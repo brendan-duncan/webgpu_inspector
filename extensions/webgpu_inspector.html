@@ -1,0 +1,120 @@
+<html>
+    <style>
+        body { background: black; color: #d0d0d0; }
+        #frameTrace { background: #232; border: 1px solid white; padding: 2px;}
+        #frameTrace div { padding: 2px;}
+        #frameTrace div:nth-child(2n) { background: #2c2c2c; }
+
+        .bindFramebuffer, .useProgram { background: #800060 !important; }
+        .bindFramebuffer:nth-child(2n), .useProgram:nth-child(2n) { background: #800040 !important; }
+
+        .getError { margin-left: 10px; }
+        .getSupportedExtensions_ret { margin-left: 20px; }
+
+        .rightArrow { color: #ff00ff; }
+        .returnValue { font-size: small; }
+        .callnum { color: white; }
+        .objectName { color: #a9a9a9; }
+        .functionName { color: white; }
+        .functionArgName, .hex { font-size: x-small; color: #d0d0d0; }
+        .functionArgs { color: #a9a9a9; }
+
+        .shaderSource .string { font-family: monospace; display: block; margin: 10px; }
+        .debugFunction { background: #400000 !important; }
+        .debugFunction:nth-child(2n) { background: #500000 !important; }
+        .resourceAllocFunction { background: #404000 !important; }
+        .resourceAllocFunction:nth-child(2n) { background: #505000 !important; }
+        .memoryOpCommand { background: #400040 !important; }
+        .memoryOpCommand:nth-child(2n) { background: #500050 !important; }
+        .drawCommand { border-bottom: 1px solid green; margin-bottom: 15px; color: white; background: #409040 !important; }
+
+        .contents {
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            display: block;
+            box-sizing: content-box;
+            border: 1px solid #000;
+            font-size: 14px;
+            background-color: #333;
+            color: #f9f9f9;
+            font-family:'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif; }
+
+        #frameList {
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 90%;
+            overflow-y: visible;
+            overflow-x: hidden;
+            padding: 10px;
+            background-color: #222;
+            border: 1px solid #000;
+        }
+
+        #frameList div { padding: 2px;}
+        #frameList div:nth-child(2n) { background: #2c2c2c; }
+
+        #commandList {
+            position: absolute;
+            top: 0;
+            left: 10%;
+            bottom: 0;
+            right: 0;
+            color: #d3d3d3;
+            background: #1c1c1c;
+            overflow: auto;
+            font-size: 12pt;
+        }
+
+        .frameTitle {
+            font-size: 18pt;
+            color: #fff;
+            text-align: center;
+            background-color: #282;
+        }
+
+        .renderpass {
+            margin-top: 20px;
+            background: #353;
+        }
+        .renderpass div { 
+            padding-left: 5px;
+            padding-top: 10px;
+            padding-bottom: 10px;
+        }
+        /*.renderpass div:nth-child(2n) { background: #2c4c2c; }*/
+
+        .computepass {
+            margin-top: 20px;
+            background: #446;
+        }
+        .computepass div { 
+            padding-left: 5px;
+            padding-top: 10px;
+            padding-bottom: 10px;
+        }
+        /*.computepass div:nth-child(2n) { background: #2c2c4c; }*/
+
+        #commandList div { 
+            padding-left: 5px;
+            padding-top: 10px;
+            padding-bottom: 10px;
+        }
+        /*#commandList div:nth-child(2n) { background: #2c2c2c; }*/
+
+        .slowFrame { color: #f55; }
+
+        .createMethod { background-color: #633; }
+    </style>
+    <body>
+        WebGPU Inspector
+        <div class="contents">
+            <div id='frameList'></div>
+            <div id='commandList'></div>
+        </div>
+    </body>
+</html>

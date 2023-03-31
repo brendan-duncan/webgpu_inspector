@@ -1,0 +1,32 @@
+{
+  "name": "webgpu-inspector",
+  "short_name": "webgpu-inspector",
+  "version": "0.0.1",
+  "author": "Brendan Duncan",
+  "description": "WebGPU Inspector",
+  "manifest_version": 3,
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_icon": {
+      "19": "webgpu_inspector_off-19.png",
+      "38": "webgpu_inspector_off-38.png"
+    },
+    "default_title": "WebGPU Inspector"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "run_at" : "document_start",
+      "all_frames" : true,
+      "css": ["webgpu_inspector.css"],
+      "js": ["content-script.js"]
+    }
+  ],
+  "web_accessible_resources": [{
+    "resources": ["webgpu_inspector.js", "webgpu_inspector.html"],
+    "matches": ["<all_urls>" ]
+  }]
+}
