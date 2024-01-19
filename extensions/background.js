@@ -1,39 +1,45 @@
-function sendMessage(message) {
-  chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-    chrome.tabs.sendMessage(tabs[0].id, message);
-  });
-}
-
-function listenForMessage(callback) {
-  chrome.runtime.onMessage.addListener(callback);
-}
-
 let activeTabs = new Set();
 
-chrome.action.onClicked.addListener(function (tab) {
-  if (activeTabs.has(tab.id)) {
-    sendMessage({ action: "disable" });
-    chrome.action.setIcon({ path: "webgpu_inspector_off-38.png" });
-  } else {
-    sendMessage({ action: "initialize" });
-  }
+async function sendMessage(message) {
+    let [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (tab) {
+        chrome.tabs.sendMessage(tab.id, message);
+    }
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.contextMenus.create({
+        id: 'openSidePanel',
+        title: 'Open side panel',
+        contexts: ['all']
+    });
 });
 
-chrome.tabs.onActivated.addListener(function (activeInfo) {
-  let activeTabId = activeInfo.tabId;
-  if (activeTabs.has(activeTabId)) {
-    chrome.action.setIcon({ path: "webgpu_inspector_on-38.png" });
-  } else {
-    chrome.action.setIcon({ path: "webgpu_inspector_off-38.png" });
-  }
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (info.menuItemId === 'openSidePanel') {
+        // This will open the panel in all the pages on the current window.
+        chrome.sidePanel.open({ windowId: tab.windowId });
+    }
 });
 
-listenForMessage(function (request, sender, sendResponse) {
-  if (request.initialized === 0) {
-    activeTabs.delete(sender.tab.id);
-    chrome.action.setIcon({ path: "webgpu_inspector_off-38.png" });
-  } else if (request.initialized === 1) {
-    activeTabs.add(sender.tab.id);
-    chrome.action.setIcon({ path: "webgpu_inspector_on-38.png" });
-  }
+chrome.runtime.onMessage.addListener((message, sender) => {
+    // The callback for runtime.onMessage must return falsy if we're not sending a response
+    (async () => {
+        if (message.action == "inspect") {
+            sendMessage({ action: "initialize_inspector" });
+        } else if (message.action == "record") {
+            sendMessage({ action: "initialize_recorder", filename: message.filename, frames: message.frames });
+        } else if (message.type === 'open_side_panel') {
+            await chrome.sidePanel.open({ tabId: sender.tab.id });
+            await chrome.sidePanel.setOptions({
+                tabId: sender.tab.id,
+                path: 'sidepanel.html',
+                enabled: true
+            });
+        }
+    })();
 });
+
+chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((error) => console.error(error));

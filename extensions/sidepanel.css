@@ -1,0 +1,51 @@
+:root {
+    --fg-color: black;
+    --bg-color: white;
+    --head-bg: orange;
+}
+  
+@media (prefers-color-scheme: dark) {
+    :root {
+        --fg-color: #FFF;
+        --bg-color: #444;
+        --head-bg: darkblue;
+    }
+}
+  
+body {
+    background-color: var(--bg-color);
+    color: var(--fg-color);
+    user-select: none;
+}
+
+#head {
+    background: var(--head-bg);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5em;
+    padding: 0.125em 0.5em 0.125em 0.5em;
+    white-space: nowrap;
+    font-size: large;
+}
+#head a {
+    color: var(--fgol)
+}
+
+.controlblock {
+    padding-top: 5px;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+    background-color: #444;
+    border: 1px solid #000;
+    box-shadow: #000 0px 3px 3px;
+}
+
+.controlblock div {
+    margin-bottom: 5px;
+    margin-left: 10px;
+}
+
+.controlblock div label {
+    margin-right: 10px;
+}

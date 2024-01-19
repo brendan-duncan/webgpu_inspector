@@ -1,32 +1,46 @@
 {
-  "name": "webgpu-inspector",
+  "name": "WebGPU Inspector",
   "short_name": "webgpu-inspector",
   "version": "0.0.1",
-  "author": "Brendan Duncan",
-  "description": "WebGPU Inspector",
   "manifest_version": 3,
+  "description": "WebGPU Debugging Tools",
+  "author": "Brendan Duncan",
+  "minimum_chrome_version": "116",
+  "permissions": ["sidePanel", "contextMenus", "tabs"],
   "host_permissions": ["<all_urls>"],
-  "action": {
-    "default_icon": {
-      "19": "webgpu_inspector_off-19.png",
-      "38": "webgpu_inspector_off-38.png"
-    },
-    "default_title": "WebGPU Inspector"
+  "icons": {
+    "19": "images/webgpu_inspector_on-19.png",
+    "38": "images/webgpu_inspector_on-38.png"
   },
   "background": {
     "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_icon": {
+      "19": "images/webgpu_inspector_on-19.png",
+      "38": "images/webgpu_inspector_on-38.png"
+    },
+    "default_title": "WebGPU Inspector"
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "run_at" : "document_start",
       "all_frames" : true,
-      "css": ["webgpu_inspector.css"],
+      "css": ["webgpu-inspector.css"],
       "js": ["content-script.js"]
     }
   ],
-  "web_accessible_resources": [{
-    "resources": ["webgpu_inspector.js", "webgpu_inspector.html"],
-    "matches": ["<all_urls>" ]
-  }]
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "webgpu-recorder.js",
+        "webgpu-inspector.js"
+       ],
+      "matches": ["*://*/*"]
+    }
+  ]
 }
