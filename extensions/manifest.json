@@ -38,7 +38,9 @@
     {
       "resources": [
         "webgpu-recorder.js",
-        "webgpu-inspector.js"
+        "webgpu-inspector.js",
+        "webgpu-inspector-panel.html",
+        "webgpu-inspector-panel.js"
        ],
       "matches": ["*://*/*"]
     }

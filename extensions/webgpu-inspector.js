@@ -1,6 +1,30 @@
 (() => {
   let webgpuInspector = null;
 
+  function getParameterByName(name, url) {
+    name = name.replace(/[\[\]]/g, '\\$&');
+    const regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)');
+    const results = regex.exec(url);
+    if (!results) {
+      return null;
+    }
+    if (!results[2]) {
+      return '';
+    }
+    return decodeURIComponent(results[2].replace(/\+/g, ' '));
+  }
+
+  const extensionId = getParameterByName("extensionId", document.currentScript.src);
+
+  function sendMessage(message, cb) {
+    //console.log(message);
+    chrome.runtime.sendMessage(extensionId || "", message, function (response) {
+      if (cb) {
+        cb(response);
+      }
+    });
+  }
+
   class Buffer {
     constructor(descriptor) {
       this.descriptor = descriptor;
@@ -141,12 +165,23 @@
 
       div = document.createElement("div");
       this.content.appendChild(div);
-      title = document.createElement("span");
-      div.appendChild(title);
-      title.innerHTML = "Descriptor: ";
-      let descriptor = document.createElement("span");
-      div.appendChild(descriptor);
-      descriptor.innerHTML = JSON.stringify(object.descriptor, undefined, 4);
+
+      if (object instanceof ShaderModule) {
+        title = document.createElement("span");
+        div.appendChild(title);
+        title.innerHTML = "Code: ";
+        let descriptor = document.createElement("span");
+        div.appendChild(descriptor);
+        const code = object.descriptor[0].code;
+        descriptor.innerHTML = `<pre>${code}</pre>`
+      } else {
+        title = document.createElement("span");
+        div.appendChild(title);
+        title.innerHTML = "Descriptor: ";
+        let descriptor = document.createElement("span");
+        div.appendChild(descriptor);
+        descriptor.innerHTML = JSON.stringify(object.descriptor, undefined, 4);
+      }
     }
   }
 
@@ -546,13 +581,18 @@
       } else if (object instanceof ShaderModule) {
         this.shaderModules.set(id, object);
       } else if (object instanceof RenderPipeline) {
-        if (pending) this.pendingRenderPipelines.set(id, object);
-        else this.renderPipelines.set(id, object);
+        if (pending) {
+          this.pendingRenderPipelines.set(id, object);
+        } else {
+          this.renderPipelines.set(id, object);
+        }
       } else if (object instanceof ComputePipeline) {
         this.computePipelines.set(id, object);
       }
 
-      if (this.objectsPanel) this.objectsPanel.addObject(id, object, pending);
+      if (this.objectsPanel) {
+        this.objectsPanel.addObject(id, object, pending);
+      }
     }
 
     resolvePendingObject(id) {
@@ -561,8 +601,9 @@
         this.pendingRenderPipelines.delete(id);
         this.renderPipelines.set(id, object);
 
-        if (this.objectsPanel)
+        if (this.objectsPanel) {
           this.objectsPanel.resolvePendingObject(id, object);
+        }
       } else if (object instanceof ComputePipeline) {
         this.pendingComputePipelines.delete(id);
         this.computePipelines.set(id, object);
@@ -583,13 +624,17 @@
       this.pendingRenderPipelines.delete(id);
       this.pendingComputePipelines.delete(id);
 
-      if (this.objectsPanel) this.objectsPanel.deleteObject(id, object);
+      if (this.objectsPanel) {
+        this.objectsPanel.deleteObject(id, object);
+      }
     }
   }
 
   class WebGPUInspector {
     constructor(options) {
-      if (!window.navigator.gpu) return;
+      if (!window.navigator.gpu) {
+        return;
+      }
 
       this._frames = [];
       this._currentFrame = null;
@@ -675,8 +720,9 @@
 
       if (this._isRecording) {
         let time = performance.now();
-        if (this._frameStartTime != -1)
+        if (this._frameStartTime != -1) {
           this._timeSinceLastFrame = time - this._frameStartTime;
+        }
         this._frameStartTime = time;
         this._frameIndex++;
         this._currentFrame = [];
@@ -703,20 +749,29 @@
       let s = "";
       for (let key in args) {
         let a = args[key];
-        if (s != "") s += ", ";
+        if (s != "") {
+          s += ", ";
+        }
 
-        if (writeKeys) s += `"${key}":`;
+        if (writeKeys) {
+          s += `"${key}":`;
+        }
 
-        if (!a) s += a;
-        else if (typeof a == "string") s += `\`${a}\``;
-        else if (a.length && a.length > 10)
+        if (!a) {
+          s += a;
+        } else if (typeof a == "string") {
+          s += `\`${a}\``;
+        } else if (a.length && a.length > 10) {
           s += `${a.constructor.name}(${a.length})`;
-        else if (a.length !== undefined)
+        } else if (a.length !== undefined) {
           s += `[${this._stringifyArgs(a, false)}]`;
-        else if (a.__id !== undefined) s += `${a.constructor.name}@${a.__id}`;
-        else if (typeof a == "object")
+        } else if (a.__id !== undefined) {
+          s += `${a.constructor.name}@${a.__id}`;
+        } else if (typeof a == "object") {
           s += `{ ${this._stringifyArgs(a, true)} }`;
-        else s += JSON.stringify(a);
+        } else {
+          s += JSON.stringify(a);
+        }
       }
       return s;
     }
@@ -862,6 +917,7 @@
         let obj = new Buffer(args[0]);
         this._objectDatabase.addObject(id, obj);
         obj.size = args[0][0].size;
+        sendMessage({"action": "inspect_add_object", "id": id, "type": "buffer", "descriptor": obj.descriptor});
       } else if (method == "createTexture") {
         let id = result.__id;
         let obj = new Texture(args[0]);
@@ -936,4 +992,7 @@
 
   webgpuInspector = new WebGPUInspector();
   webgpuInspector.enable();
+
+  //const windowUrl = getParameterByName("windowUrl", document.currentScript.src);
+  //window.open(windowUrl, "webgpuInspector", "popup");
 })();
