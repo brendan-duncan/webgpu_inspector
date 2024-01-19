@@ -809,11 +809,23 @@ class WebGPURecorder {
                 } else if (method == "writeBuffer") {
                     obj = args[0];
                 }
+
+                // Add a blank line before render and compute passes to make them easier to
+                // identify in the recording file.
+                if (method == "beginRenderPass" || method == "beginComputePass") {
+                    this._recordLine("\n", null);
+                }
     
                 if (result) {
                     this._recordLine(`${this._getObjectVariable(result)} = ${async}${this._getObjectVariable(object)}.${method}(${this._stringifyArgs(method, args)});`, obj);
                 } else {
                     this._recordLine(`${async}${this._getObjectVariable(object)}.${method}(${this._stringifyArgs(method, args)});`, obj);
+                }
+
+                // Add a blank line after ending render and compute passes to make them easier
+                // to identify in the recording file.
+                if (method == "end") {
+                    this._recordLine("\n", null);
                 }
     
                 if (result && typeof(result) == "object") {
