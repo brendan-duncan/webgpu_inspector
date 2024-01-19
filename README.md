@@ -4,6 +4,7 @@ Inspection debugger for WebGPU
 
 ## Installation
 
+- Download project from Github.
 - In Chrome, open **chrome://extensions**
 - Enable Developer Mode (switch in top-right corner)
 - Press **Load Unpacked** button
