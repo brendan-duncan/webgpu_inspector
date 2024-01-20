@@ -3,15 +3,9 @@ const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
 
 const port = chrome.runtime.connect({ name: "webgpu-inspector-content" });
 
-function injectScriptNode(url, text) {
-  // Inject the webgpu_debug script into the page
+function injectScriptNode(url) {
   const script = document.createElement("script");
-  if (url) {
-    script.src = url;
-  }
-  if (text) {
-    script.text = text;
-  }
+  script.src = url;
   (document.head || document.documentElement).appendChild(script);
 }
 
@@ -34,9 +28,25 @@ port.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+
+
+window.addEventListener('message', (event) => {
+  if (event.source !== window) {
+    return;
+  }
+  const message = event.data;
+  if (typeof message !== 'object' || message === null) {
+    return;
+  }
+  console.log(message.source);
+
+  port.postMessage(message);
+});
+
+
+
 if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
-  const url = chrome.runtime.getURL(`webgpu-inspector-panel.html`);
-  injectScriptNode(chrome.runtime.getURL(`webgpu-inspector.js?extensionId=${chrome.runtime.id}&windowUrl=${encodeURIComponent(url)}`));
+  injectScriptNode(chrome.runtime.getURL(`webgpu-inspector.js`));
   sessionStorage.removeItem(webgpuInspectorLoadedKey);
 } else if (sessionStorage.getItem(webgpuRecorderLoadedKey)) {
   const data = sessionStorage.getItem(webgpuRecorderLoadedKey).split("%");

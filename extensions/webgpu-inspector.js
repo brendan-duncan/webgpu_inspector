@@ -1,23 +1,6 @@
 (() => {
   let webgpuInspector = null;
 
-  function getParameterByName(name, url) {
-    name = name.replace(/[\[\]]/g, '\\$&');
-    const regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)');
-    const results = regex.exec(url);
-    if (!results) {
-      return null;
-    }
-    if (!results[2]) {
-      return '';
-    }
-    return decodeURIComponent(results[2].replace(/\+/g, ' '));
-  }
-
-  const extensionId = getParameterByName("extensionId", document.currentScript.src);
-
-  const port = chrome.runtime.connect(extensionId, { name: "webgpu-inspector-content" });
-
   class Buffer {
     constructor(descriptor) {
       this.descriptor = descriptor;
@@ -722,10 +705,12 @@
       }
 
       this._objectDatabase.beginFrame();
+      window.postMessage({"action": "inspect_begin_frame"}, "*");
     }
 
     _frameEnd() {
       this._objectDatabase.presentFrame();
+      window.postMessage({"action": "inspect_end_frame"}, "*");
 
       if (this._isRecording) {
         let time = performance.now();
@@ -833,11 +818,11 @@
             }
           }
         } else if (typeof object[m] == "object") {
-          let o = object[m];
+          const o = object[m];
           if (!o || o.__id) {
             continue;
           }
-          let hasMethod = this._objectHasMethods(o);
+          const hasMethod = this._objectHasMethods(o);
           if (!o.__id && hasMethod) {
             this._wrapObject(o);
           }
@@ -849,13 +834,13 @@
       if (WebGPUInspector._skipMethods.indexOf(method) != -1) {
         return;
       }
-      let origMethod = object[method];
-      let self = this;
+      const origMethod = object[method];
+      const self = this;
 
       object[method] = function () {
-        let t0 = performance.now();
-        let result = origMethod.call(object, ...arguments);
-        let t1 = performance.now();
+        const t0 = performance.now();
+        const result = origMethod.call(object, ...arguments);
+        const t1 = performance.now();
         if (result && typeof result == "object") {
           self._wrapObject(result);
         }
@@ -866,17 +851,17 @@
     }
 
     _wrapAsync(object, method) {
-      let origMethod = object[method];
-      let self = this;
+      const origMethod = object[method];
+      const self = this;
 
       object[method] = function () {
-        let t0 = performance.now();
-        let id = self._objectID++;
-        let promise = origMethod.call(object, ...arguments);
+        const t0 = performance.now();
+        const id = self._objectID++;
+        const promise = origMethod.call(object, ...arguments);
         self._recordAsyncCommand(object, method, id, arguments);
-        let wrappedPromise = new Promise((resolve) => {
+        const wrappedPromise = new Promise((resolve) => {
           promise.then((result) => {
-            let t1 = performance.now();
+            const t1 = performance.now();
             self._resolveAsyncCommand(id, t1 - t0, result);
             if (result && result.__id) {
               resolve(result);
@@ -904,50 +889,68 @@
       }
 
       if (method == "destroy") {
-        let id = object.__id;
-        let obj = this._objectDatabase.getObject(id);
+        const id = object.__id;
+        const obj = this._objectDatabase.getObject(id);
         if (obj) {
           if (obj.element) {
             obj.element.remove();
           }
           this._objectDatabase.deleteObject(id);
         }
+        window.postMessage({"action": "inspect_delete_object", id}, "*");
       } else if (method == "createShaderModule") {
-        let id = result.__id;
-        let obj = new ShaderModule(args[0]);
+        const id = result.__id;
+        const obj = new ShaderModule(args[0]);
         this._objectDatabase.addObject(id, obj);
         obj.size = args[0][0].code.length;
+        window.postMessage({"action": "inspect_add_object", id, "type": "ShaderModule", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
       } else if (method == "createBuffer") {
-        let id = result.__id;
-        let obj = new Buffer(args[0]);
+        const id = result.__id;
+        const obj = new Buffer(args[0]);
         this._objectDatabase.addObject(id, obj);
         obj.size = args[0][0].size;
-        //port.postMessage({"action": "inspect_add_object", id, "type": "buffer", "descriptor": obj.descriptor});
+        window.postMessage({"action": "inspect_add_object", id, "type": "Buffer", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
       } else if (method == "createTexture") {
-        let id = result.__id;
-        let obj = new Texture(args[0]);
+        const id = result.__id;
+        const obj = new Texture(args[0]);
         this._objectDatabase.addObject(id, obj);
+        window.postMessage({"action": "inspect_add_object", id, "type": "Texture", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
       } else if (method == "createSampler") {
-        let id = result.__id;
-        let obj = new Sampler(args[0]);
+        const id = result.__id;
+        const obj = new Sampler(args[0]);
         this._objectDatabase.addObject(id, obj);
+        window.postMessage({"action": "inspect_add_object", id, "type": "Sampler", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
       } else if (method == "createBindGroup") {
-        let id = result.__id;
-        let obj = new BindGroup(args[0]);
+        const id = result.__id;
+        const obj = new BindGroup(args[0]);
         this._objectDatabase.addObject(id, obj);
         obj.size = args[0][0].size;
+        window.postMessage({"action": "inspect_add_object", id, "type": "BindGroup", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
       } else if (method == "createBindGroupLayout") {
-        let id = result.__id;
-        let obj = new BindGroupLayout(args[0]);
+        const id = result.__id;
+        const obj = new BindGroupLayout(args[0]);
         this._objectDatabase.addObject(id, obj);
+        window.postMessage({"action": "inspect_add_object", id, "type": "BindGroupLayout", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
       } else if (method == "createRenderPipeline") {
-        let id = result.__id;
-        let obj = new RenderPipeline(args[0]);
+        const id = result.__id;
+        const obj = new RenderPipeline(args[0]);
         obj.time = time;
         this._objectDatabase.addObject(id, obj);
+        window.postMessage({"action": "inspect_add_object", id, "type": "RenderPipeline", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
+      } else if (method == "createComputePipeline") {
+        const id = result.__id;
+        const obj = new ComputePipeline(args[0]);
+        obj.time = time;
+        this._objectDatabase.addObject(id, obj);
+        window.postMessage({"action": "inspect_add_object", id, "type": "ComputePipeline", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
       } else if (method == "setBindGroup") {
+        // TODO send dynamic offsets
+        window.postMessage({"action": "set_bind_group", "args": [args[0][0], JSON.stringify(args[0][1])]}, "*");
       } else if (method == "beginRenderPass") {
         this._objectDatabase.beginRenderPass();
+        window.postMessage({"action": "inspect_begin_render_pass", "descriptor": JSON.stringify(args[0][0])}, "*");
+      } else if (method == "end") {
+        window.postMessage({"action": "inspect_end"}, "*");
       }
     }
 
