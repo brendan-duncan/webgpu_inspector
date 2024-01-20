@@ -16,14 +16,7 @@
 
   const extensionId = getParameterByName("extensionId", document.currentScript.src);
 
-  function sendMessage(message, cb) {
-    //console.log(message);
-    chrome.runtime.sendMessage(extensionId || "", message, function (response) {
-      if (cb) {
-        cb(response);
-      }
-    });
-  }
+  const port = chrome.runtime.connect(extensionId, { name: "webgpu-inspector-content" });
 
   class Buffer {
     constructor(descriptor) {
@@ -825,19 +818,25 @@
     }
 
     _wrapObject(object) {
-      if (object.__id) return;
+      if (object.__id) {
+        return;
+      }
       object.__id = this._objectID++;
 
       for (const m in object) {
         if (typeof object[m] == "function") {
           if (WebGPUInspector._skipMethods.indexOf(m) == -1) {
-            if (WebGPUInspector._asyncMethods.indexOf(m) != -1)
+            if (WebGPUInspector._asyncMethods.indexOf(m) != -1) {
               this._wrapAsync(object, m);
-            else this._wrapMethod(object, m);
+            } else {
+              this._wrapMethod(object, m);
+            }
           }
         } else if (typeof object[m] == "object") {
           let o = object[m];
-          if (!o || o.__id) continue;
+          if (!o || o.__id) {
+            continue;
+          }
           let hasMethod = this._objectHasMethods(o);
           if (!o.__id && hasMethod) {
             this._wrapObject(o);
@@ -847,7 +846,9 @@
     }
 
     _wrapMethod(object, method) {
-      if (WebGPUInspector._skipMethods.indexOf(method) != -1) return;
+      if (WebGPUInspector._skipMethods.indexOf(method) != -1) {
+        return;
+      }
       let origMethod = object[method];
       let self = this;
 
@@ -855,7 +856,9 @@
         let t0 = performance.now();
         let result = origMethod.call(object, ...arguments);
         let t1 = performance.now();
-        if (result && typeof result == "object") self._wrapObject(result);
+        if (result && typeof result == "object") {
+          self._wrapObject(result);
+        }
 
         self._recordCommand(object, method, result, t1 - t0, arguments);
         return result;
@@ -879,7 +882,9 @@
               resolve(result);
               return;
             }
-            if (result && typeof result == "object") self._wrapObject(result);
+            if (result && typeof result == "object") {
+              self._wrapObject(result);
+            }
             resolve(result);
           });
         });
@@ -917,7 +922,7 @@
         let obj = new Buffer(args[0]);
         this._objectDatabase.addObject(id, obj);
         obj.size = args[0][0].size;
-        sendMessage({"action": "inspect_add_object", "id": id, "type": "buffer", "descriptor": obj.descriptor});
+        //port.postMessage({"action": "inspect_add_object", id, "type": "buffer", "descriptor": obj.descriptor});
       } else if (method == "createTexture") {
         let id = result.__id;
         let obj = new Texture(args[0]);
@@ -992,7 +997,4 @@
 
   webgpuInspector = new WebGPUInspector();
   webgpuInspector.enable();
-
-  //const windowUrl = getParameterByName("windowUrl", document.currentScript.src);
-  //window.open(windowUrl, "webgpuInspector", "popup");
 })();

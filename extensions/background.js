@@ -1,49 +1,51 @@
-let activeTabs = new Set();
+const connections = new Map();
 
-async function sendMessage(message) {
-  let [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (tab) {
-    chrome.tabs.sendMessage(tab.id, message);
-  }
-}
+chrome.runtime.onConnect.addListener((port) => {
+  port.onMessage.addListener((message, port) => {
+    const tabId = message.tabId !== undefined ? message.tabId : port.sender.tab.id;
+    if (!connections.has(tabId)) {
+      connections.set(tabId, new Map());
+    }
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: 'openSidePanel',
-    title: 'Open side panel',
-    contexts: ['all']
-  });
-});
+    const portMap = connections.get(tabId);
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === 'openSidePanel') {
-    // This will open the panel in all the pages on the current window.
-    chrome.sidePanel.open({ windowId: tab.windowId });
-  }
-});
+    // Can be multiple content scripts per tab
+    // for example if a web page includes iframe.
+    // So manage ports as an array.
+    if (!portMap.has(port.name)) {
+      portMap.set(port.name, []);
+    }
 
-chrome.runtime.onMessage.addListener((message, sender) => {
-  console.log(message);
-  // The callback for runtime.onMessage must return falsy if we're not sending a response
-  (async () => {
-    if (message.action == "inspect") {
-      sendMessage({ action: "initialize_inspector" });
-    } else if (message.action == "record") {
-      sendMessage({ action: "initialize_recorder", filename: message.filename, frames: message.frames });
-    } else if (message.action == "inspect_add_object") {
-      message["action"] = "_inspect_add_object";
-      sendMessage(message);
-    } else if (message.type === 'open_side_panel') {
-      await chrome.sidePanel.open({ tabId: sender.tab.id });
-      await chrome.sidePanel.setOptions({
-        tabId: sender.tab.id,
-        path: 'sidepanel.html',
-        enabled: true
+    const ports = portMap.get(port.name);
+    if (!ports.includes(port)) {
+      ports.push(port);
+
+      port.onDisconnect.addListener(() => {
+        if (ports.includes(port)) {
+          ports.splice(ports.indexOf(port), 1);
+        }
+        if (ports.length === 0) {
+          portMap.delete(port.name);
+        }
+        if (portMap.size === 0) {
+          connections.delete(tabId);
+        }
       });
     }
-  })();
-});
 
-chrome.sidePanel
-  .setPanelBehavior({ openPanelOnActionClick: true })
-  .catch((error) => console.error(error));
+    const postMessageToPorts = (ports, message) => {
+      ports.forEach((port) => {
+        port.postMessage(message);
+      });
+    };
+
+    // transfer message between panel and contentScripts of the same tab
+    if (port.name === "webgpu-inspector-panel" && portMap.has("webgpu-inspector-content")) {
+      postMessageToPorts(portMap.get("webgpu-inspector-content"), message);
+    }
+
+    if (port.name === "webgpu-inspector-content" && portMap.has("webgpu-inspector-panel")) {
+      postMessageToPorts(portMap.get("webgpu-inspector-panel"), message);
+    }
+  });
+});

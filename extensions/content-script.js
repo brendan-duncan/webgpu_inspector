@@ -1,6 +1,7 @@
-const uniqueId = new Date().getTime() + Math.abs(Math.random() * 1000000);
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
+
+const port = chrome.runtime.connect({ name: "webgpu-inspector-content" });
 
 function injectScriptNode(url, text) {
   // Inject the webgpu_debug script into the page
@@ -14,21 +15,8 @@ function injectScriptNode(url, text) {
   (document.head || document.documentElement).appendChild(script);
 }
 
-function sendMessage(message, cb) {
-  message["uniqueId"] = uniqueId;
-  chrome.runtime.sendMessage(message, function (response) {
-    if (cb) {
-      cb(response);
-    }
-  });
-}
-
-function listenForMessage(callback) {
-  chrome.runtime.onMessage.addListener(callback);
-}
-
-listenForMessage(function (request, sender, sendResponse) {
-  const action = request.action;
+port.onMessage.addListener((message, sender, sendResponse) => {
+  const action = message.action;
   if (!action) {
     return;
   }
@@ -39,7 +27,7 @@ listenForMessage(function (request, sender, sendResponse) {
       window.location.reload();
     }, 50);
   } else if (action == "initialize_recorder") {
-    sessionStorage.setItem(webgpuRecorderLoadedKey, `${request.frames}%${request.filename}`);
+    sessionStorage.setItem(webgpuRecorderLoadedKey, `${message.frames}%${message.filename}`);
     setTimeout(function () {
       window.location.reload();
     }, 50);
@@ -49,13 +37,12 @@ listenForMessage(function (request, sender, sendResponse) {
 if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
   const url = chrome.runtime.getURL(`webgpu-inspector-panel.html`);
   injectScriptNode(chrome.runtime.getURL(`webgpu-inspector.js?extensionId=${chrome.runtime.id}&windowUrl=${encodeURIComponent(url)}`));
-  sendMessage({ initialized: 1 });
   sessionStorage.removeItem(webgpuInspectorLoadedKey);
 } else if (sessionStorage.getItem(webgpuRecorderLoadedKey)) {
   const data = sessionStorage.getItem(webgpuRecorderLoadedKey).split("%");
   const url = `webgpu-recorder.js?filename=${encodeURIComponent(data[1])}&frames=${encodeURIComponent(data[0])}&removeUnusedResources=1`;
   injectScriptNode(chrome.runtime.getURL(url));
   sessionStorage.removeItem(webgpuRecorderLoadedKey);
-} else {
-  sendMessage({ initialized: 0 });
 }
+
+port.postMessage({action: "PageLoaded"});
