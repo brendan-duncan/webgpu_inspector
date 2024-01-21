@@ -1,3 +1,15 @@
+import { Button } from "./src/widget/button.js";
+import { Div } from "./src/widget/div.js";
+import { HSplit } from "./src/widget/hsplit.js";
+import { Input } from "./src/widget/input.js";
+import { Span } from "./src/widget/span.js";
+import { Window } from "./src/widget/window.js";
+import { VSplit } from "./src/widget/vsplit.js";
+import { TabWidget } from "./src/widget/tab_widget.js";
+
+const port = chrome.runtime.connect({ name: "webgpu-inspector-panel" });
+const tabId = chrome.devtools.inspectedWindow.tabId;
+
 class Buffer {
   constructor(descriptor) {
     this.descriptor = descriptor;
@@ -676,32 +688,46 @@ class ObjectDatabase {
 }
 
 
+class InspectorWindow extends Window {
+  constructor(database) {
+    super();
+    this.database = database
+    this.classList.add("main-window");
+
+    const tabs = new TabWidget(this);
+    const panel = new Div();
+    tabs.addTab("Inspector", panel);
+
+    const controlBar = new Div(panel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
+
+    this.inspectButton = new Button(controlBar, { label: "Start", callback: () => { 
+      try {
+        port.postMessage({ action: "initialize_inspector", tabId });
+      } catch (e) {}
+    } });
+
+    new Span(controlBar, { text: "Frames:", style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
+    this.recordFramesInput = new Input(controlBar, { id: "record_frames", type: "number", value: 100 });
+
+    new Span(controlBar, { text: "Name:", style: "margin-left: 20px; margin-right: 10px;  vertical-align: middle;" });
+    this.recordNameInput = new Input(controlBar, { id: "record_frames", type: "text", value: "webgpu_record" });
+
+    const self = this;
+    this.recordButton = new Button(controlBar, { label: "Record", style: "margin-left: 20px; margin-right: 10px;", callback: () => {
+      const frames = self.recordFramesInput.value || 1;
+      const filename = self.recordNameInput.value;
+      port.postMessage({ action: "initialize_recorder", frames, filename, tabId });
+     }});
+  }
+}
+
+
 
 async function main() {
-  const port = chrome.runtime.connect({ name: "webgpu-inspector-panel" });
-  const tabId = chrome.devtools.inspectedWindow.tabId;
   const objectDatabase = new ObjectDatabase();
+  objectDatabase.enable();
 
-  const recordForm = document.getElementById("record");
-  recordForm.addEventListener("submit", () => {
-    const frames = document.getElementById("record_frames").value;
-    const filename = document.getElementById("record_filename").value;
-    port.postMessage({ action: "initialize_recorder", frames, filename, tabId });
-  });
-
-  
-  const inspectForm = document.getElementById("inspect");
-  inspectForm.addEventListener("submit", (event) => {
-    try {
-      if (event.submitter.name == "inspect") {
-        port.postMessage({ action: "initialize_inspector", tabId });
-      } else if (event.submitter.name == "grab_frame") {
-        port.postMessage({ action: "grab_frame", tabId });
-      }
-    } catch (e) {
-      console.log("@@@@ EXCEPTION", e);
-    }
-  });
+  const inspectorWindow = new InspectorWindow(objectDatabase);
 
   port.onMessage.addListener((message) => {
     if (!objectDatabase.enabled) {
