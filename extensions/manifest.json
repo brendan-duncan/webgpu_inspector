@@ -6,6 +6,7 @@
   "description": "WebGPU Debugging Tools",
   "author": "Brendan Duncan",
   "minimum_chrome_version": "116",
+  "permissions": [],
   "host_permissions": ["<all_urls>"],
   "icons": {
     "19": "images/webgpu_inspector_on-19.png",
@@ -19,7 +20,11 @@
     {
       "js": ["content-script.js"],
       "css": ["webgpu-inspector.css"],
-      "matches": ["*://*/*"],
+      "matches": [
+        "file://*/*",
+        "http://*/*",
+        "https://*/*"
+      ],
       "run_at" : "document_start",
       "all_frames" : true
     }

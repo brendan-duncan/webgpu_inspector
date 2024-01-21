@@ -1,15 +1,14 @@
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
 
-const port = chrome.runtime.connect({ name: "webgpu-inspector-content" });
+let port = chrome.runtime.connect({ name: "webgpu-inspector-content" });
 
-function injectScriptNode(url) {
-  const script = document.createElement("script");
-  script.src = url;
-  (document.head || document.documentElement).appendChild(script);
-}
+port.onDisconnect.addListener(() => {
+  port = chrome.runtime.connect({ name: "webgpu-inspector-content" });
+});
 
-port.onMessage.addListener((message, sender, sendResponse) => {
+// Listen for messages from the server background
+port.onMessage.addListener((message) => {
   const action = message.action;
   if (!action) {
     return;
@@ -28,8 +27,7 @@ port.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-
-
+// Listen for messages from the page
 window.addEventListener('message', (event) => {
   if (event.source !== window) {
     return;
@@ -38,11 +36,19 @@ window.addEventListener('message', (event) => {
   if (typeof message !== 'object' || message === null) {
     return;
   }
-  console.log(message.source);
-
-  port.postMessage(message);
+  try {
+    port.postMessage(message);
+  } catch (e) {
+    console.log("#### error:", e);
+  }
 });
 
+function injectScriptNode(url) {
+  const script = document.createElement("script");
+  script.src = url;
+  (document.head || document.documentElement).appendChild(script);
+  script.parentNode.removeChild(script);
+}
 
 
 if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
