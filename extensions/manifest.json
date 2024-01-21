@@ -20,11 +20,7 @@
     {
       "js": ["content-script.js"],
       "css": ["webgpu-inspector.css"],
-      "matches": [
-        "file://*/*",
-        "http://*/*",
-        "https://*/*"
-      ],
+      "matches": ["<all_urls>"],
       "run_at" : "document_start",
       "all_frames" : true
     }

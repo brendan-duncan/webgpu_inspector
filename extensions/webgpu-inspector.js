@@ -1,6 +1,8 @@
 (() => {
   let webgpuInspector = null;
 
+  const webgpuInspectorGrabFrameKey = "WEBGPU_INSPECTOR_GRAB_FRAME";
+
   class Buffer {
     constructor(descriptor) {
       this.descriptor = descriptor;
@@ -160,7 +162,7 @@
         return;
       }
 
-      this._frames = [];
+      this._frameCommands = [];
       this._currentFrame = null;
       this._frameIndex = -1;
       this._initalized = true;
@@ -214,23 +216,33 @@
     }
 
     clear() {
-      this._frames.length = 0;
+      this._frameCommands.length = 0;
       this._currentFrame = null;
       this._frameIndex = 0;
     }
 
     _frameStart() {
-      if (this._recordRequest) {
-        this._recordRequest = false;
-      }
-
       this._objectDatabase.beginFrame();
       window.postMessage({"action": "inspect_begin_frame"}, "*");
+
+      if (sessionStorage.getItem(webgpuInspectorGrabFrameKey)) {
+        sessionStorage.removeItem(webgpuInspectorGrabFrameKey);
+        this._recordRequest = true;
+      } else {
+        this._recordRequest = false;
+      }
+      this._frameCommands.length = 0;
     }
 
     _frameEnd() {
       this._objectDatabase.presentFrame();
       window.postMessage({"action": "inspect_end_frame"}, "*");
+      this._recordRequest = false;
+
+      if (this._frameCommands.length) {
+        window.postMessage({"action": "inspect_grab_frame_results", "commands": this._frameCommands}, "*");
+        this._frameCommands.length = 0;
+      }
     }
 
     _wrapCanvas(c) {
@@ -324,19 +336,26 @@
       const origMethod = object[method];
       const self = this;
 
-      console.log("!!!! WRAP Async", method);
-
       object[method] = function () {
         const t0 = performance.now();
         const id = self._objectID++;
         const promise = origMethod.call(object, ...arguments);
         self._recordAsyncCommand(object, method, id, arguments);
-        console.log("!!!! CALLING ASYNC", method);
         const wrappedPromise = new Promise((resolve) => {
           promise.then((result) => {
             const t1 = performance.now();
             self._resolveAsyncCommand(id, t1 - t0, result);
-            console.log("!!!! ASYNC RESULT", result);
+            if (method == "requestAdapter") {
+              result.requestAdapterInfo().then((infoObj) => {
+                const info = {
+                  vendor: infoObj.vendor,
+                  architecture: infoObj.architecture,
+                  device: infoObj.device,
+                  description: infoObj.description
+                };
+                window.postMessage({"action": "inspect_adapter_info", info}, "*");
+              });
+            }
             if (result && result.__id) {
               resolve(result);
               return;
@@ -418,6 +437,45 @@
       } else if (method == "end") {
         window.postMessage({"action": "inspect_end"}, "*");
       }
+
+      if (this._recordRequest) {
+        this._frameCommands.push({
+          "object": object.__id,
+          method,
+          "args": this._stringifyArgs(args)
+        });
+      }
+    }
+
+    _stringifyArgs(args, writeKeys = false) {
+      let s = "";
+      for (const key in args) {
+        let a = args[key];
+        if (s != "") {
+          s += ", ";
+        }
+
+        if (writeKeys) {
+          s += `"${key}":`;
+        }
+
+        if (!a) {
+          s += a;
+        } else if (typeof a == "string") {
+          s += `\`${a}\``;
+        } else if (a.length && a.length > 10) {
+          s += `${a.constructor.name}(${a.length})`;
+        } else if (a.length !== undefined) {
+          s += `[${this._stringifyArgs(a, false)}]`;
+        } else if (a.__id !== undefined) {
+          s += `${a.constructor.name}@${a.__id}`;
+        } else if (typeof a == "object") {
+          s += `{ ${this._stringifyArgs(a, true)} }`;
+        } else {
+          s += JSON.stringify(a);
+        }
+      }
+      return s;
     }
 
     _recordAsyncCommand(object, method, id, ...args) {

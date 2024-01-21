@@ -1,5 +1,6 @@
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
+const webgpuInspectorGrabFrameKey = "WEBGPU_INSPECTOR_GRAB_FRAME";
 
 let port = chrome.runtime.connect({ name: "webgpu-inspector-content" });
 
@@ -24,6 +25,8 @@ port.onMessage.addListener((message) => {
     setTimeout(function () {
       window.location.reload();
     }, 50);
+  } else if (action == "grab_frame") {
+    sessionStorage.setItem(webgpuInspectorGrabFrameKey, "true");
   }
 });
 

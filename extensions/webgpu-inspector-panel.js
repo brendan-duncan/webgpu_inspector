@@ -293,6 +293,38 @@ class ObjectsPanel {
     this.uiBindGroupsStat = document.createElement("span");
     div.appendChild(this.uiBindGroupsStat);
 
+    div = document.createElement("div");
+    this.statsArea.appendChild(div);
+    title = document.createElement("span");
+    div.appendChild(title);
+    title.innerHTML = "Vendor: ";
+    this.uiVendor = document.createElement("span");
+    div.appendChild(this.uiVendor);
+
+    div = document.createElement("div");
+    this.statsArea.appendChild(div);
+    title = document.createElement("span");
+    div.appendChild(title);
+    title.innerHTML = "Architecture: ";
+    this.uiArchitecture = document.createElement("span");
+    div.appendChild(this.uiArchitecture);
+
+    div = document.createElement("div");
+    this.statsArea.appendChild(div);
+    title = document.createElement("span");
+    div.appendChild(title);
+    title.innerHTML = "Device: ";
+    this.uiDevice = document.createElement("span");
+    div.appendChild(this.uiDevice);
+
+    div = document.createElement("div");
+    this.statsArea.appendChild(div);
+    title = document.createElement("span");
+    div.appendChild(title);
+    title.innerHTML = "Description: ";
+    this.uiDescription = document.createElement("span");
+    div.appendChild(this.uiDescription);
+
     // Object lists
     this.uiPendingRenderPipelines = this._createObjectListUI(
       this.debugPanel,
@@ -369,6 +401,13 @@ class ObjectsPanel {
     };
 
     return objectList;
+  }
+
+  updateAdapterInfo() {
+    this.uiVendor.innerHTML = this.database.adapterInfo.vendor;
+    this.uiArchitecture.innerHTML = this.database.adapterInfo.architecture;
+    this.uiDevice.innerHTML = this.database.adapterInfo.device;
+    this.uiDescription.innerHTML = this.database.adapterInfo.description;
   }
 
   updateLabels() {
@@ -492,6 +531,12 @@ class ObjectsPanel {
 
 class ObjectDatabase {
   constructor() {
+    this.adapterInfo = {
+      vendor: "",
+      architecture: "",
+      device: "",
+      description: ""
+    };
     this.allObjects = new Map();
     this.samplers = new Map();
     this.textures = new Map();
@@ -507,6 +552,14 @@ class ObjectDatabase {
     this.objectsPanel = null;
     this.renderPassCount = 0;
     this.computePassCount = 0;
+  }
+
+  setAdapterInfo(info) {
+    this.adapterInfo.vendor = info.vendor;
+    this.adapterInfo.architecture = info.architecture;
+    this.adapterInfo.device = info.device;
+    this.adapterInfo.description = info.description;
+    this.objectsPanel?.updateAdapterInfo();
   }
 
   initGui() {
@@ -638,9 +691,13 @@ async function main() {
 
   
   const inspectForm = document.getElementById("inspect");
-  inspectForm.addEventListener("submit", () => {
+  inspectForm.addEventListener("submit", (event) => {
     try {
-      port.postMessage({ action: "initialize_inspector", tabId });
+      if (event.submitter.name == "inspect") {
+        port.postMessage({ action: "initialize_inspector", tabId });
+      } else if (event.submitter.name == "grab_frame") {
+        port.postMessage({ action: "grab_frame", tabId });
+      }
     } catch (e) {
       console.log("@@@@ EXCEPTION", e);
     }
@@ -651,6 +708,12 @@ async function main() {
       objectDatabase.enable();
     }
     switch (message.action) {
+      case "inspect_grab_frame_results":
+        console.log("GRAB FRAME RESULTS", message.commands);
+        break;
+      case "inspect_adapter_info":
+        objectDatabase.setAdapterInfo(message.info);
+        break;
       case "inspect_begin_frame":
         objectDatabase.beginFrame();
         break;
