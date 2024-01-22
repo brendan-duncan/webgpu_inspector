@@ -344,43 +344,47 @@ class InspectorWindow extends Window {
     infoTab.addTab("Stats", this.infoPanel);
 
     let div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    let title = new Span(div, { text: "Frame Duration:", style: "color: #bbb;" });
+    new Span(div, { text: "Frame Duration:", style: "color: #bbb;" });
     this.uiFrameTime = new Span(div, { text: "0ms", style: "margin-left: 5px;" });
 
     div = new Div(this.infoPanel);
-    title = new Span(div, { text: "Frame Render Passes:", style: "color: #bbb;" });
+    new Span(div, { text: "Frame Render Passes:", style: "color: #bbb;" });
     this.uiFrameRenderPasses = new Span(div, { text: "0", style: "margin-left: 5px;" });
 
     div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    title = new Span(div, { text: "Render Pipelines:", style: "color: #bbb;" });
+    new Span(div, { text: "Render Pipelines:", style: "color: #bbb;" });
     this.uiRenderPipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
 
     div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    title = new Span(div, { text: "Shader Modules:", style: "color: #bbb;" });
+    new Span(div, { text: "Compute Pipelines:", style: "color: #bbb;" });
+    this.uiComputePipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
+
+    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
+    new Span(div, { text: "Shader Modules:", style: "color: #bbb;" });
     this.uiShaderModulesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
 
     div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    title = new Span(div, { text: "Buffers:", style: "color: #bbb;" });
+    new Span(div, { text: "Buffers:", style: "color: #bbb;" });
     this.uiBuffersStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
 
     div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    title = new Span(div, { text: "Textures:", style: "color: #bbb;" });
+    new Span(div, { text: "Textures:", style: "color: #bbb;" });
     this.uiTexturesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
 
     div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    title = new Span(div, { text: "Samplers:", style: "color: #bbb;" });
+    new Span(div, { text: "Samplers:", style: "color: #bbb;" });
     this.uiSamplersStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
 
     div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    title = new Span(div,{ text: "BindGroups:", style: "color: #bbb;" });
+    new Span(div,{ text: "BindGroups:", style: "color: #bbb;" });
     this.uiBindGroupsStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
 
     div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    title = new Span(div, { text: "Pending Async Render Pipelines:", style: "color: #bbb;" });
+    new Span(div, { text: "Pending Async Render Pipelines:", style: "color: #bbb;" });
     this.uiPendingRenderPipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
 
     div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    title = new Span(div, { text: "Pending Async Compute Pipelines:", style: "color: #bbb;" });
+    new Span(div, { text: "Pending Async Compute Pipelines:", style: "color: #bbb;" });
     this.uiPendingComputePipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
 
 
@@ -535,6 +539,7 @@ class InspectorWindow extends Window {
         children: [],
       };
       this.objectsTree.insertItem(data, "__Buffers", -1);
+      this.uiBuffersStat.text = `${this.database.buffers.size}`;
     } else if (object instanceof Sampler) {
       const data = {
         id: id,
@@ -542,6 +547,7 @@ class InspectorWindow extends Window {
         children: [],
       };
       this.objectsTree.insertItem(data, "__Samplers", -1);
+      this.uiSamplersStat.text = `${this.database.samplers.size}`;
     } else if (object instanceof Texture) {
       const data = {
         id: id,
@@ -549,6 +555,7 @@ class InspectorWindow extends Window {
         children: [],
       };
       this.objectsTree.insertItem(data, "__Textures", -1);
+      this.uiTexturesStat.text = `${this.database.buffers.size}`;
     } else if (object instanceof ShaderModule) {
       const data = {
         id: id,
@@ -556,6 +563,7 @@ class InspectorWindow extends Window {
         children: [],
       };
       this.objectsTree.insertItem(data, "__ShaderModules", -1);
+      this.uiShaderModulesStat.text = `${this.database.shaderModules.size}`;
     } else if (object instanceof BindGroupLayout) {
       const data = {
         id: id,
@@ -570,6 +578,7 @@ class InspectorWindow extends Window {
         children: [],
       };
       this.objectsTree.insertItem(data, "__BindGroups", -1);
+      this.uiBindGroupsStat.text = `${this.database.bindGroups.size}`;
     } else if (object instanceof RenderPipeline) {
       const data = {
         id: id,
@@ -578,8 +587,10 @@ class InspectorWindow extends Window {
       };
       if (pending) {
         this.objectsTree.insertItem(data, "__PendingAsyncRenderPipelines", -1);
+        this.uiPendingRenderPipelinesStat.text = `${this.database.pendingRenderPipelines.size}`;
       } else {
         this.objectsTree.insertItem(data, "__RenderPipelines", -1);
+        this.uiRenderPipelinesStat.text = `${this.database.renderPipelines.size}`;
       }
     } else if (object instanceof ComputePipeline) {
       const data = {
@@ -589,8 +600,10 @@ class InspectorWindow extends Window {
       };
       if (pending) {
         this.objectsTree.insertItem(data, "__PendingAsyncComputePipelines", -1);
+        this.uiPendingComputePipelinesStat.text = `${this.database.pendingComputePipelines.size}`;
       } else {
         this.objectsTree.insertItem(data, "__ComputePipelines", -1);
+        this.uiComputePipelinesStat.text = `${this.database.computePipelines.size}`;
       }
     }
   }
