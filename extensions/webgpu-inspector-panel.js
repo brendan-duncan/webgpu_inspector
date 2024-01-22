@@ -330,6 +330,7 @@ class InspectorWindow extends Window {
 
     this.database.onEndFrame.addListener(this.updateFrameStats, this);
     this.database.onAddObject.addListener(this.addObject, this);
+    this.database.onDeleteObject.addListener(this.deleteObject, this);
   }
 
   reset() {
@@ -391,11 +392,11 @@ class InspectorWindow extends Window {
     const hSplit = new HSplit(split1, { position: 0.2, style: "height: 100%;" });
 
     const objectsTab = new TabWidget(hSplit);
-    const objectsPanel = new Div();
+    const objectsPanel = new Div(null, { style: "font-size: 11pt;"});
     objectsTab.addTab("Objects", objectsPanel);
 
     const inspectTab = new TabWidget(hSplit);
-    this.inspectPanel = new Div();
+    this.inspectPanel = new Div(null, { style: "font-size: 14pt;"});
     inspectTab.addTab("Inspect", this.inspectPanel);
 
     this.objectsTree = new TreeWidget(objectsPanel, { style: "height: 100%; overflow-y: auto;", skipRoot: true });
@@ -531,7 +532,34 @@ class InspectorWindow extends Window {
       this.database.renderPassCount.toLocaleString("en-US");
   }
 
+  deleteObject(id, object) {
+    this.objectsTree.removeItem(id);
+    this.updateObjectStat(object);
+  }
+
+  updateObjectStat(object) {
+    if (object instanceof Buffer) {
+      this.uiBuffersStat.text = `${this.database.buffers.size}`;
+    } else if (object instanceof Sampler) {
+      this.uiSamplersStat.text = `${this.database.samplers.size}`;
+    } else if (object instanceof Texture) {
+      this.uiTexturesStat.text = `${this.database.buffers.size}`;
+    } else if (object instanceof ShaderModule) {
+      this.uiShaderModulesStat.text = `${this.database.shaderModules.size}`;
+    } else if (object instanceof BindGroupLayout) {
+    } else if (object instanceof BindGroup) {
+      this.uiBindGroupsStat.text = `${this.database.bindGroups.size}`;
+    } else if (object instanceof RenderPipeline) {
+      this.uiPendingRenderPipelinesStat.text = `${this.database.pendingRenderPipelines.size}`;
+      this.uiRenderPipelinesStat.text = `${this.database.renderPipelines.size}`;
+    } else if (object instanceof ComputePipeline) {
+      this.uiPendingComputePipelinesStat.text = `${this.database.pendingComputePipelines.size}`;
+      this.uiComputePipelinesStat.text = `${this.database.computePipelines.size}`;
+    }
+  }
+
   addObject(id, object, pending) {
+    this.updateObjectStat(object);
     if (object instanceof Buffer) {
       const data = {
         id: id,
@@ -539,7 +567,6 @@ class InspectorWindow extends Window {
         children: [],
       };
       this.objectsTree.insertItem(data, "__Buffers", -1);
-      this.uiBuffersStat.text = `${this.database.buffers.size}`;
     } else if (object instanceof Sampler) {
       const data = {
         id: id,
@@ -547,7 +574,6 @@ class InspectorWindow extends Window {
         children: [],
       };
       this.objectsTree.insertItem(data, "__Samplers", -1);
-      this.uiSamplersStat.text = `${this.database.samplers.size}`;
     } else if (object instanceof Texture) {
       const data = {
         id: id,
@@ -555,7 +581,6 @@ class InspectorWindow extends Window {
         children: [],
       };
       this.objectsTree.insertItem(data, "__Textures", -1);
-      this.uiTexturesStat.text = `${this.database.buffers.size}`;
     } else if (object instanceof ShaderModule) {
       const data = {
         id: id,
@@ -563,14 +588,12 @@ class InspectorWindow extends Window {
         children: [],
       };
       this.objectsTree.insertItem(data, "__ShaderModules", -1);
-      this.uiShaderModulesStat.text = `${this.database.shaderModules.size}`;
     } else if (object instanceof BindGroupLayout) {
       const data = {
         id: id,
         content: `BindGroupLayout ${id}`,
         children: [],
       };
-      this.objectsTree.insertItem(data, "__BindGroupLayouts", -1);
     } else if (object instanceof BindGroup) {
       const data = {
         id: id,
@@ -578,7 +601,6 @@ class InspectorWindow extends Window {
         children: [],
       };
       this.objectsTree.insertItem(data, "__BindGroups", -1);
-      this.uiBindGroupsStat.text = `${this.database.bindGroups.size}`;
     } else if (object instanceof RenderPipeline) {
       const data = {
         id: id,
@@ -587,10 +609,8 @@ class InspectorWindow extends Window {
       };
       if (pending) {
         this.objectsTree.insertItem(data, "__PendingAsyncRenderPipelines", -1);
-        this.uiPendingRenderPipelinesStat.text = `${this.database.pendingRenderPipelines.size}`;
       } else {
         this.objectsTree.insertItem(data, "__RenderPipelines", -1);
-        this.uiRenderPipelinesStat.text = `${this.database.renderPipelines.size}`;
       }
     } else if (object instanceof ComputePipeline) {
       const data = {
@@ -600,10 +620,8 @@ class InspectorWindow extends Window {
       };
       if (pending) {
         this.objectsTree.insertItem(data, "__PendingAsyncComputePipelines", -1);
-        this.uiPendingComputePipelinesStat.text = `${this.database.pendingComputePipelines.size}`;
       } else {
         this.objectsTree.insertItem(data, "__ComputePipelines", -1);
-        this.uiComputePipelinesStat.text = `${this.database.computePipelines.size}`;
       }
     }
   }

@@ -22,7 +22,7 @@ export class Pointer {
  */
 export class Widget {
   constructor(element, parent, options) {
-    this.id = `widget${Widget.id++}`;
+    this.id = `${this.constructor.name}${Widget.id++}`;
     if (element && element.constructor === String) {
       element = document.createElement(element);
     }
