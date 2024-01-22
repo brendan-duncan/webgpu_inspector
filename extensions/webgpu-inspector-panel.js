@@ -293,32 +293,38 @@ class InspectorWindow extends Window {
     const self = this;
 
     const tabs = new TabWidget(this);
-    const panel = new Div();
-    tabs.addTab("Inspector", panel);
 
-    const controlBar = new Div(panel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
+    const inspectorPanel = new Div();
+    tabs.addTab("Inspector", inspectorPanel);
+
+    const recorderPanel = new Div();
+    tabs.addTab("Recorder", recorderPanel);
+
+    const recorderBar = new Div(recorderPanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
+
+    new Span(recorderBar, { text: "Frames:", style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
+    this.recordFramesInput = new Input(recorderBar, { id: "record_frames", type: "number", value: 100 });
+
+    new Span(recorderBar, { text: "Name:", style: "margin-left: 20px; margin-right: 10px;  vertical-align: middle;" });
+    this.recordNameInput = new Input(recorderBar, { id: "record_frames", type: "text", value: "webgpu_record" });
+
+    this.recordButton = new Button(recorderBar, { label: "Record", style: "margin-left: 20px; margin-right: 10px;", callback: () => {
+      const frames = self.recordFramesInput.value || 1;
+      const filename = self.recordNameInput.value;
+      port.postMessage({ action: "initialize_recorder", frames, filename, tabId });
+    }});
+
+
+    const controlBar = new Div(inspectorPanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
 
     this.inspectButton = new Button(controlBar, { label: "Start", callback: () => { 
       try {
         port.postMessage({ action: "initialize_inspector", tabId });
         self.reset();
       } catch (e) {}
-    } });
+    } });    
 
-    new Span(controlBar, { text: "Frames:", style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
-    this.recordFramesInput = new Input(controlBar, { id: "record_frames", type: "number", value: 100 });
-
-    new Span(controlBar, { text: "Name:", style: "margin-left: 20px; margin-right: 10px;  vertical-align: middle;" });
-    this.recordNameInput = new Input(controlBar, { id: "record_frames", type: "text", value: "webgpu_record" });
-
-    
-    this.recordButton = new Button(controlBar, { label: "Record", style: "margin-left: 20px; margin-right: 10px;", callback: () => {
-      const frames = self.recordFramesInput.value || 1;
-      const filename = self.recordNameInput.value;
-      port.postMessage({ action: "initialize_recorder", frames, filename, tabId });
-    }});
-
-    this.inspectorGUI = new Div(panel);
+    this.inspectorGUI = new Div(inspectorPanel);
 
     this.reset();
 
