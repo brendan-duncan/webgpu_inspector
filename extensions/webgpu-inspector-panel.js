@@ -4,9 +4,11 @@ import { HSplit } from "./src/widget/hsplit.js";
 import { Input } from "./src/widget/input.js";
 import { Signal } from "./src/widget/signal.js";
 import { Span } from "./src/widget/span.js";
+import { Widget } from "./src/widget/widget.js";
 import { Window } from "./src/widget/window.js";
 import { TabWidget } from "./src/widget/tab_widget.js";
 import { TreeWidget } from "./src/widget/tree_widget.js";
+import { VSplit } from "./src/widget/vsplit.js";
 
 const port = chrome.runtime.connect({ name: "webgpu-inspector-panel" });
 const tabId = chrome.devtools.inspectedWindow.tabId;
@@ -297,7 +299,7 @@ class InspectorWindow extends Window {
     const inspectorPanel = new Div();
     tabs.addTab("Inspector", inspectorPanel);
 
-    const recorderPanel = new Div();
+    const recorderPanel = new VSplit(null, { fixedPosition: 100 });
     tabs.addTab("Recorder", recorderPanel);
 
     const recorderBar = new Div(recorderPanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
@@ -308,12 +310,25 @@ class InspectorWindow extends Window {
     new Span(recorderBar, { text: "Name:", style: "margin-left: 20px; margin-right: 10px;  vertical-align: middle;" });
     this.recordNameInput = new Input(recorderBar, { id: "record_frames", type: "text", value: "webgpu_record" });
 
+    this._recordingData = [];
+
     this.recordButton = new Button(recorderBar, { label: "Record", style: "margin-left: 20px; margin-right: 10px;", callback: () => {
       const frames = self.recordFramesInput.value || 1;
       const filename = self.recordNameInput.value;
       port.postMessage({ action: "initialize_recorder", frames, filename, tabId });
     }});
 
+    this.recorderDataPanel = new Div(recorderPanel);
+
+    port.onMessage.addListener((message) => {
+      switch (message.action) {
+        case "webgpu_recording":
+          if (message.index !== undefined && message.count !== undefined && message.data !== undefined) {
+            self.addRecordingData(message.data, message.index, message.count);
+          }
+          break;
+      }
+    });
 
     const controlBar = new Div(inspectorPanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
 
@@ -331,6 +346,59 @@ class InspectorWindow extends Window {
     this.database.onEndFrame.addListener(this.updateFrameStats, this);
     this.database.onAddObject.addListener(this.addObject, this);
     this.database.onDeleteObject.addListener(this.deleteObject, this);
+  }
+
+  addRecordingData(data, index, count) {
+    try {
+      index = parseInt(index);
+      count = parseInt(count);
+    } catch (e) {
+      return;
+    }
+
+    if (this._recordingData.length == 0) {
+      this._recordingData.length = count;
+    }
+
+    if (this._recordingData.length != count) {
+      console.log("Invalid Recording Chunk count", count, this._recordingData.length);
+      return;
+    }
+
+    if (index >= count) {
+      console.log("Invalid Recording Chunk index", index, count);
+      return;
+    }
+
+    this._recordingData[index] = data;
+
+    let pending = false;
+    let missingIndex = null;
+    for (let i = 0; i < count; ++i) {
+      if (this._recordingData[i] === undefined) {
+        pending = true;
+        missingIndex = i;
+        break;
+      }
+    }
+    //console.log(`Recording Data ${index} / ${count}, pending:${pending}, missingIndex: ${missingIndex}`);
+    if (pending) {
+      return;
+    }
+
+    this.recorderDataPanel.html = "";
+
+    const html = this._recordingData.join();
+    const f = document.createElement("iframe");
+    //const url = 'data:text/html;charset=utf-8,' + encodeURI(html);
+    //f.src = url;
+    f.sandbox = 'allow-same-origin';
+
+    new Widget(f, this.recorderDataPanel, { style: "width: calc(100% - 10px);" });
+
+    f.contentWindow.document.open();
+    f.contentWindow.document.write(html);
+    f.contentWindow.document.close();
   }
 
   reset() {

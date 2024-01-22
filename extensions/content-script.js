@@ -25,8 +25,6 @@ port.onMessage.addListener((message) => {
     setTimeout(function () {
       window.location.reload();
     }, 50);
-  } else if (action == "grab_frame") {
-    sessionStorage.setItem(webgpuInspectorGrabFrameKey, "true");
   }
 });
 
@@ -59,7 +57,7 @@ if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
   sessionStorage.removeItem(webgpuInspectorLoadedKey);
 } else if (sessionStorage.getItem(webgpuRecorderLoadedKey)) {
   const data = sessionStorage.getItem(webgpuRecorderLoadedKey).split("%");
-  const url = `webgpu-recorder.js?filename=${encodeURIComponent(data[1])}&frames=${encodeURIComponent(data[0])}&removeUnusedResources=1`;
+  const url = `webgpu-recorder.js?filename=${encodeURIComponent(data[1])}&frames=${encodeURIComponent(data[0])}&removeUnusedResources=1&messageRecording=1`;
   injectScriptNode(chrome.runtime.getURL(url));
   sessionStorage.removeItem(webgpuRecorderLoadedKey);
 }

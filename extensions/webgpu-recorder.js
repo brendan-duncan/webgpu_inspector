@@ -8,6 +8,7 @@ class WebGPURecorder {
                 canvasWidth: options.width || 800,
                 canvasHeight: options.height || 600,
                 removeUnusedResources: !!options.removeUnusedResources,
+                messageRecording: !!options.messageRecording
             };
     
             this._objectIndex = 1;
@@ -23,8 +24,9 @@ class WebGPURecorder {
             this._arrayCache = [];
             this._totalData = 0;
     
-            if (!navigator.gpu)
+            if (!navigator.gpu) {
                 return;
+            }
     
             this._isRecording = true;
             this._initalized = true;
@@ -143,7 +145,11 @@ class WebGPURecorder {
                 }
             }
             let s = 
-    `<html>
+    `<!DOCTYPE html>
+    <html>
+        <head>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'">
+        </head>
         <body style="text-align: center;">
             <canvas id="#webgpu" width=${this.config.canvasWidth} height=${this.config.canvasHeight}></canvas>
             <script>
@@ -310,11 +316,32 @@ class WebGPURecorder {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+
+            if (this.config.messageRecording) {
+                const maxMessageSize = 1024 * 1024; // Break message up into chunks
+                if (data.length <= maxMessageSize) {
+                    window.postMessage({"action": "webgpu_recording", data, "index":0, "count": 1});
+                } else {
+                    let startIndex = 0;
+                    const dataLength = data.length;
+                    let messageIndex = 0;
+                    let messageCount = Math.ceil(dataLength / maxMessageSize);
+                    while (startIndex < dataLength) {
+                        const remainder = dataLength - startIndex;
+                        const size = remainder > maxMessageSize ? maxMessageSize : remainder;
+                        const dataChunk = data.substr(startIndex, size);
+                        window.postMessage({"action": "webgpu_recording", "data": dataChunk, "index":messageIndex, "count": messageCount});
+                        messageIndex++;
+                        startIndex += size;
+                    }
+                }
+            }
         }
     
         _wrapCanvas(c) {
-            if (c.__id)
+            if (c.__id) {
                 return;
+            }
             this._registerObject(c);
             let self = this;
             let __getContext = c.getContext;
@@ -981,12 +1008,14 @@ function getParameterByName(name, url) {
 function main() {
     const filename = getParameterByName("filename", document.currentScript.src);
     const frames = getParameterByName("frames", document.currentScript.src);
+    const messageRecording = getParameterByName("messageRecording", document.currentScript.src);
     const removeUnusedResources = getParameterByName("removeUnusedResources", document.currentScript.src);
     if (filename) {
         new WebGPURecorder({
             "frames": frames || 1,
             "export": filename,
-            "removeUnusedResources": !!removeUnusedResources
+            "removeUnusedResources": !!removeUnusedResources,
+            "messageRecording": !!messageRecording
         });
     }
 }
