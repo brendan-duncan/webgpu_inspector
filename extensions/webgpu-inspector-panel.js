@@ -352,10 +352,6 @@ class InspectorWindow extends Window {
     this.uiFrameRenderPasses = new Span(div, { text: "0", style: "margin-left: 5px;" });
 
     div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    title = new Span(div, { text: "Pending Async Render Pipelines:", style: "color: #bbb;" });
-    this.uiPendingRenderPipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
-
-    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
     title = new Span(div, { text: "Render Pipelines:", style: "color: #bbb;" });
     this.uiRenderPipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
 
@@ -379,6 +375,13 @@ class InspectorWindow extends Window {
     title = new Span(div,{ text: "BindGroups:", style: "color: #bbb;" });
     this.uiBindGroupsStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
 
+    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
+    title = new Span(div, { text: "Pending Async Render Pipelines:", style: "color: #bbb;" });
+    this.uiPendingRenderPipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
+
+    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
+    title = new Span(div, { text: "Pending Async Compute Pipelines:", style: "color: #bbb;" });
+    this.uiPendingComputePipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
 
 
     const hSplit = new HSplit(split1, { position: 0.2, style: "height: 100%;" });
