@@ -176,7 +176,7 @@ export class TreeWidget extends Div {
 
     // Update collapse button
     if (parentId) {
-      this._updateCollapseButton(this._findElement(parentId));
+      this._updateCollapseButton(this._findElement(parentId), options);
     }
 
     if (options?.selected) {
@@ -238,15 +238,23 @@ export class TreeWidget extends Div {
 
   _isNodeChildrenVisible(id) {
     const node = this.getItem(id);
-    if (!node) return false;
+    if (!node) {
+      return false;
+    }
 
-    if (node.classList.contains('hidden')) return false;
+    if (node.classList.contains('hidden')) {
+      return false;
+    }
 
     // Check CollapseButton
     const collapseButton = node.collapseButton;
-    if (!collapseButton) return true;
+    if (!collapseButton) {
+      return true;
+    }
 
-    if (collapseButton.value === 'closed') return false;
+    if (collapseButton.value === 'closed') {
+      return false;
+    }
 
     return true;
   }
@@ -267,8 +275,9 @@ export class TreeWidget extends Div {
   _findElementIndex(id) {
     for (let i = 0, l = this.children.length; i < l; ++i) {
       const childNode = this.children[i];
-      if (!childNode.classList || !childNode.classList.contains('tree-item'))
+      if (!childNode.classList || !childNode.classList.contains('tree-item')) {
         continue;
+      }
 
       if (id.constructor === String) {
         if (childNode.itemId === id) {
@@ -459,7 +468,9 @@ export class TreeWidget extends Div {
 
         // Finishes renaming
         input.element.addEventListener('keydown', function (e) {
-          if (e.keyCode != 13) return;
+          if (e.keyCode != 13) {
+            return;
+          }
           this.blur();
         });
 
@@ -482,7 +493,9 @@ export class TreeWidget extends Div {
         if (data.onDragData) {
           const dragData = data.onDragData();
           if (dragData) {
-            for (let i in dragData) e.dataTransfer.setData(i, dragData[i]);
+            for (let i in dragData) {
+              e.dataTransfer.setData(i, dragData[i]);
+            }
           }
         }
       });
@@ -490,7 +503,9 @@ export class TreeWidget extends Div {
 
     draggableElement.addEventListener('dragenter', function (e) {
       e.preventDefault();
-      if (data.skipDrag) return false;
+      if (data.skipDrag) {
+        return false;
+      }
       item.classList.add('dragover');
     });
 
@@ -506,7 +521,9 @@ export class TreeWidget extends Div {
     draggableElement.addEventListener('drop', function (e) {
       item.classList.remove('dragover');
       e.preventDefault();
-      if (data.skipDrag) return false;
+      if (data.skipDrag) {
+        return false;
+      }
 
       const dragItemId = e.dataTransfer.getData('item_id');
       if (!dragItemId) {
@@ -551,10 +568,14 @@ export class TreeWidget extends Div {
   filterByName(name) {
     for (let i = 0; i < this.children.length; ++i) {
       const childNode = this.children[i];
-      if (!childNode.isTreeItem) continue;
+      if (!childNode.isTreeItem) {
+        continue;
+      }
 
       const content = childNode.content;
-      if (!content) continue;
+      if (!content) {
+        continue;
+      }
 
       const str = content.text.toLowerCase();
 
@@ -583,15 +604,19 @@ export class TreeWidget extends Div {
   filterByRule(callbackToFilter, param) {
     for (let i = 0; i < this.children.length; ++i) {
       const childNode = this.children[i];
-      if (!childNode.classList || !childNode.classList.contains('tree-item'))
+      if (!childNode.classList || !childNode.classList.contains('tree-item')) {
         continue;
+      }
 
       const content = childNode.content;
-      if (!content) continue;
+      if (!content) {
+        continue;
+      }
 
       if (callbackToFilter(childNode.data, content, param)) {
-        if (childNode.data && childNode.data.visible !== false)
+        if (childNode.data && childNode.data.visible !== false) {
           childNode.classList.remove('filtered');
+        }
 
         const indent = childNode.indent;
         if (indent) {
@@ -611,14 +636,22 @@ export class TreeWidget extends Div {
   }
 
   getItem(id) {
-    if (!id) return null;
+    if (!id) {
+      return null;
+    }
 
-    if (id.classList) return id;
+    if (id.classList) {
+      return id;
+    }
 
     for (const c of this.children) {
-      if (!c.classList || !c.classList.contains('tree-item')) continue;
+      if (!c.classList || !c.classList.contains('tree-item')) {
+        continue;
+      }
 
-      if (c.itemId === id) return c;
+      if (c.itemId === id) {
+        return c;
+      }
     }
 
     return null;
@@ -631,16 +664,24 @@ export class TreeWidget extends Div {
    */
   expandItem(id, parents) {
     const item = this.getItem(id);
-    if (!item) return;
+    if (!item) {
+      return;
+    }
 
-    if (!item.collapseButton) return;
+    if (!item.collapseButton) {
+      return;
+    }
 
     item.collapseButton.value = true;
 
-    if (!parents) return;
+    if (!parents) {
+      return;
+    }
 
     const parent = this.getParent(item);
-    if (parent) this.expandItem(parent, parents);
+    if (parent) {
+      this.expandItem(parent, parents);
+    }
   }
 
   /**
@@ -662,10 +703,14 @@ export class TreeWidget extends Div {
    */
   isInsideArea(id) {
     const item = id.constructor === String ? this.getItem(id) : id;
-    if (!item) return false;
+    if (!item) {
+      return false;
+    }
 
     const rects = this.element.getClientRects();
-    if (!rects.length) return false;
+    if (!rects.length) {
+      return false;
+    }
 
     const r = rects[0];
     const h = r.height;
@@ -680,18 +725,25 @@ export class TreeWidget extends Div {
    */
   scrollToItem(id) {
     const item = id.constructor === String ? this.getItem(id) : id;
-    if (!item) return;
+    if (!item) {
+      return;
+    }
 
     const rects = this.element.getClientRects();
-    if (!rects.length) return false;
+    if (!rects.length) {
+      return false;
+    }
 
     const r = rects[0];
     const h = r.height;
     const x = (item.level + this.indentOffset) * TreeWidget.Indent + 50;
 
     this.element.scrollTop = (item.top - h * 0.5) | 0;
-    if (r.width * 0.75 < x) this.element.scrollLeft = x;
-    else this.element.scrollLeft = 0;
+    if (r.width * 0.75 < x) {
+      this.element.scrollLeft = x;
+    } else {
+      this.element.scrollLeft = 0;
+    }
   }
 
   /**
@@ -707,17 +759,25 @@ export class TreeWidget extends Div {
     }
 
     const node = this.getItem(id);
-    if (!node) return null;
+    if (!node) {
+      return null;
+    }
 
-    if (node.classList.contains('selected')) return;
+    if (node.classList.contains('selected')) {
+      return;
+    }
 
     this._markAsSelected(node, true, false);
 
-    if (scroll && !this._skipScroll) this.scrollToItem(node);
+    if (scroll && !this._skipScroll) {
+      this.scrollToItem(node);
+    }
 
     this.expandItem(node, true);
 
-    if (sendEvent) node.onClick.emit();
+    if (sendEvent) {
+      node.onClick.emit();
+    }
 
     return node;
   }
@@ -727,10 +787,14 @@ export class TreeWidget extends Div {
    * @param {*} id
    */
   addItemToSelection(id) {
-    if (!id) return;
+    if (!id) {
+      return;
+    }
 
     const node = this.getItem(id);
-    if (!node) return null;
+    if (!node) {
+      return null;
+    }
 
     this._markAsSelected(node, true, true);
 
@@ -742,9 +806,13 @@ export class TreeWidget extends Div {
    * @param {*} id
    */
   removeItemFromSelection(id) {
-    if (!id) return;
+    if (!id) {
+      return;
+    }
     const node = this.getItem(id);
-    if (!node) return null;
+    if (!node) {
+      return null;
+    }
     node.classList.remove('selected');
   }
 
@@ -752,7 +820,9 @@ export class TreeWidget extends Div {
    * Returns the first selected item.
    */
   getSelectedItem() {
-    if (!this.selection.length) return;
+    if (!this.selection.length) {
+      return;
+    }
     return this.selection[this.selection.length - 1];
   }
 
@@ -848,9 +918,13 @@ export class TreeWidget extends Div {
     const oldParentLevel = oldParent.level;
     const levelOffset = parentLevel - oldParentLevel;
 
-    if (!parent || !node) return false;
+    if (!parent || !node) {
+      return false;
+    }
 
-    if (parent == oldParent) return false;
+    if (parent == oldParent) {
+      return false;
+    }
 
     // replace parent info
     node.parentId = parentId;
@@ -861,8 +935,9 @@ export class TreeWidget extends Div {
       children.unshift(node); // add the node at the beginning
 
       // remove all children
-      for (let i = 0; i < children.length; i++)
+      for (let i = 0; i < children.length; i++) {
         children[i].parentNode.removeChild(children[i]);
+      }
 
       // update levels
       for (let i = 0; i < children.length; i++) {
@@ -874,7 +949,9 @@ export class TreeWidget extends Div {
       // reinsert
       parentIndex = this._findElementIndex(parent); // update parent index
       let lastIndex = this._findElementLastChildIndex(parentIndex);
-      if (lastIndex == -1) lastIndex = 0;
+      if (lastIndex == -1) {
+        lastIndex = 0;
+      }
 
       for (let i = 0; i < children.length; i++) {
         const child = children[i];
@@ -884,7 +961,9 @@ export class TreeWidget extends Div {
 
     // update collapse button
     this._updateCollapseButton(parent);
-    if (oldParent) this._updateCollapseButton(oldParent);
+    if (oldParent) {
+      this._updateCollapseButton(oldParent);
+    }
 
     return true;
   }
@@ -896,26 +975,33 @@ export class TreeWidget extends Div {
    */
   removeItem(idOrNode, removeChildren) {
     const node = this.getItem(idOrNode);
-    if (!node) return false;
+    if (!node) {
+      return false;
+    }
 
     // get parent
     const parent = this.getParent(node);
 
     // get all descendants
     let childNodes = null;
-    if (removeChildren) childNodes = this.getChildren(node);
+    if (removeChildren) {
+      childNodes = this.getChildren(node);
+    }
 
     // remove html element
     this.removeChild(node);
 
     // remove all children
     if (childNodes) {
-      for (let i = 0; i < childNodes.length; i++)
+      for (let i = 0; i < childNodes.length; i++) {
         this.removeChild(childNodes[i]);
+      }
     }
 
     // update parent collapse button
-    if (parent) this._updateCollapseButton(parent);
+    if (parent) {
+      this._updateCollapseButton(parent);
+    }
 
     return true;
   }
@@ -930,9 +1016,13 @@ export class TreeWidget extends Div {
     if (!node) return false;
 
     node.data = data;
-    if (data.id && node.id != data.id) this.updateItemId(node.id, data.id);
+    if (data.id && node.id != data.id) {
+      this.updateItemId(node.id, data.id);
+    }
 
-    if (data.content) node.content.element.innerHTML = data.content;
+    if (data.content) {
+      node.content.element.innerHTML = data.content;
+    }
 
     return true;
   }
@@ -944,7 +1034,9 @@ export class TreeWidget extends Div {
    */
   updateItemId(oldId, newId) {
     const node = this.getItem(oldId);
-    if (!node) return false;
+    if (!node) {
+      return false;
+    }
 
     const children = this.getChildren(oldId, true);
     node.id = newId;
@@ -1031,22 +1123,31 @@ export class TreeWidget extends Div {
       this.onItemSelected.emit(node.data, addToSelection);
 
       let r = false;
-      if (node.data.callback)
+      if (node.data.callback) {
         r = node.data.callback.call(self, node.data, addToSelection);
+      }
 
-      if (!r && this.itemSelected) this.itemSelected(node.data, addToSelection);
+      if (!r && this.itemSelected) {
+        this.itemSelected(node.data, addToSelection);
+      }
     }
   }
 
   _unmarkAsSelected(node) {
-    if (!node.classList.contains('selected')) return;
+    if (!node.classList.contains('selected')) {
+      return;
+    }
 
     node.classList.remove('selected');
 
     const i = this.selection.indexOf(node);
-    if (i != -1) this.selection.splice(i, 1);
+    if (i != -1) {
+      this.selection.splice(i, 1);
+    }
 
-    for (const c of this._semiSelected) c.classList.remove('semiselected');
+    for (const c of this._semiSelected) {
+      c.classList.remove('semiselected');
+    }
 
     this._semiSelected.length = 0;
     for (const c of this.selection) {
@@ -1068,7 +1169,9 @@ export class TreeWidget extends Div {
    * @param {*} currentLevel
    */
   _updateCollapseButton(node, options, currentLevel) {
-    if (!node) return;
+    if (!node) {
+      return;
+    }
 
     const self = this;
     if (!node.collapseButton) {
@@ -1088,28 +1191,41 @@ export class TreeWidget extends Div {
       node.collapseButton = collapseButton;
     }
 
-    if ((options && options.collapsed) || currentLevel >= this.collapsedDepth)
+    if (options?.collapsed || currentLevel >= this.collapsedDepth) {
       node.collapseButton.collapse();
+    }
 
     const childElements = this.getChildren(node.itemId);
-    if (!childElements) return; //null
+    if (!childElements) {
+      return; //null
+    }
 
-    if (childElements.length) node.collapseButton.setEmpty(false);
-    else node.collapseButton.setEmpty(true);
+    if (childElements.length && !options?.alwaysShowExpandButton) {
+      node.collapseButton.setEmpty(false);
+    } else {
+      node.collapseButton.setEmpty(true);
+    }
   }
 
   _onClickExpand(e, node) {
     const children = this.getChildren(node);
 
-    if (!children) return;
+    if (!children) {
+      return;
+    }
 
     // Update children visibility
     for (const child of children) {
       const childParent = this.getParent(child);
       var visible = true;
-      if (childParent) visible = this._isNodeChildrenVisible(childParent);
-      if (visible) child.classList.remove('hidden');
-      else child.classList.add('hidden');
+      if (childParent) {
+        visible = this._isNodeChildrenVisible(childParent);
+      }
+      if (visible) {
+        child.classList.remove('hidden');
+      } else {
+        child.classList.add('hidden');
+      }
     }
   }
 }

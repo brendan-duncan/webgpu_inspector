@@ -1317,9 +1317,7 @@ li.tree-item.semiselected div.tree-item-title .content {
 li.tree-item div.tree-item-title.dragover .content {
   background-color: #ec6;
   color: black;
-  /*padding: 3px;*/
   border-radius: 2px;
-  /*font-size: 2em;*/
 }
 
 .dragover {
@@ -1355,6 +1353,7 @@ li.tree-item .expandbutton {
 }
 
 
+/* ---------------------------------------- */
 .info-panel {
   background-color: #444;
   color: #ddd;

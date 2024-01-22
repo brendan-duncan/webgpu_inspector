@@ -394,7 +394,7 @@ class InspectorWindow extends Window {
     this.inspectPanel = new Div();
     inspectTab.addTab("Inspect", this.inspectPanel);
 
-    this.objectsTree = new TreeWidget(objectsPanel, { style: "height: 100%; overflow-y: auto;" });
+    this.objectsTree = new TreeWidget(objectsPanel, { style: "height: 100%; overflow-y: auto;", skipRoot: true });
 
     this.objectsTree.onItemSelected.addListener((data) => {
       const object = self.database.getObject(data.id);
@@ -404,7 +404,7 @@ class InspectorWindow extends Window {
     });
 
     const data = {
-      id: '0',
+      id: '__Objects',
       node: null,
       content: 'Objects',
       children: [],
@@ -413,11 +413,9 @@ class InspectorWindow extends Window {
     const adaptersData = {
       id: '__Adapters',
       content: "Adapters",
-      children: [{
-        id: '__Adapter.0',
-        content: "Adapter 0",
-        children: [],
-      }],
+      children: [],
+      collapsed: true,
+      alwaysShowExpandButton: true
     };
     data.children.push(adaptersData);
 
@@ -425,6 +423,8 @@ class InspectorWindow extends Window {
       id: '__Devices',
       content: "Devices",
       children: [],
+      collapsed: true,
+      alwaysShowExpandButton: true
     };
     data.children.push(devicesData);
 
@@ -433,6 +433,7 @@ class InspectorWindow extends Window {
       content: "Render Pipelines",
       children: [],
       collapsed: true,
+      alwaysShowExpandButton: true
     };
     data.children.push(renderPipelinesData);
 
@@ -441,6 +442,7 @@ class InspectorWindow extends Window {
       content: "Compute Pipelines",
       children: [],
       collapsed: true,
+      alwaysShowExpandButton: true
     };
     data.children.push(computePipelinesData);
 
@@ -449,6 +451,7 @@ class InspectorWindow extends Window {
       content: "Shader Modules",
       children: [],
       collapsed: true,
+      alwaysShowExpandButton: true
     };
     data.children.push(shaderModulesData);
 
@@ -457,6 +460,7 @@ class InspectorWindow extends Window {
       content: "Buffers",
       children: [],
       collapsed: true,
+      alwaysShowExpandButton: true
     };
     data.children.push(buffersData);
 
@@ -465,6 +469,7 @@ class InspectorWindow extends Window {
       content: "Textures",
       children: [],
       collapsed: true,
+      alwaysShowExpandButton: true
     };
     data.children.push(texturesData);
 
@@ -473,6 +478,7 @@ class InspectorWindow extends Window {
       content: "Samplers",
       children: [],
       collapsed: true,
+      alwaysShowExpandButton: true
     };
     data.children.push(samplersData);
 
@@ -481,6 +487,7 @@ class InspectorWindow extends Window {
       content: "BindGroups",
       children: [],
       collapsed: true,
+      alwaysShowExpandButton: true
     };
     data.children.push(bindGroupsData);
 
@@ -489,6 +496,7 @@ class InspectorWindow extends Window {
       content: "BindGroupLayouts",
       children: [],
       collapsed: true,
+      alwaysShowExpandButton: true
     };
     data.children.push(bindGroupLayoutsData);
 
@@ -497,6 +505,7 @@ class InspectorWindow extends Window {
       content: "Pending Async Render Pipelines",
       children: [],
       collapsed: true,
+      alwaysShowExpandButton: true
     };
     data.children.push(pendingAsyncRenderPipelinesData);
 
@@ -505,6 +514,7 @@ class InspectorWindow extends Window {
       content: "Pending Async Compute Pipelines",
       children: [],
       collapsed: true,
+      alwaysShowExpandButton: true
     };
     data.children.push(pendingAsyncComputePipelinesData);
 
