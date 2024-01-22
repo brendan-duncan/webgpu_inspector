@@ -148,7 +148,7 @@ class WebGPURecorder {
     `<!DOCTYPE html>
     <html>
         <head>
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'">
+        <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline'; style-src * 'unsafe-inline';">
         </head>
         <body style="text-align: center;">
             <canvas id="#webgpu" width=${this.config.canvasWidth} height=${this.config.canvasHeight}></canvas>

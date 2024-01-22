@@ -315,6 +315,7 @@ class InspectorWindow extends Window {
     this.recordButton = new Button(recorderBar, { label: "Record", style: "margin-left: 20px; margin-right: 10px;", callback: () => {
       const frames = self.recordFramesInput.value || 1;
       const filename = self.recordNameInput.value;
+      self._recordingData.length = 0;
       port.postMessage({ action: "initialize_recorder", frames, filename, tabId });
     }});
 
@@ -347,6 +348,36 @@ class InspectorWindow extends Window {
     this.database.onAddObject.addListener(this.addObject, this);
     this.database.onDeleteObject.addListener(this.deleteObject, this);
   }
+
+  _encodeBase64(bytes) {
+    const _b2a = [
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+        "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+        "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "+", "/"
+    ];
+
+    let result = '', i, l = bytes.length;
+    for (i = 2; i < l; i += 3) {
+        result += _b2a[bytes[i - 2] >> 2];
+        result += _b2a[((bytes[i - 2] & 0x03) << 4) | (bytes[i - 1] >> 4)];
+        result += _b2a[((bytes[i - 1] & 0x0F) << 2) | (bytes[i] >> 6)];
+        result += _b2a[bytes[i] & 0x3F];
+    }
+    if (i === l + 1) {
+        result += _b2a[bytes[i - 2] >> 2];
+        result += _b2a[(bytes[i - 2] & 0x03) << 4];
+        result += "==";
+    }
+    if (i === l) {
+        result += _b2a[bytes[i - 2] >> 2];
+        result += _b2a[((bytes[i - 2] & 0x03) << 4) | (bytes[i - 1] >> 4)];
+        result += _b2a[(bytes[i - 1] & 0x0F) << 2];
+        result += "=";
+    }
+    return result;
+}
 
   addRecordingData(data, index, count) {
     try {
@@ -381,24 +412,29 @@ class InspectorWindow extends Window {
         break;
       }
     }
-    //console.log(`Recording Data ${index} / ${count}, pending:${pending}, missingIndex: ${missingIndex}`);
     if (pending) {
       return;
     }
 
     this.recorderDataPanel.html = "";
 
-    const html = this._recordingData.join();
+    // TODO: How to display the recording file?
+    /*const nonceData = new Uint8Array(16);
+    const nonce = this._encodeBase64(crypto.getRandomValues(nonceData));
+    const html = this._recordingData.join().replace("<script>", `<script nonce="${nonce}">`).replace("script-src *", `script-src * 'nonce-${nonce}' strict-dynamic`);
+
     const f = document.createElement("iframe");
+    f.sandbox = "allow-scripts";
     //const url = 'data:text/html;charset=utf-8,' + encodeURI(html);
-    //f.src = url;
-    f.sandbox = 'allow-same-origin';
+    const url = URL.createObjectURL(new Blob([html], {type: 'text/html'}));
+    f.src = url;
 
     new Widget(f, this.recorderDataPanel, { style: "width: calc(100% - 10px);" });
 
-    f.contentWindow.document.open();
-    f.contentWindow.document.write(html);
-    f.contentWindow.document.close();
+    //f.contentWindow.document.open();
+    //f.contentWindow.document.write(html);
+    //f.contentWindow.document.close();
+    */
   }
 
   reset() {
