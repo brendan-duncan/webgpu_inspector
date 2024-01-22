@@ -36,12 +36,16 @@ export class TreeWidget extends Div {
     const self = this;
 
     this.addEventListener('click', function (e) {
-      if (e.srcElement !== self.element) return;
+      if (e.srcElement !== self.element) {
+        return;
+      }
       self.onBackgroundClicked.emit(e);
     });
 
     self.addEventListener('contextmenu', function (e) {
-      if (e.button != 2) return false;
+      if (e.button != 2) {
+        return false;
+      }
       self.onContextMenu.emit(e);
       e.preventDefault();
       return false;
@@ -88,8 +92,12 @@ export class TreeWidget extends Div {
       if (rootItem) {
         rootItem.classList.add('tree-root-item');
         this.rootItem = rootItem;
-      } else this.rootItem = null;
-    } else this.rootItem = null;
+      } else {
+        this.rootItem = null;
+      }
+    } else {
+      this.rootItem = null;
+    }
   }
 
   /**
@@ -102,7 +110,9 @@ export class TreeWidget extends Div {
   insertItem(data, parentId, position, options) {
     if (!parentId) {
       const root = this.children[0];
-      if (root) parentId = root.itemId;
+      if (root) {
+        parentId = root.itemId;
+      }
     }
 
     const element = this.createAndInsert(data, options, parentId, position);
@@ -112,8 +122,11 @@ export class TreeWidget extends Div {
   createAndInsert(data, options, parentId, elementIndex) {
     // Find the parent
     let parentElementIndex = -1;
-    if (parentId) parentElementIndex = this._findElementIndex(parentId);
-    else if (parentId === undefined) parentElementIndex = 0; // Root
+    if (parentId) {
+      parentElementIndex = this._findElementIndex(parentId);
+    } else if (parentId === undefined) {
+      parentElementIndex = 0; // Root
+    }
 
     let parent = null;
     let childLevel = 0;
@@ -126,7 +139,9 @@ export class TreeWidget extends Div {
 
     // Create
     const element = this.createTreeItem(data, options, childLevel);
-    if (!element) return null;
+    if (!element) {
+      return null;
+    }
 
     element.parentId = parentId;
 
@@ -141,32 +156,45 @@ export class TreeWidget extends Div {
     }
 
     // Insert
-    if (parentElementIndex == -1) this.appendChild(element);
-    else this._insertInside(element, parentElementIndex, elementIndex);
+    if (parentElementIndex == -1) {
+      this.appendChild(element);
+    } else {
+      this._insertInside(element, parentElementIndex, elementIndex);
+    }
 
     // Compute visibility according to parents
-    if (parent && !this._isNodeChildrenVisible(parentId))
+    if (parent && !this._isNodeChildrenVisible(parentId)) {
       element.classList.add('hidden');
+    }
 
     // Children
     if (data.children) {
-      for (let c of data.children) this.createAndInsert(c, options, data.id);
+      for (const c of data.children) {
+        this.createAndInsert(c, options, data.id);
+      }
     }
 
     // Update collapse button
-    if (parentId) this._updateCollapseButton(this._findElement(parentId));
+    if (parentId) {
+      this._updateCollapseButton(this._findElement(parentId));
+    }
 
-    if (options?.selected) this._markAsSelected(element, true, false);
+    if (options?.selected) {
+      this._markAsSelected(element, true, false);
+    }
 
-    if (data.collapsed) this.collapseItem(data.id);
+    if (data.collapsed) {
+      this.collapseItem(data.id);
+    }
 
     return element;
   }
 
   _insertInside(element, parentIndex, offsetIndex, level) {
     const parent = this.children[parentIndex];
-    if (!parent)
+    if (!parent) {
       throw `No parent node found. Index: ${parentIndex}, nodes: ${this.children.length}`;
+    }
 
     const parentLevel = parent.level;
     const childLevel = level !== undefined ? level : parentLevel + 1;
@@ -224,11 +252,14 @@ export class TreeWidget extends Div {
   }
 
   _findElement(id) {
-    if (!id || id.constructor !== String)
+    if (!id || id.constructor !== String) {
       throw '_findElement param must be a string with item id';
+    }
 
     for (const c of this.children) {
-      if (c.itemId == id) return c;
+      if (c.itemId == id) {
+        return c;
+      }
     }
     return null;
   }
@@ -240,7 +271,9 @@ export class TreeWidget extends Div {
         continue;
 
       if (id.constructor === String) {
-        if (childNode.itemId === id) return i;
+        if (childNode.itemId === id) {
+          return i;
+        }
       } else if (childNode === id) {
         return i;
       }
@@ -250,17 +283,22 @@ export class TreeWidget extends Div {
   }
 
   _findElementLastChildIndex(startIndex) {
-    if (startIndex == -1) return -1;
+    if (startIndex == -1) {
+      return -1;
+    }
 
     const level = this.children[startIndex].level;
 
     for (let i = startIndex + 1, l = this.children.length; i < l; ++i) {
       const childNode = this.children[i];
-      if (!childNode.classList || !childNode.classList.contains('tree-item'))
+      if (!childNode.classList || !childNode.classList.contains('tree-item')) {
         continue;
+      }
 
       const currentLevel = childNode.level;
-      if (currentLevel == level) return i;
+      if (currentLevel == level) {
+        return i;
+      }
     }
 
     return -1;
@@ -268,7 +306,9 @@ export class TreeWidget extends Div {
 
   _findChildElements(id, onlyDirect) {
     const parentIndex = this._findElementIndex(id);
-    if (parentIndex == -1) return;
+    if (parentIndex == -1) {
+      return;
+    }
 
     const parent = this.children[parentIndex];
     const parentLevel = parent.level;
@@ -277,13 +317,18 @@ export class TreeWidget extends Div {
 
     for (let i = parentIndex + 1, l = this.children.length; i < l; ++i) {
       const childNode = this.children[i];
-      if (!childNode.classList || !childNode.classList.contains('tree-item'))
+      if (!childNode.classList || !childNode.classList.contains('tree-item')) {
         continue;
+      }
 
       const currentLevel = childNode.level;
-      if (onlyDirect && currentLevel > parentLevel + 1) continue;
+      if (onlyDirect && currentLevel > parentLevel + 1) {
+        continue;
+      }
 
-      if (currentLevel <= parentLevel) return result;
+      if (currentLevel <= parentLevel) {
+        return result;
+      }
 
       result.push(childNode);
     }
@@ -325,11 +370,14 @@ export class TreeWidget extends Div {
       e.preventDefault();
       e.stopPropagation();
 
-      if (item.collapseButton && e.target === item.collapseButton.element)
+      if (item.collapseButton && e.target === item.collapseButton.element) {
         return;
+      }
 
       const title = item.titleElement;
-      if (title._editing) return;
+      if (title._editing) {
+        return;
+      }
 
       if (e.ctrlKey && self.options.allowMultiSelection) {
         // Check if selected
@@ -343,9 +391,13 @@ export class TreeWidget extends Div {
       } else if (e.shiftKey && self.options.allowMultiSelection) {
         // select from current selection till here
         const lastItem = self.getSelectedItem();
-        if (!lastItem) return;
+        if (!lastItem) {
+          return;
+        }
 
-        if (lastItem === item) return;
+        if (lastItem === item) {
+          return;
+        }
 
         const nodeList = lastItem.parent.children;
         const lastIndex = nodeList.indexOf(lastItem);

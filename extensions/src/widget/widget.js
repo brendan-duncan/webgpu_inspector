@@ -22,8 +22,10 @@ export class Pointer {
  */
 export class Widget {
   constructor(element, parent, options) {
-    if (element && element.constructor === String)
+    this.id = `widget${Widget.id++}`;
+    if (element && element.constructor === String) {
       element = document.createElement(element);
+    }
 
     this._element = element;
     if (element) {
@@ -1212,10 +1214,6 @@ export class Widget {
 }
 
 Widget.window = null;
-
-// Latest state of the tracked pointers.
 Widget.currentPointers = [];
-
 Widget.disablePaintingOnResize = false;
-Widget.isWidget = true;
-Widget._idPrefix = 'WIDGET';
+Widget.id = 0;

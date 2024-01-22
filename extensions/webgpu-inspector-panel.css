@@ -339,7 +339,7 @@ body {
   width: 100%;
   margin: 0;
   padding: 0;
-  overflow: hidden;
+  overflow: auto;
   background-color: #333;
   font-family: Tahoma;
 }
@@ -781,8 +781,6 @@ span {
   font-size: 12px;
   z-index: 10;
   line-height: 20px;
-  -webkit-user-select: none;
-  -moz-user-select: none;
   padding-left: 5px;
 }
 
@@ -1298,30 +1296,10 @@ li.tree-item div.tree-item-title {
   display: flex;
 }
 
-li.tree-item div.tree-item-title .precontent {
-  /*display: inline-block;*/
-}
-
-li.tree-item div.tree-item-title .indent {
-  /*display: inline-block;*/
-}
-
-li.tree-item div.tree-item-title .collapse {
-  /*display: inline-block;*/
-}
-
-li.tree-item div.tree-item-title .icon {
-  /*display: inline-block;*/
-}
-
 li.tree-item div.tree-item-title .content {
   /*display: inline-block;*/
   display: flex;
   flex: 1;
-}
-
-li.tree-item div.tree-item-title .postcontent {
-  /*display: inline-block;*/
 }
 
 li.tree-item div.tree-item-title .content:hover {
@@ -1376,3 +1354,20 @@ li.tree-item .expandbutton {
   display: none;
 }
 
+
+.info-panel {
+  background-color: #444;
+  color: #ddd;
+  font-size: 12pt;
+  margin: 0;
+  padding: 0;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.info-panel div {
+  margin: 0;
+  padding: 0;
+  padding-left: 10px;
+  padding-bottom: 10px;
+}

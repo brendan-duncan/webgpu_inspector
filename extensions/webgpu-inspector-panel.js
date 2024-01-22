@@ -2,10 +2,11 @@ import { Button } from "./src/widget/button.js";
 import { Div } from "./src/widget/div.js";
 import { HSplit } from "./src/widget/hsplit.js";
 import { Input } from "./src/widget/input.js";
+import { Signal } from "./src/widget/signal.js";
 import { Span } from "./src/widget/span.js";
 import { Window } from "./src/widget/window.js";
-import { VSplit } from "./src/widget/vsplit.js";
 import { TabWidget } from "./src/widget/tab_widget.js";
+import { TreeWidget } from "./src/widget/tree_widget.js";
 
 const port = chrome.runtime.connect({ name: "webgpu-inspector-panel" });
 const tabId = chrome.devtools.inspectedWindow.tabId;
@@ -66,489 +67,110 @@ class ComputePipeline {
   }
 }
 
-class InspectorPanel {
-  constructor(database) {
-    this.database = database;
-
-    const self = this;
-    let isDragging = false;
-    let prevX = 0;
-    let prevY = 0;
-
-    this.panel = document.createElement("div");
-    this.panel.className = "inspector_panel";
-    document.body.appendChild(this.panel);
-    this.panel.onmouseup = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      isDragging = false;
-    };
-
-    this.titleBar = document.createElement("div");
-    this.titleBar.className = "inspector_panel_bar";
-    this.titleBar.innerHTML = "Inspector";
-    this.panel.appendChild(this.titleBar);
-
-    this.titleBar.onmousedown = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      isDragging = true;
-      prevX = e.clientX;
-      prevY = e.clientY;
-    };
-
-    document.addEventListener("mousemove", function (e) {
-      if (!isDragging) {
-        return;
-      }
-
-      const dx = e.clientX - prevX;
-      const dy = e.clientY - prevY;
-
-      const rect = self.panel.getBoundingClientRect();
-      let x = rect ? rect.left : 0;
-      let y = rect ? rect.top : 0;
-      x += dx;
-      y += dy;
-
-      prevX = e.clientX;
-      prevY = e.clientY;
-      self.panel.style.left = `${x}px`;
-      self.panel.style.top = `${y}px`;
-    });
-
-    document.addEventListener("mouseup", function () {
-      self.isDragging = false;
-    });
-
-    const contentArea = document.createElement("div");
-    contentArea.style = "max-height: 600px; overflow-y: auto;";
-    this.panel.appendChild(contentArea);
-
-    this.content = document.createElement("pre");
-    this.content.className = "inspector_panel_content";
-    contentArea.appendChild(this.content);
-  }
-
-  enable() {
-    this.panel.style.display = "block";
-  }
-
-  disable() {
-    this.panel.style.display = "none";
-  }
-
-  inspectObject(id, object) {
-    this.content.innerHTML = "";
-
-    let div = document.createElement("div");
-    this.content.appendChild(div);
-    let title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "Type: ";
-    let type = document.createElement("span");
-    div.appendChild(type);
-    type.innerHTML = object.constructor.name;
-
-    div = document.createElement("div");
-    this.content.appendChild(div);
-
-    if (object instanceof ShaderModule) {
-      title = document.createElement("span");
-      div.appendChild(title);
-      title.innerHTML = "Code: ";
-      let descriptor = document.createElement("span");
-      div.appendChild(descriptor);
-      const code = object.descriptor.code;
-      descriptor.innerHTML = `<pre>${code}</pre>`
-    } else {
-      title = document.createElement("span");
-      div.appendChild(title);
-      title.innerHTML = "Descriptor: ";
-      let descriptor = document.createElement("span");
-      div.appendChild(descriptor);
-      descriptor.innerHTML = JSON.stringify(object.descriptor, undefined, 4);
-    }
-  }
-}
-
-class ObjectsPanel {
-  constructor(database) {
-    this.database = database;
-
-    this.inspector = new InspectorPanel(database);
-
-    const self = this;
-    let isDragging = false;
-    let prevX = 0;
-    let prevY = 0;
-
-    this.debugPanel = document.createElement("div");
-    this.debugPanel.className = "debug_panel";
-    document.body.appendChild(this.debugPanel);
-    this.debugPanel.onmouseup = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      isDragging = false;
-    };
-
-    this.objectPanelTitleBar = document.createElement("div");
-    this.objectPanelTitleBar.className = "panel_bar";
-    this.objectPanelTitleBar.innerHTML = "WebGPU Objects";
-    this.debugPanel.appendChild(this.objectPanelTitleBar);
-
-    this.objectPanelTitleBar.onmousedown = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      isDragging = true;
-      prevX = e.clientX;
-      prevY = e.clientY;
-    };
-
-    document.addEventListener("mousemove", function (e) {
-      if (!isDragging) {
-        return;
-      }
-
-      const dx = e.clientX - prevX;
-      const dy = e.clientY - prevY;
-
-      const rect = self.debugPanel.getBoundingClientRect();
-      let x = rect ? rect.left : 0;
-      let y = rect ? rect.top : 0;
-      x += dx;
-      y += dy;
-
-      prevX = e.clientX;
-      prevY = e.clientY;
-      self.debugPanel.style.left = `${x}px`;
-      self.debugPanel.style.top = `${y}px`;
-    });
-
-    document.addEventListener("mouseup", function () {
-      self.isDragging = false;
-    });
-
-    this.statsArea = document.createElement("div");
-    this.statsArea.className = "stats_area";
-    this.debugPanel.appendChild(this.statsArea);
-
-    let div = document.createElement("div");
-    this.statsArea.appendChild(div);
-    let title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "Frame Duration: ";
-    this.uiFrameTime = document.createElement("span");
-    div.appendChild(this.uiFrameTime);
-
-    div = document.createElement("div");
-    this.statsArea.appendChild(div);
-    title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "Frame Render Passes: ";
-    this.uiFrameRenderPasses = document.createElement("span");
-    div.appendChild(this.uiFrameRenderPasses);
-
-    div = document.createElement("div");
-    this.statsArea.appendChild(div);
-    title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "Pending Async Render Pipelines: ";
-    this.uiPendingRenderPipelinesStat = document.createElement("span");
-    div.appendChild(this.uiPendingRenderPipelinesStat);
-
-    div = document.createElement("div");
-    this.statsArea.appendChild(div);
-    title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "Render Pipelines: ";
-    this.uiRenderPipelinesStat = document.createElement("span");
-    div.appendChild(this.uiRenderPipelinesStat);
-
-    div = document.createElement("div");
-    this.statsArea.appendChild(div);
-    title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "Shader Modules: ";
-    this.uiShaderModulesStat = document.createElement("span");
-    div.appendChild(this.uiShaderModulesStat);
-
-    div = document.createElement("div");
-    this.statsArea.appendChild(div);
-    title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "Buffers: ";
-    this.uiBuffersStat = document.createElement("span");
-    div.appendChild(this.uiBuffersStat);
-
-    div = document.createElement("div");
-    this.statsArea.appendChild(div);
-    title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "Textures: ";
-    this.uiTexturesStat = document.createElement("span");
-    div.appendChild(this.uiTexturesStat);
-
-    div = document.createElement("div");
-    this.statsArea.appendChild(div);
-    title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "Samplers: ";
-    this.uiSamplersStat = document.createElement("span");
-    div.appendChild(this.uiSamplersStat);
-
-    div = document.createElement("div");
-    this.statsArea.appendChild(div);
-    title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "BindGroups: ";
-    this.uiBindGroupsStat = document.createElement("span");
-    div.appendChild(this.uiBindGroupsStat);
-
-    div = document.createElement("div");
-    this.statsArea.appendChild(div);
-    title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "Vendor: ";
-    this.uiVendor = document.createElement("span");
-    div.appendChild(this.uiVendor);
-
-    div = document.createElement("div");
-    this.statsArea.appendChild(div);
-    title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "Architecture: ";
-    this.uiArchitecture = document.createElement("span");
-    div.appendChild(this.uiArchitecture);
-
-    div = document.createElement("div");
-    this.statsArea.appendChild(div);
-    title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "Device: ";
-    this.uiDevice = document.createElement("span");
-    div.appendChild(this.uiDevice);
-
-    div = document.createElement("div");
-    this.statsArea.appendChild(div);
-    title = document.createElement("span");
-    div.appendChild(title);
-    title.innerHTML = "Description: ";
-    this.uiDescription = document.createElement("span");
-    div.appendChild(this.uiDescription);
-
-    // Object lists
-    this.uiPendingRenderPipelines = this._createObjectListUI(
-      this.debugPanel,
-      "Pending Async Render Pipelines"
-    );
-    this.uiRenderPipelines = this._createObjectListUI(
-      this.debugPanel,
-      "Render Pipelines"
-    );
-    this.uiComputePipelines = this._createObjectListUI(
-      this.debugPanel,
-      "Compute Pipelines"
-    );
-    this.uiShaderModules = this._createObjectListUI(
-      this.debugPanel,
-      "Shader Modules"
-    );
-    this.uiBuffers = this._createObjectListUI(this.debugPanel, "Buffers");
-    this.uiTextures = this._createObjectListUI(this.debugPanel, "Textures");
-    this.uiSamplers = this._createObjectListUI(this.debugPanel, "Samplers");
-    this.uiBindGroups = this._createObjectListUI(
-      this.debugPanel,
-      "BindGroups"
-    );
-    this.uiBindGroupLayouts = this._createObjectListUI(
-      this.debugPanel,
-      "BindGroupLayouts"
-    );
-  }
-
-  enable() {
-    //console.log("ENABLE");
-    this.enabled = true;
-    this.debugPanel.style.display = "block";
-    this.inspector.enable();
-  }
-
-  disable() {
-    //console.log("DISABLE");
-    this.enabled = false;
-    this.debugPanel.style.display = "none";
-    this.inspector.disable();
-  }
-
-  _createObjectListUI(parent, name) {
-    const div = document.createElement("div");
-    parent.appendChild(div);
-
-    const titleBar = document.createElement("div");
-    div.appendChild(titleBar);
-    titleBar.className = "title_bar";
-
-    const collapse = document.createElement("span");
-    titleBar.appendChild(collapse);
-    collapse.className = "collapse";
-    collapse.innerHTML = "+";
-
-    const title = document.createElement("span");
-    titleBar.appendChild(title);
-    title.innerHTML = name;
-    title.className = "object_type";
-
-    const objectList = document.createElement("ol");
-    objectList.classList.add("object_list", "collapsed");
-    div.appendChild(objectList);
-    collapse.onclick = function () {
-      if (this.innerHTML == "-") {
-        this.innerHTML = "+";
-        objectList.className = "object_list collapsed";
-      } else {
-        this.innerHTML = "-";
-        objectList.className = "object_list";
-      }
-    };
-
-    return objectList;
-  }
-
-  updateAdapterInfo() {
-    this.uiVendor.innerHTML = this.database.adapterInfo.vendor;
-    this.uiArchitecture.innerHTML = this.database.adapterInfo.architecture;
-    this.uiDevice.innerHTML = this.database.adapterInfo.device;
-    this.uiDescription.innerHTML = this.database.adapterInfo.description;
-  }
-
-  updateLabels() {
-    this.uiPendingRenderPipelinesStat.innerHTML =
-      this.database.pendingRenderPipelines.size.toLocaleString("en-US");
-    this.uiRenderPipelinesStat.innerHTML =
-      this.database.renderPipelines.size.toLocaleString("en-US");
-    this.uiShaderModulesStat.innerHTML =
-      this.database.shaderModules.size.toLocaleString("en-US");
-    this.uiBindGroupsStat.innerHTML =
-      this.database.bindGroups.size.toLocaleString("en-US");
-    this.uiTexturesStat.innerHTML =
-      this.database.textures.size.toLocaleString("en-US");
-    this.uiSamplersStat.innerHTML =
-      this.database.samplers.size.toLocaleString("en-US");
-
-    let size = 0;
-    for (const buffer of this.database.buffers.values()) {
-      size += buffer.size;
-    }
-    this.uiBuffersStat.innerHTML = `${this.database.buffers.size.toLocaleString(
-      "en-US"
-    )} Size: ${size.toLocaleString("en-US")} Bytes`;
-  }
-
-  addObject(id, object, pending) {
-    let o = null;
-    if (object instanceof Sampler) {
-      o = document.createElement("li");
-      o.innerHTML = `Sampler ${id}`;
-      this.uiSamplers.appendChild(o);
-      object.element = o;
-    } else if (object instanceof Texture) {
-      o = document.createElement("li");
-      o.innerHTML = `Texture ${id}`;
-      this.uiTextures.appendChild(o);
-      object.element = o;
-    } else if (object instanceof Buffer) {
-      o = document.createElement("li");
-      o.innerHTML = `Buffer ${id}`;
-      this.uiBuffers.appendChild(o);
-      object.element = o;
-    } else if (object instanceof BindGroup) {
-      o = document.createElement("li");
-      o.innerHTML = `BindGroup ${id}`;
-      this.uiBindGroups.appendChild(o);
-      object.element = o;
-    } else if (object instanceof BindGroupLayout) {
-      o = document.createElement("li");
-      o.innerHTML = `BindGroupLayout ${id}`;
-      this.uiBindGroupLayouts.appendChild(o);
-      object.element = o;
-    } else if (object instanceof ShaderModule) {
-      o = document.createElement("li");
-      o.innerHTML = `ShaderModule ${id} Size:${object.descriptor.code.length.toLocaleString(
-        "en-US"
-      )} bytes`;
-      this.uiShaderModules.appendChild(o);
-      object.element = o;
-    } else if (object instanceof RenderPipeline) {
-      o = document.createElement("li");
-      o.innerHTML = `RenderPipeline ${id} time:${
-        object.time?.toLocaleString("en-US") ?? "0"
-      }ms`;
-      object.element = o;
-      if (pending) this.uiPendingRenderPipelines.appendChild(o);
-      else this.uiRenderPipelines.appendChild(o);
-    } else if (object instanceof ComputePipeline) {
-      o = document.createElement("li");
-      o.innerHTML = `ComputePipeline ${id}`;
-      this.uiComputePipelines.appendChild(o);
-      object.element = o;
-    }
-
-    const self = this;
-    if (o) {
-      o.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        self.onObjectSelected(id, object);
-      };
-    }
-
-    this.updateLabels();
-  }
-
-  onObjectSelected(id, object) {
-    this.inspector.inspectObject(id, object);
-  }
-
-  resolvePendingObject(id, object) {
-    const vs = this.database.getObject(
-      object.descriptor.vertex.module.__id
-    );
-    const fs = this.database.getObject(
-      object.descriptor.fragment.module.__id
-    );
-
-    object.element.innerHTML = `RenderPipeline ${id} time:${object.time.toLocaleString(
-      "en-US"
-    )}ms vs_size:${vs.size.toLocaleString(
-      "en-US"
-    )} fs_size:${fs.size.toLocaleString("en-US")}`;
-
-    this.uiRenderPipelines.appendChild(object.element);
-
-    this.updateLabels();
-  }
-
-  deleteObject(id, object) {
-    object.element?.remove();
-    this.updateLabels();
-  }
-
-  updateFrameStats() {
-    this.uiFrameTime.innerHTML = `${this.database.frameTime.toFixed(2)}ms`;
-    this.uiFrameRenderPasses.innerHTML =
-      this.database.renderPassCount.toLocaleString("en-US");
-  }
-}
-
 class ObjectDatabase {
   constructor() {
+    this.reset();
+
+    this.onDeleteObject = new Signal();
+    this.onResolvePendingObject = new Signal();
+    this.onAddObject = new Signal();
+    this.onBeginFrame = new Signal();
+    this.onEndFrame = new Signal();
+    this.onBeginRenderPass = new Signal();
+    this.onBeginComputePass = new Signal();
+    this.onEndPass = new Signal();
+    this.onAdapterInfo = new Signal();
+
+    const self = this;
+    port.onMessage.addListener((message) => {
+      switch (message.action) {
+        case "inspect_adapter_info":
+          self.setAdapterInfo(message.info);
+          break;
+        case "inspect_begin_frame":
+          self.beginFrame();
+          break;
+        case "inspect_end_frame":
+          self.endFrame();
+          break;
+        case "inspect_begin_render_pass":
+          self.beginRenderPass();
+          break;
+        case "inspect_begin_compute_pass":
+          self.beginComputePass();
+          break;
+        case "inspect_end":
+          self.endPass();
+          break;
+        case "inspect_delete_object":
+          self.deleteObject(message.id);
+          break;
+        case "inspect_add_object":
+          const id = message.id;
+          let descriptor = null;
+          try {
+            descriptor = message.descriptor ? JSON.parse(message.descriptor) : null;
+          } catch (e) {
+            console.log("@@@@ EXCEPTION", e);
+            break;
+          }
+          switch (message.type) {
+            case "ShaderModule": {
+              const obj = new ShaderModule(descriptor);
+              self.addObject(id, obj);
+              obj.size = descriptor?.code?.length ?? 0;
+              break;
+            }
+            case "Buffer": {
+              const obj = new Buffer(descriptor);
+              self.addObject(id, obj);
+              obj.size = descriptor?.size ?? 0;
+              break;
+            }
+            case "Texture": {
+              const obj = new Texture(descriptor);
+              self.addObject(id, obj);
+              break;
+            }
+            case "Sampler": {
+              const obj = new Sampler(descriptor);
+              self.addObject(id, obj);
+              break;
+            }
+            case "BindGroup": {
+              const obj = new BindGroup(descriptor);
+              self.addObject(id, obj);
+              break;
+            }
+            case "BindGroupLayout": {
+              const obj = new BindGroupLayout(descriptor);
+              self.addObject(id, obj);
+              break;
+            }
+            case "RenderPipeline": {
+              const obj = new RenderPipeline(descriptor);
+              self.addObject(id, obj);
+              break;
+            }
+            case "ComputePipeline": {
+              const obj = new ComputePipeline(descriptor);
+              self.addObject(id, obj);
+              break;
+            }
+          }
+          break;
+      }
+    });
+  }
+
+  reset() {
     this.adapterInfo = {
       vendor: "",
       architecture: "",
       device: "",
       description: ""
     };
+
     this.allObjects = new Map();
     this.samplers = new Map();
     this.textures = new Map();
@@ -560,10 +182,9 @@ class ObjectDatabase {
     this.computePipelines = new Map();
     this.pendingRenderPipelines = new Map();
     this.pendingComputePipelines = new Map();
-
-    this.objectsPanel = null;
     this.renderPassCount = 0;
     this.computePassCount = 0;
+    this.frameTime = 0;
   }
 
   setAdapterInfo(info) {
@@ -571,57 +192,38 @@ class ObjectDatabase {
     this.adapterInfo.architecture = info.architecture;
     this.adapterInfo.device = info.device;
     this.adapterInfo.description = info.description;
-    this.objectsPanel?.updateAdapterInfo();
-  }
-
-  initGui() {
-    this.objectsPanel = new ObjectsPanel(this);
-  }
-
-  get enabled() {
-    return this.objectsPanel?.enabled ?? false;
-  }
-
-  enable() {
-    try {
-      if (!this.objectsPanel) {
-        this.initGui();
-      }
-      this.objectsPanel?.enable();
-    } catch (e) {
-      console.log("@@@@ EXCEPTION", e);
-    }
-  }
-
-  disable() {
-    this.objectsPanel?.disable();
-    this.objectsPanel = null;
+    this.onAdapterInfo.emit();
   }
 
   beginFrame() {
     this.startFrameTime = performance.now();
     this.renderPassCount = 0;
+    this.onBeginFrame.emit();
   }
 
   endFrame() {
     this.endFrameTime = performance.now();
     this.frameTime = this.endFrameTime - this.startFrameTime;
-    this.objectsPanel?.updateFrameStats();
+    this.onEndFrame.emit();
   }
 
   beginRenderPass() {
     this.renderPassCount++;
+    this.onBeginRenderPass.emit();
   }
 
   beginComputePass() {
     this.computePassCount++;
+    this.onBeginComputePass.emit();
   }
 
-  end() { }
+  endPass() {
+    this.onEndPass.emit();
+  }
 
   getObject(id) {
     return this.allObjects.get(id);
-  }
+  }  
 
   addObject(id, object, pending) {
     this.allObjects.set(id, object);
@@ -647,9 +249,7 @@ class ObjectDatabase {
       this.computePipelines.set(id, object);
     }
 
-    if (this.objectsPanel) {
-      this.objectsPanel.addObject(id, object, pending);
-    }
+    this.onAddObject.emit(id, object, pending);
   }
 
   resolvePendingObject(id) {
@@ -658,9 +258,7 @@ class ObjectDatabase {
       this.pendingRenderPipelines.delete(id);
       this.renderPipelines.set(id, object);
 
-      if (this.objectsPanel) {
-        this.objectsPanel.resolvePendingObject(id, object);
-      }
+      this.onResolvePendingObject.emit(id, object);
     } else if (object instanceof ComputePipeline) {
       this.pendingComputePipelines.delete(id);
       this.computePipelines.set(id, object);
@@ -681,18 +279,18 @@ class ObjectDatabase {
     this.pendingRenderPipelines.delete(id);
     this.pendingComputePipelines.delete(id);
 
-    if (this.objectsPanel) {
-      this.objectsPanel.deleteObject(id, object);
-    }
+    this.onDeleteObject.emit(id, object);
   }
 }
-
 
 class InspectorWindow extends Window {
   constructor(database) {
     super();
+
     this.database = database
     this.classList.add("main-window");
+
+    const self = this;
 
     const tabs = new TabWidget(this);
     const panel = new Div();
@@ -703,6 +301,7 @@ class InspectorWindow extends Window {
     this.inspectButton = new Button(controlBar, { label: "Start", callback: () => { 
       try {
         port.postMessage({ action: "initialize_inspector", tabId });
+        self.reset();
       } catch (e) {}
     } });
 
@@ -712,12 +311,287 @@ class InspectorWindow extends Window {
     new Span(controlBar, { text: "Name:", style: "margin-left: 20px; margin-right: 10px;  vertical-align: middle;" });
     this.recordNameInput = new Input(controlBar, { id: "record_frames", type: "text", value: "webgpu_record" });
 
-    const self = this;
+    
     this.recordButton = new Button(controlBar, { label: "Record", style: "margin-left: 20px; margin-right: 10px;", callback: () => {
       const frames = self.recordFramesInput.value || 1;
       const filename = self.recordNameInput.value;
       port.postMessage({ action: "initialize_recorder", frames, filename, tabId });
-     }});
+    }});
+
+    this.inspectorGUI = new Div(panel);
+
+    this.reset();
+
+    this.database.onEndFrame.addListener(this.updateFrameStats, this);
+    this.database.onAddObject.addListener(this.addObject, this);
+  }
+
+  reset() {
+    const self = this;
+
+    this.inspectorGUI.html = "";
+
+    const split1 = new HSplit(this.inspectorGUI, { position: 0.2, style: "height: 100%;" });
+
+    this.infoPanel = new Div(null, { class: "info-panel" });
+    const infoTab = new TabWidget(split1);
+    infoTab.addTab("Stats", this.infoPanel);
+
+    let div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
+    let title = new Span(div, { text: "Frame Duration:", style: "color: #bbb;" });
+    this.uiFrameTime = new Span(div, { text: "0ms", style: "margin-left: 5px;" });
+
+    div = new Div(this.infoPanel);
+    title = new Span(div, { text: "Frame Render Passes:", style: "color: #bbb;" });
+    this.uiFrameRenderPasses = new Span(div, { text: "0", style: "margin-left: 5px;" });
+
+    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
+    title = new Span(div, { text: "Pending Async Render Pipelines:", style: "color: #bbb;" });
+    this.uiPendingRenderPipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
+
+    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
+    title = new Span(div, { text: "Render Pipelines:", style: "color: #bbb;" });
+    this.uiRenderPipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
+
+    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
+    title = new Span(div, { text: "Shader Modules:", style: "color: #bbb;" });
+    this.uiShaderModulesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
+
+    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
+    title = new Span(div, { text: "Buffers:", style: "color: #bbb;" });
+    this.uiBuffersStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
+
+    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
+    title = new Span(div, { text: "Textures:", style: "color: #bbb;" });
+    this.uiTexturesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
+
+    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
+    title = new Span(div, { text: "Samplers:", style: "color: #bbb;" });
+    this.uiSamplersStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
+
+    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
+    title = new Span(div,{ text: "BindGroups:", style: "color: #bbb;" });
+    this.uiBindGroupsStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
+
+
+
+    const hSplit = new HSplit(split1, { position: 0.2, style: "height: 100%;" });
+
+    const objectsTab = new TabWidget(hSplit);
+    const objectsPanel = new Div();
+    objectsTab.addTab("Objects", objectsPanel);
+
+    const inspectTab = new TabWidget(hSplit);
+    this.inspectPanel = new Div();
+    inspectTab.addTab("Inspect", this.inspectPanel);
+
+    this.objectsTree = new TreeWidget(objectsPanel, { style: "height: 100%; overflow-y: auto;" });
+
+    this.objectsTree.onItemSelected.addListener((data) => {
+      const object = self.database.getObject(data.id);
+      if (object) {
+        self.inspectObject(data.id, object);
+      }
+    });
+
+    const data = {
+      id: '0',
+      node: null,
+      content: 'Objects',
+      children: [],
+    };
+
+    const adaptersData = {
+      id: '__Adapters',
+      content: "Adapters",
+      children: [{
+        id: '__Adapter.0',
+        content: "Adapter 0",
+        children: [],
+      }],
+    };
+    data.children.push(adaptersData);
+
+    const devicesData = {
+      id: '__Devices',
+      content: "Devices",
+      children: [],
+    };
+    data.children.push(devicesData);
+
+    const renderPipelinesData = {
+      id: '__RenderPipelines',
+      content: "Render Pipelines",
+      children: [],
+      collapsed: true,
+    };
+    data.children.push(renderPipelinesData);
+
+    const computePipelinesData = {
+      id: '__ComputePipelines',
+      content: "Compute Pipelines",
+      children: [],
+      collapsed: true,
+    };
+    data.children.push(computePipelinesData);
+
+    const shaderModulesData = {
+      id: '__ShaderModules',
+      content: "Shader Modules",
+      children: [],
+      collapsed: true,
+    };
+    data.children.push(shaderModulesData);
+
+    const buffersData = {
+      id: '__Buffers',
+      content: "Buffers",
+      children: [],
+      collapsed: true,
+    };
+    data.children.push(buffersData);
+
+    const texturesData = {
+      id: '__Textures',
+      content: "Textures",
+      children: [],
+      collapsed: true,
+    };
+    data.children.push(texturesData);
+
+    const samplersData = {
+      id: '__Samplers',
+      content: "Samplers",
+      children: [],
+      collapsed: true,
+    };
+    data.children.push(samplersData);
+
+    const bindGroupsData = {
+      id: '__BindGroups',
+      content: "BindGroups",
+      children: [],
+      collapsed: true,
+    };
+    data.children.push(bindGroupsData);
+
+    const bindGroupLayoutsData = {
+      id: '__BindGroupLayouts',
+      content: "BindGroupLayouts",
+      children: [],
+      collapsed: true,
+    };
+    data.children.push(bindGroupLayoutsData);
+
+    const pendingAsyncRenderPipelinesData = {
+      id: '__PendingAsyncRenderPipelines',
+      content: "Pending Async Render Pipelines",
+      children: [],
+      collapsed: true,
+    };
+    data.children.push(pendingAsyncRenderPipelinesData);
+
+    const pendingAsyncComputePipelinesData = {
+      id: '__PendingAsyncComputePipelines',
+      content: "Pending Async Compute Pipelines",
+      children: [],
+      collapsed: true,
+    };
+    data.children.push(pendingAsyncComputePipelinesData);
+
+    this.objectsTree.setData(data);
+  }
+
+  updateFrameStats() {
+    this.uiFrameTime.text = `${this.database.frameTime.toFixed(2)}ms`;
+    this.uiFrameRenderPasses.text =
+      this.database.renderPassCount.toLocaleString("en-US");
+  }
+
+  addObject(id, object, pending) {
+    if (object instanceof Buffer) {
+      const data = {
+        id: id,
+        content: `Buffer ${id}`,
+        children: [],
+      };
+      this.objectsTree.insertItem(data, "__Buffers", -1);
+    } else if (object instanceof Sampler) {
+      const data = {
+        id: id,
+        content: `Sampler ${id}`,
+        children: [],
+      };
+      this.objectsTree.insertItem(data, "__Samplers", -1);
+    } else if (object instanceof Texture) {
+      const data = {
+        id: id,
+        content: `Texture ${id}`,
+        children: [],
+      };
+      this.objectsTree.insertItem(data, "__Textures", -1);
+    } else if (object instanceof ShaderModule) {
+      const data = {
+        id: id,
+        content: `ShaderModule ${id}`,
+        children: [],
+      };
+      this.objectsTree.insertItem(data, "__ShaderModules", -1);
+    } else if (object instanceof BindGroupLayout) {
+      const data = {
+        id: id,
+        content: `BindGroupLayout ${id}`,
+        children: [],
+      };
+      this.objectsTree.insertItem(data, "__BindGroupLayouts", -1);
+    } else if (object instanceof BindGroup) {
+      const data = {
+        id: id,
+        content: `BindGroup ${id}`,
+        children: [],
+      };
+      this.objectsTree.insertItem(data, "__BindGroups", -1);
+    } else if (object instanceof RenderPipeline) {
+      const data = {
+        id: id,
+        content: `RenderPipeline ${id}`,
+        children: [],
+      };
+      if (pending) {
+        this.objectsTree.insertItem(data, "__PendingAsyncRenderPipelines", -1);
+      } else {
+        this.objectsTree.insertItem(data, "__RenderPipelines", -1);
+      }
+    } else if (object instanceof ComputePipeline) {
+      const data = {
+        id: id,
+        content: `ComputePipeline ${id}`,
+        children: [],
+      };
+      if (pending) {
+        this.objectsTree.insertItem(data, "__PendingAsyncComputePipelines", -1);
+      } else {
+        this.objectsTree.insertItem(data, "__ComputePipelines", -1);
+      }
+    }
+  }
+
+  inspectObject(id, object) {
+    this.inspectPanel.html = "";
+
+    let div = new Div(this.inspectPanel);
+    new Span(div, { text: object.constructor.name });
+
+    div = new Div(this.inspectPanel);
+
+    if (object instanceof ShaderModule) {
+      const descriptor = new Span(div);
+      const code = object.descriptor.code;
+      descriptor.html = `<pre>${code}</pre>`
+    } else {
+      const descriptor = new Span(div);
+      descriptor.html = `<pre>${JSON.stringify(object.descriptor, undefined, 4)}</pre>`;
+    }
   }
 }
 
@@ -725,95 +599,8 @@ class InspectorWindow extends Window {
 
 async function main() {
   const objectDatabase = new ObjectDatabase();
-  objectDatabase.enable();
-
-  const inspectorWindow = new InspectorWindow(objectDatabase);
-
-  port.onMessage.addListener((message) => {
-    if (!objectDatabase.enabled) {
-      objectDatabase.enable();
-    }
-    switch (message.action) {
-      case "inspect_grab_frame_results":
-        console.log("GRAB FRAME RESULTS", message.commands);
-        break;
-      case "inspect_adapter_info":
-        objectDatabase.setAdapterInfo(message.info);
-        break;
-      case "inspect_begin_frame":
-        objectDatabase.beginFrame();
-        break;
-      case "inspect_end_frame":
-        objectDatabase.endFrame();
-        break;
-      case "inspect_begin_render_pass":
-        objectDatabase.beginRenderPass();
-        break;
-      case "inspect_begin_compute_pass":
-        objectDatabase.beginComputePass();
-        break;
-      case "inspect_end":
-        objectDatabase.end();
-        break;
-      case "inspect_delete_object":
-        objectDatabase.deleteObject(message.id);
-        break;
-      case "inspect_add_object":
-        const id = message.id;
-        let descriptor = null;
-        try {
-          descriptor = message.descriptor ? JSON.parse(message.descriptor) : null;
-        } catch (e) {
-          console.log("@@@@ EXCEPTION", e);
-          break;
-        }
-        switch (message.type) {
-          case "ShaderModule": {
-            const obj = new ShaderModule(descriptor);
-            objectDatabase.addObject(id, obj);
-            obj.size = descriptor?.code?.length ?? 0;
-            break;
-          }
-          case "Buffer": {
-            const obj = new Buffer(descriptor);
-            objectDatabase.addObject(id, obj);
-            obj.size = descriptor?.size ?? 0;
-            break;
-          }
-          case "Texture": {
-            const obj = new Texture(descriptor);
-            objectDatabase.addObject(id, obj);
-            break;
-          }
-          case "Sampler": {
-            const obj = new Sampler(descriptor);
-            objectDatabase.addObject(id, obj);
-            break;
-          }
-          case "BindGroup": {
-            const obj = new BindGroup(descriptor);
-            objectDatabase.addObject(id, obj);
-            break;
-          }
-          case "BindGroupLayout": {
-            const obj = new BindGroupLayout(descriptor);
-            objectDatabase.addObject(id, obj);
-            break;
-          }
-          case "RenderPipeline": {
-            const obj = new RenderPipeline(descriptor);
-            objectDatabase.addObject(id, obj);
-            break;
-          }
-          case "ComputePipeline": {
-            const obj = new ComputePipeline(descriptor);
-            objectDatabase.addObject(id, obj);
-            break;
-          }
-        }
-        break;
-    }
-  });
+  
+  new InspectorWindow(objectDatabase);
 
   port.postMessage({action: "PanelLoaded", tabId});
 }
