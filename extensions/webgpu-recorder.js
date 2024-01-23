@@ -548,10 +548,10 @@ class WebGPURecorder {
                 s += `"${key}":`;
                 if (method == "requestDevice") {
                     if (key == "requiredFeatures") {
-                        s += this._getObjectVariable(this._adapter) + ".features";
+                        s += "requiredFeatures";
                         continue;
                     } else if (key == "requiredLimits") {
-                        s += "_limits";
+                        s += "requiredLimits";
                         continue;
                     }
                 }
@@ -861,11 +861,15 @@ class WebGPURecorder {
 
                 if (method == "requestAdapter") {
                     const adapter = this._getObjectVariable(result);
-                    this._recordLine(`const _limits = {};
+                    this._recordLine(`const requiredFeatures = [];
+                    for (const x of ${adapter}.features) {
+                        requiredFeatures.push(x);
+                    }`, obj);
+                    this._recordLine(`const requiredLimits = {};
                     const exclude = new Set(["minSubgroupSize", "maxSubgroupSize"]);
                     for (const x in ${adapter}.limits) {
                       if (!exclude.has(x)) {
-                        _limits[x] = ${adapter}.limits[x];
+                        requiredLimits[x] = ${adapter}.limits[x];
                       }
                     }`, obj);
                 }
