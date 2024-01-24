@@ -27,13 +27,6 @@ From a page that has WebGPU content, press **F12** to open the Chrome Developer 
 
 The Inspector tool will reload the page and inject the WebGPU Inspector into it, reporting information about the state of WebGPU to the tool.
 
-##### Limitations
-
-##### Garbage Collection
-
-* The Inspector tracks objects that are created and explicitely destroyed. It can't track objects that are destroyed by garbage collection.
-This will lead to a growing accumilation of tracked objects. Ideally you should explicitly destroy WebGPU objects when they are no longer required.
-
 ----
 
 ### Recorder

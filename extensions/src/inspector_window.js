@@ -50,8 +50,9 @@ export class InspectorWindow extends Window {
 
     this.inspectButton = new Button(controlBar, { label: "Start", callback: () => { 
       try {
-        port.postMessage({ action: "initialize_inspector", tabId });
+        self.database.reset();
         self._resetInspectorPanel();
+        port.postMessage({ action: "initialize_inspector", tabId });
       } catch (e) {}
     } });    
 

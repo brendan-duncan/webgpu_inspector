@@ -19,10 +19,19 @@
       this._maxFramesToRecord = 1000;
       this._recordRequest = false;
 
+      this._destroyed = new Map();
+
+      const self = this;
+      // Try to track garbage collected WebGPU objects
+      this._gcRegistry = new FinalizationRegistry((id) => {
+        if (self._destroyed.has(id)) {
+          return;
+        }
+        window.postMessage({"action": "inspect_delete_object", id}, "*");
+      });
+
       this._wrapObject(window.navigator.gpu);
       this._wrapCanvases();
-
-      let self = this;
 
       // Capture any dynamically created canvases
       let __createElement = document.createElement;
@@ -124,6 +133,8 @@
         return;
       }
       object.__id = this._objectID++;
+
+      this._gcRegistry.register(object, object.__id);
 
       for (const m in object) {
         if (typeof object[m] == "function") {
@@ -232,6 +243,7 @@
     _recordCommand(object, method, result, time, ...args) {
       if (method == "destroy") {
         const id = object.__id;
+        this._destroyed.delete(id);
         window.postMessage({"action": "inspect_delete_object", id}, "*");
       } else if (method == "createShaderModule") {
         const id = result.__id;
@@ -342,5 +354,4 @@
   ];
 
   webgpuInspector = new WebGPUInspector();
-  webgpuInspector.enable();
 })();
