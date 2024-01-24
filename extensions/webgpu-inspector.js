@@ -67,6 +67,7 @@
       this.buffers = new Map();
       this.bindGroups = new Map();
       this.bindGroupLayouts = new Map();
+      this.pipelineLayouts = new Map();
       this.shaderModules = new Map();
       this.renderPipelines = new Map();
       this.computePipelines = new Map();
@@ -116,6 +117,8 @@
         this.bindGroups.set(id, object);
       } else if (object instanceof BindGroupLayout) {
         this.bindGroupLayouts.set(id, object);
+      } else if (object instanceof PipelineLayout) {
+        this.pipelineLayouts.set(id, object);
       } else if (object instanceof ShaderModule) {
         this.shaderModules.set(id, object);
       } else if (object instanceof RenderPipeline) {
@@ -148,6 +151,7 @@
       this.buffers.delete(id);
       this.bindGroups.delete(id);
       this.bindGroupLayouts.delete(id);
+      this.pipelineLayouts.delete(id);
       this.shaderModules.delete(id);
       this.renderPipelines.delete(id);
       this.computePipelines.delete(id);
@@ -414,6 +418,11 @@
         const obj = new BindGroupLayout(args[0]);
         this._objectDatabase.addObject(id, obj);
         window.postMessage({"action": "inspect_add_object", id, "type": "BindGroupLayout", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
+      } else if (method == "createPipelineLayout") {
+        const id = result.__id;
+        const obj = new PipelineLayout(args[0]);
+        this._objectDatabase.addObject(id, obj);
+        window.postMessage({"action": "inspect_add_object", id, "type": "PipelineLayout", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
       } else if (method == "createRenderPipeline") {
         const id = result.__id;
         const obj = new RenderPipeline(args[0]);
@@ -493,14 +502,6 @@
       }
     }
   }
-
-  WebGPUInspector._slowMethods = [
-    "createBuffer",
-    "createBindGroup",
-    "createShaderModule",
-    "createRenderPipeline",
-    "createComputePipeline",
-  ];
 
   WebGPUInspector._asyncMethods = [
     "requestAdapter",
