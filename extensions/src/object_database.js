@@ -278,6 +278,8 @@ export class ObjectDatabase {
     this.pendingRenderPipelines.delete(id);
     this.pendingComputePipelines.delete(id);
 
-    this.onDeleteObject.emit(id, object);
+    if (object) {
+      this.onDeleteObject.emit(id, object);
+    }
   }
 }

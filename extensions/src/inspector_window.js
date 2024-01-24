@@ -46,7 +46,7 @@ export class InspectorWindow extends Window {
       } catch (e) {}
     } });    
 
-    this.inspectorGUI = new Div(inspectorPanel, { style: "overflow: auto; white-space: nowrap; height: calc(100vh - 145px)" });
+    this.inspectorGUI = new Div(inspectorPanel, { style: "overflow: auto; white-space: nowrap; height: calc(-85px + 100vh);" });
   }
 
   _buildRecorderPanel(port, tabId, recorderPanel) {
@@ -171,6 +171,7 @@ export class InspectorWindow extends Window {
 
   _resetInspectorPanel() {
     this._selectedObject = null;
+    this._selectedGroup = null;
     this.inspectorGUI.html = "";
 
     const pane1 = new Span(this.inspectorGUI, { style: "margin-right: 10px;" });
@@ -349,7 +350,7 @@ export class InspectorWindow extends Window {
       if (item instanceof Array) {
         newArray.push(this._getDescriptorArray(object, item));
       } else if (item instanceof Object) {
-        newArray.push(this._getDescriptorInfo(item));
+        newArray.push(this._getDescriptorInfo(object, item));
       } else {
         newArray.push(item);
       }
@@ -462,35 +463,51 @@ export class InspectorWindow extends Window {
   _createObjectListUI(parent, name) {
     const div = new Div(parent);
 
-    const titleBar = new Div(div, { className: "title_bar" });
+    const titleBar = new Div(div, { class: "title_bar" });
     
-    const collapse = new Span(titleBar, { text: "+", style: "margin-right: 10px;" })
+    const collapse = new Span(titleBar, { class: "object_list_collapse", text: "+", style: "margin-right: 10px;" })
 
-    const title = new Span(titleBar, { className: "object_type", text: name });
-    const objectCount = new Span(titleBar, { className: "object_type", text: "0", style: "margin-left: 10px;" });
+    const title = new Span(titleBar, { class: "object_type", text: name });
+    const objectCount = new Span(titleBar, { class: "object_type", text: "0", style: "margin-left: 10px;" });
 
     const objectList = new Widget("ol", div, { class: ["object_list", "collapsed"] });
+    objectList.collapse = collapse;
     objectList.count = objectCount;
 
-    title.element.onclick = function() {
+    const self = this;
+
+    titleBar.element.onclick = function() {
+      if (self._selectedGroup && self._selectedGroup != objectList) {
+        self._selectedGroup.collapse.text = "+";
+        self._selectedGroup.element.className = "object_list collapsed";
+        self._selectedGroup = null;
+      }
       if (collapse.text == "-") {
         collapse.text = "+";
         objectList.element.className = "object_list collapsed";
       } else {
         collapse.text = "-";
         objectList.element.className = "object_list";
+        self._selectedGroup = objectList;
       }
     };
 
-    collapse.element.onclick = function() {
+    /*collapse.element.onclick = function() {
+      if (self._selectedGroup && self._selectedGroup != objectList) {
+        self._selectedGroup.collapse.text = "+";
+        self._selectedGroup.element.className = "object_list collapsed";
+        self._selectedGroup = null;
+      }
       if (collapse.text == "-") {
         collapse.text = "+";
         objectList.element.className = "object_list collapsed";
+        self._selectedGroup = null;
       } else {
         collapse.text = "-";
         objectList.element.className = "object_list";
+        self._selectedGroup = objectList;
       }
-    };
+    };*/
 
     return objectList;
   }

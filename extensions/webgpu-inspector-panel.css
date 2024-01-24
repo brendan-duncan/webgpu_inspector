@@ -88,17 +88,16 @@ body {
 
 .title_bar {
   background-color: rgb(128, 128, 128);
-  width: 100%;
   padding: 5px;
   border: 1px solid #000;
   margin-top: 0px;
   margin-bottom: 0px;
+  font-size: 12pt;
+  font-weight: bold;
 }
 
 .collapse {
   float: left;
-  font-size: 18px;
-  font-weight: bold;
   color: #fff;
   cursor: pointer;
   border: 1px solid #000;
@@ -107,13 +106,16 @@ body {
   padding-right: 5px;
 }
 
+.title_bar:hover {
+  cursor: pointer;
+  background-color: #aaa;
+}
+
 .collapsed {
   display: none;
 }
 
 .object_type {
-  font-size: 18px;
-  font-weight: bold;
   color: #000;
 }
 
