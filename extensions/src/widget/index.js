@@ -23,8 +23,6 @@ export * from './tab_page.js';
 export * from './tab_widget.js';
 export * from './text_area.js';
 export * from './text_input.js';
-export * from './tree_item.js';
-export * from './tree_widget.js';
 export * from './vsplit.js';
 export * from './widget.js';
 export * from './window.js';

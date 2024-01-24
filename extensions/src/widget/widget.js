@@ -186,10 +186,14 @@ export class Widget {
    * @param {Widget} child
    */
   appendChild(child) {
-    if (child.parent === this) return;
+    if (child.parent === this) {
+      return;
+    }
 
     // Remove the widget from its current parent.
-    if (child.parent) child.parent.removeChild(child);
+    if (child.parent) {
+      child.parent.removeChild(child);
+    }
 
     // Add the widget to the children list.
     child._parent = this;
@@ -197,9 +201,15 @@ export class Widget {
     this._element.appendChild(child._element);
 
     const w = this.window;
-    if (w) child._addedToWindow(w);
+    if (w) {
+      child._addedToWindow(w);
+    }
 
     child.onResize();
+  }
+
+  remove() {
+    this.element.remove();
   }
 
   /**
@@ -208,7 +218,9 @@ export class Widget {
    */
   removeChild(child) {
     const index = this.children.indexOf(child);
-    if (index != -1) this.children.splice(index, 1);
+    if (index != -1) {
+      this.children.splice(index, 1);
+    }
     this._element.removeChild(child._element);
   }
 
