@@ -30,9 +30,9 @@ export class InspectorWindow extends Window {
 
     this._resetInspectorPanel();
 
-    this.database.onEndFrame.addListener(this.updateFrameStats, this);
-    this.database.onAddObject.addListener(this.addObject, this);
-    this.database.onDeleteObject.addListener(this.deleteObject, this);
+    this.database.onEndFrame.addListener(this._updateFrameStats, this);
+    this.database.onAddObject.addListener(this._addObject, this);
+    this.database.onDeleteObject.addListener(this._deleteObject, this);
   }
 
   _buildInspectorPanel(port, tabId, inspectorPanel) {
@@ -259,18 +259,18 @@ export class InspectorWindow extends Window {
     this.uiPendingAsyncComputePipelines = this._createObjectListUI(objectsPanel, "Pending Async Compute Pipelines");
   }
 
-  updateFrameStats() {
+  _updateFrameStats() {
     this.uiFrameTime.text = `${this.database.frameTime.toFixed(2)}ms`;
     this.uiFrameRenderPasses.text =
       this.database.renderPassCount.toLocaleString("en-US");
   }
 
-  deleteObject(id, object) {
-    object.widget?.remove();
-    this.updateObjectStat(object);
+  _deleteObject(id, object) {
+    object?.widget?.remove();
+    this._updateObjectStat(object);
   }
 
-  updateObjectStat(object) {
+  _updateObjectStat(object) {
     if (object instanceof Buffer) {
       this.uiBuffersStat.text = `${this.database.buffers.size}`;
       this.uiBuffers.count.text = `${this.database.buffers.size}`;
@@ -303,8 +303,8 @@ export class InspectorWindow extends Window {
     }
   }
 
-  addObject(id, object, pending) {
-    this.updateObjectStat(object);
+  _addObject(id, object, pending) {
+    this._updateObjectStat(object);
     if (object instanceof Buffer) {
       this._addObjectToUI(id, object, this.uiBuffers);
       this.uiBuffers.count.text = `${this.database.buffers.size}`;
@@ -343,11 +343,11 @@ export class InspectorWindow extends Window {
     }
   }
 
-  _getDescriptorArray(array) {
+  _getDescriptorArray(object, array) {
     const newArray = [];
     for (const item of array) {
       if (item instanceof Array) {
-        newArray.push(this._getDescriptorArray(item));
+        newArray.push(this._getDescriptorArray(object, item));
       } else if (item instanceof Object) {
         newArray.push(this._getDescriptorInfo(item));
       } else {
@@ -357,7 +357,7 @@ export class InspectorWindow extends Window {
     return newArray;
   }
 
-  _getDescriptorInfo(descriptor) {
+  _getDescriptorInfo(object, descriptor) {
     const info = {};
     if (descriptor["__id"] !== undefined) {
       const obj = this.database.getObject(descriptor["__id"]);
@@ -369,8 +369,59 @@ export class InspectorWindow extends Window {
 
     for (const key in descriptor) {
       const value = descriptor[key];
-      if (value instanceof Array) {
-        info[key] = this._getDescriptorArray(value);
+      if (object instanceof Buffer && key == "usage") {
+        let access = "";
+        if (value & GPUBufferUsage.MAP_READ) {
+          access += "MAP_READ ";
+        }
+        if (value & GPUBufferUsage.MAP_WRITE) {
+          access += "MAP_WRITE ";
+        }
+        if (value & GPUBufferUsage.COPY_SRC) {
+          access += "COPY_SRC ";
+        }
+        if (value & GPUBufferUsage.COPY_DST) {
+          access += "COPY_DST ";
+        }
+        if (value & GPUBufferUsage.INDEX) {
+          access += "INDEX ";
+        }
+        if (value & GPUBufferUsage.VERTEX) {
+          access += "VERTEX ";
+        }
+        if (value & GPUBufferUsage.UNIFORM) {
+          access += "UNIFORM ";
+        }
+        if (value & GPUBufferUsage.STORAGE) {
+          access += "STORAGE ";
+        }
+        if (value & GPUBufferUsage.INDIRECT) {
+          access += "INDIRECT ";
+        }
+        if (value & GPUBufferUsage.QUERY_RESOLVE) {
+          access += "QUERY_RESOLVE ";
+        }
+        info[key] = access || "NONE";
+      } else if (object instanceof Texture && key == "usage") {
+        let access = "";
+        if (value & GPUTextureUsage.COPY_SRC) {
+          access += "COPY_SRC ";
+        }
+        if (value & GPUTextureUsage.COPY_DST) {
+          access += "COPY_DST ";
+        }
+        if (value & GPUTextureUsage.TEXTURE_BINDING) {
+          access += "TEXTURE_BINDING ";
+        }
+        if (value & GPUTextureUsage.STORAGE_BINDING) {
+          access += "STORAGE_BINDING ";
+        }
+        if (value & GPUTextureUsage.RENDER_ATTACHMENT) {
+          access += "RENDER_ATTACHMENT ";
+        }
+        info[key] = access || "NONE";
+      } else if (value instanceof Array) {
+        info[key] = this._getDescriptorArray(object, value);
       } else if (value instanceof Object) {
         if (value["__id"] !== undefined) {
           const obj = this.database.getObject(value["__id"]);
@@ -380,7 +431,7 @@ export class InspectorWindow extends Window {
             info[key] = `Object ${value["__id"]}`;
           }
         } else {
-          info[key] = this._getDescriptorInfo(value);
+          info[key] = this._getDescriptorInfo(object, value);
         }
       } else {
         info[key] = value;
@@ -389,7 +440,7 @@ export class InspectorWindow extends Window {
     return info;
   }
 
-  inspectObject(id, object) {
+  _inspectObject(id, object) {
     this.inspectPanel.html = "";
 
     let div = new Div(this.inspectPanel);
@@ -403,7 +454,7 @@ export class InspectorWindow extends Window {
       descriptor.html = `<pre>${code}</pre>`
     } else {
       const descriptor = new Span(div);
-      const desc = this._getDescriptorInfo(object.descriptor);
+      const desc = this._getDescriptorInfo(object, object.descriptor);
       descriptor.html = `<pre>${JSON.stringify(desc, undefined, 4)}</pre>`;
     }
   }
@@ -453,7 +504,7 @@ export class InspectorWindow extends Window {
       }
       object.widget.element.classList.add("selected");
       self._selectedObject = object;
-      self.inspectObject(id, object);
+      self._inspectObject(id, object);
     };
   }
 }
