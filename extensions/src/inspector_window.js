@@ -346,7 +346,13 @@ export class InspectorWindow extends Window {
   _getDescriptorArray(array) {
     const newArray = [];
     for (const item of array) {
-      newArray.push(this._getDescriptorInfo(item));
+      if (item instanceof Array) {
+        newArray.push(this._getDescriptorArray(item));
+      } else if (item instanceof Object) {
+        newArray.push(this._getDescriptorInfo(item));
+      } else {
+        newArray.push(item);
+      }
     }
     return newArray;
   }
@@ -409,18 +415,28 @@ export class InspectorWindow extends Window {
     
     const collapse = new Span(titleBar, { text: "+", style: "margin-right: 10px;" })
 
-    new Span(titleBar, { className: "object_type", text: name });
+    const title = new Span(titleBar, { className: "object_type", text: name });
     const objectCount = new Span(titleBar, { className: "object_type", text: "0", style: "margin-left: 10px;" });
 
     const objectList = new Widget("ol", div, { class: ["object_list", "collapsed"] });
     objectList.count = objectCount;
 
-    collapse.element.onclick = function() {
-      if (this.innerHTML == "-") {
-        this.innerHTML = "+";
+    title.element.onclick = function() {
+      if (collapse.text == "-") {
+        collapse.text = "+";
         objectList.element.className = "object_list collapsed";
       } else {
-        this.innerHTML = "-";
+        collapse.text = "-";
+        objectList.element.className = "object_list";
+      }
+    };
+
+    collapse.element.onclick = function() {
+      if (collapse.text == "-") {
+        collapse.text = "+";
+        objectList.element.className = "object_list collapsed";
+      } else {
+        collapse.text = "-";
         objectList.element.className = "object_list";
       }
     };
