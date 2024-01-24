@@ -3,163 +3,6 @@
 
   const webgpuInspectorGrabFrameKey = "WEBGPU_INSPECTOR_GRAB_FRAME";
 
-  class Buffer {
-    constructor(descriptor) {
-      this.descriptor = descriptor;
-    }
-  }
-
-  class Sampler {
-    constructor(descriptor) {
-      this.descriptor = descriptor;
-    }
-  }
-
-  class Texture {
-    constructor(descriptor) {
-      this.descriptor = descriptor;
-    }
-  }
-
-  class ShaderModule {
-    constructor(descriptor) {
-      this.descriptor = descriptor;
-    }
-  }
-
-  class BindGroupLayout {
-    constructor(descriptor) {
-      this.descriptor = descriptor;
-    }
-  }
-
-  class BindGroup {
-    constructor(descriptor) {
-      this.descriptor = descriptor;
-    }
-  }
-
-  class PipelineLayout {
-    constructor(descriptor) {
-      this.descriptor = descriptor;
-    }
-  }
-
-  class RenderPipeline {
-    constructor(descriptor) {
-      this.descriptor = descriptor;
-      this.time = 0;
-      this.element = null;
-    }
-  }
-
-  class ComputePipeline {
-    constructor(descriptor) {
-      this.descriptor = descriptor;
-    }
-  }
-
-  class ObjectDatabase {
-    constructor() {
-      this.allObjects = new Map();
-      this.samplers = new Map();
-      this.textures = new Map();
-      this.buffers = new Map();
-      this.bindGroups = new Map();
-      this.bindGroupLayouts = new Map();
-      this.pipelineLayouts = new Map();
-      this.shaderModules = new Map();
-      this.renderPipelines = new Map();
-      this.computePipelines = new Map();
-      this.pendingRenderPipelines = new Map();
-      this.pendingComputePipelines = new Map();
-
-      this.objectsPanel = null;
-      this.renderPassCount = 0;
-    }
-
-    initGui() {
-    }
-
-    enable() {
-    }
-
-    disable() {
-    }
-
-    beginFrame() {
-      this.startFrameTime = performance.now();
-      this.renderPassCount = 0;
-    }
-
-    presentFrame() {
-      this.endFrameTime = performance.now();
-      this.frameTime = this.endFrameTime - this.startFrameTime;
-    }
-
-    beginRenderPass() {
-      this.renderPassCount++;
-    }
-
-    getObject(id) {
-      return this.allObjects.get(id);
-    }
-
-    addObject(id, object, pending) {
-      this.allObjects.set(id, object);
-      if (object instanceof Sampler) {
-        this.samplers.set(id, object);
-      } else if (object instanceof Texture) {
-        this.textures.set(id, object);
-      } else if (object instanceof Buffer) {
-        this.buffers.set(id, object);
-      } else if (object instanceof BindGroup) {
-        this.bindGroups.set(id, object);
-      } else if (object instanceof BindGroupLayout) {
-        this.bindGroupLayouts.set(id, object);
-      } else if (object instanceof PipelineLayout) {
-        this.pipelineLayouts.set(id, object);
-      } else if (object instanceof ShaderModule) {
-        this.shaderModules.set(id, object);
-      } else if (object instanceof RenderPipeline) {
-        if (pending) {
-          this.pendingRenderPipelines.set(id, object);
-        } else {
-          this.renderPipelines.set(id, object);
-        }
-      } else if (object instanceof ComputePipeline) {
-        this.computePipelines.set(id, object);
-      }
-    }
-
-    resolvePendingObject(id) {
-      let object = this.allObjects.get(id);
-      if (object instanceof RenderPipeline) {
-        this.pendingRenderPipelines.delete(id);
-        this.renderPipelines.set(id, object);
-      } else if (object instanceof ComputePipeline) {
-        this.pendingComputePipelines.delete(id);
-        this.computePipelines.set(id, object);
-      }
-    }
-
-    deleteObject(id) {
-      let object = this.allObjects.get(id);
-      this.allObjects.delete(id);
-      this.samplers.delete(id);
-      this.textures.delete(id);
-      this.buffers.delete(id);
-      this.bindGroups.delete(id);
-      this.bindGroupLayouts.delete(id);
-      this.pipelineLayouts.delete(id);
-      this.shaderModules.delete(id);
-      this.renderPipelines.delete(id);
-      this.computePipelines.delete(id);
-      this.pendingRenderPipelines.delete(id);
-      this.pendingComputePipelines.delete(id);
-    }
-  }
-
   class WebGPUInspector {
     constructor(options) {
       if (!window.navigator.gpu) {
@@ -175,8 +18,6 @@
       this._timeSinceLastFrame = 0;
       this._maxFramesToRecord = 1000;
       this._recordRequest = false;
-
-      this._objectDatabase = new ObjectDatabase();
 
       this._wrapObject(window.navigator.gpu);
       this._wrapCanvases();
@@ -211,14 +52,6 @@
       };
     }
 
-    enable() {
-      this._objectDatabase.enable();
-    }
-
-    disable() {
-      this._objectDatabase.disable();
-    }
-
     clear() {
       this._frameCommands.length = 0;
       this._currentFrame = null;
@@ -226,7 +59,6 @@
     }
 
     _frameStart() {
-      this._objectDatabase.beginFrame();
       window.postMessage({"action": "inspect_begin_frame"}, "*");
 
       if (sessionStorage.getItem(webgpuInspectorGrabFrameKey)) {
@@ -239,7 +71,6 @@
     }
 
     _frameEnd() {
-      this._objectDatabase.presentFrame();
       window.postMessage({"action": "inspect_end_frame"}, "*");
       this._recordRequest = false;
 
@@ -336,6 +167,22 @@
       };
     }
 
+    _gpuToArray(gpu) {
+      const array = [];
+      for (const v of gpu) {
+        array.push(v);
+      }
+      return array;
+    }
+
+    _gpuToObject(gpu) {
+      const obj = {};
+      for (const v in gpu) {
+        obj[v] = gpu[v];
+      }
+      return obj;
+    }
+
     _wrapAsync(object, method) {
       const origMethod = object[method];
       const self = this;
@@ -355,10 +202,18 @@
                   vendor: infoObj.vendor,
                   architecture: infoObj.architecture,
                   device: infoObj.device,
-                  description: infoObj.description
+                  description: infoObj.description,
+                  features: self._gpuToArray(result.features),
+                  limits: self._gpuToObject(result.limits),
+                  isFallbackAdapter: result.isFallbackAdapter
                 };
-                window.postMessage({"action": "inspect_adapter_info", info}, "*");
+                window.postMessage({"action": "inspect_add_object", id, "type": "Adapter", "descriptor": JSON.stringify(info)}, "*");
               });
+            } else if (method == "requestDevice") {
+              const descriptor = arguments[0] ?? {};
+              descriptor["features"] = self._gpuToArray(result.features);
+              descriptor["limits"] = self._gpuToObject(result.limits);
+              window.postMessage({"action": "inspect_add_object", id, "type": "Device", "descriptor": JSON.stringify(descriptor)}, "*");
             }
             if (result && result.__id) {
               resolve(result);
@@ -377,74 +232,40 @@
     _recordCommand(object, method, result, time, ...args) {
       if (method == "destroy") {
         const id = object.__id;
-        const obj = this._objectDatabase.getObject(id);
-        if (obj) {
-          if (obj.element) {
-            obj.element.remove();
-          }
-          this._objectDatabase.deleteObject(id);
-        }
         window.postMessage({"action": "inspect_delete_object", id}, "*");
       } else if (method == "createShaderModule") {
         const id = result.__id;
-        const obj = new ShaderModule(args[0]);
-        this._objectDatabase.addObject(id, obj);
-        obj.size = args[0][0].code.length;
-        window.postMessage({"action": "inspect_add_object", id, "type": "ShaderModule", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, "type": "ShaderModule", "descriptor": JSON.stringify(args[0][0])}, "*");
       } else if (method == "createBuffer") {
         const id = result.__id;
-        const obj = new Buffer(args[0]);
-        this._objectDatabase.addObject(id, obj);
-        obj.size = args[0][0].size;
-        window.postMessage({"action": "inspect_add_object", id, "type": "Buffer", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, "type": "Buffer", "descriptor": JSON.stringify(args[0][0])}, "*");
       } else if (method == "createTexture") {
         const id = result.__id;
-        const obj = new Texture(args[0]);
-        this._objectDatabase.addObject(id, obj);
-        window.postMessage({"action": "inspect_add_object", id, "type": "Texture", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, "type": "Texture", "descriptor": JSON.stringify(args[0][0])}, "*");
       } else if (method == "createSampler") {
         const id = result.__id;
-        const obj = new Sampler(args[0]);
-        this._objectDatabase.addObject(id, obj);
-        window.postMessage({"action": "inspect_add_object", id, "type": "Sampler", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, "type": "Sampler", "descriptor": JSON.stringify(args[0][0])}, "*");
       } else if (method == "createBindGroup") {
         const id = result.__id;
-        const obj = new BindGroup(args[0]);
-        this._objectDatabase.addObject(id, obj);
-        obj.size = args[0][0].size;
-        window.postMessage({"action": "inspect_add_object", id, "type": "BindGroup", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, "type": "BindGroup", "descriptor": JSON.stringify(args[0][0])}, "*");
       } else if (method == "createBindGroupLayout") {
         const id = result.__id;
-        const obj = new BindGroupLayout(args[0]);
-        this._objectDatabase.addObject(id, obj);
-        window.postMessage({"action": "inspect_add_object", id, "type": "BindGroupLayout", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, "type": "BindGroupLayout", "descriptor": JSON.stringify(args[0][0])}, "*");
       } else if (method == "createPipelineLayout") {
         const id = result.__id;
-        const obj = new PipelineLayout(args[0]);
-        this._objectDatabase.addObject(id, obj);
-        window.postMessage({"action": "inspect_add_object", id, "type": "PipelineLayout", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, "type": "PipelineLayout", "descriptor": JSON.stringify(args[0][0])}, "*");
       } else if (method == "createRenderPipeline") {
         const id = result.__id;
-        const obj = new RenderPipeline(args[0]);
-        obj.time = time;
-        this._objectDatabase.addObject(id, obj);
-        window.postMessage({"action": "inspect_add_object", id, "type": "RenderPipeline", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, "type": "RenderPipeline", "descriptor": JSON.stringify(args[0][0])}, "*");
       } else if (method == "createComputePipeline") {
         const id = result.__id;
-        const obj = new ComputePipeline(args[0]);
-        obj.time = time;
-        this._objectDatabase.addObject(id, obj);
-        window.postMessage({"action": "inspect_add_object", id, "type": "ComputePipeline", "descriptor": JSON.stringify(obj.descriptor[0])}, "*");
-      } else if (method == "setBindGroup") {
-        // TODO send dynamic offsets
-        //window.postMessage({"action": "set_bind_group", "args": [args[0][0], JSON.stringify(args[0][1])]}, "*");
+        window.postMessage({"action": "inspect_add_object", id, "type": "ComputePipeline", "descriptor": JSON.stringify(args[0][0])}, "*");
       } else if (method == "beginRenderPass") {
-        this._objectDatabase.beginRenderPass();
         window.postMessage({"action": "inspect_begin_render_pass", "descriptor": JSON.stringify(args[0][0])}, "*");
       } else if (method == "beginComputePass") {
           window.postMessage({"action": "inspect_begin_compute_pass", "descriptor": JSON.stringify(args[0][0])}, "*");
       } else if (method == "end") {
-        window.postMessage({"action": "inspect_end"}, "*");
+        window.postMessage({"action": "inspect_end_pass"}, "*");
       }
 
       if (this._recordRequest) {
@@ -489,17 +310,14 @@
 
     _recordAsyncCommand(object, method, id, ...args) {
       if (method == "createRenderPipelineAsync") {
-        const obj = new RenderPipeline(args[0]);
-        this._objectDatabase.addObject(id, obj, true);
+        window.postMessage({"action": "inspect_add_object", id, "pending": true, "type": "RenderPipelinePipeline", "descriptor": JSON.stringify(args[0])}, "*");
+      } else if (method == "createComputePipelineAsync") {
+        window.postMessage({"action": "inspect_add_object", id, "pending": true, "type": "ComputePipelinePipeline", "descriptor": JSON.stringify(args[0])}, "*");
       }
     }
 
     _resolveAsyncCommand(id, time, result) {
-      const obj = this._objectDatabase.getObject(id);
-      if (obj instanceof RenderPipeline) {
-        obj.time = time;
-        this._objectDatabase.resolvePendingObject(id);
-      }
+      window.postMessage({"action": "inspect_resolve_async_object", id, time}, "*");
     }
   }
 

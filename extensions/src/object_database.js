@@ -1,5 +1,16 @@
 import { Signal } from "./widget/signal.js";
 
+export class Adapter {
+  constructor(descriptor) {
+    this.descriptor = descriptor;
+  }
+}
+
+export class Device {
+  constructor(descriptor) {
+    this.descriptor = descriptor;
+  }
+}
 
 export class Buffer {
   constructor(descriptor) {
@@ -74,9 +85,6 @@ export class ObjectDatabase {
     const self = this;
     port.onMessage.addListener((message) => {
       switch (message.action) {
-        case "inspect_adapter_info":
-          self.setAdapterInfo(message.info);
-          break;
         case "inspect_begin_frame":
           self.beginFrame();
           break;
@@ -89,84 +97,93 @@ export class ObjectDatabase {
         case "inspect_begin_compute_pass":
           self.beginComputePass();
           break;
-        case "inspect_end":
+        case "inspect_end_pass":
           self.endPass();
           break;
         case "inspect_delete_object":
           self.deleteObject(message.id);
           break;
-        case "inspect_add_object":
+        case "inspect_resolve_async_object":
+          self.resolvePendingObject(message.id);
+          break;
+        case "inspect_add_object": {
+          const pending = !!message.pending;
           const id = message.id;
           let descriptor = null;
           try {
             descriptor = message.descriptor ? JSON.parse(message.descriptor) : null;
           } catch (e) {
-            console.log("@@@@ EXCEPTION", e);
             break;
           }
           switch (message.type) {
+            case "Adapter": {
+              const obj = new Adapter(descriptor);
+              self.addObject(id, obj, pending);
+              break;
+            }
+            case "Device": {
+              const obj = new Device(descriptor);
+              self.addObject(id, obj, pending);
+              break;
+            }
             case "ShaderModule": {
               const obj = new ShaderModule(descriptor);
-              self.addObject(id, obj);
+              self.addObject(id, obj, pending);
               obj.size = descriptor?.code?.length ?? 0;
               break;
             }
             case "Buffer": {
               const obj = new Buffer(descriptor);
-              self.addObject(id, obj);
+              self.addObject(id, obj, pending);
               obj.size = descriptor?.size ?? 0;
               break;
             }
             case "Texture": {
               const obj = new Texture(descriptor);
-              self.addObject(id, obj);
+              self.addObject(id, obj, pending);
               break;
             }
             case "Sampler": {
               const obj = new Sampler(descriptor);
-              self.addObject(id, obj);
+              self.addObject(id, obj, pending);
               break;
             }
             case "BindGroup": {
               const obj = new BindGroup(descriptor);
-              self.addObject(id, obj);
+              self.addObject(id, obj, pending);
               break;
             }
             case "BindGroupLayout": {
               const obj = new BindGroupLayout(descriptor);
-              self.addObject(id, obj);
+              self.addObject(id, obj, pending);
               break;
             }
             case "RenderPipeline": {
               const obj = new RenderPipeline(descriptor);
-              self.addObject(id, obj);
+              self.addObject(id, obj, pending);
               break;
             }
             case "ComputePipeline": {
               const obj = new ComputePipeline(descriptor);
-              self.addObject(id, obj);
+              self.addObject(id, obj, pending);
               break;
             }
             case "PipelineLayout": {
               const obj = new PipelineLayout(descriptor);
-              self.addObject(id, obj);
+              self.addObject(id, obj, pending);
               break;
             }
           }
           break;
+        }
       }
     });
   }
 
   reset() {
-    this.adapterInfo = {
-      vendor: "",
-      architecture: "",
-      device: "",
-      description: ""
-    };
-
     this.allObjects = new Map();
+    this.adapters = new Map();
+    this.devices = new Map();
     this.samplers = new Map();
     this.textures = new Map();
     this.buffers = new Map();
@@ -181,14 +198,6 @@ export class ObjectDatabase {
     this.renderPassCount = 0;
     this.computePassCount = 0;
     this.frameTime = 0;
-  }
-
-  setAdapterInfo(info) {
-    this.adapterInfo.vendor = info.vendor;
-    this.adapterInfo.architecture = info.architecture;
-    this.adapterInfo.device = info.device;
-    this.adapterInfo.description = info.description;
-    this.onAdapterInfo.emit();
   }
 
   beginFrame() {
@@ -223,7 +232,11 @@ export class ObjectDatabase {
 
   addObject(id, object, pending) {
     this.allObjects.set(id, object);
-    if (object instanceof Sampler) {
+    if (object instanceof Adapter) {
+      this.adapters.set(id, object);
+    } else if (object instanceof Device) {
+      this.devices.set(id, object);
+    } else if (object instanceof Sampler) {
       this.samplers.set(id, object);
     } else if (object instanceof Texture) {
       this.textures.set(id, object);
@@ -266,6 +279,8 @@ export class ObjectDatabase {
   deleteObject(id) {
     const object = this.allObjects.get(id);
     this.allObjects.delete(id);
+    this.adapters.delete(id);
+    this.devices.delete(id);
     this.samplers.delete(id);
     this.textures.delete(id);
     this.buffers.delete(id);

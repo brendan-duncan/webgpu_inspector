@@ -1,13 +1,22 @@
 import { Button } from "./widget/button.js";
 import { Div } from "./widget/div.js";
-import { HSplit } from "./widget/hsplit.js";
 import { Input } from "./widget/input.js";
 import { Span } from "./widget/span.js";
 import { Widget } from "./widget/widget.js";
 import { Window } from "./widget/window.js";
 import { TabWidget } from "./widget/tab_widget.js";
 import { VSplit } from "./widget/vsplit.js";
-import { Buffer, Sampler, Texture, ShaderModule, BindGroupLayout, PipelineLayout, BindGroup, RenderPipeline, ComputePipeline } from "./object_database.js";
+import { Adapter,
+  Device,
+  Buffer,
+  Sampler,
+  Texture,
+  ShaderModule,
+  BindGroupLayout,
+  PipelineLayout,
+  BindGroup,
+  RenderPipeline,
+  ComputePipeline } from "./object_database.js";
 
 export class InspectorWindow extends Window {
   constructor(database, port, tabId) {
@@ -272,7 +281,13 @@ export class InspectorWindow extends Window {
   }
 
   _updateObjectStat(object) {
-    if (object instanceof Buffer) {
+    if (object instanceof Adapter) {
+      //this.uiAdaptersStat.text = `${this.database.adapters.size}`;
+      this.uiAdapters.count.text = `${this.database.adapters.size}`;
+    } else if (object instanceof Device) {
+      //this.uiDevicesStat.text = `${this.database.devices.size}`;
+      this.uiDevices.count.text = `${this.database.devices.size}`;
+    } else if (object instanceof Buffer) {
       this.uiBuffersStat.text = `${this.database.buffers.size}`;
       this.uiBuffers.count.text = `${this.database.buffers.size}`;
     } else if (object instanceof Sampler) {
@@ -306,7 +321,13 @@ export class InspectorWindow extends Window {
 
   _addObject(id, object, pending) {
     this._updateObjectStat(object);
-    if (object instanceof Buffer) {
+    if (object instanceof Adapter) {
+      this._addObjectToUI(id, object, this.uiAdapters);
+      this.uiAdapters.count.text = `${this.database.adapters.size}`;
+    } else if (object instanceof Device) {
+      this._addObjectToUI(id, object, this.uiDevices);
+      this.uiDevices.count.text = `${this.database.devices.size}`;
+    } else if (object instanceof Buffer) {
       this._addObjectToUI(id, object, this.uiBuffers);
       this.uiBuffers.count.text = `${this.database.buffers.size}`;
     } else if (object instanceof Sampler) {
