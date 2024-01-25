@@ -1,6 +1,6 @@
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
-const webgpuInspectorGrabFrameKey = "WEBGPU_INSPECTOR_GRAB_FRAME";
+const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 
 let port = chrome.runtime.connect({ name: "webgpu-inspector-content" });
 
@@ -8,11 +8,20 @@ port.onDisconnect.addListener(() => {
   port = chrome.runtime.connect({ name: "webgpu-inspector-content" });
 });
 
+let inspectorInitialized = false;
+
 // Listen for messages from the server background
 port.onMessage.addListener((message) => {
-  const action = message.action;
+  let action = message.action;
   if (!action) {
     return;
+  }
+
+  if (action == "inspector_capture") {
+    sessionStorage.setItem(webgpuInspectorCaptureFrameKey, "true");
+    if (!inspectorInitialized) {
+      action = "initialize_inspector";
+    }
   }
 
   if (action == "initialize_inspector") {
@@ -55,6 +64,7 @@ function injectScriptNode(url) {
 if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
   injectScriptNode(chrome.runtime.getURL(`webgpu-inspector.js`));
   sessionStorage.removeItem(webgpuInspectorLoadedKey);
+  inspectorInitialized = true;
 } else if (sessionStorage.getItem(webgpuRecorderLoadedKey)) {
   const data = sessionStorage.getItem(webgpuRecorderLoadedKey).split("%");
   const url = `webgpu-recorder.js?filename=${encodeURIComponent(data[1])}&frames=${encodeURIComponent(data[0])}&removeUnusedResources=1&messageRecording=1`;

@@ -21,20 +21,29 @@ export class InspectorWindow extends Window {
   constructor(database, port, tabId) {
     super();
 
+    this.port = port;
+    this.tabId = tabId;
     this.database = database
     this.classList.add("main-window");
     this._selectedObject = null;
 
-    const tabs = new TabWidget(this);
+    const self = this;
+    this.port.onDisconnect.addListener(() => {
+      self.port = chrome.runtime.connect({ name: "webgpu-inspector-content" });
+    });
+
+    this._tabs = new TabWidget(this);
+
+    this._capturePanel = null;
 
     const inspectorPanel = new Div();
-    tabs.addTab("Inspector", inspectorPanel);
+    this._tabs.addTab("Inspector", inspectorPanel);
 
     const recorderPanel = new Div(null);
-    tabs.addTab("Recorder", recorderPanel);
+    this._tabs.addTab("Recorder", recorderPanel);
 
-    this._buildInspectorPanel(port, tabId, inspectorPanel);
-    this._buildRecorderPanel(port, tabId, recorderPanel);
+    this._buildInspectorPanel(inspectorPanel);
+    this._buildRecorderPanel(recorderPanel);
 
     this._resetInspectorPanel();
 
@@ -43,7 +52,7 @@ export class InspectorWindow extends Window {
     this.database.onDeleteObject.addListener(this._deleteObject, this);
   }
 
-  _buildInspectorPanel(port, tabId, inspectorPanel) {
+  _buildInspectorPanel(inspectorPanel) {
     const self = this;
     const controlBar = new Div(inspectorPanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
 
@@ -51,15 +60,22 @@ export class InspectorWindow extends Window {
       try {
         self.database.reset();
         self._resetInspectorPanel();
-        port.postMessage({ action: "initialize_inspector", tabId });
+        self.port.postMessage({ action: "initialize_inspector", tabId: self.tabId });
       } catch (e) {}
-    } });    
+    } });
+
+    this.inspectButton = new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => { 
+      try {
+        self.port.postMessage({ action: "inspector_capture", tabId: self.tabId });
+      } catch (e) {}
+    } });
 
     this.inspectorGUI = new Div(inspectorPanel, { style: "overflow: auto; white-space: nowrap; height: calc(-85px + 100vh);" });
   }
 
-  _buildRecorderPanel(port, tabId, recorderPanel) {
+  _buildRecorderPanel( recorderPanel) {
     const self = this;
+    const port = this.port;
     const recorderBar = new Div(recorderPanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
 
     new Span(recorderBar, { text: "Frames:", style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
@@ -74,7 +90,7 @@ export class InspectorWindow extends Window {
       const frames = self.recordFramesInput.value || 1;
       const filename = self.recordNameInput.value;
       self._recordingData.length = 0;
-      port.postMessage({ action: "initialize_recorder", frames, filename, tabId });
+      self.port.postMessage({ action: "initialize_recorder", frames, filename, tabId: self.tabId });
     }});
 
     this.recorderDataPanel = new Div(recorderPanel);
@@ -83,11 +99,66 @@ export class InspectorWindow extends Window {
       switch (message.action) {
         case "webgpu_recording":
           if (message.index !== undefined && message.count !== undefined && message.data !== undefined) {
-            self.addRecordingData(message.data, message.index, message.count);
+            self._addRecordingData(message.data, message.index, message.count);
           }
+          break;
+        case "inspect_capture_frame_results":
+          const commands = message.commands;
+          const frame = message.frame;
+          self._captureFrameResults(frame, commands);
           break;
       }
     });
+  }
+
+  _captureFrameResults(frame, commands) {
+    if (!this._capturePanel) {
+      this._capturePanel = new Div(null, {"class": "capture_commandList", style: "height: calc(-40px + 100vh);" });
+      this._tabs.addTab("Capture", this._capturePanel);
+    }
+
+    const self = this;
+
+    this._tabs.activeTab = this._tabs.numTabs - 1;
+
+    this._capturePanel.html = "";
+
+    const controlBar = new Div(this._capturePanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 5px; padding-left: 20px; padding-top: 5px; padding-bottom: 5px; width: calc(-60px + 100vw);" });
+
+    new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => { 
+      try {
+        self.port.postMessage({ action: "inspector_capture", tabId: self.tabId });
+      } catch (e) {}
+    } });
+
+    new Span(controlBar, { text: `Frame: ${frame}`, style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
+
+    const contents = new Div(this._capturePanel, { style: "overflow: auto; white-space: nowrap; height: calc(-100px + 100vh);" });
+    
+    let currentPass = new Div(contents, { class: "capture_commandBlock" });
+    let callNumber = 0;
+
+    for (const command of commands) {
+      const className = command.class;
+      //const id = command.id;
+      const method = command.method;
+      //const args = command.args;
+      const name = `${className ?? "__"}`;
+
+      if (method == "beginRenderPass") {
+        currentPass = new Div(contents, { class: "capture_renderpass" });
+      } else if (method == "beginComputePass") {
+        currentPass = new Div(contents, { class: "capture_computepass" });
+      }
+
+      const cmd = new Div(currentPass, { class: "capture_command" });
+      cmd.html = cmd.innerHTML = `<span class='callnum'>${callNumber++}.</span> <span class='capture_objectName'>${name}</span>.<span class='capture_methodName'>${method}</span>`;
+      //(<span class='functionArgs'>${args}</span>)
+
+      if (method == "end") {
+        currentPass = new Div(contents, { class: "capture_commandBlock" });
+      }
+    }
   }
 
   _encodeBase64(bytes) {
@@ -120,7 +191,7 @@ export class InspectorWindow extends Window {
     return result;
 }
 
-  addRecordingData(data, index, count) {
+  _addRecordingData(data, index, count) {
     try {
       index = parseInt(index);
       count = parseInt(count);
@@ -282,10 +353,8 @@ export class InspectorWindow extends Window {
 
   _updateObjectStat(object) {
     if (object instanceof Adapter) {
-      //this.uiAdaptersStat.text = `${this.database.adapters.size}`;
       this.uiAdapters.count.text = `${this.database.adapters.size}`;
     } else if (object instanceof Device) {
-      //this.uiDevicesStat.text = `${this.database.devices.size}`;
       this.uiDevices.count.text = `${this.database.devices.size}`;
     } else if (object instanceof Buffer) {
       this.uiBuffersStat.text = `${this.database.buffers.size}`;
@@ -465,10 +534,10 @@ export class InspectorWindow extends Window {
   _inspectObject(id, object) {
     this.inspectPanel.html = "";
 
-    let div = new Div(this.inspectPanel);
-    new Span(div, { text: `${object.constructor.name} ${id}` });
+    let div = new Div(this.inspectPanel, { style: "background-color: #353; padding: 10px;" });
+    new Span(div, { text: `${object.constructor.name} ID:${id}` });
 
-    div = new Div(this.inspectPanel);
+    div = new Div(this.inspectPanel, { style: "height: calc(-170px + 100vh);" });
 
     if (object instanceof ShaderModule) {
       const descriptor = new Span(div);

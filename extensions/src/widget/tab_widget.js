@@ -95,7 +95,9 @@ export class TabWidget extends Div {
    * Set the current active tab.
    */
   set activeTab(index) {
-    if (index < 0 || index > this.tabListElement.children.length) return;
+    if (index < 0 || index > this.tabListElement.children.length) {
+      return;
+    }
 
     for (let i = 0, l = this.tabListElement.children.length; i < l; ++i) {
       const handle = this.tabListElement.children[i];

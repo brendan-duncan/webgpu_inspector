@@ -1,7 +1,7 @@
 (() => {
   let webgpuInspector = null;
 
-  const webgpuInspectorGrabFrameKey = "WEBGPU_INSPECTOR_GRAB_FRAME";
+  const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 
   class WebGPUInspector {
     constructor(options) {
@@ -11,7 +11,7 @@
 
       this._frameCommands = [];
       this._currentFrame = null;
-      this._frameIndex = -1;
+      this._frameIndex = 0;
       this._initalized = true;
       this._objectID = 1;
       this._frameStartTime = -1;
@@ -59,19 +59,19 @@
     clear() {
       this._frameCommands.length = 0;
       this._currentFrame = null;
-      this._frameIndex = 0;
     }
 
     _frameStart() {
       window.postMessage({"action": "inspect_begin_frame"}, "*");
 
-      if (sessionStorage.getItem(webgpuInspectorGrabFrameKey)) {
-        sessionStorage.removeItem(webgpuInspectorGrabFrameKey);
+      if (sessionStorage.getItem(webgpuInspectorCaptureFrameKey)) {
+        sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
         this._recordRequest = true;
       } else {
         this._recordRequest = false;
       }
       this._frameCommands.length = 0;
+      this._frameIndex++;
     }
 
     _frameEnd() {
@@ -79,7 +79,7 @@
       this._recordRequest = false;
 
       if (this._frameCommands.length) {
-        window.postMessage({"action": "inspect_grab_frame_results", "commands": this._frameCommands}, "*");
+        window.postMessage({"action": "inspect_capture_frame_results", "frame": this._frameIndex, "commands": this._frameCommands}, "*");
         this._frameCommands.length = 0;
       }
     }
@@ -276,7 +276,8 @@
 
       if (this._recordRequest) {
         this._frameCommands.push({
-          "object": object.__id,
+          "class": object.constructor.name,
+          "id": object.__id,
           method,
           "args": this._stringifyArgs(args)
         });

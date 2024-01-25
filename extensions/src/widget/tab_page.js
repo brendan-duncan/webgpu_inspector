@@ -11,8 +11,7 @@ export class TabPage extends Div {
     this.panel = panel;
     if (panel) {
       panel.parent = this;
-      panel.style.width = '100%';
-      panel.style.height = '100%';
+      //panel.style.width = '100%';
     }
   }
 }
