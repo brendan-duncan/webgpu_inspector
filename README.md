@@ -23,9 +23,11 @@ From a page that has WebGPU content, press **F12** to open the Chrome Developer 
 
 ## Tools
 
-### Inspector
+### Inspect
 
 The Inspector tool will reload the page and inject the WebGPU Inspector into it, reporting information about the state of WebGPU to the tool.
+
+Press the Start button to inject the Inspector tool and reload the page.
 
 ----
 
@@ -33,8 +35,19 @@ The Inspector tool will reload the page and inject the WebGPU Inspector into it,
 
 Capture all WebGPU commands used to render a frame.
 
+If the Inspector hadn't been already started on the page, it will be started and the page will reload, capturing the first frame results.
+
+If the Inspector is already running, it will capture the next frame.
+
 ----
 
-### Recorder
+### Record
 
 The Recorder tool will reload the page and inject the WebGPU Recorder into it. This will record all WebGPU commands and data for the given number of **Frames** and then download it to a file called **Filename**.html.
+
+**Frames** is the number of frames to capture.
+**Name** is the name of the HTML file that will be downloaded, as __name__.html.
+
+Press the **Record** button to inject the recorder tool into the page and reload the page. Recording always starts from the loading of the page.
+
+When the recording has finished, it will be automatically downloaded by the browser, and presented on the Record panel.
