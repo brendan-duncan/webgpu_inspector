@@ -1,5 +1,3 @@
-import { MouseCapture } from './mouse_capture.js';
-
 export class Pointer {
   constructor(event) {
     this.event = event;
@@ -514,24 +512,6 @@ export class Widget {
 
   get window() {
     return Widget.window;
-  }
-
-  /**
-   * Start mouseCapture for this element, which will send all mouse events to this element.
-   */
-  beginMouseCapture() {
-    MouseCapture.startCapture(this);
-  }
-
-  /**
-   * Stop mouseCapture.
-   */
-  endMouseCapture() {
-    MouseCapture.endCapture();
-  }
-
-  hasMouseCapture() {
-    return MouseCapture.captureWidget === this;
   }
 
   /**

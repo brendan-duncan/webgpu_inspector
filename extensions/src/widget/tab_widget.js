@@ -1,5 +1,4 @@
 import { Div } from './div.js';
-import { MenuBar } from './menu_bar.js';
 import { TabHandle } from './tab_handle.js';
 import { TabPage } from './tab_page.js';
 
@@ -24,10 +23,6 @@ export class TabWidget extends Div {
 
     this.tabListElement = new Div(this.headerElement);
     this.tabListElement.classList.add('tab-handle-list-container');
-
-    this.menuElement = new MenuBar(this.headerElement);
-    this.menuElement.classList.remove('menubar');
-    this.menuElement.classList.add('tab-menubar');
 
     this.contentElement = new Div(this);
     this.contentElement.classList.add('tab-content');
@@ -74,7 +69,6 @@ export class TabWidget extends Div {
     if (this.tabListElement.children.length == 1) {
       this._activeTab = 0;
       handle.isActive = true;
-      this.updateMenus();
       if (page) {
         page.repaint(true);
       }
@@ -98,27 +92,6 @@ export class TabWidget extends Div {
   }
 
   /**
-   * Set the handle menu for a tab.
-   * @param {number} index
-   * @param {Menu} menu
-   */
-  setTabMenu(index, menu) {
-    const self = this;
-    const handle = this.tabListElement.children[index];
-    handle.textElement.style.cursor = 'pointer';
-    handle.textElement.style.fontWeight = 'bold';
-    handle.textElement.style.color = '#ddd';
-    handle.textElement.element.addEventListener('mousedown', function (e) {
-      e.stopPropagation();
-      e.preventDefault();
-      if (self._activeTab == index) {
-        const r = handle.textElement.element.getBoundingClientRect();
-        menu.show(r.left, r.top + 15);
-      }
-    });
-  }
-
-  /**
    * Set the current active tab.
    */
   set activeTab(index) {
@@ -131,10 +104,10 @@ export class TabWidget extends Div {
 
     this._activeTab = index;
 
-    this.updateMenus();
-
     const page = this.contentElement.children[this._activeTab].children[0];
-    if (page) page.repaint(true);
+    if (page) {
+      page.repaint(true);
+    }
   }
 
   isPanelVisible(panel) {
@@ -163,15 +136,6 @@ export class TabWidget extends Div {
       const h = this.tabListElement.children[i];
       if (h === handle) this.activeTab = i;
     }
-  }
-
-  /**
-   * Update the tab widget menubar with the active tab's menus.
-   */
-  updateMenus() {
-    this.menuElement.removeAllChildren();
-    const page = this.contentElement.children[this._activeTab].children[0];
-    if (page && page.addMenus) page.addMenus(this.menuElement);
   }
 
   /**

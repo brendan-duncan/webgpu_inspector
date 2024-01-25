@@ -1,5 +1,4 @@
 import { Div } from './div.js';
-import { Menu } from './menu.js';
 import { Widget } from "./widget.js";
 
 /**
@@ -117,23 +116,6 @@ export class TabHandle extends Div {
 
   mousePressEvent(e) {
     this.parentWidget.setHandleActive(this);
-    if (e.button == 2) this.showContextMenu(e);
-  }
-
-  showContextMenu(e) {
-    /*const isMaximized = Widget.window?.isMaximized(this.page.panel);
-    const options = {
-      event: e,
-      items: [
-        {
-          label: 'Maximize',
-          callback: this.maximizePanel.bind(this),
-          checked: isMaximized,
-          checkable: isMaximized,
-        },
-      ],
-    };*/
-    Menu.contextMenu(options, e);
   }
 
   doubleClickEvent() {

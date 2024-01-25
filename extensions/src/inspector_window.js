@@ -5,7 +5,6 @@ import { Span } from "./widget/span.js";
 import { Widget } from "./widget/widget.js";
 import { Window } from "./widget/window.js";
 import { TabWidget } from "./widget/tab_widget.js";
-import { VSplit } from "./widget/vsplit.js";
 import { Adapter,
   Device,
   Buffer,
@@ -31,7 +30,7 @@ export class InspectorWindow extends Window {
     const inspectorPanel = new Div();
     tabs.addTab("Inspector", inspectorPanel);
 
-    const recorderPanel = new VSplit(null, { fixedPosition: 100 });
+    const recorderPanel = new Div(null);
     tabs.addTab("Recorder", recorderPanel);
 
     this._buildInspectorPanel(port, tabId, inspectorPanel);
@@ -513,23 +512,6 @@ export class InspectorWindow extends Window {
         self._selectedGroup = objectList;
       }
     };
-
-    /*collapse.element.onclick = function() {
-      if (self._selectedGroup && self._selectedGroup != objectList) {
-        self._selectedGroup.collapse.text = "+";
-        self._selectedGroup.element.className = "object_list collapsed";
-        self._selectedGroup = null;
-      }
-      if (collapse.text == "-") {
-        collapse.text = "+";
-        objectList.element.className = "object_list collapsed";
-        self._selectedGroup = null;
-      } else {
-        collapse.text = "-";
-        objectList.element.className = "object_list";
-        self._selectedGroup = objectList;
-      }
-    };*/
 
     return objectList;
   }
