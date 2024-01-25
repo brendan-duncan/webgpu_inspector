@@ -483,7 +483,7 @@ export class InspectorWindow extends Window {
     this.inspectPanel.html = "";
 
     let div = new Div(this.inspectPanel, { style: "background-color: #353; padding: 10px;" });
-    new Div(div, { text: `${object.constructor.name} ID:${id}` });
+    new Div(div, { text: `${object.label || object.constructor.name} ID:${id}` });
 
     if (object instanceof Texture) {
       const gpuSize = object.getGpuSize();
