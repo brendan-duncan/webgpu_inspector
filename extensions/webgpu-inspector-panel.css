@@ -1008,11 +1008,11 @@ ol::-webkit-scrollbar-thumb:hover {
   margin-left: 10px;
 }
 
-.capture_renderpass .capture_command {
+.capture_computepass .capture_command {
   background: #446;
 }
 
-.capture_renderpass .capture_command:hover {
+.capture_computepass .capture_command:hover {
   filter: brightness(150%);
 }
 
