@@ -1,69 +1,84 @@
 import { Signal } from "./widget/signal.js";
 
-export class Adapter {
+export class GPUObject {
+  constructor() {
+    this.label = "";
+  }
+}
+
+export class Adapter extends GPUObject {
   constructor(descriptor) {
+    super();
     this.descriptor = descriptor;
   }
 }
 
-export class Device {
+export class Device extends GPUObject {
   constructor(descriptor) {
+    super();
     this.descriptor = descriptor;
   }
 }
 
-export class Buffer {
+export class Buffer extends GPUObject {
   constructor(descriptor) {
+    super();
     this.descriptor = descriptor;
   }
 }
 
-export class Sampler {
+export class Sampler extends GPUObject {
   constructor(descriptor) {
+    super();
     this.descriptor = descriptor;
   }
 }
 
-export class Texture {
+export class Texture extends GPUObject {
   constructor(descriptor) {
+    super();
     this.descriptor = descriptor;
   }
 }
 
-export class ShaderModule {
+export class ShaderModule extends GPUObject {
   constructor(descriptor) {
+    super();
     this.descriptor = descriptor;
   }
 }
 
-export class BindGroupLayout {
+export class BindGroupLayout extends GPUObject {
   constructor(descriptor) {
+    super();
     this.descriptor = descriptor;
   }
 }
 
-export class PipelineLayout {
+export class PipelineLayout extends GPUObject {
   constructor(descriptor) {
+    super();
     this.descriptor = descriptor;
   }
 }
 
-export class BindGroup {
+export class BindGroup extends GPUObject {
   constructor(descriptor) {
+    super();
     this.descriptor = descriptor;
   }
 }
 
-export class RenderPipeline {
+export class RenderPipeline extends GPUObject {
   constructor(descriptor) {
+    super();
     this.descriptor = descriptor;
-    this.time = 0;
-    this.element = null;
   }
 }
 
-export class ComputePipeline {
+export class ComputePipeline extends GPUObject {
   constructor(descriptor) {
+    super();
     this.descriptor = descriptor;
   }
 }
@@ -81,6 +96,7 @@ export class ObjectDatabase {
     this.onBeginComputePass = new Signal();
     this.onEndPass = new Signal();
     this.onAdapterInfo = new Signal();
+    this.onObjectLabelChanged = new Signal();
 
     const self = this;
     port.onMessage.addListener((message) => {
@@ -105,6 +121,9 @@ export class ObjectDatabase {
           break;
         case "inspect_resolve_async_object":
           self.resolvePendingObject(message.id);
+          break;
+        case "inspect_object_set_label":
+          self.setObjectLabel(message.id, message.label);
           break;
         case "inspect_add_object": {
           const pending = !!message.pending;
@@ -228,7 +247,15 @@ export class ObjectDatabase {
 
   getObject(id) {
     return this.allObjects.get(id);
-  }  
+  }
+
+  setObjectLabel(id, label) {
+    const object = this.getObject(id);
+    if (object) {
+      object.label = label;
+      this.onObjectLabelChanged.emit(id, object, label);
+    }
+  }
 
   addObject(id, object, pending) {
     this.allObjects.set(id, object);

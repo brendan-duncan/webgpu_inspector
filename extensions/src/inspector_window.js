@@ -52,6 +52,7 @@ export class InspectorWindow extends Window {
     this.database.onEndFrame.addListener(this._updateFrameStats, this);
     this.database.onAddObject.addListener(this._addObject, this);
     this.database.onDeleteObject.addListener(this._deleteObject, this);
+    this.database.onObjectLabelChanged.addListener(this._objectLabelChanged, this);
   }
 
   _buildInspectorPanel(inspectorPanel) {
@@ -66,7 +67,11 @@ export class InspectorWindow extends Window {
       } catch (e) {}
     } });
 
-    this.inspectorGUI = new Div(inspectorPanel, { style: "overflow: auto; white-space: nowrap; height: calc(-85px + 100vh);" });
+    const stats = new Span(controlBar, { style: "border-left: 1px solid #aaa; padding-left: 10px; margin-left: 20px; height: 20px; padding-top: 5px; color: #ddd;" });
+    this.uiFrameTime = new Span(stats);
+    this.uiFrameRenderPasses = new Span(stats, { style: "margin-left: 20px;" });
+
+    this.inspectorGUI = new Div(inspectorPanel, { style: "overflow: auto; white-space: nowrap; height: calc(-85px + 100vh); display: flex;" });
   }
 
   _buildCapturePanel(capturePanel) {
@@ -227,22 +232,31 @@ export class InspectorWindow extends Window {
     this.recorderDataPanel.html = "";
 
     // TODO: How to display the recording file?
-    /*const nonceData = new Uint8Array(16);
-    const nonce = this._encodeBase64(crypto.getRandomValues(nonceData));
-    const html = this._recordingData.join().replace("<script>", `<script nonce="${nonce}">`).replace("script-src *", `script-src * 'nonce-${nonce}' strict-dynamic`);
 
-    const f = document.createElement("iframe");
+    const html = this._recordingData.join();
+    new Widget("pre", this.recorderDataPanel, { text: html });
+
+    //const nonceData = new Uint8Array(16);
+    //const nonce = this._encodeBase64(crypto.getRandomValues(nonceData));
+    //const html = this._recordingData.join().replace("<script>", `<script nonce="${nonce}">`).replace("script-src *", `script-src * 'nonce-${nonce}' strict-dynamic`);
+
+    /*const f = document.createElement("iframe");
     f.sandbox = "allow-scripts";
     //const url = 'data:text/html;charset=utf-8,' + encodeURI(html);
     const url = URL.createObjectURL(new Blob([html], {type: 'text/html'}));
     f.src = url;
 
-    new Widget(f, this.recorderDataPanel, { style: "width: calc(100% - 10px);" });
+    new Widget(f, this.recorderDataPanel, { style: "width: calc(100% - 10px);" });*/
 
     //f.contentWindow.document.open();
     //f.contentWindow.document.write(html);
     //f.contentWindow.document.close();
-    */
+  }
+
+  _objectLabelChanged(id, object, label) {
+    if (object && object.widget) {
+      object.widget.text = `${label} (ID: ${id})`;
+    }
   }
 
   _resetInspectorPanel() {
@@ -250,72 +264,13 @@ export class InspectorWindow extends Window {
     this._selectedGroup = null;
     this.inspectorGUI.html = "";
 
-    const pane1 = new Span(this.inspectorGUI, { style: "margin-right: 10px;" });
-
-    this.infoPanel = new Div(null, { class: "info-panel" });
-    const infoTab = new TabWidget(pane1);
-    infoTab.addTab("Stats", this.infoPanel);
-
-    let div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    new Span(div, { text: "Frame Duration:", style: "color: #bbb;" });
-    this.uiFrameTime = new Span(div, { text: "0ms", style: "margin-left: 5px;" });
-
-    div = new Div(this.infoPanel);
-    new Span(div, { text: "Frame Render Passes:", style: "color: #bbb;" });
-    this.uiFrameRenderPasses = new Span(div, { text: "0", style: "margin-left: 5px;" });
-
-    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    new Span(div, { text: "Render Pipelines:", style: "color: #bbb;" });
-    this.uiRenderPipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
-
-    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    new Span(div, { text: "Compute Pipelines:", style: "color: #bbb;" });
-    this.uiComputePipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
-
-    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    new Span(div, { text: "Shader Modules:", style: "color: #bbb;" });
-    this.uiShaderModulesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
-
-    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    new Span(div, { text: "Buffers:", style: "color: #bbb;" });
-    this.uiBuffersStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
-
-    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    new Span(div, { text: "Textures:", style: "color: #bbb;" });
-    this.uiTexturesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
-
-    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    new Span(div, { text: "Samplers:", style: "color: #bbb;" });
-    this.uiSamplersStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
-
-    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    new Span(div,{ text: "BindGroups:", style: "color: #bbb;" });
-    this.uiBindGroupsStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
-
-    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    new Span(div,{ text: "BindGroupLayouts:", style: "color: #bbb;" });
-    this.uiBindGroupLayoutsStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
-
-    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    new Span(div,{ text: "PipelineLayouts:", style: "color: #bbb;" });
-    this.uiPipelineLayoutsStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
-
-    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    new Span(div, { text: "Pending Async Render Pipelines:", style: "color: #bbb;" });
-    this.uiPendingRenderPipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
-
-    div = new Div(this.infoPanel, {style: "margin-right: 10px;"});
-    new Span(div, { text: "Pending Async Compute Pipelines:", style: "color: #bbb;" });
-    this.uiPendingComputePipelinesStat = new Span(div, { text: "0", style: "margin-left: 5px;" });
-
-
-    const pane2 = new Span(this.inspectorGUI, { style: "" });
+    const pane2 = new Span(this.inspectorGUI);
 
     const objectsTab = new TabWidget(pane2);
     const objectsPanel = new Div(null, { style: "font-size: 11pt;"});
     objectsTab.addTab("Objects", objectsPanel);
 
-    const pane3 = new Span(this.inspectorGUI, { style: "padding-left: 20px;" });
+    const pane3 = new Span(this.inspectorGUI, { style: "padding-left: 20px; flex-grow: 1;" });
 
     const inspectTab = new TabWidget(pane3);
     this.inspectPanel = new Div(null, { style: "font-size: 14pt;"});
@@ -337,8 +292,8 @@ export class InspectorWindow extends Window {
   }
 
   _updateFrameStats() {
-    this.uiFrameTime.text = `${this.database.frameTime.toFixed(2)}ms`;
-    this.uiFrameRenderPasses.text =
+    this.uiFrameTime.text = `Frame Time: ${this.database.frameTime.toFixed(2)}ms`;
+    this.uiFrameRenderPasses.text = `Frame Render Passes: ` +
       this.database.renderPassCount.toLocaleString("en-US");
   }
 
@@ -353,32 +308,23 @@ export class InspectorWindow extends Window {
     } else if (object instanceof Device) {
       this.uiDevices.count.text = `${this.database.devices.size}`;
     } else if (object instanceof Buffer) {
-      this.uiBuffersStat.text = `${this.database.buffers.size}`;
       this.uiBuffers.count.text = `${this.database.buffers.size}`;
     } else if (object instanceof Sampler) {
-      this.uiSamplersStat.text = `${this.database.samplers.size}`;
       this.uiSamplers.count.text = `${this.database.samplers.size}`;
     } else if (object instanceof Texture) {
-      this.uiTexturesStat.text = `${this.database.buffers.size}`;
       this.uiTextures.count.text = `${this.database.textures.size}`;
     } else if (object instanceof ShaderModule) {
-      this.uiShaderModulesStat.text = `${this.database.shaderModules.size}`;
       this.uiShaderModules.count.text = `${this.database.shaderModules.size}`;
     } else if (object instanceof BindGroupLayout) {
       this.uiBindGroupLayouts.count.text = `${this.database.bindGroupLayouts.size}`;
     } else if (object instanceof PipelineLayout) {
       this.uiPipelineLayouts.count.text = `${this.database.pipelineLayouts.size}`;
     } else if (object instanceof BindGroup) {
-      this.uiBindGroupsStat.text = `${this.database.bindGroups.size}`;
       this.uiBindGroups.count.text = `${this.database.bindGroups.size}`;
     } else if (object instanceof RenderPipeline) {
-      this.uiPendingRenderPipelinesStat.text = `${this.database.pendingRenderPipelines.size}`;
-      this.uiRenderPipelinesStat.text = `${this.database.renderPipelines.size}`;
       this.uiPendingAsyncRenderPipelines.count.text = `${this.database.pendingRenderPipelines.size}`;
       this.uiRenderPipelines.count.text = `${this.database.renderPipelines.size}`;
     } else if (object instanceof ComputePipeline) {
-      this.uiPendingComputePipelinesStat.text = `${this.database.pendingComputePipelines.size}`;
-      this.uiComputePipelinesStat.text = `${this.database.computePipelines.size}`;
       this.uiPendingAsyncComputePipelines.count.text = `${this.database.pendingComputePipelines.size}`;
       this.uiComputePipelines.count.text = `${this.database.computePipelines.size}`;
     }

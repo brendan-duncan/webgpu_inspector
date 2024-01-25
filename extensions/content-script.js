@@ -2,40 +2,56 @@ const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
 const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 
-let port = chrome.runtime.connect({ name: "webgpu-inspector-content" });
+class MessagePort {
+  constructor() {
+    const self = this;
+    this.port = null;
+    this._resetPort();
+  }
 
-port.onDisconnect.addListener(() => {
-  port = chrome.runtime.connect({ name: "webgpu-inspector-content" });
-});
+  _resetPort() {
+    const self = this;
+    this.port = chrome.runtime.connect({ name: "webgpu-inspector-content" });
+    this.port.onDisconnect.addListener(() => {
+      self._resetPort();
+    });
+
+    // Listen for messages from the server background
+    this.port.onMessage.addListener((message) => {
+      let action = message.action;
+      if (!action) {
+        return;
+      }
+
+      if (action == "inspector_capture") {
+        sessionStorage.setItem(webgpuInspectorCaptureFrameKey, "true");
+        if (!inspectorInitialized) {
+          action = "initialize_inspector";
+        }
+      }
+
+      if (action == "initialize_inspector") {
+        sessionStorage.setItem(webgpuInspectorLoadedKey, "true");
+        setTimeout(function () {
+          window.location.reload();
+        }, 50);
+      } else if (action == "initialize_recorder") {
+        sessionStorage.setItem(webgpuRecorderLoadedKey, `${message.frames}%${message.filename}`);
+        setTimeout(function () {
+          window.location.reload();
+        }, 50);
+      }
+    });
+  }
+
+  postMessage(message) {
+    this.port.postMessage(message);
+  }
+}
+
+let port = new MessagePort();
 
 let inspectorInitialized = false;
-
-// Listen for messages from the server background
-port.onMessage.addListener((message) => {
-  let action = message.action;
-  if (!action) {
-    return;
-  }
-
-  if (action == "inspector_capture") {
-    sessionStorage.setItem(webgpuInspectorCaptureFrameKey, "true");
-    if (!inspectorInitialized) {
-      action = "initialize_inspector";
-    }
-  }
-
-  if (action == "initialize_inspector") {
-    sessionStorage.setItem(webgpuInspectorLoadedKey, "true");
-    setTimeout(function () {
-      window.location.reload();
-    }, 50);
-  } else if (action == "initialize_recorder") {
-    sessionStorage.setItem(webgpuRecorderLoadedKey, `${message.frames}%${message.filename}`);
-    setTimeout(function () {
-      window.location.reload();
-    }, 50);
-  }
-});
 
 // Listen for messages from the page
 window.addEventListener('message', (event) => {

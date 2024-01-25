@@ -132,7 +132,23 @@
       this._gcRegistry.register(object, object.__id);
 
       for (const m in object) {
-        if (typeof object[m] == "function") {
+        if (m == "label") {
+          // Capture chaning of the GPUObjectBase label
+          const l = object[m];
+          object._label = l;
+          Object.defineProperty(object, m, {
+            enumerable: true,
+            configurable: true,
+            get() {
+              return object._label;
+            },
+            set(label) {
+              object._label = label;
+              const id = object.__id;
+              window.postMessage({"action": "inspect_object_set_label", id, label}, "*");
+            }
+          });
+        } else if (typeof object[m] == "function") {
           if (WebGPUInspector._skipMethods.indexOf(m) == -1) {
             if (WebGPUInspector._asyncMethods.indexOf(m) != -1) {
               this._wrapAsync(object, m);
