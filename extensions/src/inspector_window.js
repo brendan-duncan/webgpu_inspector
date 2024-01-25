@@ -70,6 +70,8 @@ export class InspectorWindow extends Window {
     const stats = new Span(controlBar, { style: "border-left: 1px solid #aaa; padding-left: 10px; margin-left: 20px; height: 20px; padding-top: 5px; color: #ddd;" });
     this.uiFrameTime = new Span(stats);
     this.uiFrameRenderPasses = new Span(stats, { style: "margin-left: 20px;" });
+    this.uiTotalTextureMemory = new Span(stats, { style: "margin-left: 20px;" });
+    this.uiTotalBufferMemory = new Span(stats, { style: "margin-left: 20px;" });
 
     this.inspectorGUI = new Div(inspectorPanel, { style: "overflow: auto; white-space: nowrap; height: calc(-85px + 100vh); display: flex;" });
   }
@@ -293,8 +295,12 @@ export class InspectorWindow extends Window {
 
   _updateFrameStats() {
     this.uiFrameTime.text = `Frame Time: ${this.database.frameTime.toFixed(2)}ms`;
-    this.uiFrameRenderPasses.text = `Frame Render Passes: ` +
-      this.database.renderPassCount.toLocaleString("en-US");
+    const renderPassCount = this.database.renderPassCount.toLocaleString("en-US");
+    this.uiFrameRenderPasses.text = `Frame Render Passes: ${renderPassCount}`;
+    const totalTextureMemory = this.database.totalTextureMemory.toLocaleString("en-US");
+    this.uiTotalTextureMemory.text = `Texture Memory: ${totalTextureMemory} Bytes`;
+    const totalBufferMemory = this.database.totalBufferMemory.toLocaleString("en-US");
+    this.uiTotalBufferMemory.text = `Buffer Memory: ${totalBufferMemory} Bytes`;
   }
 
   _deleteObject(id, object) {
@@ -477,16 +483,22 @@ export class InspectorWindow extends Window {
     this.inspectPanel.html = "";
 
     let div = new Div(this.inspectPanel, { style: "background-color: #353; padding: 10px;" });
-    new Span(div, { text: `${object.constructor.name} ID:${id}` });
+    new Div(div, { text: `${object.constructor.name} ID:${id}` });
 
-    div = new Div(this.inspectPanel, { style: "height: calc(-170px + 100vh);" });
+    if (object instanceof Texture) {
+      const gpuSize = object.getGpuSize();
+      const sizeStr = gpuSize < 0 ? "<unknown>" : gpuSize.toLocaleString("en-US");
+      new Div(div, { text: `GPU Size: ${sizeStr} Bytes`, style: "font-size: 10pt; margin-top: 5px;" });
+    }
+
+    div = new Div(this.inspectPanel, { style: "height: calc(-200px + 100vh);" });
 
     if (object instanceof ShaderModule) {
       const descriptor = new Span(div);
       const code = object.descriptor.code;
       descriptor.html = `<pre>${code}</pre>`
     } else {
-      const descriptor = new Span(div);
+      const descriptor = new Div(div);
       const desc = this._getDescriptorInfo(object, object.descriptor);
       descriptor.html = `<pre>${JSON.stringify(desc, undefined, 4)}</pre>`;
     }

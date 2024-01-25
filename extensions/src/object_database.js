@@ -1,4 +1,5 @@
 import { Signal } from "./widget/signal.js";
+import { TextureFormatInfo } from "./texture_format_info.js";
 
 export class GPUObject {
   constructor() {
@@ -38,6 +39,63 @@ export class Texture extends GPUObject {
   constructor(descriptor) {
     super();
     this.descriptor = descriptor;
+  }
+
+  get dimension() {
+    return this.descriptor?.dimension ?? "2d";
+  }
+
+  get width() {
+    const size = this.descriptor?.size;
+    if (size instanceof Array && size.length > 0) {
+      return size[0] ?? 0;
+    } else if (size instanceof Object) {
+      return size.width ?? 0;
+    }
+    return 0;
+  }
+
+  get height() {
+    const size = this.descriptor?.size;
+    if (size instanceof Array && size.length > 1) {
+      return size[1] ?? 1;
+    } else if (size instanceof Object) {
+      return size.height ?? 1;
+    }
+    return 0;
+  }
+
+  get depthOrArrayLayers() {
+    const size = this.descriptor?.size;
+    if (size instanceof Array && size.length > 2) {
+      return size[2] ?? 1;
+    } else if (size instanceof Object) {
+      return size.depthOrArrayLayers ?? 1;
+    }
+    return 0;
+  }
+
+  getGpuSize() {
+    const format = this.descriptor?.format;
+    const formatInfo = TextureFormatInfo[format];
+    const width = this.width;
+    if (!format || width <= 0 || !formatInfo) {
+      return -1;
+    }
+
+    const height = this.height;
+    const dimension = this.dimension;
+    const blockWidth = width / formatInfo.blockWidth;
+    const blockHeight = height / formatInfo.blockHeight;
+    const bytesPerBlock = formatInfo.bytesPerBlock;
+
+    if (dimension === "2d") {
+      return blockWidth * blockHeight * bytesPerBlock;
+    }
+
+    // TODO other dimensions
+
+    return -1;
   }
 }
 
@@ -98,6 +156,9 @@ export class ObjectDatabase {
     this.onAdapterInfo = new Signal();
     this.onObjectLabelChanged = new Signal();
 
+    this.totalTextureMemory = 0;
+    this.totalBufferMemory = 0;
+
     const self = this;
     port.onMessage.addListener((message) => {
       switch (message.action) {
@@ -155,10 +216,15 @@ export class ObjectDatabase {
               const obj = new Buffer(descriptor);
               self.addObject(id, obj, pending);
               obj.size = descriptor?.size ?? 0;
+              this.totalBufferMemory += obj.size;
               break;
             }
             case "Texture": {
               const obj = new Texture(descriptor);
+              const size = obj.getGpuSize();
+              if (size != -1) {
+                this.totalTextureMemory += size;
+              }
               self.addObject(id, obj, pending);
               break;
             }
@@ -321,6 +387,15 @@ export class ObjectDatabase {
     this.pendingComputePipelines.delete(id);
 
     if (object) {
+      if (object instanceof Texture) {
+        const size = object.getGpuSize();
+        if (size != -1) {
+          this.totalTextureMemory -= size;
+        }
+      } else if (object instanceof Buffer) {
+        const size = object.size;
+        this.totalBufferMemory -= size ?? 0;
+      }
       this.onDeleteObject.emit(id, object);
     }
   }
