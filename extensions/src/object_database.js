@@ -103,6 +103,9 @@ export class ShaderModule extends GPUObject {
   constructor(descriptor) {
     super();
     this.descriptor = descriptor;
+    this.hasVertexEntries = descriptor?.code ? descriptor.code.indexOf("@vertex") != -1 : false;
+    this.hasFragmentEntries = descriptor?.code ? descriptor.code.indexOf("@fragment") != -1 : false;
+    this.hasComputeEntries = descriptor?.code ? descriptor.code.indexOf("@compute") != -1 : false;
   }
 }
 

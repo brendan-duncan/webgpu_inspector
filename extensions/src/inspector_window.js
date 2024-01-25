@@ -257,7 +257,7 @@ export class InspectorWindow extends Window {
 
   _objectLabelChanged(id, object, label) {
     if (object && object.widget) {
-      object.widget.text = `${label} (ID: ${id})`;
+      object.nameWidget.text = label || object.constructor.name;
     }
   }
 
@@ -266,13 +266,13 @@ export class InspectorWindow extends Window {
     this._selectedGroup = null;
     this.inspectorGUI.html = "";
 
-    const pane2 = new Span(this.inspectorGUI);
+    const pane1 = new Span(this.inspectorGUI);
 
-    const objectsTab = new TabWidget(pane2);
+    const objectsTab = new TabWidget(pane1);
     const objectsPanel = new Div(null, { style: "font-size: 11pt;"});
     objectsTab.addTab("Objects", objectsPanel);
 
-    const pane3 = new Span(this.inspectorGUI, { style: "padding-left: 20px; flex-grow: 1;" });
+    const pane3 = new Span(this.inspectorGUI, { style: "padding-left: 20px; flex-grow: 1; overflow: auto;" });
 
     const inspectTab = new TabWidget(pane3);
     this.inspectPanel = new Div(null, { style: "font-size: 14pt;"});
@@ -482,25 +482,24 @@ export class InspectorWindow extends Window {
   _inspectObject(id, object) {
     this.inspectPanel.html = "";
 
-    let div = new Div(this.inspectPanel, { style: "background-color: #353; padding: 10px;" });
-    new Div(div, { text: `${object.label || object.constructor.name} ID:${id}` });
+    const infoBox = new Div(this.inspectPanel, { style: "background-color: #353; padding: 10px;" });
+    new Div(infoBox, { text: `${object.label || object.constructor.name} ID:${id}` });
 
     if (object instanceof Texture) {
       const gpuSize = object.getGpuSize();
       const sizeStr = gpuSize < 0 ? "<unknown>" : gpuSize.toLocaleString("en-US");
-      new Div(div, { text: `GPU Size: ${sizeStr} Bytes`, style: "font-size: 10pt; margin-top: 5px;" });
+      new Div(infoBox, { text: `GPU Size: ${sizeStr} Bytes`, style: "font-size: 10pt; margin-top: 5px;" });
     }
 
-    div = new Div(this.inspectPanel, { style: "height: calc(-200px + 100vh);" });
+    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-185px + 100vh);" });
 
     if (object instanceof ShaderModule) {
-      const descriptor = new Span(div);
-      const code = object.descriptor.code;
-      descriptor.html = `<pre>${code}</pre>`
+      const text = object.descriptor.code;
+      new Widget("pre", descriptionBox, { text });
     } else {
-      const descriptor = new Div(div);
       const desc = this._getDescriptorInfo(object, object.descriptor);
-      descriptor.html = `<pre>${JSON.stringify(desc, undefined, 4)}</pre>`;
+      const text = JSON.stringify(desc, undefined, 4);
+      new Widget("pre", descriptionBox, { text });
     }
   }
 
@@ -540,7 +539,28 @@ export class InspectorWindow extends Window {
   }
 
   _addObjectToUI(id, object, ui) {
-    object.widget = new Widget("li", ui, { text: `${object.constructor.name} ${id}` });
+    const name = `${object.label || object.constructor.name}`;
+    let type = "";
+    if (object instanceof ShaderModule) {
+      if (object.hasVertexEntries) {
+        type += " VERTEX";
+      }
+      if (object.hasFragmentEntries) {
+        type += " FRAGMENT";
+      }
+      if (object.hasComputeEntries) {
+        type += " COMPUTE";
+      }
+    }
+    object.widget = new Widget("li", ui);
+
+    object.nameWidget = new Span(object.widget, { text: name });
+    new Span(object.widget, { text: `ID: ${id}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+    if (type) {
+      new Span(object.widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+    }
+
+
     const self = this;
     object.widget.element.onclick = () => {
       if (self._selectedObject) {
