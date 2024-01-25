@@ -29,6 +29,12 @@ The Inspector tool will reload the page and inject the WebGPU Inspector into it,
 
 ----
 
+### Capture
+
+Capture all WebGPU commands used to render a frame.
+
+----
+
 ### Recorder
 
 The Recorder tool will reload the page and inject the WebGPU Recorder into it. This will record all WebGPU commands and data for the given number of **Frames** and then download it to a file called **Filename**.html.

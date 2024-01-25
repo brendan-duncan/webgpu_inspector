@@ -34,16 +34,18 @@ export class InspectorWindow extends Window {
 
     this._tabs = new TabWidget(this);
 
-    this._capturePanel = null;
-
     const inspectorPanel = new Div();
-    this._tabs.addTab("Inspector", inspectorPanel);
+    this._tabs.addTab("Inspect", inspectorPanel);
+
+    const capturePanel = new Div(null);
+    this._tabs.addTab("Capture", capturePanel);
 
     const recorderPanel = new Div(null);
-    this._tabs.addTab("Recorder", recorderPanel);
+    this._tabs.addTab("Record", recorderPanel);   
 
     this._buildInspectorPanel(inspectorPanel);
     this._buildRecorderPanel(recorderPanel);
+    this._buildCapturePanel(capturePanel);
 
     this._resetInspectorPanel();
 
@@ -64,19 +66,30 @@ export class InspectorWindow extends Window {
       } catch (e) {}
     } });
 
-    this.inspectButton = new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => { 
+    this.inspectorGUI = new Div(inspectorPanel, { style: "overflow: auto; white-space: nowrap; height: calc(-85px + 100vh);" });
+  }
+
+  _buildCapturePanel(capturePanel) {
+    const self = this;
+
+    const controlBar = new Div(capturePanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
+
+    new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => { 
       try {
         self.port.postMessage({ action: "inspector_capture", tabId: self.tabId });
       } catch (e) {}
     } });
 
-    this.inspectorGUI = new Div(inspectorPanel, { style: "overflow: auto; white-space: nowrap; height: calc(-85px + 100vh);" });
+    this._captureFrame = new Span(controlBar, { text: ``, style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
+
+    this._capturePanel = new Div(capturePanel, { style: "overflow: auto; white-space: nowrap; height: calc(-100px + 100vh);" });
   }
 
-  _buildRecorderPanel( recorderPanel) {
+  _buildRecorderPanel(recorderPanel) {
     const self = this;
     const port = this.port;
-    const recorderBar = new Div(recorderPanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
+
+    const recorderBar = new Div(recorderPanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 5px; padding-left: 20px; padding-top: 5px; padding-bottom: 5px; width: calc(-60px + 100vw);" });
 
     new Span(recorderBar, { text: "Frames:", style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
     this.recordFramesInput = new Input(recorderBar, { id: "record_frames", type: "number", value: 100 });
@@ -112,28 +125,11 @@ export class InspectorWindow extends Window {
   }
 
   _captureFrameResults(frame, commands) {
-    if (!this._capturePanel) {
-      this._capturePanel = new Div(null, {"class": "capture_commandList", style: "height: calc(-40px + 100vh);" });
-      this._tabs.addTab("Capture", this._capturePanel);
-    }
+    const contents = this._capturePanel;
 
-    const self = this;
+    this._captureFrame.text = `Frame ${frame}`;
 
-    this._tabs.activeTab = this._tabs.numTabs - 1;
-
-    this._capturePanel.html = "";
-
-    const controlBar = new Div(this._capturePanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 5px; padding-left: 20px; padding-top: 5px; padding-bottom: 5px; width: calc(-60px + 100vw);" });
-
-    new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => { 
-      try {
-        self.port.postMessage({ action: "inspector_capture", tabId: self.tabId });
-      } catch (e) {}
-    } });
-
-    new Span(controlBar, { text: `Frame: ${frame}`, style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
-
-    const contents = new Div(this._capturePanel, { style: "overflow: auto; white-space: nowrap; height: calc(-100px + 100vh);" });
+    contents.html = "";   
     
     let currentPass = new Div(contents, { class: "capture_commandBlock" });
     let callNumber = 0;
