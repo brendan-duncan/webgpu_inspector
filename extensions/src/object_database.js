@@ -5,6 +5,8 @@ export class GPUObject {
   constructor(id) {
     this.id = id;
     this.label = "";
+    this.parent = null;
+    this.children = [];
   }
 }
 
@@ -97,6 +99,13 @@ export class Texture extends GPUObject {
     // TODO other dimensions
 
     return -1;
+  }
+}
+
+export class TextureView extends GPUObject {
+  constructor(id, descriptor) {
+    super(id);
+    this.descriptor = descriptor;
   }
 }
 
@@ -193,6 +202,7 @@ export class ObjectDatabase {
         case "inspect_add_object": {
           const pending = !!message.pending;
           const id = message.id;
+          const parent = message.parent;
           let descriptor = null;
           try {
             descriptor = message.descriptor ? JSON.parse(message.descriptor) : null;
@@ -202,23 +212,23 @@ export class ObjectDatabase {
           switch (message.type) {
             case "Adapter": {
               const obj = new Adapter(id, descriptor);
-              self._addObject(obj, pending);
+              self._addObject(obj, parent, pending);
               break;
             }
             case "Device": {
               const obj = new Device(id, descriptor);
-              self._addObject(obj, pending);
+              self._addObject(obj, parent, pending);
               break;
             }
             case "ShaderModule": {
               const obj = new ShaderModule(id, descriptor);
-              self._addObject(obj, pending);
+              self._addObject(obj, parent, pending);
               obj.size = descriptor?.code?.length ?? 0;
               break;
             }
             case "Buffer": {
               const obj = new Buffer(id, descriptor);
-              self._addObject(obj, pending);
+              self._addObject(obj, parent, pending);
               obj.size = descriptor?.size ?? 0;
               this.totalBufferMemory += obj.size;
               break;
@@ -229,37 +239,42 @@ export class ObjectDatabase {
               if (size != -1) {
                 this.totalTextureMemory += size;
               }
-              self._addObject(obj, pending);
+              self._addObject(obj, parent, pending);
+              break;
+            }
+            case "TextureView": {
+              const obj = new TextureView(id, descriptor);
+              self._addObject(obj, parent, pending);
               break;
             }
             case "Sampler": {
               const obj = new Sampler(id, descriptor);
-              self._addObject(obj, pending);
+              self._addObject(obj, parent, pending);
               break;
             }
             case "BindGroup": {
               const obj = new BindGroup(id, descriptor);
-              self._addObject(obj, pending);
+              self._addObject(obj, parent, pending);
               break;
             }
             case "BindGroupLayout": {
               const obj = new BindGroupLayout(id, descriptor);
-              self._addObject(obj, pending);
+              self._addObject(obj, parent, pending);
               break;
             }
             case "RenderPipeline": {
               const obj = new RenderPipeline(id, descriptor);
-              self._addObject(obj, pending);
+              self._addObject(obj, parent, pending);
               break;
             }
             case "ComputePipeline": {
               const obj = new ComputePipeline(id, descriptor);
-              self._addObject(obj, pending);
+              self._addObject(obj, parent, pending);
               break;
             }
             case "PipelineLayout": {
               const obj = new PipelineLayout(id, descriptor);
-              self._addObject(obj, pending);
+              self._addObject(obj, parent, pending);
               break;
             }
           }
@@ -275,6 +290,7 @@ export class ObjectDatabase {
     this.devices = new Map();
     this.samplers = new Map();
     this.textures = new Map();
+    this.textureViews = new Map();
     this.buffers = new Map();
     this.bindGroups = new Map();
     this.bindGroupLayouts = new Map();
@@ -372,7 +388,7 @@ export class ObjectDatabase {
     }
   }
 
-  _addObject(object, pending) {
+  _addObject(object, parent, pending) {
     const id = object.id;
     this.allObjects.set(id, object);
     if (object instanceof Adapter) {
@@ -383,6 +399,8 @@ export class ObjectDatabase {
       this.samplers.set(id, object);
     } else if (object instanceof Texture) {
       this.textures.set(id, object);
+    } else if (object instanceof TextureView) {
+      this.textureViews.set(id, object);
     } else if (object instanceof Buffer) {
       this.buffers.set(id, object);
     } else if (object instanceof BindGroup) {
@@ -401,6 +419,14 @@ export class ObjectDatabase {
       }
     } else if (object instanceof ComputePipeline) {
       this.computePipelines.set(id, object);
+    }
+
+    if (parent) {
+      const parentObject = this.getObject(parent);
+      if (parentObject) {
+        parentObject.children.push(object);
+        object.parent = parentObject;
+      }
     }
 
     this.onAddObject.emit(object, pending);
@@ -426,6 +452,7 @@ export class ObjectDatabase {
     this.devices.delete(id);
     this.samplers.delete(id);
     this.textures.delete(id);
+    this.textureViews.delete(id);
     this.buffers.delete(id);
     this.bindGroups.delete(id);
     this.bindGroupLayouts.delete(id);
@@ -446,6 +473,21 @@ export class ObjectDatabase {
         const size = object.size;
         this.totalBufferMemory -= size ?? 0;
       }
+
+      if (object.parent) {
+        const parent = object.parent;
+        const index = parent.children.indexOf(object);
+        if (index != -1) {
+          parent.children.splice(index, 1);
+        }
+      }
+
+      if (object.children) {
+        for (const child of object.children) {
+          this._deleteObject(child.id);
+        }
+      }
+
       this.onDeleteObject.emit(id, object);
     }
   }

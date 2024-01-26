@@ -10,6 +10,7 @@ import { Adapter,
   Buffer,
   Sampler,
   Texture,
+  TextureView,
   ShaderModule,
   BindGroupLayout,
   PipelineLayout,
@@ -327,6 +328,7 @@ export class InspectorWindow extends Window {
     this.uiShaderModules = this._createObjectListUI(objectsPanel, "Shader Modules");
     this.uiBuffers = this._createObjectListUI(objectsPanel, "Buffers");
     this.uiTextures = this._createObjectListUI(objectsPanel, "Textures");
+    this.uiTextureViews = this._createObjectListUI(objectsPanel, "Texture Views");
     this.uiSamplers = this._createObjectListUI(objectsPanel, "Samplers");
     this.uiBindGroups = this._createObjectListUI(objectsPanel, "BindGroups");
     this.uiBindGroupLayouts = this._createObjectListUI(objectsPanel, "BindGroupLayouts");
@@ -395,6 +397,9 @@ export class InspectorWindow extends Window {
     } else if (object instanceof Texture) {
       this._addObjectToUI(object, this.uiTextures);
       this.uiTextures.count.text = `${this.database.textures.size}`;
+    } else if (object instanceof TextureView) {
+        this._addObjectToUI(object, this.uiTextureViews);
+        this.uiTextureViews.count.text = `${this.database.textureViews.size}`;
     } else if (object instanceof ShaderModule) {
       this._addObjectToUI(object, this.uiShaderModules);
       this.uiShaderModules.count.text = `${this.database.shaderModules.size}`;
@@ -559,7 +564,7 @@ export class InspectorWindow extends Window {
     
     const collapse = new Span(titleBar, { class: "object_list_collapse", text: "+", style: "margin-right: 10px;" })
 
-    const title = new Span(titleBar, { class: "object_type", text: name });
+    new Span(titleBar, { class: "object_type", text: name });
     const objectCount = new Span(titleBar, { class: "object_type", text: "0", style: "margin-left: 10px;" });
 
     const objectList = new Widget("ol", div, { class: ["object_list", "collapsed"] });
@@ -608,7 +613,6 @@ export class InspectorWindow extends Window {
     if (type) {
       new Span(object.widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
     }
-
 
     const self = this;
     object.widget.element.onclick = () => {

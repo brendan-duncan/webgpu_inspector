@@ -179,14 +179,12 @@
       const self = this;
 
       object[method] = function () {
-        const t0 = performance.now();
         const result = origMethod.call(object, ...arguments);
-        const t1 = performance.now();
         if (result && typeof result == "object") {
           self._wrapObject(result);
         }
 
-        self._recordCommand(object, method, result, t1 - t0, arguments);
+        self._recordCommand(object, method, result, arguments);
         return result;
       };
     }
@@ -235,9 +233,10 @@
               });
             } else if (method == "requestDevice") {
               const descriptor = arguments[0] ?? {};
+              const parent = object.__id;
               descriptor["features"] = self._gpuToArray(result.features);
               descriptor["limits"] = self._gpuToObject(result.limits);
-              window.postMessage({"action": "inspect_add_object", id, "type": "Device", "descriptor": JSON.stringify(descriptor)}, "*");
+              window.postMessage({"action": "inspect_add_object", id, parent, "type": "Device", "descriptor": JSON.stringify(descriptor)}, "*");
             }
             if (result && result.__id) {
               resolve(result);
@@ -253,111 +252,133 @@
       };
     }
 
-    _recordCommand(object, method, result, time, ...args) {
+    _recordCommand(object, method, result, ...args) {
+      const arg = args[0];
+      const parent = object.__id;
       if (method == "destroy") {
         const id = object.__id;
         window.postMessage({"action": "inspect_delete_object", id}, "*");
       } else if (method == "createShaderModule") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, "type": "ShaderModule", "descriptor": JSON.stringify(args[0][0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent, "type": "ShaderModule", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "createBuffer") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, "type": "Buffer", "descriptor": JSON.stringify(args[0][0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Buffer", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "createTexture") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, "type": "Texture", "descriptor": JSON.stringify(args[0][0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Texture", "descriptor": JSON.stringify(arg[0])}, "*");
+      } else if (method == "createView") {
+        const id = result.__id;
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "TextureView", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "createSampler") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, "type": "Sampler", "descriptor": JSON.stringify(args[0][0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Sampler", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "createBindGroup") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, "type": "BindGroup", "descriptor": JSON.stringify(args[0][0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroup", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "createBindGroupLayout") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, "type": "BindGroupLayout", "descriptor": JSON.stringify(args[0][0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroupLayout", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "createPipelineLayout") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, "type": "PipelineLayout", "descriptor": JSON.stringify(args[0][0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "PipelineLayout", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "createRenderPipeline") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, "type": "RenderPipeline", "descriptor": JSON.stringify(args[0][0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "RenderPipeline", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "createComputePipeline") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, "type": "ComputePipeline", "descriptor": JSON.stringify(args[0][0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "ComputePipeline", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "beginRenderPass") {
-        window.postMessage({"action": "inspect_begin_render_pass", "descriptor": JSON.stringify(args[0][0])}, "*");
+        window.postMessage({"action": "inspect_begin_render_pass", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "beginComputePass") {
-          window.postMessage({"action": "inspect_begin_compute_pass", "descriptor": JSON.stringify(args[0][0])}, "*");
+          window.postMessage({"action": "inspect_begin_compute_pass", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "end") {
         window.postMessage({"action": "inspect_end_pass"}, "*");
       }
 
       if (this._recordRequest) {
-        const a = [...args[0]];
-        if (a.length === 1 && a[0] === undefined) {
-          a.length = 0;
-        }
+        this._captureCommand(object, method, arg);
+      }
+    }
 
-        let newArgs = null;
-        if (method == "setBindGroup") {
-          newArgs = [];
-          const binding = a[0];
-          const bindGroup = a[1];
-          newArgs.push(binding);
-          newArgs.push(bindGroup);
-          // handle dynamic offsets data, converting buffer views to Uint32Array
-          if (a.length > 2) {
-            const array = a[2];
-            const offset = a[3] ?? 0;
-            const size = a[4];
-            if (size !== 0) {
-              const buffer = array instanceof ArrayBuffer ? array : array.buffer;
-              if (!buffer) { // It's a []<number>
-                newArgs.push(array);
-              } else if (size > 0) {
-                newArgs.push(new Uint32Array(buffer, offset, size));
-              } else if (offset > 0) {
-                newArgs.push(new Uint32Array(buffer, offset));
-              } else {
-                newArgs.push(array);
-              }
-            }
-          }
-        } else if (method == "writeBuffer") {
-          newArgs = [];
-          const buffer = a[0];
-          const bufferOffset = a[1];
-          newArgs.push(buffer);
-          newArgs.push(bufferOffset);
-          let data = a[2];
-          if (a.length > 3) {
-            const offset = a[3] ?? 0;
-            const size = a[4];
-            const buffer = data instanceof ArrayBuffer ? data : data.buffer;
-            if (!buffer) { 
-              // It's a []<number>
+    _captureCommand(object, method, args) {
+      const a = [...args];
+      if (a.length === 1 && a[0] === undefined) {
+        a.length = 0;
+      }
+
+      let newArgs = null;
+      if (method == "setBindGroup") {
+        newArgs = [];
+        const binding = a[0];
+        const bindGroup = a[1];
+        newArgs.push(binding);
+        newArgs.push(bindGroup);
+        // handle dynamic offsets data, converting buffer views to Uint32Array
+        if (a.length > 2) {
+          const array = a[2];
+          const offset = a[3] ?? 0;
+          const size = a[4];
+          if (size !== 0) {
+            const buffer = array instanceof ArrayBuffer ? array : array.buffer;
+            if (!buffer) { // It's a []<number>
+              newArgs.push(array);
             } else if (size > 0) {
-              data = new Uint8Array(buffer, offset, size);
+              newArgs.push(new Uint32Array(buffer, offset, size));
             } else if (offset > 0) {
-              data = new Uint8Array(buffer, offset);
+              newArgs.push(new Uint32Array(buffer, offset));
+            } else {
+              newArgs.push(array);
             }
           }
-          // We can't push the actual data to the inspector server, it would be too much data.
-          // Instead, we push a description of the data. If we actually want the data, we should
-          // push it seperately in chunks as an ID'd data block, and then reference that ID here.
-          newArgs.push(data);
-        } else {
-          newArgs = a;
         }
+      } else if (method == "writeBuffer") {
+        newArgs = [];
+        const buffer = a[0];
+        const bufferOffset = a[1];
+        newArgs.push(buffer);
+        newArgs.push(bufferOffset);
+        let data = a[2];
+        if (a.length > 3) {
+          const offset = a[3] ?? 0;
+          const size = a[4];
+          const buffer = data instanceof ArrayBuffer ? data : data.buffer;
+          if (!buffer) { 
+            // It's a []<number>
+          } else if (size > 0) {
+            data = new Uint8Array(buffer, offset, size);
+          } else if (offset > 0) {
+            data = new Uint8Array(buffer, offset);
+          }
+        }
+        // We can't push the actual data to the inspector server, it would be too much data.
+        // Instead, we push a description of the data. If we actually want the data, we should
+        // push it seperately in chunks as an ID'd data block, and then reference that ID here.
+        newArgs.push(data);
+      } else {
+        newArgs = a;
+      }
 
-        newArgs = this._processCommandArgs(newArgs);
+      newArgs = this._processCommandArgs(newArgs);
 
-        this._frameCommands.push({
-          "class": object.constructor.name,
-          "id": object.__id,
-          method,
-          args: newArgs
-        });
+      this._frameCommands.push({
+        "class": object.constructor.name,
+        "id": object.__id,
+        method,
+        args: newArgs
+      });
+
+      if (method == "beginRenderPass") {
+        if (args[0]?.colorAttachments?.length > 0) {
+          const captureTextureView = args[0].colorAttachments[0].view;
+          console.log("!!!!captureTextureView", captureTextureView);
+          this._captureTextureView = captureTextureView;
+        }
+      } else if (method == "end") {
+        if (this._captureTextureView) {
+          console.log("!!!! CAPTURING TEXTURE VIEW", this._captureTextureView);
+          this._captureTextureView = null;
+        }
       }
     }
 
