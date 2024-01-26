@@ -2,42 +2,43 @@ import { Signal } from "./widget/signal.js";
 import { TextureFormatInfo } from "./texture_format_info.js";
 
 export class GPUObject {
-  constructor() {
+  constructor(id) {
+    this.id = id;
     this.label = "";
   }
 }
 
 export class Adapter extends GPUObject {
-  constructor(descriptor) {
-    super();
+  constructor(id, descriptor) {
+    super(id);
     this.descriptor = descriptor;
   }
 }
 
 export class Device extends GPUObject {
-  constructor(descriptor) {
-    super();
+  constructor(id, descriptor) {
+    super(id);
     this.descriptor = descriptor;
   }
 }
 
 export class Buffer extends GPUObject {
-  constructor(descriptor) {
-    super();
+  constructor(id, descriptor) {
+    super(id);
     this.descriptor = descriptor;
   }
 }
 
 export class Sampler extends GPUObject {
-  constructor(descriptor) {
-    super();
+  constructor(id, descriptor) {
+    super(id);
     this.descriptor = descriptor;
   }
 }
 
 export class Texture extends GPUObject {
-  constructor(descriptor) {
-    super();
+  constructor(id, descriptor) {
+    super(id);
     this.descriptor = descriptor;
   }
 
@@ -100,8 +101,8 @@ export class Texture extends GPUObject {
 }
 
 export class ShaderModule extends GPUObject {
-  constructor(descriptor) {
-    super();
+  constructor(id, descriptor) {
+    super(id);
     this.descriptor = descriptor;
     this.hasVertexEntries = descriptor?.code ? descriptor.code.indexOf("@vertex") != -1 : false;
     this.hasFragmentEntries = descriptor?.code ? descriptor.code.indexOf("@fragment") != -1 : false;
@@ -110,36 +111,36 @@ export class ShaderModule extends GPUObject {
 }
 
 export class BindGroupLayout extends GPUObject {
-  constructor(descriptor) {
-    super();
+  constructor(id, descriptor) {
+    super(id);
     this.descriptor = descriptor;
   }
 }
 
 export class PipelineLayout extends GPUObject {
-  constructor(descriptor) {
-    super();
+  constructor(id, descriptor) {
+    super(id);
     this.descriptor = descriptor;
   }
 }
 
 export class BindGroup extends GPUObject {
-  constructor(descriptor) {
-    super();
+  constructor(id, descriptor) {
+    super(id);
     this.descriptor = descriptor;
   }
 }
 
 export class RenderPipeline extends GPUObject {
-  constructor(descriptor) {
-    super();
+  constructor(id, descriptor) {
+    super(id);
     this.descriptor = descriptor;
   }
 }
 
 export class ComputePipeline extends GPUObject {
-  constructor(descriptor) {
-    super();
+  constructor(id, descriptor) {
+    super(id);
     this.descriptor = descriptor;
   }
 }
@@ -166,28 +167,28 @@ export class ObjectDatabase {
     port.onMessage.addListener((message) => {
       switch (message.action) {
         case "inspect_begin_frame":
-          self.beginFrame();
+          self._beginFrame();
           break;
         case "inspect_end_frame":
-          self.endFrame();
+          self._endFrame();
           break;
         case "inspect_begin_render_pass":
-          self.beginRenderPass();
+          self._beginRenderPass();
           break;
         case "inspect_begin_compute_pass":
-          self.beginComputePass();
+          self._beginComputePass();
           break;
         case "inspect_end_pass":
-          self.endPass();
+          self._endPass();
           break;
         case "inspect_delete_object":
-          self.deleteObject(message.id);
+          self._deleteObject(message.id);
           break;
         case "inspect_resolve_async_object":
-          self.resolvePendingObject(message.id);
+          self._resolvePendingObject(message.id);
           break;
         case "inspect_object_set_label":
-          self.setObjectLabel(message.id, message.label);
+          self._setObjectLabel(message.id, message.label);
           break;
         case "inspect_add_object": {
           const pending = !!message.pending;
@@ -200,65 +201,65 @@ export class ObjectDatabase {
           }
           switch (message.type) {
             case "Adapter": {
-              const obj = new Adapter(descriptor);
-              self.addObject(id, obj, pending);
+              const obj = new Adapter(id, descriptor);
+              self._addObject(obj, pending);
               break;
             }
             case "Device": {
-              const obj = new Device(descriptor);
-              self.addObject(id, obj, pending);
+              const obj = new Device(id, descriptor);
+              self._addObject(obj, pending);
               break;
             }
             case "ShaderModule": {
-              const obj = new ShaderModule(descriptor);
-              self.addObject(id, obj, pending);
+              const obj = new ShaderModule(id, descriptor);
+              self._addObject(obj, pending);
               obj.size = descriptor?.code?.length ?? 0;
               break;
             }
             case "Buffer": {
-              const obj = new Buffer(descriptor);
-              self.addObject(id, obj, pending);
+              const obj = new Buffer(id, descriptor);
+              self._addObject(obj, pending);
               obj.size = descriptor?.size ?? 0;
               this.totalBufferMemory += obj.size;
               break;
             }
             case "Texture": {
-              const obj = new Texture(descriptor);
+              const obj = new Texture(id, descriptor);
               const size = obj.getGpuSize();
               if (size != -1) {
                 this.totalTextureMemory += size;
               }
-              self.addObject(id, obj, pending);
+              self._addObject(obj, pending);
               break;
             }
             case "Sampler": {
-              const obj = new Sampler(descriptor);
-              self.addObject(id, obj, pending);
+              const obj = new Sampler(id, descriptor);
+              self._addObject(obj, pending);
               break;
             }
             case "BindGroup": {
-              const obj = new BindGroup(descriptor);
-              self.addObject(id, obj, pending);
+              const obj = new BindGroup(id, descriptor);
+              self._addObject(obj, pending);
               break;
             }
             case "BindGroupLayout": {
-              const obj = new BindGroupLayout(descriptor);
-              self.addObject(id, obj, pending);
+              const obj = new BindGroupLayout(id, descriptor);
+              self._addObject(obj, pending);
               break;
             }
             case "RenderPipeline": {
-              const obj = new RenderPipeline(descriptor);
-              self.addObject(id, obj, pending);
+              const obj = new RenderPipeline(id, descriptor);
+              self._addObject(obj, pending);
               break;
             }
             case "ComputePipeline": {
-              const obj = new ComputePipeline(descriptor);
-              self.addObject(id, obj, pending);
+              const obj = new ComputePipeline(id, descriptor);
+              self._addObject(obj, pending);
               break;
             }
             case "PipelineLayout": {
-              const obj = new PipelineLayout(descriptor);
-              self.addObject(id, obj, pending);
+              const obj = new PipelineLayout(id, descriptor);
+              self._addObject(obj, pending);
               break;
             }
           }
@@ -288,29 +289,74 @@ export class ObjectDatabase {
     this.frameTime = 0;
   }
 
-  beginFrame() {
+  getObjectDependencies(object) {
+    const dependencies = [];
+    const id = object.id;
+
+    if (object instanceof ShaderModule) {
+      this.renderPipelines.forEach((rp) => {
+        const descriptor = rp.descriptor;
+        if (descriptor?.vertex?.module?.__id == id) {
+          dependencies.push(rp);
+        } else if (descriptor?.fragment?.module?.__id == id) {
+          dependencies.push(rp);
+        }
+      });
+      this.computePipelines.forEach((cp) => {
+        const descriptor = cp.descriptor;
+        if (descriptor?.compute?.module?.__id == id) {
+          dependencies.push(cp);
+        }
+      });
+    } else if (object instanceof Buffer || object instanceof Texture) {
+      const isTexture = object instanceof Texture;
+      this.bindGroups.forEach((bg) => {
+        const entries = bg.descriptor?.entries;
+        if (entries) {
+          for (const entry of entries) {
+            const resource = entry.resource;
+            if (isTexture && resource instanceof String) {
+              if (resource.__id == id) {
+                dependencies.push(bg);
+                break;
+              }
+            } else if (resource?.buffer) {
+              const id = resource.buffer.__id;
+              if (id == id) {
+                dependencies.push(bg);
+              }
+              break;
+            }
+          }
+        }
+      });
+    }
+    return dependencies;
+  }
+
+  _beginFrame() {
     this.startFrameTime = performance.now();
     this.renderPassCount = 0;
     this.onBeginFrame.emit();
   }
 
-  endFrame() {
+  _endFrame() {
     this.endFrameTime = performance.now();
     this.frameTime = this.endFrameTime - this.startFrameTime;
     this.onEndFrame.emit();
   }
 
-  beginRenderPass() {
+  _beginRenderPass() {
     this.renderPassCount++;
     this.onBeginRenderPass.emit();
   }
 
-  beginComputePass() {
+  _beginComputePass() {
     this.computePassCount++;
     this.onBeginComputePass.emit();
   }
 
-  endPass() {
+  _endPass() {
     this.onEndPass.emit();
   }
 
@@ -318,7 +364,7 @@ export class ObjectDatabase {
     return this.allObjects.get(id);
   }
 
-  setObjectLabel(id, label) {
+  _setObjectLabel(id, label) {
     const object = this.getObject(id);
     if (object) {
       object.label = label;
@@ -326,7 +372,8 @@ export class ObjectDatabase {
     }
   }
 
-  addObject(id, object, pending) {
+  _addObject(object, pending) {
+    const id = object.id;
     this.allObjects.set(id, object);
     if (object instanceof Adapter) {
       this.adapters.set(id, object);
@@ -356,10 +403,10 @@ export class ObjectDatabase {
       this.computePipelines.set(id, object);
     }
 
-    this.onAddObject.emit(id, object, pending);
+    this.onAddObject.emit(object, pending);
   }
 
-  resolvePendingObject(id) {
+  _resolvePendingObject(id) {
     const object = this.allObjects.get(id);
     if (object instanceof RenderPipeline) {
       this.pendingRenderPipelines.delete(id);
@@ -372,7 +419,7 @@ export class ObjectDatabase {
     }
   }
 
-  deleteObject(id) {
+  _deleteObject(id) {
     const object = this.allObjects.get(id);
     this.allObjects.delete(id);
     this.adapters.delete(id);

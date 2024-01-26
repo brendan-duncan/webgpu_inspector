@@ -336,44 +336,44 @@ export class InspectorWindow extends Window {
     }
   }
 
-  _addObject(id, object, pending) {
+  _addObject(object, pending) {
     this._updateObjectStat(object);
     if (object instanceof Adapter) {
-      this._addObjectToUI(id, object, this.uiAdapters);
+      this._addObjectToUI(object, this.uiAdapters);
       this.uiAdapters.count.text = `${this.database.adapters.size}`;
     } else if (object instanceof Device) {
-      this._addObjectToUI(id, object, this.uiDevices);
+      this._addObjectToUI(object, this.uiDevices);
       this.uiDevices.count.text = `${this.database.devices.size}`;
     } else if (object instanceof Buffer) {
-      this._addObjectToUI(id, object, this.uiBuffers);
+      this._addObjectToUI(object, this.uiBuffers);
       this.uiBuffers.count.text = `${this.database.buffers.size}`;
     } else if (object instanceof Sampler) {
-      this._addObjectToUI(id, object, this.uiSamplers);
+      this._addObjectToUI(object, this.uiSamplers);
       this.uiSamplers.count.text = `${this.database.samplers.size}`;
     } else if (object instanceof Texture) {
-      this._addObjectToUI(id, object, this.uiTextures);
+      this._addObjectToUI(object, this.uiTextures);
       this.uiTextures.count.text = `${this.database.textures.size}`;
     } else if (object instanceof ShaderModule) {
-      this._addObjectToUI(id, object, this.uiShaderModules);
+      this._addObjectToUI(object, this.uiShaderModules);
       this.uiShaderModules.count.text = `${this.database.shaderModules.size}`;
     } else if (object instanceof BindGroupLayout) {
-      this._addObjectToUI(id, object, this.uiBindGroupLayouts);
+      this._addObjectToUI(object, this.uiBindGroupLayouts);
       this.uiBindGroupLayouts.count.text = `${this.database.bindGroupLayouts.size}`;
     } else if (object instanceof PipelineLayout) {
-      this._addObjectToUI(id, object, this.uiPipelineLayouts);
+      this._addObjectToUI(object, this.uiPipelineLayouts);
       this.uiPipelineLayouts.count.text = `${this.database.pipelineLayouts.size}`;
     } else if (object instanceof BindGroup) {
-      this._addObjectToUI(id, object, this.uiBindGroups);
+      this._addObjectToUI(object, this.uiBindGroups);
       this.uiBindGroups.count.text = `${this.database.bindGroups.size}`;
     } else if (object instanceof RenderPipeline) {
-      this._addObjectToUI(id, object, pending ? this.uiPendingAsyncRenderPipelines : this.uiRenderPipelines);
+      this._addObjectToUI(object, pending ? this.uiPendingAsyncRenderPipelines : this.uiRenderPipelines);
       if (pending) {
         this.uiPendingAsyncRenderPipelines.count.text = `${this.database.pendingRenderPipelines.size}`;
       } else {
         this.uiRenderPipelines.count.text = `${this.database.renderPipelines.size}`;
       }
     } else if (object instanceof ComputePipeline) {
-      this._addObjectToUI(id, object, pending ? this.uiPendingAsyncComputePipelines : this.uiComputePipelines);
+      this._addObjectToUI(object, pending ? this.uiPendingAsyncComputePipelines : this.uiComputePipelines);
       if (pending) {
         this.uiPendingAsyncComputePipelines.count.text = `${this.database.pendingComputePipelines.size}`;
       } else {
@@ -479,16 +479,23 @@ export class InspectorWindow extends Window {
     return info;
   }
 
-  _inspectObject(id, object) {
+  _inspectObject(object) {
     this.inspectPanel.html = "";
 
     const infoBox = new Div(this.inspectPanel, { style: "background-color: #353; padding: 10px;" });
-    new Div(infoBox, { text: `${object.label || object.constructor.name} ID:${id}` });
+    new Div(infoBox, { text: `${object.label || object.constructor.name} ID:${object.id}` });
 
     if (object instanceof Texture) {
       const gpuSize = object.getGpuSize();
       const sizeStr = gpuSize < 0 ? "<unknown>" : gpuSize.toLocaleString("en-US");
       new Div(infoBox, { text: `GPU Size: ${sizeStr} Bytes`, style: "font-size: 10pt; margin-top: 5px;" });
+    }
+
+    const dependencies = this.database.getObjectDependencies(object);
+    new Div(infoBox, { text: `Used By: ${dependencies.length} Objects`, style: "font-size: 10pt; color: #aaa;"});
+    const depGrp = new Div(infoBox, { style: "font-size: 10pt; color: #aaa; padding-left: 20px; max-height: 50px; overflow: auto;" })
+    for (const dep of dependencies) {
+      new Div(depGrp, { text: `${dep.label || dep.constructor.name} ${dep.id}` });
     }
 
     const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-185px + 100vh);" });
@@ -538,7 +545,7 @@ export class InspectorWindow extends Window {
     return objectList;
   }
 
-  _addObjectToUI(id, object, ui) {
+  _addObjectToUI(object, ui) {
     const name = `${object.label || object.constructor.name}`;
     let type = "";
     if (object instanceof ShaderModule) {
@@ -555,7 +562,7 @@ export class InspectorWindow extends Window {
     object.widget = new Widget("li", ui);
 
     object.nameWidget = new Span(object.widget, { text: name });
-    new Span(object.widget, { text: `ID: ${id}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+    new Span(object.widget, { text: `ID: ${object.id}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
     if (type) {
       new Span(object.widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
     }
@@ -568,7 +575,7 @@ export class InspectorWindow extends Window {
       }
       object.widget.element.classList.add("selected");
       self._selectedObject = object;
-      self._inspectObject(id, object);
+      self._inspectObject(object);
     };
   }
 }
