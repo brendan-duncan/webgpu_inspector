@@ -131,6 +131,34 @@ export class InspectorWindow extends Window {
     });
   }
 
+  _processCommandArgs(object) {
+    if (!object) {
+      return object;
+    }
+    if (object.__id !== undefined) {
+      const obj = this.database.getObject(object.__id);
+      if (obj) {
+        return `$${object.__id} ${obj.constructor.name}`;
+      }
+      return `&${object.__id} ${object.__class || "Object"}`;
+    }
+    if (object instanceof Array) {
+      const newArray = [];
+      for (const i in object) {
+        newArray[i] = this._processCommandArgs(object[i]);
+      }
+      return newArray;
+    }
+    if (object instanceof Object) {
+      const newObject = {};
+      for (const key in object) {
+        newObject[key] = this._processCommandArgs(object[key]);
+      }
+      return newObject;
+    }
+    return object;
+  }
+
   _captureFrameResults(frame, commands) {
     const contents = this._capturePanel;
 
@@ -163,12 +191,13 @@ export class InspectorWindow extends Window {
       }
 
       const cmd = new Div(currentPass, { class: cmdType });
-      //cmd.html = cmd.innerHTML = `<span class='callnum'>${callNumber++}.</span> <span class='capture_objectName'>${name}</span>.<span class='capture_methodName'>${method}</span>`;
       cmd.html = cmd.innerHTML = `<span class='callnum'>${callNumber++}.</span> <span class='capture_methodName'>${method}</span>`;
 
-      //const self = this;
+      const self = this;
       cmd.element.onclick = () => {
-        commandInfo.html = `<pre>${args}</pre>`;
+        const newArgs = self._processCommandArgs(args);
+        const argStr = JSON.stringify(newArgs, undefined, 4);
+        commandInfo.html = `<div style="background-color: #575; padding-left: 20px; line-height: 40px;">${name} Method: ${method}</div><hr><pre>${argStr}</pre>`;
       };
 
       if (method == "end") {

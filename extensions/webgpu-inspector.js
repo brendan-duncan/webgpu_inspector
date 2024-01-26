@@ -10,6 +10,7 @@
       }
 
       this._frameCommands = [];
+      this._frameData = [];
       this._currentFrame = null;
       this._frameIndex = 0;
       this._initalized = true;
@@ -70,6 +71,7 @@
       } else {
         this._recordRequest = false;
       }
+      this._frameData.length = 0;
       this._frameCommands.length = 0;
       this._frameIndex++;
     }
@@ -291,73 +293,124 @@
       }
 
       if (this._recordRequest) {
-        const a = args[0];
-        let argStr = null;
+        const a = [...args[0]];
+        if (a.length === 1 && a[0] === undefined) {
+          a.length = 0;
+        }
+
+        let newArgs = null;
         if (method == "setBindGroup") {
+          newArgs = [];
           const binding = a[0];
           const bindGroup = a[1];
-          if (a.length == 5) {
+          newArgs.push(binding);
+          newArgs.push(bindGroup);
+          // handle dynamic offsets data, converting buffer views to Uint32Array
+          if (a.length > 2) {
             const array = a[2];
-            const offset = a[3];
+            const offset = a[3] ?? 0;
             const size = a[4];
-            if (size == 0) {
-              argStr = `[${binding}, {"__id": ${bindGroup?.__id ?? 0}}]`;
-            } else {
-              const dynamicOffsets = new Uint32Array(array.buffer, offset, size);
-              argStr = `[${binding}, {"__id": ${bindGroup?.__id ?? 0}}, [${dynamicOffsets}]]`;
+            if (size !== 0) {
+              const buffer = array instanceof ArrayBuffer ? array : array.buffer;
+              if (!buffer) { // It's a []<number>
+                newArgs.push(array);
+              } else if (size > 0) {
+                newArgs.push(new Uint32Array(buffer, offset, size));
+              } else if (offset > 0) {
+                newArgs.push(new Uint32Array(buffer, offset));
+              } else {
+                newArgs.push(array);
+              }
             }
-          } else if (a.length == 3) {
-            const dynamicOffsets = a[2];
-            argStr = `[${binding}, {"__id": ${bindGroup?.__id ?? 0}}, [${dynamicOffsets}]]`;
-          } else {
-            argStr = `[${binding}, {"__id": ${bindGroup?.__id ?? 0}}]`;
           }
+        } else if (method == "writeBuffer") {
+          newArgs = [];
+          const buffer = a[0];
+          const bufferOffset = a[1];
+          newArgs.push(buffer);
+          newArgs.push(bufferOffset);
+          let data = a[2];
+          if (a.length > 3) {
+            const offset = a[3] ?? 0;
+            const size = a[4];
+            const buffer = data instanceof ArrayBuffer ? data : data.buffer;
+            if (!buffer) { 
+              // It's a []<number>
+            } else if (size > 0) {
+              data = new Uint8Array(buffer, offset, size);
+            } else if (offset > 0) {
+              data = new Uint8Array(buffer, offset);
+            }
+          }
+          // We can't push the actual data to the inspector server, it would be too much data.
+          // Instead, we push a description of the data. If we actually want the data, we should
+          // push it seperately in chunks as an ID'd data block, and then reference that ID here.
+          newArgs.push(data);
         } else {
-          argStr = `[${this._stringifyArgs(a)}]`;
+          newArgs = a;
         }
+
+        newArgs = this._processCommandArgs(newArgs);
 
         this._frameCommands.push({
           "class": object.constructor.name,
           "id": object.__id,
           method,
-          args: argStr
+          args: newArgs
         });
       }
     }
 
-    _stringifyArgs(args, writeKeys = false) {
-      if (args.length == 0 || (args.length == 1 && args[0] === undefined)) {
-        return "[]";
+    _addCommandData(data) {
+      if (this._recordRequest) {
+        const id = this._frameData.length;
+        this._frameData.push(data);
+        return id;
       }
+      return -1;
+    }
 
-      let s = "";
-      for (const key in args) {
-        let a = args[key];
-        if (s != "") {
-          s += ", ";
-        }
-
-        if (writeKeys) {
-          s += `"${key}":`;
-        }
-
-        if (!a) {
-          s += a;
-        } else if (typeof a == "string") {
-          s += `\`${a}\``;
-        } else if (a.length && a.length > 10) {
-          s += `"${a.constructor.name}(${a.length})"`;
-        } else if (a.length !== undefined) {
-          s += `[${this._stringifyArgs(a, false)}]`;
-        } else if (a.__id !== undefined) {
-          s += `{"__id": ${a.__id}}`;
-        } else if (typeof a == "object") {
-          s += `{ ${this._stringifyArgs(a, true)} }`;
-        } else {
-          s += JSON.stringify(a, undefined, 4);;
-        }
+    // Convert any objects to a string representation that can be sent to the inspector server.
+    _processCommandArgs(object) {
+      if (!object || object instanceof Number || object instanceof String || object instanceof Boolean) {
+        return object;
       }
-      return s;
+      if (object.__id !== undefined) {
+        return {"__id": object.__id, "__class": object.constructor.name };
+      }
+      if (object instanceof ImageBitmap ||
+        object instanceof ImageData ||
+        object instanceof HTMLImageElement ||
+        object instanceof HTMLCanvasElement ||
+        object instanceof HTMLVideoElement ||
+        object instanceof OffscreenCanvas ||
+        object instanceof VideoFrame) {
+        return `@-1 ${object.constructor.name} ${object.width} ${object.height}`;
+      }
+      if (object instanceof Array || object.buffer !== undefined) {
+        const maxMessageArrayLength = 100;
+        if (object.length > maxMessageArrayLength) {
+          const id = this._addCommandData(object);
+          return `@${id} ${object.constructor.name} ${object.byteLength}`;
+        }
+        const newArray = [];
+        for (const i in object) {
+          newArray[i] = this._processCommandArgs(object[i]);
+        }
+        return newArray;
+      }
+      if (object instanceof ArrayBuffer) {
+        const id = this._addCommandData(object);
+        return `@${id} ${object.constructor.name} ${object.byteLength}`;
+      }
+      if (object instanceof Object) {
+        const newObject = {};
+        for (const key in object) {
+          newObject[key] = this._processCommandArgs(object[key]);
+        }
+        return newObject;
+      }
+      return object;
     }
 
     _recordAsyncCommand(object, method, id, ...args) {
