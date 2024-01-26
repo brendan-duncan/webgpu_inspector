@@ -964,11 +964,27 @@ ol::-webkit-scrollbar-thumb:hover {
 }
 
 .capture_command {
-  padding-bottom: 5px;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 28px;
 }
 
 .capture_command:hover {
   filter: brightness(150%);
+}
+
+.capture_frame {
+  overflow: auto;
+  width: calc(50% - 10px);
+  height: calc(100% - 10px);
+}
+
+.capture_commandInfo {
+  overflow: auto;
+  width: calc(50% - 10px);
+  height: calc(100% - 10px);
+  padding-left: 20px;
+  font-size: 12pt;
 }
 
 .capture_frame_title {
@@ -1001,6 +1017,10 @@ ol::-webkit-scrollbar-thumb:hover {
 
 .capture_renderpass .capture_command:hover {
   filter: brightness(150%);
+}
+
+.capture_renderpass .capture_drawcall {
+  color: #ff0;
 }
 
 .capture_computepass {

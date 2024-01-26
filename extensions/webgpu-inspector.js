@@ -291,16 +291,45 @@
       }
 
       if (this._recordRequest) {
+        const a = args[0];
+        let argStr = null;
+        if (method == "setBindGroup") {
+          const binding = a[0];
+          const bindGroup = a[1];
+          if (a.length == 5) {
+            const array = a[2];
+            const offset = a[3];
+            const size = a[4];
+            if (size == 0) {
+              argStr = `[${binding}, {"__id": ${bindGroup?.__id ?? 0}}]`;
+            } else {
+              const dynamicOffsets = new Uint32Array(array.buffer, offset, size);
+              argStr = `[${binding}, {"__id": ${bindGroup?.__id ?? 0}}, [${dynamicOffsets}]]`;
+            }
+          } else if (a.length == 3) {
+            const dynamicOffsets = a[2];
+            argStr = `[${binding}, {"__id": ${bindGroup?.__id ?? 0}}, [${dynamicOffsets}]]`;
+          } else {
+            argStr = `[${binding}, {"__id": ${bindGroup?.__id ?? 0}}]`;
+          }
+        } else {
+          argStr = `[${this._stringifyArgs(a)}]`;
+        }
+
         this._frameCommands.push({
           "class": object.constructor.name,
           "id": object.__id,
           method,
-          "args": this._stringifyArgs(args)
+          args: argStr
         });
       }
     }
 
     _stringifyArgs(args, writeKeys = false) {
+      if (args.length == 0 || (args.length == 1 && args[0] === undefined)) {
+        return "[]";
+      }
+
       let s = "";
       for (const key in args) {
         let a = args[key];
@@ -317,15 +346,15 @@
         } else if (typeof a == "string") {
           s += `\`${a}\``;
         } else if (a.length && a.length > 10) {
-          s += `${a.constructor.name}(${a.length})`;
+          s += `"${a.constructor.name}(${a.length})"`;
         } else if (a.length !== undefined) {
           s += `[${this._stringifyArgs(a, false)}]`;
         } else if (a.__id !== undefined) {
-          s += `${a.constructor.name}@${a.__id}`;
+          s += `{"__id": ${a.__id}}`;
         } else if (typeof a == "object") {
           s += `{ ${this._stringifyArgs(a, true)} }`;
         } else {
-          s += JSON.stringify(a);
+          s += JSON.stringify(a, undefined, 4);;
         }
       }
       return s;

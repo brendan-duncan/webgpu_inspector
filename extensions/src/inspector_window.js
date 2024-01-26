@@ -137,29 +137,42 @@ export class InspectorWindow extends Window {
     this._captureFrame.text = `Frame ${frame}`;
 
     contents.html = "";   
+
+    const frameContents = new Span(contents, { class: "capture_frame" });
+    const commandInfo = new Span(contents, { class: "capture_commandInfo" });
     
-    let currentPass = new Div(contents, { class: "capture_commandBlock" });
+    let currentPass = new Div(frameContents, { class: "capture_commandBlock" });
     let callNumber = 0;
 
     for (const command of commands) {
       const className = command.class;
       //const id = command.id;
       const method = command.method;
-      //const args = command.args;
+      const args = command.args;
       const name = `${className ?? "__"}`;
 
       if (method == "beginRenderPass") {
-        currentPass = new Div(contents, { class: "capture_renderpass" });
+        currentPass = new Div(frameContents, { class: "capture_renderpass" });
       } else if (method == "beginComputePass") {
-        currentPass = new Div(contents, { class: "capture_computepass" });
+        currentPass = new Div(frameContents, { class: "capture_computepass" });
       }
 
-      const cmd = new Div(currentPass, { class: "capture_command" });
-      cmd.html = cmd.innerHTML = `<span class='callnum'>${callNumber++}.</span> <span class='capture_objectName'>${name}</span>.<span class='capture_methodName'>${method}</span>`;
-      //(<span class='functionArgs'>${args}</span>)
+      const cmdType = ["capture_command"];
+      if (method == "draw" || method == "drawIndexed" || method == "drawIndirect" || method == "drawIndexedIndirect") {
+        cmdType.push("capture_drawcall");
+      }
+
+      const cmd = new Div(currentPass, { class: cmdType });
+      //cmd.html = cmd.innerHTML = `<span class='callnum'>${callNumber++}.</span> <span class='capture_objectName'>${name}</span>.<span class='capture_methodName'>${method}</span>`;
+      cmd.html = cmd.innerHTML = `<span class='callnum'>${callNumber++}.</span> <span class='capture_methodName'>${method}</span>`;
+
+      //const self = this;
+      cmd.element.onclick = () => {
+        commandInfo.html = `<pre>${args}</pre>`;
+      };
 
       if (method == "end") {
-        currentPass = new Div(contents, { class: "capture_commandBlock" });
+        currentPass = new Div(frameContents, { class: "capture_commandBlock" });
       }
     }
   }
