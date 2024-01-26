@@ -71,6 +71,7 @@ window.addEventListener('message', (event) => {
 
 function injectScriptNode(url) {
   const script = document.createElement("script");
+  script.type = "module";
   script.src = url;
   (document.head || document.documentElement).appendChild(script);
   script.parentNode.removeChild(script);

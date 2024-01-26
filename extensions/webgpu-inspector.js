@@ -1,16 +1,22 @@
-(() => {
-  let webgpuInspector = null;
+import { encodeBase64 } from "./src/base64.js";
+import { TextureFormatInfo } from "./src/texture_format_info.js";
 
+(() => {
   const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 
   class WebGPUInspector {
-    constructor(options) {
+    constructor() {
       if (!window.navigator.gpu) {
+        // No WebGPU support
         return;
       }
 
       this._frameCommands = [];
       this._frameData = [];
+      this._frameRenderPassCount = 0;
+      this._captureTextureView = null;
+      this._captureCommandEncoder = null;
+      this._captureTexturedBuffers = [];
       this._currentFrame = null;
       this._frameIndex = 0;
       this._initalized = true;
@@ -73,6 +79,7 @@
       }
       this._frameData.length = 0;
       this._frameCommands.length = 0;
+      this._frameRenderPassCount = 0;
       this._frameIndex++;
     }
 
@@ -179,7 +186,20 @@
       const self = this;
 
       object[method] = function () {
+        if (method === "createTexture") {
+          arguments[0].usage |= GPUTextureUsage.COPY_SRC;
+        }
+
         const result = origMethod.call(object, ...arguments);
+        
+        if (method=== "createTexture") {
+          result.__created = true;
+        }
+
+        if (object.__skipRecord) {
+          object.__skipRecord = false;
+          return result;
+        }
         if (result && typeof result == "object") {
           self._wrapObject(result);
         }
@@ -269,6 +289,7 @@
         window.postMessage({"action": "inspect_add_object", id, parent,"type": "Texture", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "createView") {
         const id = result.__id;
+        result.__texture = object;
         window.postMessage({"action": "inspect_add_object", id, parent,"type": "TextureView", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "createSampler") {
         const id = result.__id;
@@ -290,10 +311,14 @@
         window.postMessage({"action": "inspect_add_object", id, parent,"type": "ComputePipeline", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "beginRenderPass") {
         window.postMessage({"action": "inspect_begin_render_pass", "descriptor": JSON.stringify(arg[0])}, "*");
+        this._frameRenderPassCount++;
       } else if (method == "beginComputePass") {
           window.postMessage({"action": "inspect_begin_compute_pass", "descriptor": JSON.stringify(arg[0])}, "*");
       } else if (method == "end") {
         window.postMessage({"action": "inspect_end_pass"}, "*");
+      } else if (method == "createCommandEncoder") {
+        // We'll need the CommandEncoder's device for capturing textures
+        result.__device = object;
       }
 
       if (this._recordRequest) {
@@ -371,15 +396,115 @@
       if (method == "beginRenderPass") {
         if (args[0]?.colorAttachments?.length > 0) {
           const captureTextureView = args[0].colorAttachments[0].view;
-          console.log("!!!!captureTextureView", captureTextureView);
           this._captureTextureView = captureTextureView;
+          this._captureCommandEncoder = object;
         }
       } else if (method == "end") {
         if (this._captureTextureView) {
-          console.log("!!!! CAPTURING TEXTURE VIEW", this._captureTextureView);
+          const texture = this._captureTextureView.__texture;
+          if (texture) {
+            this._captureTexture(this._captureCommandEncoder, texture);
+          }
           this._captureTextureView = null;
         }
+        this._captureCommandEncoder = null;
+      } else if (method == "submit") {
+        this._sendCaptureTextureBuffers();
       }
+    }
+
+    _sendCaptureTextureBuffers() {     
+      for (const textureBuffer of this._captureTexturedBuffers) {
+        const { id, buffer, width, height, depthOrArrayLayers, format, passId } = textureBuffer;
+        //console.log(`!!!!!!! CAPTURING TEXTURE BUFFERS ${width} ${height} ${depthOrArrayLayers} ${format} ${passId}`);
+
+        const self = this;
+        buffer.mapAsync(GPUMapMode.READ).then(() => {
+          const range = buffer.getMappedRange();
+          const data = new Uint8Array(range);
+
+          self._sendTextureData(id, width, height, depthOrArrayLayers, format, passId, data);
+
+          buffer.destroy();
+        });
+      }
+      this._captureTexturedBuffers.length = 0;
+    }
+
+    _sendTextureData(id, width, height, depthOrArrayLayers, format, passId, data) {
+      const maxChunkSize = 1024 * 1024;
+      const size = data.length;
+      const numChunks = Math.ceil(size / maxChunkSize);
+      
+      for (let i = 0; i < numChunks; ++i) {
+        const offset = i * maxChunkSize;
+        const chunkSize = Math.min(maxChunkSize, size - offset);
+        const chunk = data.slice(offset, offset + chunkSize);
+
+        const chunkData = encodeBase64(chunk);
+
+        window.postMessage({
+          "action": "inspect_capture_texture_data",
+          id,
+          width,
+          height,
+          depthOrArrayLayers,
+          format,
+          passId,
+          offset,
+          size,
+          index: i,
+          count: numChunks,
+          chunk: chunkData
+        }, "*");
+      }
+    }
+
+    _captureTexture(commandEncoder, texture) {
+      const device = commandEncoder.__device;
+      // can't capture canvas texture
+      if (!device || !texture.__created) {
+        return;
+      }
+      const id = texture.__id;
+      const passId = this._frameRenderPassCount - 1;
+      const format = texture.format;
+      const formatInfo = format ? TextureFormatInfo[format] : undefined;
+      if (!formatInfo) { // GPUExternalTexture?
+        return;
+      }
+      const width = texture.width;
+      const height = texture.height || 1;
+      const depthOrArrayLayers = texture.depthOrArrayLayers || 1;
+      const texelByteSize = formatInfo.bytesPerBlock;
+      const bytesPerRow = (width * texelByteSize + 255) & ~0xff;
+      const rowsPerImage = height;
+      const bufferSize = bytesPerRow * rowsPerImage * depthOrArrayLayers;
+      if (!bufferSize) {
+        return;
+      }
+      const copySize = { width, height, depthOrArrayLayers };
+
+      //console.log("!!!! CAPTURING RENDER PASS", passId, texelByteSize, bufferSize, copySize, device, commandEncoder);
+
+      device.__skipRecord = true;
+      const buffer = device.createBuffer({
+        size: bufferSize,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+      });
+      device.__skipRecord = false;
+
+      const aspect = format === 'depth24plus-stencil8' || format === 'depth32float-stencil8' ? 'depth-only' : 'all';
+
+      commandEncoder.__skipRecord = true;
+      commandEncoder.copyTextureToBuffer(
+        { texture, aspect },
+        { buffer, bytesPerRow, rowsPerImage: height },
+        copySize
+      );
+      commandEncoder.__skipRecord = false;
+
+      this._captureTexturedBuffers.push({ id, buffer, width, height, depthOrArrayLayers, format, passId });
     }
 
     _addCommandData(data) {
@@ -467,5 +592,5 @@
     "popErrorScope",
   ];
 
-  webgpuInspector = new WebGPUInspector();
+  new WebGPUInspector();
 })();

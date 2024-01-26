@@ -1,3 +1,4 @@
+import { decodeBase64 } from "./base64.js";
 import { Button } from "./widget/button.js";
 import { Div } from "./widget/div.js";
 import { Input } from "./widget/input.js";
@@ -118,16 +119,33 @@ export class InspectorWindow extends Window {
 
     port.onMessage.addListener((message) => {
       switch (message.action) {
-        case "webgpu_recording":
+        case "webgpu_recording": {
           if (message.index !== undefined && message.count !== undefined && message.data !== undefined) {
             self._addRecordingData(message.data, message.index, message.count);
           }
           break;
-        case "inspect_capture_frame_results":
+        }
+        case "inspect_capture_frame_results": {
           const commands = message.commands;
           const frame = message.frame;
           self._captureFrameResults(frame, commands);
           break;
+        }
+        case "inspect_capture_texture_data": {
+          const id = message.id;
+          const width = message.width;
+          const height = message.height;
+          const depthOrArrayLayers = message.depthOrArrayLayers;
+          const format = message.format;
+          const passId = message.passId;
+          const offset = message.offset;
+          const size = message.size;
+          const index = message.index;
+          const count = message.count;
+          const chunk = message.chunk;
+          self._captureTextureData(id, width, height, depthOrArrayLayers, format, passId, offset, size, index, count, chunk);
+          break;
+        }
       }
     });
   }
@@ -158,6 +176,46 @@ export class InspectorWindow extends Window {
       return newObject;
     }
     return object;
+  }
+
+  _captureTextureData(id, width, height, depthOrArrayLayers, format, passId, offset, size, index, count, chunk) {
+    //console.log("TEXTURE DATA", id, passId, width, height, depthOrArrayLayers, format, offset, size, index, count, chunk);
+    const object = this.database.getObject(id);
+    if (!object || !(object instanceof Texture)) {
+      return;
+    }
+
+    if (object.loadedImageDataChunks.length != count) {
+      object.loadedImageDataChunks.length = count;
+      object.isImageDataLoaded = false;
+    }
+
+    object.loadedImageDataChunks[index] = 1;
+
+    if (!(object.imageData instanceof Uint8Array) || (object.imageData.length != size)) {
+      object.imageData = new Uint8Array(size);
+    }
+
+    const data = decodeBase64(chunk);
+
+    try {
+      object.imageData.set(data, offset);
+    } catch (e) {
+      console.log("TEXTURE IMAGE DATA SET ERROR", id, passId, offset, data.length, object.imageData.length);
+    }
+
+    let loaded = true;
+    for (let i = 0; i < count; ++i) {
+      if (!object.loadedImageDataChunks[i]) {
+        loaded = false;
+        break;
+      }
+    }
+    object.isImageDataLoaded = loaded;
+
+    if (object.isImageDataLoaded) {
+      console.log("TEXTURE IMAGE DATA LOADED", id, passId, object.imageData.length);
+    }
   }
 
   _captureFrameResults(frame, commands) {
@@ -207,35 +265,7 @@ export class InspectorWindow extends Window {
     }
   }
 
-  _encodeBase64(bytes) {
-    const _b2a = [
-        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
-        "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
-        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
-        "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
-        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "+", "/"
-    ];
-
-    let result = '', i, l = bytes.length;
-    for (i = 2; i < l; i += 3) {
-        result += _b2a[bytes[i - 2] >> 2];
-        result += _b2a[((bytes[i - 2] & 0x03) << 4) | (bytes[i - 1] >> 4)];
-        result += _b2a[((bytes[i - 1] & 0x0F) << 2) | (bytes[i] >> 6)];
-        result += _b2a[bytes[i] & 0x3F];
-    }
-    if (i === l + 1) {
-        result += _b2a[bytes[i - 2] >> 2];
-        result += _b2a[(bytes[i - 2] & 0x03) << 4];
-        result += "==";
-    }
-    if (i === l) {
-        result += _b2a[bytes[i - 2] >> 2];
-        result += _b2a[((bytes[i - 2] & 0x03) << 4) | (bytes[i - 1] >> 4)];
-        result += _b2a[(bytes[i - 1] & 0x0F) << 2];
-        result += "=";
-    }
-    return result;
-}
+  
 
   _addRecordingData(data, index, count) {
     try {
@@ -282,7 +312,7 @@ export class InspectorWindow extends Window {
     new Widget("pre", this.recorderDataPanel, { text: html });
 
     //const nonceData = new Uint8Array(16);
-    //const nonce = this._encodeBase64(crypto.getRandomValues(nonceData));
+    //const nonce = encodeBase64(crypto.getRandomValues(nonceData));
     //const html = this._recordingData.join().replace("<script>", `<script nonce="${nonce}">`).replace("script-src *", `script-src * 'nonce-${nonce}' strict-dynamic`);
 
     /*const f = document.createElement("iframe");
@@ -445,6 +475,9 @@ export class InspectorWindow extends Window {
 
   _getDescriptorInfo(object, descriptor) {
     const info = {};
+    if (descriptor === null) {
+      return null;
+    }
     if (descriptor["__id"] !== undefined) {
       const obj = this.database.getObject(descriptor["__id"]);
       if (obj) {

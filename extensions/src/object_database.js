@@ -42,6 +42,9 @@ export class Texture extends GPUObject {
   constructor(id, descriptor) {
     super(id);
     this.descriptor = descriptor;
+    this.imageData = null;
+    this.loadedImageDataChunks = [];
+    this.isImageDataLoaded = false;
   }
 
   get dimension() {

@@ -30,7 +30,9 @@
         "webgpu-recorder.js",
         "webgpu-inspector.js",
         "webgpu-inspector-panel.html",
-        "webgpu-inspector.css"
+        "webgpu-inspector.css",
+        "src/texture_format_info.js",
+        "src/base64.js"
        ],
       "matches": ["*://*/*"]
     }
