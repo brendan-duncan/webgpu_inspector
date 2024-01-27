@@ -446,10 +446,6 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
         window.postMessage({
           "action": "inspect_capture_texture_data",
           id,
-          width,
-          height,
-          depthOrArrayLayers,
-          format,
           passId,
           offset,
           size,
@@ -484,8 +480,6 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
         return;
       }
       const copySize = { width, height, depthOrArrayLayers };
-
-      //console.log("!!!! CAPTURING RENDER PASS", passId, texelByteSize, bufferSize, copySize, device, commandEncoder);
 
       device.__skipRecord = true;
       const buffer = device.createBuffer({

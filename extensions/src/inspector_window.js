@@ -6,6 +6,8 @@ import { Span } from "./widget/span.js";
 import { Widget } from "./widget/widget.js";
 import { Window } from "./widget/window.js";
 import { TabWidget } from "./widget/tab_widget.js";
+import { TextureFormatInfo } from "./texture_format_info.js";
+import { TextureUtils } from "./texture_utils.js";
 import { Adapter,
   Device,
   Buffer,
@@ -28,6 +30,9 @@ export class InspectorWindow extends Window {
     this.database = database
     this.classList.add("main-window");
     this._selectedObject = null;
+
+    this.adapter = null;
+    this.device = null;
 
     const self = this;
     this.port.onDisconnect.addListener(() => {
@@ -55,6 +60,32 @@ export class InspectorWindow extends Window {
     this.database.onAddObject.addListener(this._addObject, this);
     this.database.onDeleteObject.addListener(this._deleteObject, this);
     this.database.onObjectLabelChanged.addListener(this._objectLabelChanged, this);
+  }
+
+  async initialize() {
+    if (!navigator.gpu) {
+      return;
+    }
+    this.adapter = await navigator.gpu.requestAdapter();
+    if (!this.adapter) {
+      return;
+    }
+
+    const features = [];
+    const limits = {};
+    for (const key of this.adapter.features) {
+      features.push(key);
+    }
+    const exclude = new Set(["minSubgroupSize", "maxSubgroupSize"]);
+    for (const key in this.adapter.limits) {
+      if (!exclude.has(key)) {
+        limits[key] = this.adapter.limits[key];
+      }
+    }
+
+    this.device = await this.adapter.requestDevice({requiredFeatures: features, requiredLimits: limits});
+
+    this.textureUtils = new TextureUtils(this.device);
   }
 
   _buildInspectorPanel(inspectorPanel) {
@@ -98,7 +129,14 @@ export class InspectorWindow extends Window {
     const self = this;
     const port = this.port;
 
-    const recorderBar = new Div(recorderPanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 5px; padding-left: 20px; padding-top: 5px; padding-bottom: 5px; width: calc(-60px + 100vw);" });
+    const recorderBar = new Div(recorderPanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 5px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px; width: calc(-60px + 100vw);" });
+
+    this.recordButton = new Button(recorderBar, { label: "Record", style: "background-color: #755;", callback: () => {
+      const frames = self.recordFramesInput.value || 1;
+      const filename = self.recordNameInput.value;
+      self._recordingData.length = 0;
+      self.port.postMessage({ action: "initialize_recorder", frames, filename, tabId: self.tabId });
+    }});
 
     new Span(recorderBar, { text: "Frames:", style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
     this.recordFramesInput = new Input(recorderBar, { id: "record_frames", type: "number", value: 100 });
@@ -107,13 +145,6 @@ export class InspectorWindow extends Window {
     this.recordNameInput = new Input(recorderBar, { id: "record_frames", type: "text", value: "webgpu_record" });
 
     this._recordingData = [];
-
-    this.recordButton = new Button(recorderBar, { label: "Record", style: "margin-left: 20px; margin-right: 10px;", callback: () => {
-      const frames = self.recordFramesInput.value || 1;
-      const filename = self.recordNameInput.value;
-      self._recordingData.length = 0;
-      self.port.postMessage({ action: "initialize_recorder", frames, filename, tabId: self.tabId });
-    }});
 
     this.recorderDataPanel = new Div(recorderPanel);
 
@@ -133,17 +164,13 @@ export class InspectorWindow extends Window {
         }
         case "inspect_capture_texture_data": {
           const id = message.id;
-          const width = message.width;
-          const height = message.height;
-          const depthOrArrayLayers = message.depthOrArrayLayers;
-          const format = message.format;
           const passId = message.passId;
           const offset = message.offset;
           const size = message.size;
           const index = message.index;
           const count = message.count;
           const chunk = message.chunk;
-          self._captureTextureData(id, width, height, depthOrArrayLayers, format, passId, offset, size, index, count, chunk);
+          self._captureTextureData(id, passId, offset, size, index, count, chunk);
           break;
         }
       }
@@ -178,8 +205,7 @@ export class InspectorWindow extends Window {
     return object;
   }
 
-  _captureTextureData(id, width, height, depthOrArrayLayers, format, passId, offset, size, index, count, chunk) {
-    //console.log("TEXTURE DATA", id, passId, width, height, depthOrArrayLayers, format, offset, size, index, count, chunk);
+  _captureTextureData(id, passId, offset, size, index, count, chunk) {
     const object = this.database.getObject(id);
     if (!object || !(object instanceof Texture)) {
       return;
@@ -202,6 +228,8 @@ export class InspectorWindow extends Window {
       object.imageData.set(data, offset);
     } catch (e) {
       console.log("TEXTURE IMAGE DATA SET ERROR", id, passId, offset, data.length, object.imageData.length);
+      object.loadedImageDataChunks.length = 0;
+      object.isImageDataLoaded = false;
     }
 
     let loaded = true;
@@ -214,8 +242,49 @@ export class InspectorWindow extends Window {
     object.isImageDataLoaded = loaded;
 
     if (object.isImageDataLoaded) {
-      console.log("TEXTURE IMAGE DATA LOADED", id, passId, object.imageData.length);
+      object.loadedImageDataChunks.length = 0;
+      this._createTexture(object, passId);
     }
+  }
+
+  _createTexture(texture, passId) {
+    texture.gpuTexture = this.device.createTexture(texture.descriptor);
+
+    const format = texture.descriptor.format;
+    const formatInfo = TextureFormatInfo[format] ?? TextureFormatInfo["rgba8unorm"];
+    const width = texture.width;
+    const texelByteSize = formatInfo.bytesPerBlock;
+    const bytesPerRow = (width * texelByteSize + 255) & ~0xff;
+    const rowsPerImage = texture.height;
+
+    this.device.queue.writeTexture(
+      {
+        texture: texture.gpuTexture
+      },
+      texture.imageData,
+      {
+        offset: 0,
+        bytesPerRow,
+        rowsPerImage
+      },
+      texture.descriptor.size);
+
+      const frameImages = this._frameImages;
+      if (!frameImages) {
+        return;
+      }
+
+      const aspect = texture.height / texture.width;
+      const viewWidth = 256;
+      const viewHeight = Math.round(viewWidth * aspect);
+
+      new Div(frameImages, { text: `Render Pass ${passId}`, style: "font-size: 10pt; color: #ddd; margin-bottom: 5px;" });
+      const canvas = new Widget("canvas", frameImages, { width: viewWidth, height: viewHeight });
+      const context = canvas.element.getContext('webgpu');
+      context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
+      const canvasTexture = context.getCurrentTexture();
+
+      this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), format);
   }
 
   _captureFrameResults(frame, commands) {
@@ -225,11 +294,13 @@ export class InspectorWindow extends Window {
 
     contents.html = "";   
 
+    this._frameImages = new Span(contents, { class: "capture_frameImages" });
     const frameContents = new Span(contents, { class: "capture_frame" });
     const commandInfo = new Span(contents, { class: "capture_commandInfo" });
     
     let currentPass = new Div(frameContents, { class: "capture_commandBlock" });
     let callNumber = 0;
+    let renderPassIndex = 0;
 
     for (const command of commands) {
       const className = command.class;
@@ -240,6 +311,8 @@ export class InspectorWindow extends Window {
 
       if (method == "beginRenderPass") {
         currentPass = new Div(frameContents, { class: "capture_renderpass" });
+        new Div(currentPass, { text: `Render Pass ${renderPassIndex}`, style: "padding-left: 20px; font-size: 12pt; color: #ddd; margin-bottom: 5px; background-color: #553; line-height: 30px;" });
+        renderPassIndex++;
       } else if (method == "beginComputePass") {
         currentPass = new Div(frameContents, { class: "capture_computepass" });
       }
@@ -256,7 +329,30 @@ export class InspectorWindow extends Window {
       cmd.element.onclick = () => {
         const newArgs = self._processCommandArgs(args);
         const argStr = JSON.stringify(newArgs, undefined, 4);
-        commandInfo.html = `<div style="background-color: #575; padding-left: 20px; line-height: 40px;">${name} Method: ${method}</div><hr><pre>${argStr}</pre>`;
+
+        commandInfo.html = "";
+
+        new Div(commandInfo, { text: name, style: "background-color: #575; padding-left: 20px; line-height: 40px;" });
+
+        if (method == "beginRenderPass") {
+          const desc = args[0];
+          const colorAttachments = desc.colorAttachments;
+          const depthStencilAttachment = desc.depthStencilAttachment;
+          for (const i in colorAttachments) {
+            const attachment = colorAttachments[i];
+            const textureView = self.database.getObject(attachment.view.__id);
+            if (textureView) {
+              const texture = textureView.parent;
+              if (texture) {
+                const format = texture.descriptor.format;
+                new Div(commandInfo, { text: `Color Attachment ${i}: ${format}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+              }
+            }
+          }
+        }
+
+        new Widget("hr", commandInfo);
+        new Widget("pre", commandInfo, { text: argStr });
       };
 
       if (method == "end") {
@@ -264,8 +360,6 @@ export class InspectorWindow extends Window {
       }
     }
   }
-
-  
 
   _addRecordingData(data, index, count) {
     try {
