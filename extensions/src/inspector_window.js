@@ -269,23 +269,32 @@ export class InspectorWindow extends Window {
       },
       texture.descriptor.size);
 
-      const frameImages = this._frameImages;
-      if (!frameImages) {
-        return;
+    const frameImages = this._frameImages;
+    if (!frameImages) {
+      return;
+    }
+
+    const aspect = texture.height / texture.width;
+    const viewWidth = 256;
+    const viewHeight = Math.round(viewWidth * aspect);
+
+    new Div(frameImages, { text: `Render Pass ${passId}`, style: "font-size: 10pt; color: #ddd; margin-bottom: 5px;" });
+    const canvas = new Widget("canvas", frameImages, { width: viewWidth, height: viewHeight });
+    const context = canvas.element.getContext('webgpu');
+    const dstFormat = navigator.gpu.getPreferredCanvasFormat();
+    context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
+    const canvasTexture = context.getCurrentTexture();
+
+    const self = this;
+    canvas.element.onclick = () => {
+      const element = document.getElementById(`RenderPass_${passId}`);
+      if (element) {
+        element.scrollIntoView();
       }
+    };
 
-      const aspect = texture.height / texture.width;
-      const viewWidth = 256;
-      const viewHeight = Math.round(viewWidth * aspect);
-
-      new Div(frameImages, { text: `Render Pass ${passId}`, style: "font-size: 10pt; color: #ddd; margin-bottom: 5px;" });
-      const canvas = new Widget("canvas", frameImages, { width: viewWidth, height: viewHeight });
-      const context = canvas.element.getContext('webgpu');
-      context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
-      const canvasTexture = context.getCurrentTexture();
-
-      this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), format);
-  }
+    this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
+}
 
   _captureFrameResults(frame, commands) {
     const contents = this._capturePanel;
@@ -311,7 +320,7 @@ export class InspectorWindow extends Window {
 
       if (method == "beginRenderPass") {
         currentPass = new Div(frameContents, { class: "capture_renderpass" });
-        new Div(currentPass, { text: `Render Pass ${renderPassIndex}`, style: "padding-left: 20px; font-size: 12pt; color: #ddd; margin-bottom: 5px; background-color: #553; line-height: 30px;" });
+        new Div(currentPass, { text: `Render Pass ${renderPassIndex}`, id: `RenderPass_${renderPassIndex}`, style: "padding-left: 20px; font-size: 12pt; color: #ddd; margin-bottom: 5px; background-color: #553; line-height: 30px;" });
         renderPassIndex++;
       } else if (method == "beginComputePass") {
         currentPass = new Div(frameContents, { class: "capture_computepass" });
@@ -337,7 +346,6 @@ export class InspectorWindow extends Window {
         if (method == "beginRenderPass") {
           const desc = args[0];
           const colorAttachments = desc.colorAttachments;
-          const depthStencilAttachment = desc.depthStencilAttachment;
           for (const i in colorAttachments) {
             const attachment = colorAttachments[i];
             const textureView = self.database.getObject(attachment.view.__id);
@@ -346,6 +354,17 @@ export class InspectorWindow extends Window {
               if (texture) {
                 const format = texture.descriptor.format;
                 new Div(commandInfo, { text: `Color Attachment ${i}: ${format}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+              }
+            }
+          }
+          const depthStencilAttachment = desc.depthStencilAttachment;
+          if (depthStencilAttachment) {
+            const textureView = self.database.getObject(depthStencilAttachment.view.__id);
+            if (textureView) {
+              const texture = textureView.parent;
+              if (texture) {
+                const format = texture.descriptor.format;
+                new Div(commandInfo, { text: `DepthStencil Attachment: ${format}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
               }
             }
           }

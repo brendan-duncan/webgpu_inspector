@@ -1040,6 +1040,15 @@ ol::-webkit-scrollbar-thumb:hover {
   filter: brightness(150%);
 }
 
+.capture_frameImages {
+  padding-left: 10px;
+  width: 320px;
+}
+
+.capture_frameImages canvas:hover {
+  border: 2px solid #ff0;
+}
+
 .rightArrow { color: #ff00ff; }
 .returnValue { font-size: small; }
 .callnum { color: white; }
