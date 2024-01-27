@@ -28,9 +28,9 @@ class MessagePort {
         if (!inspectorInitialized) {
           action = "initialize_inspector";
         }
-      }
-
-      if (action == "initialize_inspector") {
+      } else if (action == "inspect_request_texture") {
+        window.postMessage(message, "*");
+      } else if (action == "initialize_inspector") {
         sessionStorage.setItem(webgpuInspectorLoadedKey, "true");
         setTimeout(function () {
           window.location.reload();

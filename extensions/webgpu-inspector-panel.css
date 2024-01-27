@@ -967,6 +967,8 @@ ol::-webkit-scrollbar-thumb:hover {
   overflow: auto;
   width: calc(50% - 10px);
   height: calc(100% - 10px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--thumbBG) var(--scrollbarBG);
 }
 
 .capture_commandInfo {
@@ -1034,7 +1036,7 @@ ol::-webkit-scrollbar-thumb:hover {
   margin-top: 10px;
   border: 1px solid #666;
   width: 300px;
-  height: 255px;
+  height: 320px;
   overflow: auto;
   padding-left: 10px;
   padding-top: 10px;
@@ -1044,7 +1046,11 @@ ol::-webkit-scrollbar-thumb:hover {
 
 .capture_frameImages {
   padding-left: 10px;
-  width: 320px;
+  width: 340px;
+  height: calc(-120px + 100vh);
+  scrollbar-width: thin;
+  scrollbar-color: var(--thumbBG) var(--scrollbarBG);
+  overflow: auto;
 }
 
 .capture_frameImages canvas:hover {

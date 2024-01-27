@@ -30,6 +30,7 @@ export class InspectorWindow extends Window {
     this.database = database
     this.classList.add("main-window");
     this._selectedObject = null;
+    this._inspectedObject = null;
 
     this.adapter = null;
     this.device = null;
@@ -90,7 +91,7 @@ export class InspectorWindow extends Window {
 
   _buildInspectorPanel(inspectorPanel) {
     const self = this;
-    const controlBar = new Div(inspectorPanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
+    const controlBar = new Div(inspectorPanel, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px; font-size: 10pt;" });
 
     this.inspectButton = new Button(controlBar, { label: "Start", callback: () => { 
       try {
@@ -106,7 +107,7 @@ export class InspectorWindow extends Window {
     this.uiTotalTextureMemory = new Span(stats, { style: "margin-left: 20px;" });
     this.uiTotalBufferMemory = new Span(stats, { style: "margin-left: 20px;" });
 
-    this.inspectorGUI = new Div(inspectorPanel, { style: "overflow: auto; white-space: nowrap; height: calc(-85px + 100vh); display: flex;" });
+    this.inspectorGUI = new Div(inspectorPanel, { style: "overflow: hidden; white-space: nowrap; height: calc(-85px + 100vh); display: flex;" });
   }
 
   _buildCapturePanel(capturePanel) {
@@ -122,7 +123,7 @@ export class InspectorWindow extends Window {
 
     this._captureFrame = new Span(controlBar, { text: ``, style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
 
-    this._capturePanel = new Div(capturePanel, { style: "overflow: auto; white-space: nowrap; height: calc(-100px + 100vh);" });
+    this._capturePanel = new Div(capturePanel, { style: "overflow: hidden; white-space: nowrap; height: calc(-100px + 100vh);" });
   }
 
   _buildRecorderPanel(recorderPanel) {
@@ -269,37 +270,38 @@ export class InspectorWindow extends Window {
       },
       texture.descriptor.size);
 
-    const frameImages = this._frameImages;
-    if (!frameImages) {
-      return;
+    if (this._inspectedObject == texture) {
+      this._inspectObject(texture);
     }
 
-    const aspect = texture.height / texture.width;
-    const viewWidth = 256;
-    const viewHeight = Math.round(viewWidth * aspect);
+    const frameImages = this._frameImages;
+    if (frameImages) {
+      const aspect = texture.height / texture.width;
+      const viewWidth = 256;
+      const viewHeight = Math.round(viewWidth * aspect);
 
-    const passFrame = new Div(frameImages, { class: "capture_pass_texture" });
+      const passFrame = new Div(frameImages, { class: "capture_pass_texture" });
 
-    new Div(passFrame, { text: `Render Pass ${passId}`, style: "color: #ddd; margin-bottom: 5px;" });
-    new Div(passFrame, { text: `${texture.name} ID:${texture.id}`, style: "color: #ddd; margin-bottom: 10px;" })
-    const canvas = new Widget("canvas", passFrame);
-    canvas.element.width = viewWidth;
-    canvas.element.height = viewHeight;
-    const context = canvas.element.getContext('webgpu');
-    const dstFormat = navigator.gpu.getPreferredCanvasFormat();
-    context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
-    const canvasTexture = context.getCurrentTexture();
+      new Div(passFrame, { text: `Render Pass ${passId}`, style: "color: #ddd; margin-bottom: 5px;" });
+      new Div(passFrame, { text: `${texture.name} ID:${texture.id}`, style: "color: #ddd; margin-bottom: 10px;" })
+      const canvas = new Widget("canvas", passFrame);
+      canvas.element.width = viewWidth;
+      canvas.element.height = viewHeight;
+      const context = canvas.element.getContext('webgpu');
+      const dstFormat = navigator.gpu.getPreferredCanvasFormat();
+      context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
+      const canvasTexture = context.getCurrentTexture();
 
-    const self = this;
-    canvas.element.onclick = () => {
-      const element = document.getElementById(`RenderPass_${passId}`);
-      if (element) {
-        element.scrollIntoView();
-      }
-    };
+      canvas.element.onclick = () => {
+        const element = document.getElementById(`RenderPass_${passId}`);
+        if (element) {
+          element.scrollIntoView();
+        }
+      };
 
-    this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
-}
+      this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
+    }
+  }
 
   _captureFrameResults(frame, commands) {
     const contents = this._capturePanel;
@@ -460,7 +462,7 @@ export class InspectorWindow extends Window {
     const pane1 = new Span(this.inspectorGUI);
 
     const objectsTab = new TabWidget(pane1);
-    const objectsPanel = new Div(null, { style: "font-size: 11pt;"});
+    const objectsPanel = new Div(null, { style: "font-size: 11pt; overflow: auto; height: calc(-115px + 100vh);" });
     objectsTab.addTab("Objects", objectsPanel);
 
     const pane3 = new Span(this.inspectorGUI, { style: "padding-left: 20px; flex-grow: 1; overflow: hidden;" });
@@ -680,6 +682,8 @@ export class InspectorWindow extends Window {
   _inspectObject(object) {
     this.inspectPanel.html = "";
 
+    this._inspectedObject = object;
+
     const infoBox = new Div(this.inspectPanel, { style: "background-color: #353; padding: 10px;" });
     new Div(infoBox, { text: `${object.name} ID:${object.id}` });
 
@@ -708,6 +712,10 @@ export class InspectorWindow extends Window {
     }
 
     if (object instanceof Texture) {
+      const self = this;
+      new Button(descriptionBox, { label: "Load", callback: () => {
+        this.port.postMessage({ action: "inspect_request_texture", id: object.id, tabId: self.tabId });
+      }});
       if (object.gpuTexture) {
         const width = object.width;
         const height = object.height;

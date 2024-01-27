@@ -15,6 +15,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       this._frameData = [];
       this._frameRenderPassCount = 0;
       this._captureTextureView = null;
+      this._lastCommandEncoder = null;
       this._captureCommandEncoder = null;
       this._captureTexturedBuffers = [];
       this._currentFrame = null;
@@ -26,10 +27,14 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       this._maxFramesToRecord = 1000;
       this._recordRequest = false;
       this.__skipRecord = false;
+      this._trackedObjects = new Map();
+      this._captureTextureRequest = new Map();
 
       const self = this;
       // Try to track garbage collected WebGPU objects
       this._gcRegistry = new FinalizationRegistry((id) => {
+        self._trackedObjects.delete(id);
+        self._captureTextureRequest.delete(id);
         window.postMessage({"action": "inspect_delete_object", id}, "*");
       });
 
@@ -37,7 +42,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       this._wrapCanvases();
 
       // Capture any dynamically created canvases
-      let __createElement = document.createElement;
+      const __createElement = document.createElement;
       document.createElement = function (type) {
         let element = __createElement.call(document, type);
         if (type == "canvas") {
@@ -53,7 +58,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       // we would need to keep track of things like shader creation/deletion that can happen
       // at arbitrary frames prior to the start, for any objects used within that recorded
       // duration.
-      let __requestAnimationFrame = window.requestAnimationFrame;
+      const __requestAnimationFrame = window.requestAnimationFrame;
       window.requestAnimationFrame = function (cb) {
         function callback() {
           self._frameStart();
@@ -62,11 +67,33 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
         }
         __requestAnimationFrame(callback);
       };
+
+      window.addEventListener('message', (event) => {
+        if (event.source !== window) {
+          return;
+        }
+        const message = event.data;
+        if (typeof message !== 'object' || message === null) {
+          return;
+        }
+        if (message.action == "inspect_request_texture") {
+          const textureId = message.id;
+          self._requestTexture(textureId);
+        }
+      });
     }
 
     clear() {
       this._frameCommands.length = 0;
       this._currentFrame = null;
+    }
+
+    _requestTexture(textureId) {
+      const object = this._trackedObjects.get(textureId);
+      if (!object || !(object instanceof GPUTexture)) {
+        return;
+      }
+      this._captureTextureRequest.set(textureId, object);
     }
 
     _frameStart() {
@@ -187,13 +214,27 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       const self = this;
 
       object[method] = function () {
-        if (method === "createTexture") {
+        if (method == "createTexture") {
+          // Add COPY_SRC usage to all textures so we can capture them
           arguments[0].usage |= GPUTextureUsage.COPY_SRC;
         }
 
+        // Before we finish the command encoder, inject any pending texture captures
+        if ((object == self._lastCommandEncoder) && method == "finish") {
+          if (self._captureTextureRequest.size > 0) {
+            self._captureTextureBuffers();
+          }
+        }
+
         const result = origMethod.call(object, ...arguments);
+
+        // After the CommandBuffer has been submitted, send any pending texture data
+        if (method == "submit") {
+          self._sendCaptureTextureBuffers();
+        }
         
-        if (method=== "createTexture") {
+        if (method == "createTexture") {
+          // If it wasn't created, it's a canvas texture.
           result.__created = true;
         }
 
@@ -207,9 +248,25 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
           self._wrapObject(result);
         }
 
+        if (method == "createTexture") {
+          self._trackedObjects.set(result.__id, result);
+        } else if (method == "createTextureView") {
+          self._trackedObjects.set(result.__id, result);
+        } else if (method == "createBuffer") {
+          self._trackedObjects.set(result.__id, result);
+        }
+
         self._recordCommand(object, method, result, arguments);
         return result;
       };
+    }
+
+    _captureTextureBuffers() {
+      const self = this;
+      this._captureTextureRequest.forEach((texture) => {
+        self._captureTexture(self._lastCommandEncoder, texture);
+      });
+      this._captureTextureRequest.clear();
     }
 
     _gpuToArray(gpu) {
@@ -280,6 +337,8 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       const parent = object.__id;
       if (method == "destroy") {
         const id = object.__id;
+        this._trackedObjects.delete(id);
+        this._captureTextureRequest.delete(id);
         window.postMessage({"action": "inspect_delete_object", id}, "*");
       } else if (method == "createShaderModule") {
         const id = result.__id;
@@ -322,6 +381,11 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       } else if (method == "createCommandEncoder") {
         // We'll need the CommandEncoder's device for capturing textures
         result.__device = object;
+        this._lastCommandEncoder = result;
+      } else if (method == "finish") {
+        if (object == this._lastCommandEncoder) {
+          this._lastCommandEncoder = null;
+        }
       }
 
       if (this._recordRequest) {
@@ -411,15 +475,12 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
           this._captureTextureView = null;
         }
         this._captureCommandEncoder = null;
-      } else if (method == "submit") {
-        this._sendCaptureTextureBuffers();
       }
     }
 
     _sendCaptureTextureBuffers() {     
       for (const textureBuffer of this._captureTexturedBuffers) {
         const { id, buffer, width, height, depthOrArrayLayers, format, passId } = textureBuffer;
-        //console.log(`!!!!!!! CAPTURING TEXTURE BUFFERS ${width} ${height} ${depthOrArrayLayers} ${format} ${passId}`);
 
         const self = this;
         buffer.mapAsync(GPUMapMode.READ).then(() => {
