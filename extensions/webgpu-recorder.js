@@ -997,30 +997,24 @@ class WebGPURecorder {
     };
 
 
-// -------------
-// Auto start recording on script load if filename is provided:
-// webgpu_recorder.js?filename=foo
-function getParameterByName(name, url) {
-    name = name.replace(/[\[\]]/g, '\\$&');
-    const regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)');
-    const results = regex.exec(url);
-    if (!results) return null;
-    if (!results[2]) return '';
-    return decodeURIComponent(results[2].replace(/\+/g, ' '));
-}
+
 
 function main() {
-    const filename = getParameterByName("filename", document.currentScript.src);
-    const frames = getParameterByName("frames", document.currentScript.src);
-    const messageRecording = getParameterByName("messageRecording", document.currentScript.src);
-    const removeUnusedResources = getParameterByName("removeUnusedResources", document.currentScript.src);
-    if (filename) {
-        new WebGPURecorder({
-            "frames": frames || 1,
-            "export": filename,
-            "removeUnusedResources": !!removeUnusedResources,
-            "messageRecording": !!messageRecording
-        });
+    // If the script tag has a filename attribute, then auto start recording.
+    const script = document.getElementById("__webgpu-recorder");
+    if (script) {
+        const filename = script.getAttribute("filename");
+        const frames = script.getAttribute("frames");
+        const messageRecording = script.getAttribute("messageRecording");
+        const removeUnusedResources = script.getAttribute("removeUnusedResources");
+        if (filename) {
+            new WebGPURecorder({
+                "frames": frames || 1,
+                "export": filename,
+                "removeUnusedResources": !!removeUnusedResources,
+                "messageRecording": !!messageRecording
+            });
+        }
     }
 }
 

@@ -69,23 +69,34 @@ window.addEventListener('message', (event) => {
   }
 });
 
-function injectScriptNode(url) {
+function injectScriptNode(name, url, attributes) {
   const script = document.createElement("script");
+  script.id = name;
   script.type = "module";
   script.src = url;
+
+  if (attributes) {
+    for (const key in attributes) {
+      script.setAttribute(key, attributes[key]);
+    }
+  }
+
   (document.head || document.documentElement).appendChild(script);
-  script.parentNode.removeChild(script);
 }
 
 
 if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
-  injectScriptNode(chrome.runtime.getURL(`webgpu-inspector.js`));
+  injectScriptNode("__webgpu-inspector", chrome.runtime.getURL(`webgpu-inspector.js`));
   sessionStorage.removeItem(webgpuInspectorLoadedKey);
   inspectorInitialized = true;
 } else if (sessionStorage.getItem(webgpuRecorderLoadedKey)) {
   const data = sessionStorage.getItem(webgpuRecorderLoadedKey).split("%");
-  const url = `webgpu-recorder.js?filename=${encodeURIComponent(data[1])}&frames=${encodeURIComponent(data[0])}&removeUnusedResources=1&messageRecording=1`;
-  injectScriptNode(chrome.runtime.getURL(url));
+  injectScriptNode("__webgpu-recorder", chrome.runtime.getURL("webgpu-recorder.js"), {
+    filename: data[1],
+    frames: data[0],
+    removeUnusedResources: 1,
+    messageRecording: 1
+  });
   sessionStorage.removeItem(webgpuRecorderLoadedKey);
 }
 
