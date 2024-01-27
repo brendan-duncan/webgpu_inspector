@@ -29,6 +29,8 @@ The Inspector tool will reload the page and inject the WebGPU Inspector into it,
 
 Press the Start button to inject the Inspector tool and reload the page.
 
+![WebGPU Inspector Panel](images/inspect.png)
+
 ----
 
 ### Capture
@@ -38,6 +40,8 @@ Capture all WebGPU commands used to render a frame.
 If the Inspector hadn't been already started on the page, it will be started and the page will reload, capturing the first frame results.
 
 If the Inspector is already running, it will capture the next frame.
+
+![WebGPU Inspector Panel](images/capture.png)
 
 ----
 
@@ -51,3 +55,5 @@ The Recorder tool will reload the page and inject the WebGPU Recorder into it. T
 Press the **Record** button to inject the recorder tool into the page and reload the page. Recording always starts from the loading of the page.
 
 When the recording has finished, it will be automatically downloaded by the browser, and presented on the Record panel.
+
+![WebGPU Inspector Panel](images/record.png)
