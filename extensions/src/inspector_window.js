@@ -41,14 +41,14 @@ export class InspectorWindow extends Window {
 
     this._tabs = new TabWidget(this);
 
-    const inspectorPanel = new Div();
+    const inspectorPanel = new Div(null, { class: "inspector_panel" });
     this._tabs.addTab("Inspect", inspectorPanel);
 
-    const capturePanel = new Div(null);
+    const capturePanel = new Div(null, { class: "capture_panel" });
     this._tabs.addTab("Capture", capturePanel);
 
-    const recorderPanel = new Div(null);
-    this._tabs.addTab("Record", recorderPanel);   
+    const recorderPanel = new Div(null, { class: "recorder_panel" });
+    this._tabs.addTab("Record", recorderPanel);
 
     this._buildInspectorPanel(inspectorPanel);
     this._buildRecorderPanel(recorderPanel);
@@ -278,8 +278,13 @@ export class InspectorWindow extends Window {
     const viewWidth = 256;
     const viewHeight = Math.round(viewWidth * aspect);
 
-    new Div(frameImages, { text: `Render Pass ${passId}`, style: "font-size: 10pt; color: #ddd; margin-bottom: 5px;" });
-    const canvas = new Widget("canvas", frameImages, { width: viewWidth, height: viewHeight });
+    const passFrame = new Div(frameImages, { class: "capture_pass_texture" });
+
+    new Div(passFrame, { text: `Render Pass ${passId}`, style: "color: #ddd; margin-bottom: 5px;" });
+    new Div(passFrame, { text: `${texture.name} ID:${texture.id}`, style: "color: #ddd; margin-bottom: 10px;" })
+    const canvas = new Widget("canvas", passFrame);
+    canvas.element.width = viewWidth;
+    canvas.element.height = viewHeight;
     const context = canvas.element.getContext('webgpu');
     const dstFormat = navigator.gpu.getPreferredCanvasFormat();
     context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
@@ -458,10 +463,10 @@ export class InspectorWindow extends Window {
     const objectsPanel = new Div(null, { style: "font-size: 11pt;"});
     objectsTab.addTab("Objects", objectsPanel);
 
-    const pane3 = new Span(this.inspectorGUI, { style: "padding-left: 20px; flex-grow: 1; overflow: auto;" });
+    const pane3 = new Span(this.inspectorGUI, { style: "padding-left: 20px; flex-grow: 1; overflow: hidden;" });
 
     const inspectTab = new TabWidget(pane3);
-    this.inspectPanel = new Div(null, { style: "font-size: 14pt;"});
+    this.inspectPanel = new Div(null, { class: "inspector_panel_content" });
     inspectTab.addTab("Inspect", this.inspectPanel);
 
     this.uiAdapters = this._createObjectListUI(objectsPanel, "Adapters");
@@ -676,7 +681,7 @@ export class InspectorWindow extends Window {
     this.inspectPanel.html = "";
 
     const infoBox = new Div(this.inspectPanel, { style: "background-color: #353; padding: 10px;" });
-    new Div(infoBox, { text: `${object.label || object.constructor.name} ID:${object.id}` });
+    new Div(infoBox, { text: `${object.name} ID:${object.id}` });
 
     if (object instanceof Texture) {
       const gpuSize = object.getGpuSize();
@@ -688,10 +693,10 @@ export class InspectorWindow extends Window {
     new Div(infoBox, { text: `Used By: ${dependencies.length} Objects`, style: "font-size: 10pt; color: #aaa;"});
     const depGrp = new Div(infoBox, { style: "font-size: 10pt; color: #aaa; padding-left: 20px; max-height: 50px; overflow: auto;" })
     for (const dep of dependencies) {
-      new Div(depGrp, { text: `${dep.label || dep.constructor.name} ${dep.id}` });
+      new Div(depGrp, { text: `${dep.name} ${dep.id}` });
     }
 
-    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-185px + 100vh);" });
+    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-200px + 100vh); overflow: auto;" });
 
     if (object instanceof ShaderModule) {
       const text = object.descriptor.code;
@@ -700,6 +705,21 @@ export class InspectorWindow extends Window {
       const desc = this._getDescriptorInfo(object, object.descriptor);
       const text = JSON.stringify(desc, undefined, 4);
       new Widget("pre", descriptionBox, { text });
+    }
+
+    if (object instanceof Texture) {
+      if (object.gpuTexture) {
+        const width = object.width;
+        const height = object.height;
+        const canvas = new Widget("canvas", descriptionBox);
+        canvas.element.width = width;
+        canvas.element.height = height;
+        const context = canvas.element.getContext('webgpu');
+        const dstFormat = navigator.gpu.getPreferredCanvasFormat();
+        context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
+        const canvasTexture = context.getCurrentTexture();
+        this.textureUtils.blitTexture(object.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
+      }
     }
   }
 
@@ -739,7 +759,7 @@ export class InspectorWindow extends Window {
   }
 
   _addObjectToUI(object, ui) {
-    const name = `${object.label || object.constructor.name}`;
+    const name = `${object.name}`;
     let type = "";
     if (object instanceof ShaderModule) {
       if (object.hasVertexEntries) {

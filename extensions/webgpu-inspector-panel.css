@@ -70,20 +70,9 @@ body {
 }
 
 .inspector_panel {
-  background-color: rgb(187, 187, 187);
-  border: 1px solid;
-  float: left;
-  overflow: auto;
-  overflow-x: hidden;
-  border-radius: 10px 10px 0px 0px;
-  box-shadow: 5px 5px 5px rgba(0, 0, 0, 0.5);
-  font-family: monospace;
-  font-size: 12px;
-  width: 500px;
-  position: absolute;
-  top: 200px;
-  left: 450px;
-  z-index: 200;
+  font-size: 14pt;
+  height: calc(-30px + 100vh);
+  overflow: hidden;
 }
 
 .title_bar {
@@ -178,8 +167,9 @@ li:hover {
 }
 
 .inspector_panel_content {
-  width: 100%;
-  background-color: rgb(200, 200, 200);
+  overflow: hidden;
+  height: calc(-120px + 100vh);
+  font-size: 14pt;
 }
 
 /* ---------------------------------------- */
@@ -1038,6 +1028,18 @@ ol::-webkit-scrollbar-thumb:hover {
 
 .capture_command:hover {
   filter: brightness(150%);
+}
+
+.capture_pass_texture {
+  margin-top: 10px;
+  border: 1px solid #666;
+  width: 300px;
+  height: 255px;
+  overflow: auto;
+  padding-left: 10px;
+  padding-top: 10px;
+  border-radius: 5px;
+  font-size: 12pt;
 }
 
 .capture_frameImages {

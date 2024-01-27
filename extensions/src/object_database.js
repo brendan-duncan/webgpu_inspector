@@ -8,6 +8,10 @@ export class GPUObject {
     this.parent = null;
     this.children = [];
   }
+
+  get name() {
+    return this.label || this.constructor.name;
+  }
 }
 
 export class Adapter extends GPUObject {

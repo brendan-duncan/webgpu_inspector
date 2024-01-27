@@ -25,6 +25,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       this._timeSinceLastFrame = 0;
       this._maxFramesToRecord = 1000;
       this._recordRequest = false;
+      this.__skipRecord = false;
 
       const self = this;
       // Try to track garbage collected WebGPU objects
@@ -196,10 +197,12 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
           result.__created = true;
         }
 
-        if (object.__skipRecord) {
-          object.__skipRecord = false;
+        // If __skipRecord is set, don't wrap the result object or record the command.
+        // It is set when we're creating utilty objects that aren't from the page.
+        if (self.__skipRecord) {
           return result;
         }
+
         if (result && typeof result == "object") {
           self._wrapObject(result);
         }
@@ -481,24 +484,29 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       }
       const copySize = { width, height, depthOrArrayLayers };
 
-      device.__skipRecord = true;
-      const buffer = device.createBuffer({
-        size: bufferSize,
-        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-      });
-      device.__skipRecord = false;
+      let buffer = null;
+      try {
+        this.__skipRecord = true;
+        buffer = device.createBuffer({
+          size: bufferSize,
+          usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+        });
 
-      const aspect = format === 'depth24plus-stencil8' || format === 'depth32float-stencil8' ? 'depth-only' : 'all';
+        const aspect = format === 'depth24plus-stencil8' || format === 'depth32float-stencil8' ? 'depth-only' : 'all';
 
-      commandEncoder.__skipRecord = true;
-      commandEncoder.copyTextureToBuffer(
-        { texture, aspect },
-        { buffer, bytesPerRow, rowsPerImage: height },
-        copySize
-      );
-      commandEncoder.__skipRecord = false;
+        commandEncoder.copyTextureToBuffer(
+          { texture, aspect },
+          { buffer, bytesPerRow, rowsPerImage: height },
+          copySize
+        );
+      } catch (e) {
+        console.log(e);
+      }
+      this.__skipRecord = false;
 
-      this._captureTexturedBuffers.push({ id, buffer, width, height, depthOrArrayLayers, format, passId });
+      if (buffer) {
+        this._captureTexturedBuffers.push({ id, buffer, width, height, depthOrArrayLayers, format, passId });
+      }
     }
 
     _addCommandData(data) {

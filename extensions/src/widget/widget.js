@@ -99,42 +99,67 @@ export class Widget {
       }
     }
 
-    if (options.text !== undefined) this.text = options.text;
-
-    if (options.html !== undefined) this.html = options.html;
-
-    if (options.style !== undefined) this._element.style = options.style;
-
-    if (options.title !== undefined) this._element.title = options.title;
-
-    if (options.backgroundColor !== undefined)
-      this._element.style.backgroundColor = options.backgroundColor;
-
-    if (options.color !== undefined) this._element.style.color = options.color;
-
-    if (options.type !== undefined) this._element.type = options.type;
-
-    if (options.children !== undefined) {
-      for (const c of options.children) this.appendChild(c);
+    if (options.text !== undefined) {
+      this.text = options.text;
     }
 
-    if (options.disabled !== undefined)
+    if (options.html !== undefined) {
+      this.html = options.html;
+    }
+
+    if (options.style !== undefined) {
+      this._element.style = options.style;
+    }
+
+    if (options.title !== undefined) {
+      this._element.title = options.title;
+    }
+
+    if (options.backgroundColor !== undefined) {
+      this._element.style.backgroundColor = options.backgroundColor;
+    }
+
+    if (options.color !== undefined) {
+      this._element.style.color = options.color;
+    }
+
+    if (options.type !== undefined) {
+      this._element.type = options.type;
+    }
+
+    if (options.children !== undefined) {
+      for (const c of options.children) {
+        this.appendChild(c);
+      }
+    }
+
+    if (options.disabled !== undefined) {
       this._element.disabled = options.disabled;
+    }
 
-    if (options.tabIndex !== undefined)
+    if (options.tabIndex !== undefined) {
       this._element.tabindex = options.tabindex;
+    }
 
-    if (options.zIndex !== undefined)
+    if (options.zIndex !== undefined) {
       this._element.style.zIndex = String(options.zIndex);
+    }
 
-    if (options.draggable !== undefined) this.draggable = options.draggable;
+    if (options.draggable !== undefined) {
+      this.draggable = options.draggable;
+    }
 
-    if (options.onClick !== undefined)
+    if (options.onClick !== undefined) {
       this.addEventListener('click', options.onClick);
+    }
 
-    if (options.data !== undefined) this.data = options.data;
+    if (options.data !== undefined) {
+      this.data = options.data;
+    }
 
-    if (options.tooltip !== undefined) this.tooltip = options.tooltip;
+    if (options.tooltip !== undefined) {
+      this.tooltip = options.tooltip;
+    }
   }
 
   /**
