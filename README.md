@@ -56,4 +56,8 @@ Press the **Record** button to inject the recorder tool into the page and reload
 
 When the recording has finished, it will be automatically downloaded by the browser, and presented on the Record panel.
 
+#### WARNING
+
+* Because it records all commands and data, file sizes can get quite large. Record is best suited for smaller tests.
+
 ![WebGPU Inspector Panel](images/record.png)
