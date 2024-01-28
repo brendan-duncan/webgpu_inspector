@@ -14,7 +14,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       this._frameCommands = [];
       this._frameData = [];
       this._frameRenderPassCount = 0;
-      this._captureTextureView = null;
+      this._captureTextureViews = [];
       this._lastCommandEncoder = null;
       this._captureCommandEncoder = null;
       this._captureTexturedBuffers = [];
@@ -657,17 +657,21 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
 
       if (method == "beginRenderPass") {
         if (args[0]?.colorAttachments?.length > 0) {
-          const captureTextureView = args[0].colorAttachments[0].view;
-          this._captureTextureView = captureTextureView;
+          for (const attachment of args[0].colorAttachments) {
+            const captureTextureView = attachment.view;
+            this._captureTextureViews.push(captureTextureView);
+          }
           this._captureCommandEncoder = object;
         }
       } else if (method == "end") {
-        if (this._captureTextureView) {
-          const texture = this._captureTextureView.__texture;
-          if (texture) {
-            this._captureTexture(this._captureCommandEncoder, texture, this._frameRenderPassCount - 1);
+        if (this._captureTextureViews.length > 0) {
+          for (const captureTextureView of this._captureTextureViews) {
+            const texture = captureTextureView.__texture;
+            if (texture) {
+              this._captureTexture(this._captureCommandEncoder, texture, this._frameRenderPassCount - 1);
+            }
           }
-          this._captureTextureView = null;
+          this._captureTextureViews.length = 0;
         }
         this._captureCommandEncoder = null;
       }
