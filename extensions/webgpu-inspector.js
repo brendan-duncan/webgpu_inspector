@@ -22,6 +22,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       this._frameIndex = 0;
       this._initalized = true;
       this._objectID = 1;
+      this._nonTrackingID = 0.5;
       this._frameStartTime = -1;
       this._timeSinceLastFrame = 0;
       this._maxFramesToRecord = 1000;
@@ -99,7 +100,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
           object instanceof GPUComputePassEncoder ||
           object instanceof GPURenderPassEncoder ||
           object instanceof GPUCommandBuffer) {
-        return 0;
+        return this._nonTrackingID++;
       }
       return this._objectID++;
     }
