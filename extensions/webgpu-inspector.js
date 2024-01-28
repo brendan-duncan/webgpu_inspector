@@ -107,7 +107,6 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       const type = object.constructor.name;
       const id = object.__id;
       const message = `WebGPU ${type} ${id} ${label} was garbage collected without being explicitly destroyed. This is a memory leak.`;
-      console.warn(message);
       window.postMessage({"action": "inspect_memory_leak_warning", id, "message": message}, "*");
     }
 

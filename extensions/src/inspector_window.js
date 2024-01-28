@@ -368,7 +368,7 @@ export class InspectorWindow extends Window {
               const texture = textureView.parent;
               if (texture) {
                 const format = texture.descriptor.format;
-                new Div(commandInfo, { text: `Color Attachment ${i}: ${format}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+                new Div(commandInfo, { text: `Color ${i}: ${format}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
               }
             }
           }
@@ -379,7 +379,7 @@ export class InspectorWindow extends Window {
               const texture = textureView.parent;
               if (texture) {
                 const format = texture.descriptor.format;
-                new Div(commandInfo, { text: `DepthStencil Attachment: ${format}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+                new Div(commandInfo, { text: `Depth-Stencil: ${format}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
               }
             }
           }
