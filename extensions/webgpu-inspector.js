@@ -35,11 +35,21 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       const self = this;
       // Try to track garbage collected WebGPU objects
       this._gcRegistry = new FinalizationRegistry((id) => {
-        self._trackedObjects.delete(id);
-        self._captureTextureRequest.delete(id);
         if (id >= 0) {
           window.postMessage({"action": "inspect_delete_object", id}, "*");
+          if (self._trackedObjects.has(id)) {
+            const object = self._trackedObjects.get(id);
+            // If we're here, the object was garbage collected but not explicitly destroyed.
+            // Some GPU objects need to be explicitly destroyed, otherwise it's a memory
+            // leak. Notify the user of this.
+            if (object instanceof GPUBuffer || object instanceof GPUTexture || object instanceof GPUDevice) {
+              self._memoryLeakWarning(object);
+            }
+            self._trackedObjects.delete(id);
+          }
         }
+        self._trackedObjects.delete(id);
+        self._captureTextureRequest.delete(id);
       });
 
       this._wrapObject(window.navigator.gpu);
@@ -90,6 +100,15 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
     clear() {
       this._frameCommands.length = 0;
       this._currentFrame = null;
+    }
+
+    _memoryLeakWarning(object) {
+      const label = object.label ?? "";
+      const type = object.constructor.name;
+      const id = object.__id;
+      const message = `WebGPU ${type} ${id} ${label} was garbage collected without being explicitly destroyed. This is a memory leak.`;
+      console.warn(message);
+      window.postMessage({"action": "inspect_memory_leak_warning", id, "message": message}, "*");
     }
 
     _getNextId(object) {
@@ -461,6 +480,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
               const parent = object.__id;
               descriptor["features"] = self._gpuToArray(result.features);
               descriptor["limits"] = self._gpuToObject(result.limits);
+              self._trackedObjects.set(result.__id, result);
               window.postMessage({"action": "inspect_add_object", id, parent, "type": "Device", "descriptor": JSON.stringify(descriptor)}, "*");
             }
             if (result && result.__id) {
