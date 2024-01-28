@@ -91,6 +91,19 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       this._currentFrame = null;
     }
 
+    _getNextId(object) {
+      // We don't need unique id's for some types of objects
+      // and they get created so frequenty they make the ID's
+      // grow too quickly.
+      if (object instanceof GPUCommandEncoder ||
+          object instanceof GPUComputePassEncoder ||
+          object instanceof GPURenderPassEncoder ||
+          object instanceof GPUCommandBuffer) {
+        return 0;
+      }
+      return this._objectID++;
+    }
+
     _requestTexture(textureId) {
       if (textureId < 0) {
         // canvas texture
@@ -139,7 +152,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       if (c.__id) {
         return;
       }
-      c.__id = this._objectID++;
+      c.__id = this._getNextId(c);
 
       this._trackedObjects.set(c.__id, c);
 
@@ -182,7 +195,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       if (object.__id) {
         return;
       }
-      object.__id = id ?? this._objectID++;
+      object.__id = id ?? this._getNextId(object);
 
       this._gcRegistry.register(object, object.__id);
 
@@ -422,7 +435,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
 
       object[method] = function () {
         const t0 = performance.now();
-        const id = self._objectID++;
+        const id = self._getNextId(object);
         const promise = origMethod.call(object, ...arguments);
         self._recordAsyncCommand(object, method, id, arguments);
         const wrappedPromise = new Promise((resolve) => {

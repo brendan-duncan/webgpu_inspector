@@ -356,7 +356,7 @@ export class InspectorWindow extends Window {
 
         commandInfo.html = "";
 
-        new Div(commandInfo, { text: name, style: "background-color: #575; padding-left: 20px; line-height: 40px;" });
+        new Div(commandInfo, { text: `${name} ${method}`, style: "background-color: #575; padding-left: 20px; line-height: 40px;" });
 
         if (method == "beginRenderPass") {
           const desc = args[0];
