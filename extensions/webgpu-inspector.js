@@ -3,8 +3,6 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
 
 (() => {
   const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
-  const webgpuCanvasTextureID = -1;
-  const webgpuCanvasTextureViewID = -2;
 
   class WebGPUInspector {
     constructor() {
@@ -94,6 +92,17 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
     }
 
     _requestTexture(textureId) {
+      if (textureId < 0) {
+        // canvas texture
+        const canvasId = -textureId;
+        const canvas = this._trackedObjects.get(canvasId);
+        if (canvas) {
+          if (canvas.__captureTexture) {
+            this._captureTextureRequest.set(textureId, canvas.__captureTexture);
+            return;
+          }
+        }
+      }
       const object = this._trackedObjects.get(textureId);
       if (!object || !(object instanceof GPUTexture)) {
         return;
@@ -131,6 +140,8 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
         return;
       }
       c.__id = this._objectID++;
+
+      this._trackedObjects.set(c.__id, c);
 
       const self = this;
       const __getContext = c.getContext;
@@ -252,6 +263,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
                           self.__skipRecord = true;
                           context.__captureTexture.destroy();
                           context.__captureTexture = null;
+                          context.__canvas.__captureTexture = null;
                           self.__skipRecord = false;
                         }
                       }
@@ -271,6 +283,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
                           captureTexture.__view.__texture = captureTexture;
                           captureTexture.__canvasTexture = texture;
                           texture.__captureTexture = captureTexture;
+                          texture.__canvas.__captureTexture = captureTexture;
                           self.__skipRecord = false;
                         }
                       }
@@ -348,10 +361,10 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
 
         let id = undefined;
         if (method == "getCurrentTexture" && result) {
-          id = webgpuCanvasTextureID;
+          id = -(object.__canvas?.__id ?? 1);
         } else if (method == "createView") {
           if (object.__isCanvasTexture) {
-            id = webgpuCanvasTextureViewID;
+            id = object.__id - 0.5;
           }
         }
         
@@ -489,8 +502,8 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       if (method == "destroy") {
         const id = object.__id;
         this._trackedObjects.delete(id);
-        this._captureTextureRequest.delete(id);
         if (id >= 0) {
+          this._captureTextureRequest.delete(id);
           window.postMessage({"action": "inspect_delete_object", id}, "*");
         }
       } else if (method == "createShaderModule") {
