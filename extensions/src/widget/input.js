@@ -12,25 +12,37 @@ export class Input extends Widget {
     this.element.addEventListener('change', function () {
       let v = self.type === 'checkbox' ? self.checked : self.value;
       self.onChange.emit(v);
-      if (self._onChange) self._onChange(v);
+      if (self._onChange) {
+        self._onChange(v);
+      }
     });
 
     this.element.addEventListener('input', function () {
       let v = self.type === 'checkbox' ? self.checked : self.value;
       self.onEdit.emit(v);
-      if (self._onEdit) self._onEdit(v);
+      if (self._onEdit) {
+        self._onEdit(v);
+      }
     });
   }
 
   configure(options) {
-    if (!options) return;
+    if (!options) {
+      return;
+    }
     super.configure(options);
 
-    if (options.type !== undefined) this.type = options.type;
+    if (options.type !== undefined) {
+      this.type = options.type;
+    }
 
-    if (options.checked !== undefined) this.checked = options.checked;
+    if (options.checked !== undefined) {
+      this.checked = options.checked;
+    }
 
-    if (options.value !== undefined) this.value = options.value;
+    if (options.value !== undefined) {
+      this.value = options.value;
+    }
 
     if (options.label !== undefined) {
       if (options.label.constructor === String) {
@@ -43,11 +55,17 @@ export class Input extends Widget {
       }
     }
 
-    if (options.readOnly !== undefined) this.readOnly = options.readOnly;
+    if (options.readOnly !== undefined) {
+      this.readOnly = options.readOnly;
+    }
 
-    if (options.onChange !== undefined) this._onChange = options.onChange;
+    if (options.onChange !== undefined) {
+      this._onChange = options.onChange;
+    }
 
-    if (options.onEdit !== undefined) this._onEdit = options.onEdit;
+    if (options.onEdit !== undefined) {
+      this._onEdit = options.onEdit;
+    }
   }
 
   get type() {

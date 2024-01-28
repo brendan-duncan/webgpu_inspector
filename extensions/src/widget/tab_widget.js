@@ -150,7 +150,9 @@ export class TabWidget extends Div {
   static findParentTabWidget(panel) {
     let p = panel._parent;
     while (p) {
-      if (p.constructor.isTabPage) return [p._parent._parent, p];
+      if (p.constructor.isTabPage) {
+        return [p._parent._parent, p];
+      }
       p = p._parent;
     }
     return null;

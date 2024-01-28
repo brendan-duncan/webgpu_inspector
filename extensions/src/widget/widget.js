@@ -252,8 +252,9 @@ export class Widget {
    */
   removeAllChildren() {
     this.children.length = 0;
-    while (this._element.firstChild)
+    while (this._element.firstChild) {
       this._element.removeChild(this._element.lastChild);
+    }
   }
 
   /**
@@ -330,7 +331,9 @@ export class Widget {
   get visible() {
     let e = this;
     while (e) {
-      if (e._element.style.display == 'none') return false;
+      if (e._element.style.display == 'none') {
+        return false;
+      }
       e = e.parent;
     }
     return true;
@@ -340,7 +343,9 @@ export class Widget {
 
   domChanged() {
     this.onDomChanged();
-    for (const c of this.children) c.domChanged();
+    for (const c of this.children) {
+      c.domChanged();
+    }
   }
 
   /**
@@ -384,7 +389,9 @@ export class Widget {
   }
 
   onResize() {
-    for (const c of this.children) c.onResize();
+    for (const c of this.children) {
+      c.onResize();
+    }
   }
 
   /**
@@ -521,18 +528,28 @@ export class Widget {
   repaint(allDecendents = true) {
     if (this.paintEvent) this.paintEvent();
     if (allDecendents) {
-      for (const c of this.children) c.repaint(allDecendents);
+      for (const c of this.children) {
+        c.repaint(allDecendents);
+      }
     }
   }
 
   _startResize() {
-    if (this.startResize) this.startResize();
-    for (const c of this.children) c._startResize();
+    if (this.startResize) {
+      this.startResize();
+    }
+    for (const c of this.children) {
+      c._startResize();
+    }
   }
 
   _addedToWindow(w) {
-    if (this.onAddedToWindow) this.onAddedToWindow(w);
-    for (const c of this.children) c._addedToWindow(w);
+    if (this.onAddedToWindow) {
+      this.onAddedToWindow(w);
+    }
+    for (const c of this.children) {
+      c._addedToWindow(w);
+    }
   }
 
   get window() {
@@ -724,7 +741,9 @@ export class Widget {
     //if (Widget.currentPointers.some((p) => p.id === pointer.id))
     //this.element.releasePointerCapture(e.pointerId);
     const index = Widget.currentPointers.findIndex((p) => p.id === pointer.id);
-    if (index != -1) Widget.currentPointers.splice(index, 1);
+    if (index != -1) {
+      Widget.currentPointers.splice(index, 1);
+    }
 
     this.hasFocus = true;
     const res = this.pointerUpEvent(e, Widget.currentPointers, pointer);
@@ -905,7 +924,9 @@ export class Widget {
    * @param {Event} e
    */
   updatePositionFromEvent(e) {
-    if (!this._element) return;
+    if (!this._element) {
+      return;
+    }
 
     if (this.startMouseEvent) {
       e.targetX = Math.max(
@@ -981,7 +1002,9 @@ export class Widget {
   _onMouseUp(e) {
     this.updatePositionFromEvent(e);
     this.startMouseEvent = null;
-    if (!this._isMouseDown) return true;
+    if (!this._isMouseDown) {
+      return true;
+    }
 
     this._isMouseDown = false;
     const res = this.mouseReleaseEvent(e);
@@ -1041,9 +1064,12 @@ export class Widget {
    * @param {Event} e
    */
   _onMouseWheel(e) {
-    if (e.type === 'wheel') e.wheel = -e.deltaY;
-    // in firefox deltaY is 1 while in Chrome is 120
-    else e.wheel = e.wheelDeltaY != null ? e.wheelDeltaY : e.detail * -60;
+    if (e.type === 'wheel') {
+      e.wheel = -e.deltaY;
+    } else {
+      // in firefox deltaY is 1 while in Chrome is 120
+      e.wheel = e.wheelDeltaY != null ? e.wheelDeltaY : e.detail * -60;
+    }
 
     // from stack overflow
     // firefox doesnt have wheelDelta
@@ -1096,7 +1122,9 @@ export class Widget {
    * @param {Event} e
    */
   _onKeyPress(e) {
-    if (!this.hasFocus) return;
+    if (!this.hasFocus) {
+      return;
+    }
     const res = this.keyPressEvent(e);
     // if false is returned, prevent the event from propagating up.
     if (!res) {
@@ -1110,7 +1138,9 @@ export class Widget {
    * @param {Event} e
    */
   _onKeyRelease(e) {
-    if (!this.hasFocus) return;
+    if (!this.hasFocus) {
+      return;
+    }
     const res = this.keyReleaseEvent(e);
     // if false is returned, prevent the event from propagating up.
     if (!res) {
@@ -1178,13 +1208,17 @@ export class Widget {
       detail: params,
     });
 
-    if (this.dispatchEvent) this.dispatchEvent(event);
+    if (this.dispatchEvent) {
+      this.dispatchEvent(event);
+    }
 
     return event;
   }
 
   disableDropEvents() {
-    if (!this._onDragEvent) return;
+    if (!this._onDragEvent) {
+      return;
+    }
 
     this.removeEventListener('dragenter', this._onDragEvent);
     this.removeEventListener('drop', this._onDropEvent);
@@ -1197,7 +1231,9 @@ export class Widget {
   }
 
   enableDropEvents() {
-    if (this._onDragEvent) return;
+    if (this._onDragEvent) {
+      return;
+    }
 
     this._onDragEvent = this.onDragEvent.bind(this);
     this._onDropEvent = this.onDropEvent.bind(this);
@@ -1213,12 +1249,15 @@ export class Widget {
       element.addEventListener('dragover', this._onDragEvent);
       element.addEventListener('drop', this._onDropEvent);
     }
-    if (event.type == 'dragenter' && this.dragEnterEvent)
+    if (event.type == 'dragenter' && this.dragEnterEvent) {
       this.dragEnterEvent(event);
-    if (event.type == 'dragleave' && this.dragLeaveEvent)
+    }
+    if (event.type == 'dragleave' && this.dragLeaveEvent) {
       this.dragLeaveEvent(event);
-    if (event.type == 'dragover' && this.dragOverEvent)
+    }
+    if (event.type == 'dragover' && this.dragOverEvent) {
       this.dragOverEvent(event);
+    }
   }
 
   onDropEvent(event) {
@@ -1226,7 +1265,9 @@ export class Widget {
     this.removeEventListener('dragover', this._onDragEvent);
     this.removeEventListener('drop', this._onDropEvent);
 
-    if (this.dropEvent) this.dropEvent(event);
+    if (this.dropEvent) {
+      this.dropEvent(event);
+    }
   }
 }
 

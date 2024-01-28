@@ -11,7 +11,9 @@ export class Checkbox extends Span {
     this.input.type = 'checkbox';
     this.input.classList.add('styled-checkbox');
 
-    if (!this.label) this.label = new Label('', this, { for: this });
+    if (!this.label) {
+      this.label = new Label('', this, { for: this });
+    }
   }
 
   get checked() {

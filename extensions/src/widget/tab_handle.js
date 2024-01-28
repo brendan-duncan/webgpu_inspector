@@ -60,8 +60,11 @@ export class TabHandle extends Div {
     this.style.borderLeft = '';
     this.style.borderRight = '';
     if (e.srcElement.classList.contains('tab-handle')) {
-      if (e.layerX < this.width * 0.5) console.log('Insert Before');
-      else console.log('Insert After');
+      if (e.layerX < this.width * 0.5) {
+        console.log('Insert Before');
+      } else {
+        console.log('Insert After');
+      }
     }
   }
 
@@ -101,7 +104,9 @@ export class TabHandle extends Div {
    * be set as inactive).
    */
   set isActive(a) {
-    if (a == this.isActive) return;
+    if (a == this.isActive) {
+      return;
+    }
 
     if (a) {
       this.classList.add('tab-handle-selected');

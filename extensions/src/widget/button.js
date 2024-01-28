@@ -17,7 +17,9 @@ export class Button extends Widget {
     this.element.addEventListener('mousedown', this._mouseDown);
     this.element.addEventListener('mouseup', this._mouseUp);
 
-    if (options) this.configure(options);
+    if (options) {
+      this.configure(options);
+    }
   }
 
   configure(options) {

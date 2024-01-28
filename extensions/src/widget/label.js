@@ -8,9 +8,13 @@ export class Label extends Widget {
   }
 
   configure(options) {
-    if (!options) return;
+    if (!options) {
+      return;
+    }
     super.configure(options);
-    if (options.for) this.for = options.for;
+    if (options.for) {
+      this.for = options.for;
+    }
   }
 
   get for() {
@@ -18,8 +22,12 @@ export class Label extends Widget {
   }
 
   set for(v) {
-    if (!v) this._element.htmlFor = '';
-    else if (v.constructor === String) this._element.htmlFor = v;
-    else this._element.htmlFor = v.id;
+    if (!v) {
+      this._element.htmlFor = '';
+    } else if (v.constructor === String) {
+      this._element.htmlFor = v;
+    } else {
+      this._element.htmlFor = v.id;
+    }
   }
 }

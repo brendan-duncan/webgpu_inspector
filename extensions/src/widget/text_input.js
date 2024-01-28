@@ -12,7 +12,9 @@ export class TextInput extends Input {
   configure(options) {
     if (!options) return;
     super.configure(options);
-    if (options.placeholder) this.placeholder = options.placeholder;
+    if (options.placeholder) {
+      this.placeholder = options.placeholder;
+    }
   }
 
   get placeholder() {
@@ -24,9 +26,10 @@ export class TextInput extends Input {
   }
 
   keyPressEvent(e) {
-    if (e.keyCode === 27)
+    if (e.keyCode === 27) {
       // Escape
       e.target.blur();
+    }
     return true;
   }
 }

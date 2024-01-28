@@ -76,9 +76,14 @@ export class Log {
     let s = '';
     for (const i in args) {
       const arg = args[i];
-      if (!arg) continue;
-      if (arg.constructor === String) s += `${arg} `;
-      else s += JSON.stringify(arg) + ' ';
+      if (!arg) {
+        continue;
+      }
+      if (arg.constructor === String) {
+        s += `${arg} `;
+      } else {
+        s += JSON.stringify(arg) + ' ';
+      }
     }
     return s;
   }

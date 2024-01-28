@@ -13,29 +13,45 @@ export class TextArea extends Widget {
     this.element.addEventListener('change', function () {
       let v = self.value;
       self.onChange.emit(v);
-      if (self._onChange) self._onChange(v);
+      if (self._onChange) {
+        self._onChange(v);
+      }
     });
 
     this.element.addEventListener('input', function () {
       let v = self.value;
       self.onEdit.emit(v);
-      if (self._onEdit) self._onEdit(v);
+      if (self._onEdit) {
+        self._onEdit(v);
+      }
     });
   }
 
   configure(options) {
-    if (!options) return;
+    if (!options) {
+      return;
+    }
     super.configure(options);
 
-    if (options.value) this.value = options.value;
+    if (options.value) {
+      this.value = options.value;
+    }
 
-    if (options.placeholder) this.placeholder = options.placeholder;
+    if (options.placeholder) {
+      this.placeholder = options.placeholder;
+    }
 
-    if (options.readOnly !== undefined) this.readOnly = options.readOnly;
+    if (options.readOnly !== undefined) {
+      this.readOnly = options.readOnly;
+    }
 
-    if (options.onChange !== undefined) this._onChange = options.onChange;
+    if (options.onChange !== undefined) {
+      this._onChange = options.onChange;
+    }
 
-    if (options.onEdit !== undefined) this._onEdit = options.onEdit;
+    if (options.onEdit !== undefined) {
+      this._onEdit = options.onEdit;
+    }
   }
 
   get value() {

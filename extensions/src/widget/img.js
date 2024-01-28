@@ -14,8 +14,12 @@ export class Img extends Widget {
   }
 
   configure(options) {
-    if (!options) return;
+    if (!options) {
+      return;
+    }
     super.configure(options);
-    if (options.src !== undefined) this.element.src = options.src;
+    if (options.src !== undefined) {
+      this.element.src = options.src;
+    }
   }
 }

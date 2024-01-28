@@ -44,10 +44,13 @@ export class Window extends Widget {
   }
 
   set overlay(v) {
-    if (this._overlay === v) return;
+    if (this._overlay === v) {
+      return;
+    }
 
-    if (this._overlay !== null)
+    if (this._overlay !== null) {
       this._element.removeChild(this._overlay._element);
+    }
 
     this._overlay = v;
 
@@ -67,7 +70,9 @@ export class Window extends Widget {
     this.onWindowResized.emit();
     this.repaint();
     if (this._element) {
-      if (this._overlay) this._overlay.resize(width, height);
+      if (this._overlay) {
+        this._overlay.resize(width, height);
+      }
     }
     this.onResize();
   }

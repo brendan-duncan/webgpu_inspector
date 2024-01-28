@@ -22,7 +22,9 @@ export class Select extends Widget {
         self.selectEdit.value = self.select.element.value;
       } else {
         self.onChange.emit(self.value);
-        if (self._onChange) self._onChange(self.value);
+        if (self._onChange) {
+          self._onChange(self.value);
+        }
       }
     });
 
@@ -34,11 +36,15 @@ export class Select extends Widget {
       });
       this.selectEdit.onChange.addListener(function () {
         self.onChange.emit(self.value);
-        if (self._onChange) self._onChange(self.value);
+        if (self._onChange) {
+          self._onChange(self.value);
+        }
       });
     }
 
-    if (options) this.configure(options);
+    if (options) {
+      this.configure(options);
+    }
 
     this.style.height = '20px';
     this.style.position = 'relative';
@@ -52,15 +58,21 @@ export class Select extends Widget {
   set disabled(v) {
     super.disabled = v;
     this.select.disabled = v;
-    if (this.selectEdit) this.selectEdit.disabled = v;
+    if (this.selectEdit) {
+      this.selectEdit.disabled = v;
+    }
   }
 
   configure(options) {
-    if (!options) return;
+    if (!options) {
+      return;
+    }
     super.configure(options);
 
     if (options.options) {
-      for (const o of options.options) this.addOption(o);
+      for (const o of options.options) {
+        this.addOption(o);
+      }
     }
 
     if (options.label !== undefined) {
@@ -72,18 +84,26 @@ export class Select extends Widget {
       } else {
         this.label = options.label;
         this.label.for = this.id;
-        if (!this.label.parent) this.label.parent = this.parent;
+        if (!this.label.parent) {
+          this.label.parent = this.parent;
+        }
       }
     }
 
-    if (options.value !== undefined) this.select.element.value = options.value;
+    if (options.value !== undefined) {
+      this.select.element.value = options.value;
+    }
 
     if (options.index !== undefined) {
       this.select.element.selectedIndex = options.index;
-      if (this.selectEdit) this.selectEdit.value = this.select.element.value;
+      if (this.selectEdit) {
+        this.selectEdit.value = this.select.element.value;
+      }
     }
 
-    if (options.onChange !== undefined) this._onChange = options.onChange;
+    if (options.onChange !== undefined) {
+      this._onChange = options.onChange;
+    }
   }
 
   get index() {
@@ -95,13 +115,18 @@ export class Select extends Widget {
   }
 
   get value() {
-    if (this.selectEdit) return this.selectEdit.value;
+    if (this.selectEdit) {
+      return this.selectEdit.value;
+    }
     return this.select.element.value;
   }
 
   set value(v) {
-    if (this.selectEdit) this.selectEdit.value = v;
-    else this.select.element.value = v;
+    if (this.selectEdit) {
+      this.selectEdit.value = v;
+    } else {
+      this.select.element.value = v;
+    }
   }
 
   addOption(text) {
@@ -111,7 +136,9 @@ export class Select extends Widget {
   }
 
   resize(width, height) {
-    if (!this._element) return;
+    if (!this._element) {
+      return;
+    }
 
     // SELECT elements behave differently than other elements with resizing.
     this.select.element.style.width = `${width}px`;
@@ -119,6 +146,8 @@ export class Select extends Widget {
 
     this.onResize();
 
-    if (!Widget.disablePaintingOnResize) this.paintEvent();
+    if (!Widget.disablePaintingOnResize) {
+      this.paintEvent();
+    }
   }
 }

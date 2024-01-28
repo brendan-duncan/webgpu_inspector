@@ -15,7 +15,9 @@ export class Signal {
   constructor(name) {
     this._lastSlotId = 0;
     this.slots = new Map();
-    if (name) this.name = name;
+    if (name) {
+      this.name = name;
+    }
   }
 
   /**
@@ -66,7 +68,9 @@ export class Signal {
   static disconnect(object, callback, instance) {
     for (const i in object) {
       const p = object[i];
-      if (p.constructor === Signal) p.disconnect(callback, instance);
+      if (p.constructor === Signal) {
+        p.disconnect(callback, instance);
+      }
     }
   }
 
@@ -80,7 +84,9 @@ export class Signal {
     out = out || [];
     for (const i in object) {
       const p = object[i];
-      if (p.constructor === Signal) out.push(p);
+      if (p.constructor === Signal) {
+        out.push(p);
+      }
     }
     return out;
   }
@@ -97,15 +103,22 @@ export class Signal {
    * @param {...*} arguments Optional arguments to call the listeners with.
    */
   emit() {
-    if (Signal.disabled) return;
+    if (Signal.disabled) {
+      return;
+    }
 
     for (const k of this.slots) {
       const s = k[1][0];
       const o = k[1][1] || s;
-      if (!s) continue;
+      if (!s) {
+        continue;
+      }
 
-      if (s.constructor === Signal) s.emit.apply(o, arguments);
-      else s.apply(o, arguments);
+      if (s.constructor === Signal) {
+        s.emit.apply(o, arguments);
+      } else {
+        s.apply(o, arguments);
+      }
     }
   }
 
@@ -125,7 +138,9 @@ export class Signal {
    */
   addListener(callback, object) {
     // Don't add the same listener multiple times.
-    if (this.isListening(callback, object)) return null;
+    if (this.isListening(callback, object)) {
+      return null;
+    }
 
     this.slots.set(this._lastSlotId++, [callback, object]);
     return this._lastSlotId - 1;
@@ -147,11 +162,17 @@ export class Signal {
       const slotInfo = slot[1];
 
       if (callback && !object) {
-        if (slotInfo[0] === callback || slotInfo[1] === callback) return true;
+        if (slotInfo[0] === callback || slotInfo[1] === callback) {
+          return true;
+        }
       } else if (!callback && object) {
-        if (slotInfo[1] === object) return true;
+        if (slotInfo[1] === object) {
+          return true;
+        }
       } else {
-        if (slotInfo[0] === callback && slotInfo[1] === object) return true;
+        if (slotInfo[0] === callback && slotInfo[1] === object) {
+          return true;
+        }
       }
     }
     return false;
@@ -179,7 +200,9 @@ export class Signal {
 
     if (callback.constructor === Number) {
       const handle = callback;
-      if (!this.slots.has(handle)) return false;
+      if (!this.slots.has(handle)) {
+        return false;
+      }
       this.slots.delete(handle);
       return true;
     }
