@@ -3,6 +3,8 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
 
 (() => {
   const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
+  const webgpuCanvasTextureID = -1;
+  const webgpuCanvasTextureViewID = -2;
 
   class WebGPUInspector {
     constructor() {
@@ -29,13 +31,16 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       this.__skipRecord = false;
       this._trackedObjects = new Map();
       this._captureTextureRequest = new Map();
+      this._textureUtils = null;
 
       const self = this;
       // Try to track garbage collected WebGPU objects
       this._gcRegistry = new FinalizationRegistry((id) => {
         self._trackedObjects.delete(id);
         self._captureTextureRequest.delete(id);
-        window.postMessage({"action": "inspect_delete_object", id}, "*");
+        if (id >= 0) {
+          window.postMessage({"action": "inspect_delete_object", id}, "*");
+        }
       });
 
       this._wrapObject(window.navigator.gpu);
@@ -126,14 +131,16 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
         return;
       }
       c.__id = this._objectID++;
-      let self = this;
-      let __getContext = c.getContext;
+
+      const self = this;
+      const __getContext = c.getContext;
 
       c.getContext = function (a1, a2) {
         const ret = __getContext.call(c, a1, a2);
         if (a1 == "webgpu") {
           if (ret) {
             self._wrapObject(ret);
+            ret.__canvas = c;
           }
         }
         return ret;
@@ -160,11 +167,11 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       return false;
     }
 
-    _wrapObject(object) {
+    _wrapObject(object, id) {
       if (object.__id) {
         return;
       }
-      object.__id = this._objectID++;
+      object.__id = id ?? this._objectID++;
 
       this._gcRegistry.register(object, object.__id);
 
@@ -204,6 +211,10 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
           }
         }
       }
+
+      if (object instanceof GPUDevice) {
+        object.queue.parent = object;
+      }
     }
 
     _wrapMethod(object, method) {
@@ -214,9 +225,67 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       const self = this;
 
       object[method] = function () {
+        const args = [...arguments];
+
         if (method == "createTexture") {
           // Add COPY_SRC usage to all textures so we can capture them
-          arguments[0].usage |= GPUTextureUsage.COPY_SRC;
+          args[0].usage |= GPUTextureUsage.COPY_SRC;
+        }
+
+        let capturedRenderView = null;
+        if (method == "beginRenderPass") {
+          const descriptor = args[0];
+          const colorAttachments = descriptor.colorAttachments;
+          if (colorAttachments) {
+            for (let i = 0; i < colorAttachments.length; ++i) {
+              const attachment = colorAttachments[i];
+              if (attachment.view) {
+                const texture = attachment.view.__texture;
+                if (texture) {
+                  if (texture.__isCanvasTexture) {
+                    const context = texture.__context;
+                    if (context) {
+                      if (context.__captureTexture) {
+                        if (context.__captureTexture?.width != texture.width ||
+                            context.__captureTexture?.height != texture.height ||
+                            context.__captureTexture?.format != texture.format) {
+                          self.__skipRecord = true;
+                          context.__captureTexture.destroy();
+                          context.__captureTexture = null;
+                          self.__skipRecord = false;
+                        }
+                      }
+
+                      if (!context.__captureTexture) {
+                        const device = context.__device;
+                        if (device) {
+                          self.__skipRecord = true;
+                          const captureTexture = device.createTexture({
+                            size: [texture.width, texture.height, 1],
+                            format: texture.format,
+                            usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+                          });
+                          context.__captureTexture = captureTexture;
+                          captureTexture.__id = texture.__id;
+                          captureTexture.__view = context.__captureTexture.createView();
+                          captureTexture.__view.__texture = captureTexture;
+                          captureTexture.__canvasTexture = texture;
+                          texture.__captureTexture = captureTexture;
+                          self.__skipRecord = false;
+                        }
+                      }
+
+                      if (context.__captureTexture) {
+                        context.__captureTexture.__canvasTexture = texture;
+                        attachment.view = context.__captureTexture.__view;
+                        capturedRenderView = attachment.view;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
 
         // Before we finish the command encoder, inject any pending texture captures
@@ -226,16 +295,49 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
           }
         }
 
-        const result = origMethod.call(object, ...arguments);
+        // We want to be able to capture canvas textures, so we need to add COPY_SRC to
+        // the usage flags of any textures created from canvases.
+        if ((object instanceof GPUCanvasContext) && method == "configure") {
+          const descriptor = args[0];
+          if (descriptor.usage) {
+            descriptor.usage |= GPUTextureUsage.COPY_DST;
+          } else {
+            descriptor.usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST;
+          }
+          object.__device = descriptor.device;
+        }       
 
-        // After the CommandBuffer has been submitted, send any pending texture data
         if (method == "submit") {
-          self._sendCaptureTextureBuffers();
+          self.__skipRecord = true;
+          object.onSubmittedWorkDone().then(() => {
+            self._sendCaptureTextureBuffers();
+          });
+          self.__skipRecord = false;
         }
-        
-        if (method == "createTexture") {
-          // If it wasn't created, it's a canvas texture.
-          result.__created = true;
+
+        // Call the original method
+        const result = origMethod.call(object, ...args);
+
+        if (method == "beginRenderPass") {
+          result.__commandEncoder = object;
+          if (capturedRenderView) {
+            result.__capturedRenderView = capturedRenderView;
+          }
+        }
+
+        if (method == "end") {
+          // If the captured canvas texture was rendered to, blit it to the real canvas texture
+          if (object.__capturedRenderView) {
+            const texture = object.__capturedRenderView.__texture;
+            if (texture) {
+              const commandEncoder = object.__commandEncoder;
+              if (commandEncoder) {
+                commandEncoder.copyTextureToTexture({ texture },
+                  { texture: texture.__canvasTexture },
+                  [texture.width, texture.height, 1]);
+              }
+            }
+          }
         }
 
         // If __skipRecord is set, don't wrap the result object or record the command.
@@ -244,16 +346,32 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
           return result;
         }
 
+        let id = undefined;
+        if (method == "getCurrentTexture" && result) {
+          id = webgpuCanvasTextureID;
+        } else if (method == "createView") {
+          if (object.__isCanvasTexture) {
+            id = webgpuCanvasTextureViewID;
+          }
+        }
+        
         if (result && typeof result == "object") {
-          self._wrapObject(result);
+          self._wrapObject(result, id);
         }
 
         if (method == "createTexture") {
           self._trackedObjects.set(result.__id, result);
-        } else if (method == "createTextureView") {
+        } else if (method == "createView" && !id) {
           self._trackedObjects.set(result.__id, result);
         } else if (method == "createBuffer") {
           self._trackedObjects.set(result.__id, result);
+        } else if (method == "getCurrentTexture") {
+          result.__isCanvasTexture = true;
+          result.__context = object;
+          self._trackedObjects.set(result.__id, result);
+          if (object.__canvas) {
+            result.__canvas = object.__canvas;
+          }
         }
 
         self._recordCommand(object, method, result, arguments);
@@ -332,50 +450,100 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       };
     }
 
+    _prepareDescriptor(args) {
+      if (!args || args.constructor === Number || args.constructor === String || args.constructor === Boolean) {
+        return args;
+      }
+      if (args.buffer === ArrayBuffer || args instanceof ArrayBuffer) {
+        return args;
+      }
+      if (args instanceof Array) {
+        const array = [];
+        for (const v of args) {
+          array.push(this._prepareDescriptor(v));
+        }
+        return array;
+      }
+
+      if (args.__id !== undefined) {
+        return {"__id": args.__id, "__class": args.constructor.name };
+      }
+      
+      const descriptor = {};
+      for (const key in args) {
+        descriptor[key] = this._prepareDescriptor(args[key]);
+      }
+
+      return descriptor;
+    }
+
+    _stringifyDescriptor(args) {
+      const descriptor = this._prepareDescriptor(args) ?? {};
+      const s = JSON.stringify(descriptor);
+      return s;
+    }
+
     _recordCommand(object, method, result, ...args) {
-      const arg = args[0];
+      const arg = [...args[0]];
       const parent = object.__id;
       if (method == "destroy") {
         const id = object.__id;
         this._trackedObjects.delete(id);
         this._captureTextureRequest.delete(id);
-        window.postMessage({"action": "inspect_delete_object", id}, "*");
+        if (id >= 0) {
+          window.postMessage({"action": "inspect_delete_object", id}, "*");
+        }
       } else if (method == "createShaderModule") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent, "type": "ShaderModule", "descriptor": JSON.stringify(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent, "type": "ShaderModule", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
       } else if (method == "createBuffer") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Buffer", "descriptor": JSON.stringify(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Buffer", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
       } else if (method == "createTexture") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Texture", "descriptor": JSON.stringify(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Texture", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+      } else if (method == "getCurrentTexture") {
+        const id = result.__id;
+        if (result) {
+          const info = {
+            size: [result.width, result.height, result.depthOrArrayLayers],
+            mipLevelCount: result.mipLevelCount,
+            sampleCount: result.sampleCount,
+            dimension: result.dimension,
+            format: result.format,
+            usage: result.usage,
+            isCanvasTexture: true
+          };
+          const infoStr = JSON.stringify(info);
+          window.postMessage({"action": "inspect_add_object", id, parent, "type": "Texture", "descriptor": infoStr}, "*");
+        }
       } else if (method == "createView") {
         const id = result.__id;
         result.__texture = object;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "TextureView", "descriptor": JSON.stringify(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "TextureView", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
       } else if (method == "createSampler") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Sampler", "descriptor": JSON.stringify(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Sampler", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
       } else if (method == "createBindGroup") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroup", "descriptor": JSON.stringify(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroup", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
       } else if (method == "createBindGroupLayout") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroupLayout", "descriptor": JSON.stringify(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroupLayout", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
       } else if (method == "createPipelineLayout") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "PipelineLayout", "descriptor": JSON.stringify(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "PipelineLayout", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
       } else if (method == "createRenderPipeline") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "RenderPipeline", "descriptor": JSON.stringify(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "RenderPipeline", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
       } else if (method == "createComputePipeline") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "ComputePipeline", "descriptor": JSON.stringify(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "ComputePipeline", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
       } else if (method == "beginRenderPass") {
-        window.postMessage({"action": "inspect_begin_render_pass", "descriptor": JSON.stringify(arg[0])}, "*");
+        window.postMessage({"action": "inspect_begin_render_pass", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
         this._frameRenderPassCount++;
       } else if (method == "beginComputePass") {
-          window.postMessage({"action": "inspect_begin_compute_pass", "descriptor": JSON.stringify(arg[0])}, "*");
+          window.postMessage({"action": "inspect_begin_compute_pass", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
       } else if (method == "end") {
         window.postMessage({"action": "inspect_end_pass"}, "*");
       } else if (method == "createCommandEncoder") {
@@ -470,7 +638,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
         if (this._captureTextureView) {
           const texture = this._captureTextureView.__texture;
           if (texture) {
-            this._captureTexture(this._captureCommandEncoder, texture);
+            this._captureTexture(this._captureCommandEncoder, texture, this._frameRenderPassCount - 1);
           }
           this._captureTextureView = null;
         }
@@ -520,14 +688,16 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       }
     }
 
-    _captureTexture(commandEncoder, texture) {
+    _captureTexture(commandEncoder, texture, passId) {
       const device = commandEncoder.__device;
       // can't capture canvas texture
-      if (!device || !texture.__created) {
+      if (!device) {
         return;
       }
+
+      passId ??= -1;
+
       const id = texture.__id;
-      const passId = this._frameRenderPassCount - 1;
       const format = texture.format;
       const formatInfo = format ? TextureFormatInfo[format] : undefined;
       if (!formatInfo) { // GPUExternalTexture?
@@ -581,7 +751,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
 
     // Convert any objects to a string representation that can be sent to the inspector server.
     _processCommandArgs(object) {
-      if (!object || object instanceof Number || object instanceof String || object instanceof Boolean) {
+      if (!object || object.constructor === Number || object.constructor === String || object.constructor === Boolean) {
         return object;
       }
       if (object.__id !== undefined) {

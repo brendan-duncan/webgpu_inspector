@@ -241,6 +241,19 @@ export class ObjectDatabase {
               break;
             }
             case "Texture": {
+              const prevTexture = self.textures.get(id);
+              if (prevTexture) {
+                let size = prevTexture.getGpuSize();
+                if (size != -1) {
+                  this.totalTextureMemory -= size;
+                }
+                prevTexture.descriptor = descriptor;
+                size = prevTexture.getGpuSize();
+                if (size != -1) {
+                  this.totalTextureMemory += size;
+                }
+                return;
+              }
               const obj = new Texture(id, descriptor);
               const size = obj.getGpuSize();
               if (size != -1) {
@@ -250,6 +263,11 @@ export class ObjectDatabase {
               break;
             }
             case "TextureView": {
+              const prevView = self.textureViews.get(id);
+              if (prevView) {
+                prevView.descriptor = descriptor;
+                return;
+              }
               const obj = new TextureView(id, descriptor);
               self._addObject(obj, parent, pending);
               break;

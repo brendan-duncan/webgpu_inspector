@@ -32,6 +32,7 @@
         "webgpu-inspector-panel.html",
         "webgpu-inspector.css",
         "src/texture_format_info.js",
+        "src/texture_utils.js",
         "src/base64.js"
        ],
       "matches": ["*://*/*"]

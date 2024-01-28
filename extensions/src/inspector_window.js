@@ -249,7 +249,10 @@ export class InspectorWindow extends Window {
   }
 
   _createTexture(texture, passId) {
+    const usage = texture.descriptor.usage;
+    texture.descriptor.usage = (usage ?? GPUTextureUsage.RENDER_ATTACHMENT) | GPUTextureUsage.TEXTURE_BINDING;
     texture.gpuTexture = this.device.createTexture(texture.descriptor);
+    texture.descriptor.usage = usage;
 
     const format = texture.descriptor.format;
     const formatInfo = TextureFormatInfo[format] ?? TextureFormatInfo["rgba8unorm"];
@@ -274,6 +277,10 @@ export class InspectorWindow extends Window {
       this._inspectObject(texture);
     }
 
+    if (passId == -1) {
+      return;
+    }
+
     const frameImages = this._frameImages;
     if (frameImages) {
       const aspect = texture.height / texture.width;
@@ -283,7 +290,8 @@ export class InspectorWindow extends Window {
       const passFrame = new Div(frameImages, { class: "capture_pass_texture" });
 
       new Div(passFrame, { text: `Render Pass ${passId}`, style: "color: #ddd; margin-bottom: 5px;" });
-      new Div(passFrame, { text: `${texture.name} ID:${texture.id}`, style: "color: #ddd; margin-bottom: 10px;" })
+      const textureId = texture.id < 0 ? "CANVAS" : texture.id;
+      new Div(passFrame, { text: `${texture.name} ID:${textureId}`, style: "color: #ddd; margin-bottom: 10px;" })
       const canvas = new Widget("canvas", passFrame);
       canvas.element.width = viewWidth;
       canvas.element.height = viewHeight;
@@ -685,7 +693,8 @@ export class InspectorWindow extends Window {
     this._inspectedObject = object;
 
     const infoBox = new Div(this.inspectPanel, { style: "background-color: #353; padding: 10px;" });
-    new Div(infoBox, { text: `${object.name} ID:${object.id}` });
+    const idName = object.id < 0 ? "CANVAS" : object.id;
+    new Div(infoBox, { text: `${object.name} ID: ${idName}` });
 
     if (object instanceof Texture) {
       const gpuSize = object.getGpuSize();
@@ -783,7 +792,8 @@ export class InspectorWindow extends Window {
     object.widget = new Widget("li", ui);
 
     object.nameWidget = new Span(object.widget, { text: name });
-    new Span(object.widget, { text: `ID: ${object.id}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+    const idName = object.id < 0 ? "CANVAS" : object.id;
+    new Span(object.widget, { text: `ID: ${idName}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
     if (type) {
       new Span(object.widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
     }
