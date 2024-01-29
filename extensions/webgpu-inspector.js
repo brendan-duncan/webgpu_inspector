@@ -557,8 +557,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
             sampleCount: result.sampleCount,
             dimension: result.dimension,
             format: result.format,
-            usage: result.usage,
-            isCanvasTexture: true
+            usage: result.usage
           };
           const infoStr = JSON.stringify(info);
           window.postMessage({"action": "inspect_add_object", id, parent, "type": "Texture", "descriptor": infoStr}, "*");

@@ -1047,6 +1047,7 @@ ol::-webkit-scrollbar-thumb:hover {
 .capture_frameImages {
   padding-left: 10px;
   width: 340px;
+  min-width: 340px;
   height: calc(-120px + 100vh);
   scrollbar-width: thin;
   scrollbar-color: var(--thumbBG) var(--scrollbarBG);
