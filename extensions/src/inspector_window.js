@@ -124,7 +124,7 @@ export class InspectorWindow extends Window {
 
     this._captureFrame = new Span(controlBar, { text: ``, style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
 
-    this._capturePanel = new Div(capturePanel, { style: "overflow: hidden; white-space: nowrap; height: calc(-100px + 100vh);" });
+    this._capturePanel = new Div(capturePanel, { style: "overflow: hidden; white-space: nowrap; height: calc(-100px + 100vh); display: flex;" });
   }
 
   _buildRecorderPanel(recorderPanel) {
@@ -398,6 +398,32 @@ export class InspectorWindow extends Window {
 
     const argsGroup = new Collapsable(commandInfo, { label: "Arguments" });
     new Widget("pre", argsGroup.body, { text: argStr });
+
+    if (method == "beginRenderPass") {
+      const colorAttachments = args[0].colorAttachments;
+      for (const i in colorAttachments) {
+        const attachment = colorAttachments[i];
+        const texture = attachment.view.__id
+            ? this.database.getObject(attachment.view.__id).parent
+            : attachment.view.__texture
+                ? this.database.getObject(attachment.view.__texture.__id)
+                : null;
+        if (texture) {
+          //const format = texture.descriptor.format;
+          const viewWidth = 256;
+          const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
+          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}` });
+          const canvas = new Widget("canvas", colorAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
+          canvas.element.width = viewWidth;
+          canvas.element.height = viewHeight;
+          const context = canvas.element.getContext('webgpu');
+          const dstFormat = navigator.gpu.getPreferredCanvasFormat();
+          context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
+          const canvasTexture = context.getCurrentTexture();
+          this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
+        }
+      }
+    }
   }
 
   _addRecordingData(data, index, count) {
