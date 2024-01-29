@@ -20,6 +20,7 @@ import { Adapter,
   BindGroup,
   RenderPipeline,
   ComputePipeline } from "./object_database.js";
+import { Collapsable } from "./widget/collapsable.js";
 
 export class InspectorWindow extends Window {
   constructor(database, port, tabId) {
@@ -351,48 +352,52 @@ export class InspectorWindow extends Window {
 
       const self = this;
       cmd.element.onclick = () => {
-        const newArgs = self._processCommandArgs(args);
-        const argStr = JSON.stringify(newArgs, undefined, 4);
-
-        commandInfo.html = "";
-
-        new Div(commandInfo, { text: `${name} ${method}`, style: "background-color: #575; padding-left: 20px; line-height: 40px;" });
-
-        if (method == "beginRenderPass") {
-          const desc = args[0];
-          const colorAttachments = desc.colorAttachments;
-          for (const i in colorAttachments) {
-            const attachment = colorAttachments[i];
-            const textureView = self.database.getObject(attachment.view.__id);
-            if (textureView) {
-              const texture = textureView.parent;
-              if (texture) {
-                const format = texture.descriptor.format;
-                new Div(commandInfo, { text: `Color ${i}: ${format}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
-              }
-            }
-          }
-          const depthStencilAttachment = desc.depthStencilAttachment;
-          if (depthStencilAttachment) {
-            const textureView = self.database.getObject(depthStencilAttachment.view.__id);
-            if (textureView) {
-              const texture = textureView.parent;
-              if (texture) {
-                const format = texture.descriptor.format;
-                new Div(commandInfo, { text: `Depth-Stencil: ${format}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
-              }
-            }
-          }
-        }
-
-        new Widget("hr", commandInfo);
-        new Widget("pre", commandInfo, { text: argStr });
+        self._showCaptureCommandInfo(name, method, args, commandInfo);
       };
 
       if (method == "end") {
         currentPass = new Div(frameContents, { class: "capture_commandBlock" });
       }
     }
+  }
+
+  _showCaptureCommandInfo(name, method, args, commandInfo) {
+    const newArgs = this._processCommandArgs(args);
+    const argStr = JSON.stringify(newArgs, undefined, 4);
+
+    commandInfo.html = "";
+
+    new Div(commandInfo, { text: `${name} ${method}`, style: "background-color: #575; padding-left: 20px; line-height: 40px;" });
+
+    if (method == "beginRenderPass") {
+      const desc = args[0];
+      const colorAttachments = desc.colorAttachments;
+      for (const i in colorAttachments) {
+        const attachment = colorAttachments[i];
+        const textureView = this.database.getObject(attachment.view.__id);
+        if (textureView) {
+          const texture = textureView.parent;
+          if (texture) {
+            const format = texture.descriptor.format;
+            new Div(commandInfo, { text: `Color ${i}: ${format}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          }
+        }
+      }
+      const depthStencilAttachment = desc.depthStencilAttachment;
+      if (depthStencilAttachment) {
+        const textureView = this.database.getObject(depthStencilAttachment.view.__id);
+        if (textureView) {
+          const texture = textureView.parent;
+          if (texture) {
+            const format = texture.descriptor.format;
+            new Div(commandInfo, { text: `Depth-Stencil: ${format}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          }
+        }
+      }
+    }
+
+    const argsGroup = new Collapsable(commandInfo, { label: "Arguments" });
+    new Widget("pre", argsGroup.body, { text: argStr });
   }
 
   _addRecordingData(data, index, count) {

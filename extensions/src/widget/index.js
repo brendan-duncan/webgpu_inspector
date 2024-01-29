@@ -1,5 +1,6 @@
 export * from './button.js';
 export * from './checkbox.js';
+export * from "./collapsable.js";
 export * from './div.js';
 export * from './img.js';
 export * from './input.js';
