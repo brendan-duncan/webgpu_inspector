@@ -86,12 +86,12 @@ function injectScriptNode(name, url, attributes) {
 
 
 if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
-  injectScriptNode("__webgpu-inspector", chrome.runtime.getURL(`webgpu-inspector.js`));
+  injectScriptNode("__webgpu_inspector", chrome.runtime.getURL(`webgpu_inspector.js`));
   sessionStorage.removeItem(webgpuInspectorLoadedKey);
   inspectorInitialized = true;
 } else if (sessionStorage.getItem(webgpuRecorderLoadedKey)) {
   const data = sessionStorage.getItem(webgpuRecorderLoadedKey).split("%");
-  injectScriptNode("__webgpu-recorder", chrome.runtime.getURL("webgpu-recorder.js"), {
+  injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder.js"), {
     filename: data[1],
     frames: data[0],
     removeUnusedResources: 1,

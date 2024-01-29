@@ -1001,7 +1001,7 @@ class WebGPURecorder {
 
 function main() {
     // If the script tag has a filename attribute, then auto start recording.
-    const script = document.getElementById("__webgpu-recorder");
+    const script = document.getElementById("__webgpu_recorder");
     if (script) {
         const filename = script.getAttribute("filename");
         const frames = script.getAttribute("frames");

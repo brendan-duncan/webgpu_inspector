@@ -1,6 +1,6 @@
 {
   "name": "WebGPU Inspector",
-  "short_name": "webgpu-inspector",
+  "short_name": "webgpu_inspector",
   "version": "0.0.1",
   "manifest_version": 3,
   "description": "WebGPU Debugging Tools",
@@ -15,7 +15,7 @@
   "background": {
     "service_worker": "background.js"
   },
-  "devtools_page": "webgpu-inspector-devtools.html",
+  "devtools_page": "webgpu_inspector_devtools.html",
   "content_scripts": [
     {
       "js": ["content-script.js"],
@@ -27,10 +27,10 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "webgpu-recorder.js",
-        "webgpu-inspector.js",
-        "webgpu-inspector-panel.html",
-        "webgpu-inspector.css",
+        "webgpu_recorder.js",
+        "webgpu_inspector.js",
+        "webgpu_inspector-panel.html",
+        "webgpu_inspector.css",
         "src/texture_format_info.js",
         "src/texture_utils.js",
         "src/base64.js"

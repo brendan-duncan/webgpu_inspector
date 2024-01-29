@@ -1,5 +1,5 @@
 chrome.devtools.panels.create(
   "WebGPU Inspector",
   null,
-  "/webgpu-inspector-panel.html"
+  "/webgpu_inspector_panel.html"
 );

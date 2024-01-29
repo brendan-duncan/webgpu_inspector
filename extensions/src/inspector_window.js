@@ -251,12 +251,28 @@ export class InspectorWindow extends Window {
 
   _createTexture(texture, passId) {
     const usage = texture.descriptor.usage;
+    const format = texture.descriptor.format;
+    const formatInfo = TextureFormatInfo[format] ?? TextureFormatInfo["rgba8unorm"];
+
+    // For depth textures we can't currently use writeTexture.
+    // To load data into a depth texture, put the imageData into a storage buffer
+    // then do a blit where the shader reads from the storage buffer and writes
+    // to frag_depth. On the webgpu_inspector side, we should translate imageData
+    // from depth24plus to depth32 so we can deal with floats and not weird depth24
+    // data.
+
+    // For now, we can't preview depth-stencil textures.
+    if (formatInfo.isDepthStencil) {
+      return;
+    }
+
+    const gpuFormat = formatInfo.depthOnlyFormat ?? format;
+    texture.descriptor.format = gpuFormat;
     texture.descriptor.usage = (usage ?? GPUTextureUsage.RENDER_ATTACHMENT) | GPUTextureUsage.TEXTURE_BINDING;
     texture.gpuTexture = this.device.createTexture(texture.descriptor);
     texture.descriptor.usage = usage;
-
-    const format = texture.descriptor.format;
-    const formatInfo = TextureFormatInfo[format] ?? TextureFormatInfo["rgba8unorm"];
+    texture.descriptor.format = format;
+    
     const width = texture.width;
     const texelByteSize = formatInfo.bytesPerBlock;
     const bytesPerRow = (width * texelByteSize + 255) & ~0xff;
@@ -293,6 +309,7 @@ export class InspectorWindow extends Window {
       new Div(passFrame, { text: `Render Pass ${passId}`, style: "color: #ddd; margin-bottom: 5px;" });
       const textureId = texture.id < 0 ? "CANVAS" : texture.id;
       new Div(passFrame, { text: `${texture.name} ID:${textureId}`, style: "color: #ddd; margin-bottom: 10px;" })
+      
       const canvas = new Widget("canvas", passFrame);
       canvas.element.width = viewWidth;
       canvas.element.height = viewHeight;
@@ -300,6 +317,7 @@ export class InspectorWindow extends Window {
       const dstFormat = navigator.gpu.getPreferredCanvasFormat();
       context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
       const canvasTexture = context.getCurrentTexture();
+      this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
 
       canvas.element.onclick = () => {
         const element = document.getElementById(`RenderPass_${passId}`);
@@ -307,8 +325,6 @@ export class InspectorWindow extends Window {
           element.scrollIntoView();
         }
       };
-
-      this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
     }
   }
 
@@ -440,9 +456,10 @@ export class InspectorWindow extends Window {
                 : null;
           const format = texture.descriptor.format;
         if (texture && texture.gpuTexture) {
+          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
+
           const viewWidth = 256;
           const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
-          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
           const canvas = new Widget("canvas", colorAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
           canvas.element.width = viewWidth;
           canvas.element.height = viewHeight;
@@ -450,7 +467,7 @@ export class InspectorWindow extends Window {
           const dstFormat = navigator.gpu.getPreferredCanvasFormat();
           context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
           const canvasTexture = context.getCurrentTexture();
-          this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
+          this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
         } else {
           const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
           new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
@@ -470,9 +487,9 @@ export class InspectorWindow extends Window {
                 : null;
         if (texture && texture.gpuTexture) {
           const format = texture.descriptor.format;
+          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment ${format}` });
           const viewWidth = 256;
           const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
-          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment ${format}` });
           const canvas = new Widget("canvas", depthStencilAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
           canvas.element.width = viewWidth;
           canvas.element.height = viewHeight;
@@ -480,7 +497,7 @@ export class InspectorWindow extends Window {
           const dstFormat = navigator.gpu.getPreferredCanvasFormat();
           context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
           const canvasTexture = context.getCurrentTexture();
-          this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
+          this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
         } else {
           const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.descriptor?.format ?? "<unknown format>"}` });
           new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
@@ -537,7 +554,7 @@ export class InspectorWindow extends Window {
                   const dstFormat = navigator.gpu.getPreferredCanvasFormat();
                   context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
                   const canvasTexture = context.getCurrentTexture();
-                  this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
+                  this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
                 } else {
                   new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
                   new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
@@ -935,6 +952,34 @@ export class InspectorWindow extends Window {
     return info;
   }
 
+  _createTexturePreview(texture, parent, width, height) {
+    width ??= texture.width;
+    height ??= texture.height;
+    const canvas = new Widget("canvas", parent);
+    canvas.element.width = width;
+    canvas.element.height = height;
+    const context = canvas.element.getContext('webgpu');
+    const format = navigator.gpu.getPreferredCanvasFormat();
+    const device = this.device;
+    context.configure({ device, format });
+    const canvasTexture = context.getCurrentTexture();
+    const formatInfo = TextureFormatInfo[texture.descriptor.format];
+    let srcView;
+    if (formatInfo.isDepthStencil) {
+      if (formatInfo.hasDepth) {
+        srcView = texture.gpuTexture.createView({ aspect: "depth-only" });
+      } else {
+        srcView = texture.gpuTexture.createView({ aspect: "depth-only" })
+      }
+      srcView = formatInfo.isDepthStencil
+        ? texture.gpuTexture.createView({ aspect: "depth-only" })
+        : texture.gpuTexture.createView();
+    } else {
+      srcView = texture.gpuTexture.createView();
+    }
+    this.textureUtils.blitTexture(srcView, texture.descriptor.format, canvasTexture.createView(), format);
+  }
+
   _inspectObject(object) {
     this.inspectPanel.html = "";
 
@@ -970,11 +1015,16 @@ export class InspectorWindow extends Window {
 
     if (object instanceof Texture) {
       const self = this;
-      new Button(descriptionBox, { label: "Load", callback: () => {
+      const loadButton = new Button(descriptionBox, { label: "Load", callback: () => {
         this.port.postMessage({ action: "inspect_request_texture", id: object.id, tabId: self.tabId });
       }});
+      if (TextureFormatInfo[object.descriptor.format]?.isDepthStencil) {
+        loadButton.disabled = true;
+        loadButton.tooltip = "Previewing depth-stencil textures is currently disabled.";
+      }
       if (object.gpuTexture) {
-        const width = object.width;
+        this._createTexturePreview(object, descriptionBox);
+        /*const width = object.width;
         const height = object.height;
         const canvas = new Widget("canvas", descriptionBox);
         canvas.element.width = width;
@@ -983,7 +1033,7 @@ export class InspectorWindow extends Window {
         const dstFormat = navigator.gpu.getPreferredCanvasFormat();
         context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
         const canvasTexture = context.getCurrentTexture();
-        this.textureUtils.blitTexture(object.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
+        this.textureUtils.blitTexture(object.gpuTexture.createView(), object.descriptor.format, canvasTexture.createView(), dstFormat);*/
       }
     }
   }
@@ -1036,7 +1086,11 @@ export class InspectorWindow extends Window {
       if (object.hasComputeEntries) {
         type += " COMPUTE";
       }
+    } else if (object instanceof Texture) {
+      const depth = object.depthOrArrayLayers > 1 ? `x${object.depthOrArrayLayers}` : "";
+      type += ` ${object.width}x${object.height}${depth} ${object.descriptor.format}`;
     }
+
     object.widget = new Widget("li", ui);
 
     object.nameWidget = new Span(object.widget, { text: name });

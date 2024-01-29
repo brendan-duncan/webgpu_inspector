@@ -1,5 +1,6 @@
 import { encodeBase64 } from "./src/base64.js";
 import { TextureFormatInfo } from "./src/texture_format_info.js";
+import { TextureUtils } from "./src/texture_utils.js";
 
 (() => {
   const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
@@ -30,7 +31,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       this.__skipRecord = false;
       this._trackedObjects = new Map();
       this._captureTextureRequest = new Map();
-      this._textureUtils = null;
+      this._toDestroy = [];
 
       const self = this;
       // Try to track garbage collected WebGPU objects
@@ -356,6 +357,10 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
           self.__skipRecord = true;
           object.onSubmittedWorkDone().then(() => {
             self._sendCaptureTextureBuffers();
+            for (const obj of self._toDestroy) {
+              obj.destroy();
+            }
+            self._toDestroy.length = 0;
           });
           self.__skipRecord = false;
         }
@@ -548,6 +553,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       } else if (method == "createTexture") {
         const id = result.__id;
         window.postMessage({"action": "inspect_add_object", id, parent,"type": "Texture", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+        result.__device = object;
       } else if (method == "getCurrentTexture") {
         const id = result.__id;
         if (result) {
@@ -737,6 +743,16 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       }
     }
 
+    _getTextureUtils(device) {
+      if (!device) {
+        return null;
+      }
+      if (!device.__textureUtils) {
+        device.__textureUtils = new TextureUtils(device);
+      }
+      return device.__textureUtils;
+    }
+
     _captureTexture(commandEncoder, texture, passId) {
       const device = commandEncoder.__device;
       // can't capture canvas texture
@@ -747,11 +763,31 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
       passId ??= -1;
 
       const id = texture.__id;
-      const format = texture.format;
-      const formatInfo = format ? TextureFormatInfo[format] : undefined;
+      let format = texture.format;
+      let formatInfo = format ? TextureFormatInfo[format] : undefined;
       if (!formatInfo) { // GPUExternalTexture?
         return;
       }
+
+      // depth24plus texture's can't be copied to a buffer,
+      // https://github.com/gpuweb/gpuweb/issues/652.
+      if (format === "depth24plus" || format === "depth24plus-stencil8") {
+        this.__skipRecord = true;
+        try {
+          const textureUtils = this._getTextureUtils(texture.__device);
+          texture = textureUtils.copyDepthTexture(texture, format === "depth24plus-stencil8" ? "depth32float" : "depth32float-stencil8");
+        } catch (e) {
+          this.__skipRecord = false;
+          console.log(e);
+          return;
+        }
+        this.__skipRecord = false;
+        format = texture.format;
+        formatInfo = format ? TextureFormatInfo[format] : undefined;
+        texture.__id = id;
+        this._toDestroy.push(texture); // Destroy the temp texture at the end of the frame
+      }
+
       const width = texture.width;
       const height = texture.height || 1;
       const depthOrArrayLayers = texture.depthOrArrayLayers || 1;
@@ -779,6 +815,7 @@ import { TextureFormatInfo } from "./src/texture_format_info.js";
           { buffer, bytesPerRow, rowsPerImage: height },
           copySize
         );
+
       } catch (e) {
         console.log(e);
       }
