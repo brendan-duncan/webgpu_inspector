@@ -728,6 +728,11 @@ div {
   scrollbar-color: var(--thumbBG) var(--scrollbarBG);
 }
 
+span {
+  scrollbar-width: thin;
+  scrollbar-color: var(--thumbBG) var(--scrollbarBG);
+}
+
 div::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -975,7 +980,7 @@ ol::-webkit-scrollbar-thumb:hover {
   overflow: auto;
   width: calc(50% - 10px);
   height: calc(100% - 10px);
-  padding-left: 20px;
+  padding-left: 5px;
   font-size: 12pt;
 }
 
@@ -1046,7 +1051,7 @@ ol::-webkit-scrollbar-thumb:hover {
 
 .capture_frameImages {
   padding-left: 10px;
-  width: 340px;
+  width: 325px;
   min-width: 340px;
   height: calc(-120px + 100vh);
   scrollbar-width: thin;

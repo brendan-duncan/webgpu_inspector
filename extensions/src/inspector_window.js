@@ -409,10 +409,10 @@ export class InspectorWindow extends Window {
                 ? this.database.getObject(attachment.view.__texture.__id)
                 : null;
         if (texture) {
-          //const format = texture.descriptor.format;
+          const format = texture.descriptor.format;
           const viewWidth = 256;
           const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
-          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}` });
+          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
           const canvas = new Widget("canvas", colorAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
           canvas.element.width = viewWidth;
           canvas.element.height = viewHeight;
@@ -421,6 +421,130 @@ export class InspectorWindow extends Window {
           context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
           const canvasTexture = context.getCurrentTexture();
           this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
+        }
+      }
+    } else if (method == "setBindGroup") {
+      const id = args[1].__id;
+      const bindGroup = this.database.getObject(id);
+      if (bindGroup) {
+        const bindGroupGrp = new Collapsable(commandInfo, { label: `BindGroup ${id}` });
+        const bindGroupDesc = bindGroup.descriptor;
+        const newDesc = this._processCommandArgs(bindGroupDesc);
+        const descStr = JSON.stringify(newDesc, undefined, 4);
+        new Widget("pre", bindGroupGrp.body, { text: descStr });
+
+        for (const entry of bindGroupDesc.entries) {
+          const binding = entry.binding;
+          const resource = entry.resource;
+          const resourceGrp = new Collapsable(commandInfo, { label: `Binding ${binding}` });
+          if (resource.__id !== undefined) {
+            const obj = this.database.getObject(resource.__id);
+            if (obj) {
+              if (obj instanceof Sampler) {
+                new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
+                new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
+              } else if (obj instanceof TextureView) {
+                const texture = obj.parent;
+                if (texture && texture.gpuTexture) {
+                  const viewWidth = 256;
+                  const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
+                  const canvas = new Widget("canvas", resourceGrp.body, { style: "margin-left: 20px; margin-top: 10px;" });
+                  canvas.element.width = viewWidth;
+                  canvas.element.height = viewHeight;
+                  const context = canvas.element.getContext('webgpu');
+                  const dstFormat = navigator.gpu.getPreferredCanvasFormat();
+                  context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
+                  const canvasTexture = context.getCurrentTexture();
+                  this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
+                } else {
+                  new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
+                  new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
+                  if (texture) {
+                    new Div(resourceGrp.body, { text: `GPUTexture ID:${texture.id}` });
+                    new Widget("pre", resourceGrp.body, { text: JSON.stringify(texture.descriptor, undefined, 4) });
+                  }
+                }
+              } else {
+                new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
+                new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
+              }
+            } else {
+              new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
+            }
+          } else {
+            if (resource.buffer) {
+              const bufferId = resource.buffer.__id;
+              const buffer = this.database.getObject(bufferId);
+              if (buffer) {
+                const bufferDesc = buffer.descriptor;
+                const newDesc = this._processCommandArgs(bufferDesc);
+                if (newDesc.usage) {
+                  newDesc.usage = this._getFlagString(newDesc.usage, GPUBufferUsage);
+                }
+                new Widget("pre", resourceGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+              } else {
+                new Div(resourceGrp.body, { text: `Buffer ${bufferId}` });
+              }
+            } else {
+              new Widget("pre", resourceGrp.body, { text: JSON.stringify(resource, undefined, 4) });
+            }
+          }
+        }
+      }
+    } else if (method == "setPipeline") {
+      const id = args[0].__id;
+      const pipeline = this.database.getObject(id);
+      if (pipeline) {
+        const pipelineGrp = new Collapsable(commandInfo, { label: `Pipeline ${id}` });
+        const desc = pipeline.descriptor;
+        const newDesc = this._processCommandArgs(desc);
+        const descStr = JSON.stringify(newDesc, undefined, 4);
+        new Widget("pre", pipelineGrp.body, { text: descStr });
+
+        const vertexId = desc.vertex?.module?.__id;
+        const fragmentId = desc.fragment?.module?.__id;
+
+        if (vertexId !== undefined && vertexId === fragmentId) {
+          const module = this.database.getObject(vertexId);
+          if (module) {
+            const vertexEntry = desc.vertex?.entryPoint;
+            const fragmentEntry = desc.fragment?.entryPoint;
+            const grp = new Collapsable(commandInfo, { label: `Module ${vertexId} Vertex: ${vertexEntry} Fragment: ${fragmentEntry}` });
+            const code = module.descriptor.code;
+            new Widget("pre", grp.body, { text: code });
+          }
+        } else {
+          if (vertexId !== undefined) {
+            const vertexModule = this.database.getObject(vertexId);
+            if (vertexModule) {
+              const vertexEntry = desc.vertex?.entryPoint;
+
+              const vertexGrp = new Collapsable(commandInfo, { label: `Vertex Module ${vertexId} Entry: ${vertexEntry}` });
+              const code = vertexModule.descriptor.code;
+              new Widget("pre", vertexGrp.body, { text: code });
+            }
+          }
+          
+          if (fragmentId !== undefined) {
+            const fragmentModule = this.database.getObject(fragmentId);
+            if (fragmentModule) {
+              const fragmentEntry = desc.fragment?.entryPoint;
+              const fragmentGrp = new Collapsable(commandInfo, { label: `Fragment Module ${fragmentId} Entry: ${fragmentEntry}` });
+              const code = fragmentModule.descriptor.code;
+              new Widget("pre", fragmentGrp.body, { text: code });
+            }
+          }
+        }
+
+        const computeId = desc.compute?.module?.__id;
+        if (computeId !== undefined) {
+          const computeModule = this.database.getObject(computeId);
+          if (computeModule) {
+            const computeEntry = desc.compute?.entryPoint;
+            const computeGrp = new Collapsable(commandInfo, { label: `Compute Module ${computeId} Entry: ${computeEntry}` });
+            const code = computeModule.descriptor.code;
+            new Widget("pre", computeGrp.body, { text: code });
+          }
         }
       }
     }
@@ -632,6 +756,20 @@ export class InspectorWindow extends Window {
     return newArray;
   }
 
+  _getFlagString(value, flags) {
+    function _addFlagString(flags, flag) {
+      return flags === "" ? flag : `${flags} | ${flag}`;
+    }
+    let flagStr = "";
+    for (const flagName in flags) {
+      const flag = flags[flagName];
+      if (value & flag) {
+        flagStr = _addFlagString(flagStr, flagName);
+      }
+    }
+    return flagStr;
+  }
+
   _getDescriptorInfo(object, descriptor) {
     const info = {};
     if (descriptor === null) {
@@ -648,56 +786,11 @@ export class InspectorWindow extends Window {
     for (const key in descriptor) {
       const value = descriptor[key];
       if (object instanceof Buffer && key == "usage") {
-        let access = "";
-        if (value & GPUBufferUsage.MAP_READ) {
-          access += "MAP_READ ";
-        }
-        if (value & GPUBufferUsage.MAP_WRITE) {
-          access += "MAP_WRITE ";
-        }
-        if (value & GPUBufferUsage.COPY_SRC) {
-          access += "COPY_SRC ";
-        }
-        if (value & GPUBufferUsage.COPY_DST) {
-          access += "COPY_DST ";
-        }
-        if (value & GPUBufferUsage.INDEX) {
-          access += "INDEX ";
-        }
-        if (value & GPUBufferUsage.VERTEX) {
-          access += "VERTEX ";
-        }
-        if (value & GPUBufferUsage.UNIFORM) {
-          access += "UNIFORM ";
-        }
-        if (value & GPUBufferUsage.STORAGE) {
-          access += "STORAGE ";
-        }
-        if (value & GPUBufferUsage.INDIRECT) {
-          access += "INDIRECT ";
-        }
-        if (value & GPUBufferUsage.QUERY_RESOLVE) {
-          access += "QUERY_RESOLVE ";
-        }
-        info[key] = access || "NONE";
+        const usage = this._getFlagString(value, GPUBufferUsage);
+        info[key] = usage || "NONE";
       } else if (object instanceof Texture && key == "usage") {
-        let access = "";
-        if (value & GPUTextureUsage.COPY_SRC) {
-          access += "COPY_SRC ";
-        }
-        if (value & GPUTextureUsage.COPY_DST) {
-          access += "COPY_DST ";
-        }
-        if (value & GPUTextureUsage.TEXTURE_BINDING) {
-          access += "TEXTURE_BINDING ";
-        }
-        if (value & GPUTextureUsage.STORAGE_BINDING) {
-          access += "STORAGE_BINDING ";
-        }
-        if (value & GPUTextureUsage.RENDER_ATTACHMENT) {
-          access += "RENDER_ATTACHMENT ";
-        }
-        info[key] = access || "NONE";
+        let usage = this._getFlagString(value, GPUTextureUsage);
+        info[key] = usage || "NONE";
       } else if (value instanceof Array) {
         info[key] = this._getDescriptorArray(object, value);
       } else if (value instanceof Object) {
