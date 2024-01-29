@@ -327,6 +327,9 @@ export class InspectorWindow extends Window {
     let callNumber = 0;
     let renderPassIndex = 0;
 
+    this._lastSelectedCommand = null;
+
+    let first = true;
     for (const command of commands) {
       const className = command.class;
       //const id = command.id;
@@ -348,12 +351,27 @@ export class InspectorWindow extends Window {
       }
 
       const cmd = new Div(currentPass, { class: cmdType });
-      cmd.html = cmd.innerHTML = `<span class='callnum'>${callNumber++}.</span> <span class='capture_methodName'>${method}</span>`;
+      new Span(cmd, { class: "capture_callnum", text: `${callNumber}.` });
+      new Span(cmd, { class: "capture_methodName", text: `${method}` });
 
       const self = this;
       cmd.element.onclick = () => {
+        if (self._lastSelectedCommand !== cmd) {
+          if (self._lastSelectedCommand) {
+            self._lastSelectedCommand.classList.remove("capture_command_selected");
+          }
+          cmd.classList.add("capture_command_selected");
+          self._lastSelectedCommand = cmd;
+        }
+        
         self._showCaptureCommandInfo(name, method, args, commandInfo);
       };
+
+      if (first) {
+        // Start off selecting the first command.
+        cmd.element.click();
+        first = false;
+      }
 
       if (method == "end") {
         currentPass = new Div(frameContents, { class: "capture_commandBlock" });
@@ -362,9 +380,6 @@ export class InspectorWindow extends Window {
   }
 
   _showCaptureCommandInfo(name, method, args, commandInfo) {
-    const newArgs = this._processCommandArgs(args);
-    const argStr = JSON.stringify(newArgs, undefined, 4);
-
     commandInfo.html = "";
 
     new Div(commandInfo, { text: `${name} ${method}`, style: "background-color: #575; padding-left: 20px; line-height: 40px;" });
@@ -397,7 +412,22 @@ export class InspectorWindow extends Window {
     }
 
     const argsGroup = new Collapsable(commandInfo, { label: "Arguments" });
-    new Widget("pre", argsGroup.body, { text: argStr });
+    const newArgs = this._processCommandArgs(args);
+    if (InspectorWindow._commandArgs[method]) {
+      const args = InspectorWindow._commandArgs[method];
+      for (let i = 0, l = newArgs.length; i < l; ++i) {
+        const arg = args[i];
+        const value = newArgs[i];
+        const valueStr = value instanceof Array ? `[${value.length}]: ${value}` : JSON.stringify(value, undefined, 4);
+        if (arg !== undefined) {
+          new Widget("pre", argsGroup.body, { text: `${arg}: ${valueStr}`, style: "margin-left: 10px;" });
+        } else {
+          new Widget("pre", argsGroup.body, { text: `[${i}]: ${valueStr}`, style: "margin-left: 10px;" });
+        }
+      }
+    } else {
+      new Widget("pre", argsGroup.body, { text: JSON.stringify(newArgs, undefined, 4) });
+    }
 
     if (method == "beginRenderPass") {
       const colorAttachments = args[0].colorAttachments;
@@ -408,8 +438,8 @@ export class InspectorWindow extends Window {
             : attachment.view.__texture
                 ? this.database.getObject(attachment.view.__texture.__id)
                 : null;
-        if (texture) {
           const format = texture.descriptor.format;
+        if (texture && texture.gpuTexture) {
           const viewWidth = 256;
           const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
           const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
@@ -421,6 +451,44 @@ export class InspectorWindow extends Window {
           context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
           const canvasTexture = context.getCurrentTexture();
           this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
+        } else {
+          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
+          new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
+          const texDesc = this._processCommandArgs(texture.descriptor);
+          if (texDesc.usage) {
+            texDesc.usage = this._getFlagString(texDesc.usage, GPUTextureUsage);
+          }
+          new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(texDesc, undefined, 4) });
+        }
+      }
+      const depthStencilAttachment = args[0].depthStencilAttachment;
+      if (depthStencilAttachment) {
+        const texture = depthStencilAttachment.view.__id
+            ? this.database.getObject(depthStencilAttachment.view.__id).parent
+            : depthStencilAttachment.view.__texture
+                ? this.database.getObject(depthStencilAttachment.view.__texture.__id)
+                : null;
+        if (texture && texture.gpuTexture) {
+          const format = texture.descriptor.format;
+          const viewWidth = 256;
+          const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
+          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment ${format}` });
+          const canvas = new Widget("canvas", depthStencilAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
+          canvas.element.width = viewWidth;
+          canvas.element.height = viewHeight;
+          const context = canvas.element.getContext('webgpu');
+          const dstFormat = navigator.gpu.getPreferredCanvasFormat();
+          context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
+          const canvasTexture = context.getCurrentTexture();
+          this.textureUtils.blitTexture(texture.gpuTexture.createView(), canvasTexture.createView(), dstFormat);
+        } else {
+          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.descriptor?.format ?? "<unknown format>"}` });
+          new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
+          const texDesc = this._processCommandArgs(texture.descriptor);
+          if (texDesc.usage) {
+            texDesc.usage = this._getFlagString(texDesc.usage, GPUTextureUsage);
+          }
+          new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(texDesc, undefined, 4) });
         }
       }
     } else if (method == "setBindGroup") {
@@ -433,10 +501,24 @@ export class InspectorWindow extends Window {
         const descStr = JSON.stringify(newDesc, undefined, 4);
         new Widget("pre", bindGroupGrp.body, { text: descStr });
 
+        const self = this;
+        function getResourceType(resource) {
+          if (resource.__id !== undefined) {
+            const obj = self.database.getObject(resource.__id);
+            if (obj) {
+              return obj.constructor.name;
+            }
+          }
+          if (resource.buffer) {
+            return "Buffer";
+          }
+          return "<unknown resource type>";
+        }
+
         for (const entry of bindGroupDesc.entries) {
           const binding = entry.binding;
           const resource = entry.resource;
-          const resourceGrp = new Collapsable(commandInfo, { label: `Binding ${binding}` });
+          const resourceGrp = new Collapsable(commandInfo, { label: `Binding ${binding}: ${getResourceType(resource)}` });
           if (resource.__id !== undefined) {
             const obj = this.database.getObject(resource.__id);
             if (obj) {
@@ -461,7 +543,11 @@ export class InspectorWindow extends Window {
                   new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
                   if (texture) {
                     new Div(resourceGrp.body, { text: `GPUTexture ID:${texture.id}` });
-                    new Widget("pre", resourceGrp.body, { text: JSON.stringify(texture.descriptor, undefined, 4) });
+                    const newDesc = this._processCommandArgs(texture.descriptor);
+                    if (newDesc.usage) {
+                      newDesc.usage = this._getFlagString(newDesc.usage, GPUTextureUsage);
+                    }
+                    new Widget("pre", resourceGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
                   }
                 }
               } else {
@@ -483,7 +569,7 @@ export class InspectorWindow extends Window {
                 }
                 new Widget("pre", resourceGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
               } else {
-                new Div(resourceGrp.body, { text: `Buffer ${bufferId}` });
+                new Div(resourceGrp.body, { text: `Buffer ID:${bufferId}` });
               }
             } else {
               new Widget("pre", resourceGrp.body, { text: JSON.stringify(resource, undefined, 4) });
@@ -495,7 +581,7 @@ export class InspectorWindow extends Window {
       const id = args[0].__id;
       const pipeline = this.database.getObject(id);
       if (pipeline) {
-        const pipelineGrp = new Collapsable(commandInfo, { label: `Pipeline ${id}` });
+        const pipelineGrp = new Collapsable(commandInfo, { label: `Pipeline ID:${id}` });
         const desc = pipeline.descriptor;
         const newDesc = this._processCommandArgs(desc);
         const descStr = JSON.stringify(newDesc, undefined, 4);
@@ -509,7 +595,7 @@ export class InspectorWindow extends Window {
           if (module) {
             const vertexEntry = desc.vertex?.entryPoint;
             const fragmentEntry = desc.fragment?.entryPoint;
-            const grp = new Collapsable(commandInfo, { label: `Module ${vertexId} Vertex: ${vertexEntry} Fragment: ${fragmentEntry}` });
+            const grp = new Collapsable(commandInfo, { label: `Module ID:${vertexId} Vertex: ${vertexEntry} Fragment: ${fragmentEntry}` });
             const code = module.descriptor.code;
             new Widget("pre", grp.body, { text: code });
           }
@@ -519,7 +605,7 @@ export class InspectorWindow extends Window {
             if (vertexModule) {
               const vertexEntry = desc.vertex?.entryPoint;
 
-              const vertexGrp = new Collapsable(commandInfo, { label: `Vertex Module ${vertexId} Entry: ${vertexEntry}` });
+              const vertexGrp = new Collapsable(commandInfo, { label: `Vertex Module ID:${vertexId} Entry: ${vertexEntry}` });
               const code = vertexModule.descriptor.code;
               new Widget("pre", vertexGrp.body, { text: code });
             }
@@ -529,7 +615,7 @@ export class InspectorWindow extends Window {
             const fragmentModule = this.database.getObject(fragmentId);
             if (fragmentModule) {
               const fragmentEntry = desc.fragment?.entryPoint;
-              const fragmentGrp = new Collapsable(commandInfo, { label: `Fragment Module ${fragmentId} Entry: ${fragmentEntry}` });
+              const fragmentGrp = new Collapsable(commandInfo, { label: `Fragment Module ID:${fragmentId} Entry: ${fragmentEntry}` });
               const code = fragmentModule.descriptor.code;
               new Widget("pre", fragmentGrp.body, { text: code });
             }
@@ -541,14 +627,52 @@ export class InspectorWindow extends Window {
           const computeModule = this.database.getObject(computeId);
           if (computeModule) {
             const computeEntry = desc.compute?.entryPoint;
-            const computeGrp = new Collapsable(commandInfo, { label: `Compute Module ${computeId} Entry: ${computeEntry}` });
+            const computeGrp = new Collapsable(commandInfo, { label: `Compute Module ID:${computeId} Entry: ${computeEntry}` });
             const code = computeModule.descriptor.code;
             new Widget("pre", computeGrp.body, { text: code });
           }
         }
       }
+    } else if (method == "writeBuffer") {
+      const id = args[0].__id;
+      const buffer = this.database.getObject(id);
+      if (buffer) {
+        const bufferGrp = new Collapsable(commandInfo, { label: `Buffer ID:${id}` });
+        const desc = buffer.descriptor;
+        const newDesc = this._processCommandArgs(desc);
+        if (newDesc.usage) {
+          newDesc.usage = this._getFlagString(newDesc.usage, GPUBufferUsage);
+        }
+        new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+      }
+    } else if (method == "setIndexBuffer") {
+      const id = args[0].__id;
+      const buffer = this.database.getObject(id);
+      if (buffer) {
+        const bufferGrp = new Collapsable(commandInfo, { label: `Buffer ID:${id}` });
+        const desc = buffer.descriptor;
+        const newDesc = this._processCommandArgs(desc);
+        if (newDesc.usage) {
+          newDesc.usage = this._getFlagString(newDesc.usage, GPUBufferUsage);
+        }
+        new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+      }
+    } else if (method == "setVertexBuffer") {
+      const id = args[1]?.__id;
+      const buffer = this.database.getObject(id);
+      if (buffer) {
+        const bufferGrp = new Collapsable(commandInfo, { label: `Buffer ID:${id}` });
+        const desc = buffer.descriptor;
+        const newDesc = this._processCommandArgs(desc);
+        if (newDesc.usage) {
+          newDesc.usage = this._getFlagString(newDesc.usage, GPUBufferUsage);
+        }
+        new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+      }
     }
   }
+
+
 
   _addRecordingData(data, index, count) {
     try {
@@ -933,3 +1057,64 @@ export class InspectorWindow extends Window {
     };
   }
 }
+
+InspectorWindow._commandArgs = {
+  "beginComputePass": ["descriptor"],
+  "beginOcclusionQuery": ["queryIndex"],
+  "beginRenderPass": ["descriptor"],
+  "configure": ["configuration"],
+  "clearBuffer": ["buffer", "offset", "size"],
+  "copyBufferToBuffer": ["source", "sourceOffset", "destination", "destinationOffset", "size"],
+  "copyBufferToTexture": ["source", "destination", "copySize"],
+  "copyTextureToBuffer": ["source", "destination", "copySize"],
+  "copyTextureToTexture": ["source", "destination", "copySize"],
+  "createBindGroup": ["descriptor"],
+  "createBindGroupLayout": ["descriptor"],
+  "createBuffer": ["descriptor"],
+  "createCommandEncoder": ["descriptor"],
+  "createComputePipeline": ["descriptor"],
+  "createComputePipelineAsync": ["descriptor"],
+  "createPipelineLayout": ["descriptor"],
+  "createQuerySet": ["descriptor"],
+  "createRenderBundleEncoder": ["descriptor"],
+  "createRenderPipeline": ["descriptor"],
+  "createRenderPipelineAsync": ["descriptor"],
+  "createSampler": ["descriptor"],
+  "createShaderModule": ["descriptor"],
+  "createTexture": ["descriptor"],
+  "createView": ["descriptor"],
+  "destroy": [],
+  "dispatchWorkgroup": ["workgroupCountX", "workgroupCountY", "workgroupCountZ"],
+  "dispatchWorkgroupIndirect": ["indirectBuffer", "indirectOffset"],
+  "draw": ["vertexCount", "instanceCount", "firstVertex", "firstInstance"],
+  "drawIndexed": ["indexCount", "instanceCount", "firstIndex", "baseVertex", "firstInstance"],
+  "drawIndirect": ["indirectBuffer", "indirectOffset"],
+  "drawIndexedIndirect": ["indirectBuffer", "indirectOffset"],
+  "end": [],
+  "endOcclusionQuery": [],
+  "executeBundles": ["bundles"],
+  "finish": ["descriptor"],
+  "getCompilationInfo": [],
+  "getCurrentTexture": [],
+  "getMappedRange": ["offset", "size"],
+  "importExternalTexture": ["descriptor"],
+  "insertDebugMarker": ["markerLabel"],
+  "mapAsync": ["mode", "offset", "size"],
+  "onSubmittedWorkDone": ["workDonePromise", "callback"],
+  "pushDebugGroup": ["groupLabel"],
+  "popDebugGroup": [],
+  "resolveQuerySet": ["querySet", "firstQuery", "queryCount", "destination", "destinationOffset"],
+  "setBindGroup": ["index", "bindGroup", "dynamicOffsets"],
+  "setBlendColor": ["color"],
+  "setIndexBuffer": ["buffer", "indexFormat", "offset", "size"],
+  "setVertexBuffer": ["slot", "buffer", "offset", "size"],
+  "setPipeline": ["pipeline"],
+  "setScissorRect": ["x", "y", "width", "height"],
+  "setStencilReference": ["reference"],
+  "setViewport": ["x", "y", "width", "height", "minDepth", "maxDepth"],
+  "submit": ["commandBuffers"],
+  "unmap": [],
+  "writeBuffer": ["buffer", "bufferOffset", "data", "dataOffset", "size"],
+  "writeTexture": ["destination", "data", "dataLayout", "size", "bytesPerRow"],
+  "copyExternalImageToTexture": ["source", "destination", "copySize"],
+};

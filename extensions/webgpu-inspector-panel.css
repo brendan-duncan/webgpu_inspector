@@ -964,10 +964,6 @@ ol::-webkit-scrollbar-thumb:hover {
   line-height: 28px;
 }
 
-.capture_command:hover {
-  filter: brightness(150%);
-}
-
 .capture_frame {
   overflow: auto;
   width: calc(50% - 10px);
@@ -995,12 +991,8 @@ ol::-webkit-scrollbar-thumb:hover {
   margin-top: 10px;
 }
 
-.capture_commandBlock .capture_command {
+.capture_commandBlock {
   background: #333;
-}
-
-.capture_commandBlock .capture_command:hover {
-  filter: brightness(150%);
 }
 
 .capture_renderpass {
@@ -1008,12 +1000,8 @@ ol::-webkit-scrollbar-thumb:hover {
   margin-left: 10px;
 }
 
-.capture_renderpass .capture_command {
+.capture_renderpass {
   background: #353;
-}
-
-.capture_renderpass .capture_command:hover {
-  filter: brightness(150%);
 }
 
 .capture_renderpass .capture_drawcall {
@@ -1029,12 +1017,12 @@ ol::-webkit-scrollbar-thumb:hover {
   background: #446;
 }
 
-.capture_computepass .capture_command:hover {
-  filter: brightness(150%);
+.capture_command:hover {
+  box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.8) inset;
 }
 
-.capture_command:hover {
-  filter: brightness(150%);
+.capture_command_selected {
+  background: #ca4;
 }
 
 .capture_pass_texture {
