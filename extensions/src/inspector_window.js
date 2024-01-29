@@ -186,7 +186,7 @@ export class InspectorWindow extends Window {
     if (object.__id !== undefined) {
       const obj = this.database.getObject(object.__id);
       if (obj) {
-        return `$${object.__id} ${obj.constructor.name}`;
+        return `${obj.constructor.name} ID:${object.__id}`;
       }
       return `&${object.__id} ${object.__class || "Object"}`;
     }
