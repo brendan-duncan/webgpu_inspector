@@ -33,7 +33,12 @@ class MessagePort {
     if (this.tabId) {
       message.tabId = this.tabId;
     }
-    this._port.postMessage(message);
+    try {
+      this._port.postMessage(message);
+    } catch(e) {
+      console.log(e);
+      this.reset();
+    }
   }
 }
 

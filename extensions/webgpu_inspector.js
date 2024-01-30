@@ -633,17 +633,17 @@ import { TextureUtils } from "./src/texture_utils.js";
         window.postMessage({"action": "inspect_add_object", id, parent,"type": "RenderPipeline", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
         // There are cases when the shader modules used by the render pipeline will be garbage collected, and we won't be able to inspect them after that.
         // Hang on to the shader modules used in the descriptor by attaching them to the pipeline.
-        if (args[0].vertex?.module) {
-          result.__vertexModule = args[0].vertex?.module;
+        if (arg[0].vertex?.module) {
+          result.__vertexModule = arg[0].vertex?.module;
         }
-        if (args[0].fragment?.module) {
-          result.__fragmentModule = args[0].fragment?.module;
+        if (arg[0].fragment?.module) {
+          result.__fragmentModule = arg[0].fragment?.module;
         }
       } else if (method == "createComputePipeline") {
         const id = result.__id;
         window.postMessage({"action": "inspect_add_object", id, parent,"type": "ComputePipeline", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
-        if (args[0].compute?.module) {
-          result.__computeModule = args[0].compute?.module;
+        if (arg[0].compute?.module) {
+          result.__computeModule = arg[0].compute?.module;
         }
       } else if (method == "beginRenderPass") {
         window.postMessage({"action": "inspect_begin_render_pass", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
