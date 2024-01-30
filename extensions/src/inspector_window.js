@@ -649,6 +649,40 @@ export class InspectorWindow extends Window {
     }
   }
 
+  _showCaptureCommandInfo_draw(args, commandInfo, commandIndex, commands) {
+    let pipeline = null;
+    let vertexBuffer = null;
+    let bindGroups = [];
+    for (let ci = commandIndex - 1; ci >= 0; --ci) {
+      const cmd = commands[ci];
+      if (cmd.method == "beginRenderPass") {
+        break;
+      }
+      if (cmd.method == "setVertexBuffer" && !vertexBuffer) {
+        vertexBuffer = cmd;
+      }
+      if (cmd.method == "setPipeline" && !pipeline) {
+        pipeline = cmd;
+      }
+      if (cmd.method == "setBindGroup") {
+        const bindGroupIndex = cmd.args[0];
+        if (!bindGroups[bindGroupIndex]) {
+          bindGroups[bindGroupIndex] = cmd;
+        }
+      }
+    }
+
+    if (pipeline) {
+      this._showCaptureCommandInfo_setPipeline(pipeline.args, commandInfo, true);
+    }
+    if (vertexBuffer) {
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer.args, commandInfo, true);
+    }
+    for (const index in bindGroups) {
+      this._showCaptureCommandInfo_setBindGroup(bindGroups[index].args, commandInfo, index, true);
+    }
+  }
+
   _showCaptureCommandInfo_drawIndexed(args, commandInfo, commandIndex, commands) {
     let pipeline = null;
     let vertexBuffer = null;
@@ -754,6 +788,8 @@ export class InspectorWindow extends Window {
       this._showCaptureCommandInfo_setVertexBuffer(args, commandInfo);
     } else if (method == "drawIndexed") {
       this._showCaptureCommandInfo_drawIndexed(args, commandInfo, commandIndex, commands);
+    } else if (method == "draw") {
+      this._showCaptureCommandInfo_draw(args, commandInfo, commandIndex, commands);
     }
   }
 
