@@ -931,6 +931,10 @@ ol::-webkit-scrollbar-thumb:hover {
   background: #333;
 }
 
+.capture_callnum {
+  margin-right: 5px;
+}
+
 .capture_method_args {
   padding-left: 5px;
   font-size: 9pt;

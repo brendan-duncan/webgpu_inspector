@@ -182,7 +182,7 @@ export class InspectorWindow extends Window {
       if (obj) {
         return `${obj.constructor.name} ID:${object.__id}`;
       }
-      return `&${object.__id} ${object.__class || "Object"}`;
+      return `${object.__class || "Object"}.${object.__id}`;
     }
     if (object instanceof Array) {
       const newArray = [];

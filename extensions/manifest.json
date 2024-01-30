@@ -33,9 +33,11 @@
         "src/texture_format_info.js",
         "src/texture_utils.js",
         "src/base64.js",
-        "src/message_port.js"
+        "src/message_port.js",
+        "src/gpu_object_wrapper.js",
+        "src/widget/signal.js"
        ],
-      "matches": ["*://*/*"]
+      "matches": ["<all_urls>"]
     }
   ]
 }

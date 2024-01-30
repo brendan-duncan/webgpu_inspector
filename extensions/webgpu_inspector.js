@@ -1,4 +1,5 @@
 import { encodeBase64 } from "./src/base64.js";
+import { GPUObjectTypes, GPUObjectWrapper } from "./src/gpu_object_wrapper.js";
 import { TextureFormatInfo } from "./src/texture_format_info.js";
 import { TextureUtils } from "./src/texture_utils.js";
 
@@ -33,49 +34,13 @@ import { TextureUtils } from "./src/texture_utils.js";
         return;
       }
 
+      this._gpuWrapper = new GPUObjectWrapper(this);
+
       const self = this;
-
-      // We can wrap navigator.gpu to intercept requestAdapter, but a lot of times the browser will start
-      // executing the page script before the inspector script, and will request the Adapter before we get
-      // a chance to wrap requestAdapter. Replacing GPUAdapter.requestDevice here, we can intercept that,
-      // then wrap the adapter it was called with after it was already created. Other methods will be
-      // dynamically wrapped at the object level rather than the prototype level.
-      GPUAdapter.prototype.requestDevice = (function(origFn) {
-        return async function(...args) {
-          const adapter = this;
-          if (adapter.__id === undefined) {
-            self._wrapObject(adapter);
-            const id = adapter.__id;
-            adapter.requestAdapterInfo().then((infoObj) => {
-              const info = {
-                vendor: infoObj.vendor,
-                architecture: infoObj.architecture,
-                device: infoObj.device,
-                description: infoObj.description,
-                features: self._gpuToArray(adapter.features),
-                limits: self._gpuToObject(adapter.limits),
-                isFallbackAdapter: adapter.isFallbackAdapter,
-                wgslFeatures: self._gpuToArray(navigator.gpu.wgslLanguageFeatures)
-              };
-              window.postMessage({"action": "inspect_add_object", id, "type": "Adapter", "descriptor": JSON.stringify(info)}, "*");
-            });
-          }
-          const device = await origFn.call(this, ...args);
-          if (device && device.__id === undefined) {
-            self._wrapObject(device);
-            const descriptor = arguments[0] ?? {};
-            const id = device.__id;
-            const parent = adapter.__id;
-            descriptor["features"] = self._gpuToArray(device.features);
-            descriptor["limits"] = self._gpuToObject(device.limits);
-            self._trackedObjects.set(device.__id, device);
-            window.postMessage({"action": "inspect_add_object", id, parent, "type": "Device", "descriptor": JSON.stringify(descriptor)}, "*");
-          }
-          return device;
-        };
-      })(GPUAdapter.prototype.requestDevice);
-
-      
+      this._gpuWrapper.onPromiseResolve.addListener(this._onAsyncResolve, this);
+      this._gpuWrapper.onPreCall.addListener(this._preMethodCall, this);
+      this._gpuWrapper.onPostCall.addListener(this._onMethodCall, this);
+     
       // Try to track garbage collected WebGPU objects
       this._gcRegistry = new FinalizationRegistry((id) => {
         if (id >= 0) {
@@ -140,9 +105,235 @@ import { TextureUtils } from "./src/texture_utils.js";
       });
     }
 
+    _preMethodCall(object, method, args) {
+      const self = this;
+
+      if (method == "createTexture") {
+        // Add COPY_SRC usage to all textures so we can capture them
+        args[0].usage |= GPUTextureUsage.COPY_SRC;
+      }
+
+      this._capturedRenderView = null;
+      if (method == "beginRenderPass") {
+        const descriptor = args[0];
+        const colorAttachments = descriptor.colorAttachments;
+        if (colorAttachments) {
+          for (let i = 0; i < colorAttachments.length; ++i) {
+            const attachment = colorAttachments[i];
+            if (attachment.view) {
+              const texture = attachment.view.__texture;
+              if (texture) {
+                if (texture.__isCanvasTexture) {
+                  const context = texture.__context;
+                  if (context) {
+                    if (context.__captureTexture) {
+                      if (context.__captureTexture?.width != texture.width ||
+                          context.__captureTexture?.height != texture.height ||
+                          context.__captureTexture?.format != texture.format) {
+                        this.__skipRecord = true;
+                        context.__captureTexture.destroy();
+                        context.__captureTexture = null;
+                        context.__canvas.__captureTexture = null;
+                        this.__skipRecord = false;
+                      }
+                    }
+
+                    if (!context.__captureTexture) {
+                      const device = context.__device;
+                      if (device) {
+                        this.__skipRecord = true;
+                        const captureTexture = device.createTexture({
+                          size: [texture.width, texture.height, 1],
+                          format: texture.format,
+                          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+                        });
+                        context.__captureTexture = captureTexture;
+                        captureTexture.__id = texture.__id;
+                        captureTexture.__view = context.__captureTexture.createView();
+                        captureTexture.__view.__texture = captureTexture;
+                        captureTexture.__canvasTexture = texture;
+                        texture.__captureTexture = captureTexture;
+                        texture.__canvas.__captureTexture = captureTexture;
+                        this.__skipRecord = false;
+                      }
+                    }
+
+                    if (context.__captureTexture) {
+                      context.__captureTexture.__canvasTexture = texture;
+                      attachment.view = context.__captureTexture.__view;
+                      this._capturedRenderView = attachment.view;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Before we finish the command encoder, inject any pending texture captures
+      if ((object == this._lastCommandEncoder) && method == "finish") {
+        if (this._captureTextureRequest.size > 0) {
+          this._captureTextureBuffers();
+        }
+      }
+
+      // We want to be able to capture canvas textures, so we need to add COPY_SRC to
+      // the usage flags of any textures created from canvases.
+      if ((object instanceof GPUCanvasContext) && method == "configure") {
+        const descriptor = args[0];
+        if (descriptor.usage) {
+          descriptor.usage |= GPUTextureUsage.COPY_DST;
+        } else {
+          descriptor.usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST;
+        }
+        object.__device = descriptor.device;
+      }       
+
+      if (method == "submit") {
+        this.__skipRecord = true;
+        object.onSubmittedWorkDone().then(() => {
+          self._sendCaptureTextureBuffers();
+          for (const obj of this._toDestroy) {
+            obj.destroy();
+          }
+          self._toDestroy.length = 0;
+        });
+        this.__skipRecord = false;
+      }
+    }
+
+    _onMethodCall(object, method, args, result) {
+      if (method == "beginRenderPass") {
+        result.__commandEncoder = object;
+        if (this._capturedRenderView) {
+          result.__capturedRenderView = this._capturedRenderView;
+        }
+      }
+
+      if (method == "end") {
+        // If the captured canvas texture was rendered to, blit it to the real canvas texture
+        if (object.__capturedRenderView) {
+          const texture = object.__capturedRenderView.__texture;
+          if (texture) {
+            const commandEncoder = object.__commandEncoder;
+            if (commandEncoder) {
+              this.__skipRecord = true;
+              commandEncoder.copyTextureToTexture({ texture },
+                { texture: texture.__canvasTexture },
+                [texture.width, texture.height, 1]);
+              this.__skipRecord = false;
+            }
+          }
+        }
+      }
+
+      // If __skipRecord is set, don't wrap the result object or record the command.
+      // It is set when we're creating utilty objects that aren't from the page.
+      if (this.__skipRecord) {
+        return result;
+      }
+
+      let id = undefined;
+      if (method == "getCurrentTexture" && result) {
+        id = -(object.__canvas?.__id ?? 1);
+      } else if (method == "createView") {
+        if (object.__isCanvasTexture) {
+          id = object.__id - 0.5;
+        }
+      }
+      
+      if (result) {
+        if (GPUObjectTypes.has(result.constructor)) {
+          this._wrapObject(result, id);
+        }
+
+        if (method == "createTexture") {
+          this._trackedObjects.set(result.__id, result);
+        } else if (method == "createView" && !id) {
+          this._trackedObjects.set(result.__id, result);
+        } else if (method == "createBuffer") {
+          this._trackedObjects.set(result.__id, result);
+        } else if (method == "getCurrentTexture") {
+          result.__isCanvasTexture = true;
+          result.__context = object;
+          this._trackedObjects.set(result.__id, result);
+          if (object.__canvas) {
+            result.__canvas = object.__canvas;
+          }
+        }
+      }
+
+      this._recordCommand(object, method, result, args[0]);
+    }
+
+    _onAsyncResolve(object, method, args, id, result) {
+      if (method === "requestAdapter") {
+        const adapter = result;
+        if (adapter) {
+          this._wrapAdapter(result, id);
+        }
+      } else if (method === "requestDevice") {
+        const adapter = object;
+        const device = result;
+        if (device) {
+          this._wrapDevice(adapter, device, id, args);
+        }
+      }
+    }
+
+    _wrapAdapter(adapter, id) {
+      this._wrapObject(adapter, id);
+      id ??= adapter.__id;
+      const self = this;
+      adapter.requestAdapterInfo().then((infoObj) => {
+        const info = {
+          vendor: infoObj.vendor,
+          architecture: infoObj.architecture,
+          device: infoObj.device,
+          description: infoObj.description,
+          features: self._gpuToArray(adapter.features),
+          limits: self._gpuToObject(adapter.limits),
+          isFallbackAdapter: adapter.isFallbackAdapter,
+          wgslFeatures: self._gpuToArray(navigator.gpu.wgslLanguageFeatures)
+        };
+        window.postMessage({"action": "inspect_add_object", id, "type": "Adapter", "descriptor": JSON.stringify(info)}, "*");
+      });
+    }
+
+    _wrapDevice(adapter, device, id, args) {
+      if (adapter.__id === undefined) {
+        this._wrapAdapter(adapter);
+      }
+
+      if (device && device.__id === undefined) {
+        this._wrapObject(device, id);
+        const descriptor = args[0] ?? {};
+        const deviceId = device.__id;
+        const adapterId = adapter.__id;
+        descriptor["features"] = this._gpuToArray(device.features);
+        descriptor["limits"] = this._gpuToObject(device.limits);
+        this._trackedObjects.set(deviceId, device);
+        window.postMessage({"action": "inspect_add_object", id: deviceId, parent: adapterId, "type": "Device", "descriptor": JSON.stringify(descriptor)}, "*");
+      }
+    }
+
     clear() {
       this._frameCommands.length = 0;
       this._currentFrame = null;
+    }
+
+    getNextId(object) {
+      // We don't need unique id's for some types of objects
+      // and they get created so frequenty they make the ID's
+      // grow too quickly.
+      if (object instanceof GPUCommandEncoder ||
+          object instanceof GPUComputePassEncoder ||
+          object instanceof GPURenderPassEncoder ||
+          object instanceof GPUCommandBuffer) {
+        return 0;//this._nonTrackingID++;
+      }
+      return this._objectID++;
     }
 
     _memoryLeakWarning(object) {
@@ -151,19 +342,6 @@ import { TextureUtils } from "./src/texture_utils.js";
       const id = object.__id;
       const message = `WebGPU ${type} ${id} ${label} was garbage collected without being explicitly destroyed. This is a memory leak.`;
       window.postMessage({"action": "inspect_memory_leak_warning", id, "message": message}, "*");
-    }
-
-    _getNextId(object) {
-      // We don't need unique id's for some types of objects
-      // and they get created so frequenty they make the ID's
-      // grow too quickly.
-      if (object instanceof GPUCommandEncoder ||
-          object instanceof GPUComputePassEncoder ||
-          object instanceof GPURenderPassEncoder ||
-          object instanceof GPUCommandBuffer) {
-        return this._nonTrackingID++;
-      }
-      return this._objectID++;
     }
 
     _requestTexture(textureId) {
@@ -214,7 +392,7 @@ import { TextureUtils } from "./src/texture_utils.js";
       if (c.__id) {
         return;
       }
-      c.__id = this._getNextId(c);
+      c.__id = this.getNextId(c);
 
       this._trackedObjects.set(c.__id, c);
 
@@ -257,220 +435,33 @@ import { TextureUtils } from "./src/texture_utils.js";
       if (object.__id) {
         return;
       }
-      object.__id = id ?? this._getNextId(object);
+      object.__id = id ?? this.getNextId(object);
 
       this._gcRegistry.register(object, object.__id);
 
-      for (const m in object) {
-        if (m == "label") {
-          // Capture chaning of the GPUObjectBase label
-          const l = object[m];
-          object._label = l;
-          Object.defineProperty(object, m, {
-            enumerable: true,
-            configurable: true,
-            get() {
-              return object._label;
-            },
-            set(label) {
-              object._label = label;
-              const id = object.__id;
-              window.postMessage({"action": "inspect_object_set_label", id, label}, "*");
-            }
-          });
-        } else if (typeof object[m] == "function") {
-          if (WebGPUInspector._skipMethods.indexOf(m) == -1) {
-            if (WebGPUInspector._asyncMethods.indexOf(m) != -1) {
-              this._wrapAsync(object, m);
-            } else {
-              this._wrapMethod(object, m);
-            }
+      if (object.label !== undefined) {
+        // Capture chaning of the GPUObjectBase label
+        const l = object.label;
+        object._label = l;
+        Object.defineProperty(object, "label", {
+          enumerable: true,
+          configurable: true,
+          get() {
+            return object._label;
+          },
+          set(label) {
+            object._label = label;
+            const id = object.__id;
+            window.postMessage({ "action": "inspect_object_set_label", id, label }, "*");
           }
-        } else if (typeof object[m] == "object") {
-          const o = object[m];
-          if (!o || o.__id) {
-            continue;
-          }
-          const hasMethod = this._objectHasMethods(o);
-          if (!o.__id && hasMethod) {
-            this._wrapObject(o);
-          }
-        }
+        });
       }
 
       if (object instanceof GPUDevice) {
-        object.queue.parent = object;
+        if (object.queue.__id === undefined) {
+          this._wrapObject(object.queue);
+        }
       }
-    }
-
-    _wrapMethod(object, method) {
-      if (WebGPUInspector._skipMethods.indexOf(method) != -1) {
-        return;
-      }
-      const origMethod = object[method];
-      const self = this;
-
-      object[method] = function () {
-        const args = [...arguments];
-
-        if (method == "createTexture") {
-          // Add COPY_SRC usage to all textures so we can capture them
-          args[0].usage |= GPUTextureUsage.COPY_SRC;
-        }
-
-        let capturedRenderView = null;
-        if (method == "beginRenderPass") {
-          const descriptor = args[0];
-          const colorAttachments = descriptor.colorAttachments;
-          if (colorAttachments) {
-            for (let i = 0; i < colorAttachments.length; ++i) {
-              const attachment = colorAttachments[i];
-              if (attachment.view) {
-                const texture = attachment.view.__texture;
-                if (texture) {
-                  if (texture.__isCanvasTexture) {
-                    const context = texture.__context;
-                    if (context) {
-                      if (context.__captureTexture) {
-                        if (context.__captureTexture?.width != texture.width ||
-                            context.__captureTexture?.height != texture.height ||
-                            context.__captureTexture?.format != texture.format) {
-                          self.__skipRecord = true;
-                          context.__captureTexture.destroy();
-                          context.__captureTexture = null;
-                          context.__canvas.__captureTexture = null;
-                          self.__skipRecord = false;
-                        }
-                      }
-
-                      if (!context.__captureTexture) {
-                        const device = context.__device;
-                        if (device) {
-                          self.__skipRecord = true;
-                          const captureTexture = device.createTexture({
-                            size: [texture.width, texture.height, 1],
-                            format: texture.format,
-                            usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
-                          });
-                          context.__captureTexture = captureTexture;
-                          captureTexture.__id = texture.__id;
-                          captureTexture.__view = context.__captureTexture.createView();
-                          captureTexture.__view.__texture = captureTexture;
-                          captureTexture.__canvasTexture = texture;
-                          texture.__captureTexture = captureTexture;
-                          texture.__canvas.__captureTexture = captureTexture;
-                          self.__skipRecord = false;
-                        }
-                      }
-
-                      if (context.__captureTexture) {
-                        context.__captureTexture.__canvasTexture = texture;
-                        attachment.view = context.__captureTexture.__view;
-                        capturedRenderView = attachment.view;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // Before we finish the command encoder, inject any pending texture captures
-        if ((object == self._lastCommandEncoder) && method == "finish") {
-          if (self._captureTextureRequest.size > 0) {
-            self._captureTextureBuffers();
-          }
-        }
-
-        // We want to be able to capture canvas textures, so we need to add COPY_SRC to
-        // the usage flags of any textures created from canvases.
-        if ((object instanceof GPUCanvasContext) && method == "configure") {
-          const descriptor = args[0];
-          if (descriptor.usage) {
-            descriptor.usage |= GPUTextureUsage.COPY_DST;
-          } else {
-            descriptor.usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST;
-          }
-          object.__device = descriptor.device;
-        }       
-
-        if (method == "submit") {
-          self.__skipRecord = true;
-          object.onSubmittedWorkDone().then(() => {
-            self._sendCaptureTextureBuffers();
-            for (const obj of self._toDestroy) {
-              obj.destroy();
-            }
-            self._toDestroy.length = 0;
-          });
-          self.__skipRecord = false;
-        }
-
-        // Call the original method
-        const result = origMethod.call(object, ...args);
-
-        if (method == "beginRenderPass") {
-          result.__commandEncoder = object;
-          if (capturedRenderView) {
-            result.__capturedRenderView = capturedRenderView;
-          }
-        }
-
-        if (method == "end") {
-          // If the captured canvas texture was rendered to, blit it to the real canvas texture
-          if (object.__capturedRenderView) {
-            const texture = object.__capturedRenderView.__texture;
-            if (texture) {
-              const commandEncoder = object.__commandEncoder;
-              if (commandEncoder) {
-                self.__skipRecord = true;
-                commandEncoder.copyTextureToTexture({ texture },
-                  { texture: texture.__canvasTexture },
-                  [texture.width, texture.height, 1]);
-                  self.__skipRecord = false;
-              }
-            }
-          }
-        }
-
-        // If __skipRecord is set, don't wrap the result object or record the command.
-        // It is set when we're creating utilty objects that aren't from the page.
-        if (self.__skipRecord) {
-          return result;
-        }
-
-        let id = undefined;
-        if (method == "getCurrentTexture" && result) {
-          id = -(object.__canvas?.__id ?? 1);
-        } else if (method == "createView") {
-          if (object.__isCanvasTexture) {
-            id = object.__id - 0.5;
-          }
-        }
-        
-        if (result && typeof result == "object") {
-          self._wrapObject(result, id);
-        }
-
-        if (method == "createTexture") {
-          self._trackedObjects.set(result.__id, result);
-        } else if (method == "createView" && !id) {
-          self._trackedObjects.set(result.__id, result);
-        } else if (method == "createBuffer") {
-          self._trackedObjects.set(result.__id, result);
-        } else if (method == "getCurrentTexture") {
-          result.__isCanvasTexture = true;
-          result.__context = object;
-          self._trackedObjects.set(result.__id, result);
-          if (object.__canvas) {
-            result.__canvas = object.__canvas;
-          }
-        }
-
-        self._recordCommand(object, method, result, arguments);
-        return result;
-      };
     }
 
     _captureTextureBuffers() {
@@ -495,54 +486,6 @@ import { TextureUtils } from "./src/texture_utils.js";
         obj[v] = gpu[v];
       }
       return obj;
-    }
-
-    _wrapAsync(object, method) {
-      const origMethod = object[method];
-      const self = this;
-
-      object[method] = function () {
-        const t0 = performance.now();
-        const id = self._getNextId(object);
-        const promise = origMethod.call(object, ...arguments);
-        self._recordAsyncCommand(object, method, id, arguments);
-        const wrappedPromise = new Promise((resolve) => {
-          promise.then((result) => {
-            const t1 = performance.now();
-            self._resolveAsyncCommand(id, t1 - t0, result);
-            if (method == "requestAdapter") {
-              result.requestAdapterInfo().then((infoObj) => {
-                const info = {
-                  vendor: infoObj.vendor,
-                  architecture: infoObj.architecture,
-                  device: infoObj.device,
-                  description: infoObj.description,
-                  features: self._gpuToArray(result.features),
-                  limits: self._gpuToObject(result.limits),
-                  isFallbackAdapter: result.isFallbackAdapter
-                };
-                window.postMessage({"action": "inspect_add_object", id, "type": "Adapter", "descriptor": JSON.stringify(info)}, "*");
-              });
-            } else if (method == "requestDevice") {
-              const descriptor = arguments[0] ?? {};
-              const parent = object.__id;
-              descriptor["features"] = self._gpuToArray(result.features);
-              descriptor["limits"] = self._gpuToObject(result.limits);
-              self._trackedObjects.set(result.__id, result);
-              window.postMessage({"action": "inspect_add_object", id, parent, "type": "Device", "descriptor": JSON.stringify(descriptor)}, "*");
-            }
-            if (result && result.__id) {
-              resolve(result);
-              return;
-            }
-            if (result && typeof result == "object") {
-              self._wrapObject(result);
-            }
-            resolve(result);
-          });
-        });
-        return wrappedPromise;
-      };
     }
 
     _prepareDescriptor(args) {
@@ -579,7 +522,6 @@ import { TextureUtils } from "./src/texture_utils.js";
     }
 
     _recordCommand(object, method, result, ...args) {
-      const arg = [...args[0]];
       const parent = object.__id;
       if (method == "destroy") {
         const id = object.__id;
@@ -590,13 +532,13 @@ import { TextureUtils } from "./src/texture_utils.js";
         }
       } else if (method == "createShaderModule") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent, "type": "ShaderModule", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent, "type": "ShaderModule", "descriptor": this._stringifyDescriptor(args[0])}, "*");
       } else if (method == "createBuffer") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Buffer", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Buffer", "descriptor": this._stringifyDescriptor(args[0])}, "*");
       } else if (method == "createTexture") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Texture", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Texture", "descriptor": this._stringifyDescriptor(args[0])}, "*");
         result.__device = object;
       } else if (method == "getCurrentTexture") {
         const id = result.__id;
@@ -615,41 +557,41 @@ import { TextureUtils } from "./src/texture_utils.js";
       } else if (method == "createView") {
         const id = result.__id;
         result.__texture = object;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "TextureView", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "TextureView", "descriptor": this._stringifyDescriptor(args[0])}, "*");
       } else if (method == "createSampler") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Sampler", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Sampler", "descriptor": this._stringifyDescriptor(args[0])}, "*");
       } else if (method == "createBindGroup") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroup", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroup", "descriptor": this._stringifyDescriptor(args[0])}, "*");
       } else if (method == "createBindGroupLayout") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroupLayout", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroupLayout", "descriptor": this._stringifyDescriptor(args[0])}, "*");
       } else if (method == "createPipelineLayout") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "PipelineLayout", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "PipelineLayout", "descriptor": this._stringifyDescriptor(args[0])}, "*");
       } else if (method == "createRenderPipeline") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "RenderPipeline", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "RenderPipeline", "descriptor": this._stringifyDescriptor(args[0])}, "*");
         // There are cases when the shader modules used by the render pipeline will be garbage collected, and we won't be able to inspect them after that.
         // Hang on to the shader modules used in the descriptor by attaching them to the pipeline.
-        if (arg[0].vertex?.module) {
-          result.__vertexModule = arg[0].vertex?.module;
+        if (args[0].vertex?.module) {
+          result.__vertexModule = args[0].vertex?.module;
         }
-        if (arg[0].fragment?.module) {
-          result.__fragmentModule = arg[0].fragment?.module;
+        if (args[0].fragment?.module) {
+          result.__fragmentModule = args[0].fragment?.module;
         }
       } else if (method == "createComputePipeline") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "ComputePipeline", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
-        if (arg[0].compute?.module) {
-          result.__computeModule = arg[0].compute?.module;
+        window.postMessage({"action": "inspect_add_object", id, parent,"type": "ComputePipeline", "descriptor": this._stringifyDescriptor(args[0])}, "*");
+        if (args[0].compute?.module) {
+          result.__computeModule = args[0].compute?.module;
         }
       } else if (method == "beginRenderPass") {
-        window.postMessage({"action": "inspect_begin_render_pass", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+        window.postMessage({"action": "inspect_begin_render_pass", "descriptor": this._stringifyDescriptor(args[0])}, "*");
         this._frameRenderPassCount++;
       } else if (method == "beginComputePass") {
-          window.postMessage({"action": "inspect_begin_compute_pass", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+          window.postMessage({"action": "inspect_begin_compute_pass", "descriptor": this._stringifyDescriptor(args[0])}, "*");
       } else if (method == "end") {
         window.postMessage({"action": "inspect_end_pass"}, "*");
       } else if (method == "createCommandEncoder") {
@@ -663,7 +605,7 @@ import { TextureUtils } from "./src/texture_utils.js";
       }
 
       if (this._recordRequest) {
-        this._captureCommand(object, method, arg);
+        this._captureCommand(object, method, args);
       }
     }
 
