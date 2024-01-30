@@ -340,13 +340,13 @@ export class InspectorWindow extends Window {
     const commandInfo = new Span(contents, { class: "capture_commandInfo" });
     
     let currentPass = new Div(frameContents, { class: "capture_commandBlock" });
-    let callNumber = 0;
     let renderPassIndex = 0;
 
     this._lastSelectedCommand = null;
 
     let first = true;
-    for (const command of commands) {
+    for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
+      const command = commands[commandIndex];
       const className = command.class;
       //const id = command.id;
       const method = command.method;
@@ -367,7 +367,7 @@ export class InspectorWindow extends Window {
       }
 
       const cmd = new Div(currentPass, { class: cmdType });
-      new Span(cmd, { class: "capture_callnum", text: `${callNumber}.` });
+      new Span(cmd, { class: "capture_callnum", text: `${commandIndex}.` });
       new Span(cmd, { class: "capture_methodName", text: `${method}` });
 
       const self = this;
@@ -380,7 +380,7 @@ export class InspectorWindow extends Window {
           self._lastSelectedCommand = cmd;
         }
         
-        self._showCaptureCommandInfo(name, method, args, commandInfo);
+        self._showCaptureCommandInfo(name, method, args, commandInfo, commandIndex, commands);
       };
 
       if (first) {
@@ -395,7 +395,302 @@ export class InspectorWindow extends Window {
     }
   }
 
-  _showCaptureCommandInfo(name, method, args, commandInfo) {
+  _showCaptureCommandInfo_beginRenderPass(args, commandInfo) {
+    const colorAttachments = args[0].colorAttachments;
+    for (const i in colorAttachments) {
+      const attachment = colorAttachments[i];
+      const texture = attachment.view.__id
+          ? this.database.getObject(attachment.view.__id).parent
+          : attachment.view.__texture
+              ? this.database.getObject(attachment.view.__texture.__id)
+              : null;
+        const format = texture.descriptor.format;
+      if (texture && texture.gpuTexture) {
+        const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
+
+        const viewWidth = 256;
+        const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
+        const canvas = new Widget("canvas", colorAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
+        canvas.element.width = viewWidth;
+        canvas.element.height = viewHeight;
+        const context = canvas.element.getContext('webgpu');
+        const dstFormat = navigator.gpu.getPreferredCanvasFormat();
+        context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
+        const canvasTexture = context.getCurrentTexture();
+        this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
+      } else {
+        const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
+        new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
+        const texDesc = this._processCommandArgs(texture.descriptor);
+        if (texDesc.usage) {
+          texDesc.usage = this._getFlagString(texDesc.usage, GPUTextureUsage);
+        }
+        new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(texDesc, undefined, 4) });
+      }
+    }
+    const depthStencilAttachment = args[0].depthStencilAttachment;
+    if (depthStencilAttachment) {
+      const texture = depthStencilAttachment.view.__id
+          ? this.database.getObject(depthStencilAttachment.view.__id).parent
+          : depthStencilAttachment.view.__texture
+              ? this.database.getObject(depthStencilAttachment.view.__texture.__id)
+              : null;
+      if (texture && texture.gpuTexture) {
+        const format = texture.descriptor.format;
+        const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment ${format}` });
+        const viewWidth = 256;
+        const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
+        const canvas = new Widget("canvas", depthStencilAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
+        canvas.element.width = viewWidth;
+        canvas.element.height = viewHeight;
+        const context = canvas.element.getContext('webgpu');
+        const dstFormat = navigator.gpu.getPreferredCanvasFormat();
+        context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
+        const canvasTexture = context.getCurrentTexture();
+        this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
+      } else {
+        const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.descriptor?.format ?? "<unknown format>"}` });
+        new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
+        const texDesc = this._processCommandArgs(texture.descriptor);
+        if (texDesc.usage) {
+          texDesc.usage = this._getFlagString(texDesc.usage, GPUTextureUsage);
+        }
+        new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(texDesc, undefined, 4) });
+      }
+    }
+  }
+
+  _showCaptureCommandInfo_setBindGroup(args, commandInfo, index, collapsed) {
+    const id = args[1].__id;
+    const bindGroup = this.database.getObject(id);
+    if (bindGroup) {
+      const bindGroupGrp = new Collapsable(commandInfo, { collapsed, label: `BindGroup ${index ?? ""} ID:${id}` });
+      const bindGroupDesc = bindGroup.descriptor;
+      const newDesc = this._processCommandArgs(bindGroupDesc);
+      const descStr = JSON.stringify(newDesc, undefined, 4);
+      new Widget("pre", bindGroupGrp.body, { text: descStr });
+
+      const self = this;
+      function getResourceType(resource) {
+        if (resource.__id !== undefined) {
+          const obj = self.database.getObject(resource.__id);
+          if (obj) {
+            return obj.constructor.name;
+          }
+        }
+        if (resource.buffer) {
+          return "Buffer";
+        }
+        return "<unknown resource type>";
+      }
+
+      for (const entry of bindGroupDesc.entries) {
+        const binding = entry.binding;
+        const resource = entry.resource;
+        const groupLabel = index !== undefined ? `Group ${index} ` : "";
+        const resourceGrp = new Collapsable(commandInfo, { collapsed, label: `${groupLabel}Binding ${binding}: ${getResourceType(resource)}` });
+        if (resource.__id !== undefined) {
+          const obj = this.database.getObject(resource.__id);
+          if (obj) {
+            if (obj instanceof Sampler) {
+              new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
+              new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
+            } else if (obj instanceof TextureView) {
+              const texture = obj.parent;
+              if (texture && texture.gpuTexture) {
+                const viewWidth = 256;
+                const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
+                const canvas = new Widget("canvas", resourceGrp.body, { style: "margin-left: 20px; margin-top: 10px;" });
+                canvas.element.width = viewWidth;
+                canvas.element.height = viewHeight;
+                const context = canvas.element.getContext('webgpu');
+                const dstFormat = navigator.gpu.getPreferredCanvasFormat();
+                context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
+                const canvasTexture = context.getCurrentTexture();
+                this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
+              } else {
+                new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
+                new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
+                if (texture) {
+                  new Div(resourceGrp.body, { text: `GPUTexture ID:${texture.id}` });
+                  const newDesc = this._processCommandArgs(texture.descriptor);
+                  if (newDesc.usage) {
+                    newDesc.usage = this._getFlagString(newDesc.usage, GPUTextureUsage);
+                  }
+                  new Widget("pre", resourceGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+                }
+              }
+            } else {
+              new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
+              new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
+            }
+          } else {
+            new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
+          }
+        } else {
+          if (resource.buffer) {
+            const bufferId = resource.buffer.__id;
+            const buffer = this.database.getObject(bufferId);
+            if (buffer) {
+              const bufferDesc = buffer.descriptor;
+              const newDesc = this._processCommandArgs(bufferDesc);
+              if (newDesc.usage) {
+                newDesc.usage = this._getFlagString(newDesc.usage, GPUBufferUsage);
+              }
+              new Widget("pre", resourceGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+            } else {
+              new Div(resourceGrp.body, { text: `Buffer ID:${bufferId}` });
+            }
+          } else {
+            new Widget("pre", resourceGrp.body, { text: JSON.stringify(resource, undefined, 4) });
+          }
+        }
+      }
+    }
+  }
+
+  _showCaptureCommandInfo_setPipeline(args, commandInfo, collapsed) {
+    const id = args[0].__id;
+    const pipeline = this.database.getObject(id);
+    if (pipeline) {
+      const pipelineGrp = new Collapsable(commandInfo, { collapsed, label: `Pipeline ID:${id}` });
+      const desc = pipeline.descriptor;
+      const newDesc = this._processCommandArgs(desc);
+      const descStr = JSON.stringify(newDesc, undefined, 4);
+      new Widget("pre", pipelineGrp.body, { text: descStr });
+
+      const vertexId = desc.vertex?.module?.__id;
+      const fragmentId = desc.fragment?.module?.__id;
+
+      if (vertexId !== undefined && vertexId === fragmentId) {
+        const module = this.database.getObject(vertexId);
+        if (module) {
+          const vertexEntry = desc.vertex?.entryPoint;
+          const fragmentEntry = desc.fragment?.entryPoint;
+          const grp = new Collapsable(commandInfo, { collapsed, label: `Module ID:${vertexId} Vertex: ${vertexEntry} Fragment: ${fragmentEntry}` });
+          const code = module.descriptor.code;
+          new Widget("pre", grp.body, { text: code });
+        }
+      } else {
+        if (vertexId !== undefined) {
+          const vertexModule = this.database.getObject(vertexId);
+          if (vertexModule) {
+            const vertexEntry = desc.vertex?.entryPoint;
+
+            const vertexGrp = new Collapsable(commandInfo, { collapsed, label: `Vertex Module ID:${vertexId} Entry: ${vertexEntry}` });
+            const code = vertexModule.descriptor.code;
+            new Widget("pre", vertexGrp.body, { text: code });
+          }
+        }
+        
+        if (fragmentId !== undefined) {
+          const fragmentModule = this.database.getObject(fragmentId);
+          if (fragmentModule) {
+            const fragmentEntry = desc.fragment?.entryPoint;
+            const fragmentGrp = new Collapsable(commandInfo, { collapsed, label: `Fragment Module ID:${fragmentId} Entry: ${fragmentEntry}` });
+            const code = fragmentModule.descriptor.code;
+            new Widget("pre", fragmentGrp.body, { text: code });
+          }
+        }
+      }
+
+      const computeId = desc.compute?.module?.__id;
+      if (computeId !== undefined) {
+        const computeModule = this.database.getObject(computeId);
+        if (computeModule) {
+          const computeEntry = desc.compute?.entryPoint;
+          const computeGrp = new Collapsable(commandInfo, { collapsed, label: `Compute Module ID:${computeId} Entry: ${computeEntry}` });
+          const code = computeModule.descriptor.code;
+          new Widget("pre", computeGrp.body, { text: code });
+        }
+      }
+    }
+  }
+
+  _showCaptureCommandInfo_writeBuffer(args, commandInfo) {
+    const id = args[0].__id;
+    const buffer = this.database.getObject(id);
+    if (buffer) {
+      const bufferGrp = new Collapsable(commandInfo, { label: `Buffer ID:${id}` });
+      const desc = buffer.descriptor;
+      const newDesc = this._processCommandArgs(desc);
+      if (newDesc.usage) {
+        newDesc.usage = this._getFlagString(newDesc.usage, GPUBufferUsage);
+      }
+      new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+    }
+  }
+
+  _showCaptureCommandInfo_setIndexBuffer(args, commandInfo, collapsed) {
+    const id = args[0].__id;
+    const buffer = this.database.getObject(id);
+    if (buffer) {
+      const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Index Buffer ID:${id}` });
+      const desc = buffer.descriptor;
+      const newDesc = this._processCommandArgs(desc);
+      if (newDesc.usage) {
+        newDesc.usage = this._getFlagString(newDesc.usage, GPUBufferUsage);
+      }
+      new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+    }
+  }
+
+  _showCaptureCommandInfo_setVertexBuffer(args, commandInfo, collapsed) {
+    const id = args[1]?.__id;
+    const buffer = this.database.getObject(id);
+    if (buffer) {
+      const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Vertex Buffer ID:${id}` });
+      const desc = buffer.descriptor;
+      const newDesc = this._processCommandArgs(desc);
+      if (newDesc.usage) {
+        newDesc.usage = this._getFlagString(newDesc.usage, GPUBufferUsage);
+      }
+      new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+    }
+  }
+
+  _showCaptureCommandInfo_drawIndexed(args, commandInfo, commandIndex, commands) {
+    let pipeline = null;
+    let vertexBuffer = null;
+    let indexBuffer = null;
+    let bindGroups = [];
+    for (let ci = commandIndex - 1; ci >= 0; --ci) {
+      const cmd = commands[ci];
+      if (cmd.method == "beginRenderPass") {
+        break;
+      }
+      if (cmd.method == "setIndexBuffer" && !indexBuffer) {
+        indexBuffer = cmd;
+      }
+      if (cmd.method == "setVertexBuffer" && !vertexBuffer) {
+        vertexBuffer = cmd;
+      }
+      if (cmd.method == "setPipeline" && !pipeline) {
+        pipeline = cmd;
+      }
+      if (cmd.method == "setBindGroup") {
+        const bindGroupIndex = cmd.args[0];
+        if (!bindGroups[bindGroupIndex]) {
+          bindGroups[bindGroupIndex] = cmd;
+        }
+      }
+    }
+
+    if (pipeline) {
+      this._showCaptureCommandInfo_setPipeline(pipeline.args, commandInfo, true);
+    }
+    if (indexBuffer) {
+      this._showCaptureCommandInfo_setIndexBuffer(indexBuffer.args, commandInfo, true);
+    }
+    if (vertexBuffer) {
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer.args, commandInfo, true);
+    }
+    for (const index in bindGroups) {
+      this._showCaptureCommandInfo_setBindGroup(bindGroups[index].args, commandInfo, index, true);
+    }
+  }
+
+  _showCaptureCommandInfo(name, method, args, commandInfo, commandIndex, commands) {
     commandInfo.html = "";
 
     new Div(commandInfo, { text: `${name} ${method}`, style: "background-color: #575; padding-left: 20px; line-height: 40px;" });
@@ -446,246 +741,19 @@ export class InspectorWindow extends Window {
     }
 
     if (method == "beginRenderPass") {
-      const colorAttachments = args[0].colorAttachments;
-      for (const i in colorAttachments) {
-        const attachment = colorAttachments[i];
-        const texture = attachment.view.__id
-            ? this.database.getObject(attachment.view.__id).parent
-            : attachment.view.__texture
-                ? this.database.getObject(attachment.view.__texture.__id)
-                : null;
-          const format = texture.descriptor.format;
-        if (texture && texture.gpuTexture) {
-          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
-
-          const viewWidth = 256;
-          const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
-          const canvas = new Widget("canvas", colorAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
-          canvas.element.width = viewWidth;
-          canvas.element.height = viewHeight;
-          const context = canvas.element.getContext('webgpu');
-          const dstFormat = navigator.gpu.getPreferredCanvasFormat();
-          context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
-          const canvasTexture = context.getCurrentTexture();
-          this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
-        } else {
-          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
-          new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
-          const texDesc = this._processCommandArgs(texture.descriptor);
-          if (texDesc.usage) {
-            texDesc.usage = this._getFlagString(texDesc.usage, GPUTextureUsage);
-          }
-          new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(texDesc, undefined, 4) });
-        }
-      }
-      const depthStencilAttachment = args[0].depthStencilAttachment;
-      if (depthStencilAttachment) {
-        const texture = depthStencilAttachment.view.__id
-            ? this.database.getObject(depthStencilAttachment.view.__id).parent
-            : depthStencilAttachment.view.__texture
-                ? this.database.getObject(depthStencilAttachment.view.__texture.__id)
-                : null;
-        if (texture && texture.gpuTexture) {
-          const format = texture.descriptor.format;
-          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment ${format}` });
-          const viewWidth = 256;
-          const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
-          const canvas = new Widget("canvas", depthStencilAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
-          canvas.element.width = viewWidth;
-          canvas.element.height = viewHeight;
-          const context = canvas.element.getContext('webgpu');
-          const dstFormat = navigator.gpu.getPreferredCanvasFormat();
-          context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
-          const canvasTexture = context.getCurrentTexture();
-          this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
-        } else {
-          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.descriptor?.format ?? "<unknown format>"}` });
-          new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
-          const texDesc = this._processCommandArgs(texture.descriptor);
-          if (texDesc.usage) {
-            texDesc.usage = this._getFlagString(texDesc.usage, GPUTextureUsage);
-          }
-          new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(texDesc, undefined, 4) });
-        }
-      }
+      this._showCaptureCommandInfo_beginRenderPass(args, commandInfo);
     } else if (method == "setBindGroup") {
-      const id = args[1].__id;
-      const bindGroup = this.database.getObject(id);
-      if (bindGroup) {
-        const bindGroupGrp = new Collapsable(commandInfo, { label: `BindGroup ${id}` });
-        const bindGroupDesc = bindGroup.descriptor;
-        const newDesc = this._processCommandArgs(bindGroupDesc);
-        const descStr = JSON.stringify(newDesc, undefined, 4);
-        new Widget("pre", bindGroupGrp.body, { text: descStr });
-
-        const self = this;
-        function getResourceType(resource) {
-          if (resource.__id !== undefined) {
-            const obj = self.database.getObject(resource.__id);
-            if (obj) {
-              return obj.constructor.name;
-            }
-          }
-          if (resource.buffer) {
-            return "Buffer";
-          }
-          return "<unknown resource type>";
-        }
-
-        for (const entry of bindGroupDesc.entries) {
-          const binding = entry.binding;
-          const resource = entry.resource;
-          const resourceGrp = new Collapsable(commandInfo, { label: `Binding ${binding}: ${getResourceType(resource)}` });
-          if (resource.__id !== undefined) {
-            const obj = this.database.getObject(resource.__id);
-            if (obj) {
-              if (obj instanceof Sampler) {
-                new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
-                new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
-              } else if (obj instanceof TextureView) {
-                const texture = obj.parent;
-                if (texture && texture.gpuTexture) {
-                  const viewWidth = 256;
-                  const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
-                  const canvas = new Widget("canvas", resourceGrp.body, { style: "margin-left: 20px; margin-top: 10px;" });
-                  canvas.element.width = viewWidth;
-                  canvas.element.height = viewHeight;
-                  const context = canvas.element.getContext('webgpu');
-                  const dstFormat = navigator.gpu.getPreferredCanvasFormat();
-                  context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
-                  const canvasTexture = context.getCurrentTexture();
-                  this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
-                } else {
-                  new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
-                  new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
-                  if (texture) {
-                    new Div(resourceGrp.body, { text: `GPUTexture ID:${texture.id}` });
-                    const newDesc = this._processCommandArgs(texture.descriptor);
-                    if (newDesc.usage) {
-                      newDesc.usage = this._getFlagString(newDesc.usage, GPUTextureUsage);
-                    }
-                    new Widget("pre", resourceGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
-                  }
-                }
-              } else {
-                new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
-                new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
-              }
-            } else {
-              new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
-            }
-          } else {
-            if (resource.buffer) {
-              const bufferId = resource.buffer.__id;
-              const buffer = this.database.getObject(bufferId);
-              if (buffer) {
-                const bufferDesc = buffer.descriptor;
-                const newDesc = this._processCommandArgs(bufferDesc);
-                if (newDesc.usage) {
-                  newDesc.usage = this._getFlagString(newDesc.usage, GPUBufferUsage);
-                }
-                new Widget("pre", resourceGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
-              } else {
-                new Div(resourceGrp.body, { text: `Buffer ID:${bufferId}` });
-              }
-            } else {
-              new Widget("pre", resourceGrp.body, { text: JSON.stringify(resource, undefined, 4) });
-            }
-          }
-        }
-      }
+      this._showCaptureCommandInfo_setBindGroup(args, commandInfo);
     } else if (method == "setPipeline") {
-      const id = args[0].__id;
-      const pipeline = this.database.getObject(id);
-      if (pipeline) {
-        const pipelineGrp = new Collapsable(commandInfo, { label: `Pipeline ID:${id}` });
-        const desc = pipeline.descriptor;
-        const newDesc = this._processCommandArgs(desc);
-        const descStr = JSON.stringify(newDesc, undefined, 4);
-        new Widget("pre", pipelineGrp.body, { text: descStr });
-
-        const vertexId = desc.vertex?.module?.__id;
-        const fragmentId = desc.fragment?.module?.__id;
-
-        if (vertexId !== undefined && vertexId === fragmentId) {
-          const module = this.database.getObject(vertexId);
-          if (module) {
-            const vertexEntry = desc.vertex?.entryPoint;
-            const fragmentEntry = desc.fragment?.entryPoint;
-            const grp = new Collapsable(commandInfo, { label: `Module ID:${vertexId} Vertex: ${vertexEntry} Fragment: ${fragmentEntry}` });
-            const code = module.descriptor.code;
-            new Widget("pre", grp.body, { text: code });
-          }
-        } else {
-          if (vertexId !== undefined) {
-            const vertexModule = this.database.getObject(vertexId);
-            if (vertexModule) {
-              const vertexEntry = desc.vertex?.entryPoint;
-
-              const vertexGrp = new Collapsable(commandInfo, { label: `Vertex Module ID:${vertexId} Entry: ${vertexEntry}` });
-              const code = vertexModule.descriptor.code;
-              new Widget("pre", vertexGrp.body, { text: code });
-            }
-          }
-          
-          if (fragmentId !== undefined) {
-            const fragmentModule = this.database.getObject(fragmentId);
-            if (fragmentModule) {
-              const fragmentEntry = desc.fragment?.entryPoint;
-              const fragmentGrp = new Collapsable(commandInfo, { label: `Fragment Module ID:${fragmentId} Entry: ${fragmentEntry}` });
-              const code = fragmentModule.descriptor.code;
-              new Widget("pre", fragmentGrp.body, { text: code });
-            }
-          }
-        }
-
-        const computeId = desc.compute?.module?.__id;
-        if (computeId !== undefined) {
-          const computeModule = this.database.getObject(computeId);
-          if (computeModule) {
-            const computeEntry = desc.compute?.entryPoint;
-            const computeGrp = new Collapsable(commandInfo, { label: `Compute Module ID:${computeId} Entry: ${computeEntry}` });
-            const code = computeModule.descriptor.code;
-            new Widget("pre", computeGrp.body, { text: code });
-          }
-        }
-      }
+      this._showCaptureCommandInfo_setPipeline(args, commandInfo);
     } else if (method == "writeBuffer") {
-      const id = args[0].__id;
-      const buffer = this.database.getObject(id);
-      if (buffer) {
-        const bufferGrp = new Collapsable(commandInfo, { label: `Buffer ID:${id}` });
-        const desc = buffer.descriptor;
-        const newDesc = this._processCommandArgs(desc);
-        if (newDesc.usage) {
-          newDesc.usage = this._getFlagString(newDesc.usage, GPUBufferUsage);
-        }
-        new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
-      }
+      this._showCaptureCommandInfo_writeBuffer(args, commandInfo);
     } else if (method == "setIndexBuffer") {
-      const id = args[0].__id;
-      const buffer = this.database.getObject(id);
-      if (buffer) {
-        const bufferGrp = new Collapsable(commandInfo, { label: `Buffer ID:${id}` });
-        const desc = buffer.descriptor;
-        const newDesc = this._processCommandArgs(desc);
-        if (newDesc.usage) {
-          newDesc.usage = this._getFlagString(newDesc.usage, GPUBufferUsage);
-        }
-        new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
-      }
+      this._showCaptureCommandInfo_setIndexBuffer(args, commandInfo);
     } else if (method == "setVertexBuffer") {
-      const id = args[1]?.__id;
-      const buffer = this.database.getObject(id);
-      if (buffer) {
-        const bufferGrp = new Collapsable(commandInfo, { label: `Buffer ID:${id}` });
-        const desc = buffer.descriptor;
-        const newDesc = this._processCommandArgs(desc);
-        if (newDesc.usage) {
-          newDesc.usage = this._getFlagString(newDesc.usage, GPUBufferUsage);
-        }
-        new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
-      }
+      this._showCaptureCommandInfo_setVertexBuffer(args, commandInfo);
+    } else if (method == "drawIndexed") {
+      this._showCaptureCommandInfo_drawIndexed(args, commandInfo, commandIndex, commands);
     }
   }
 
@@ -1024,16 +1092,6 @@ export class InspectorWindow extends Window {
       }
       if (object.gpuTexture) {
         this._createTexturePreview(object, descriptionBox);
-        /*const width = object.width;
-        const height = object.height;
-        const canvas = new Widget("canvas", descriptionBox);
-        canvas.element.width = width;
-        canvas.element.height = height;
-        const context = canvas.element.getContext('webgpu');
-        const dstFormat = navigator.gpu.getPreferredCanvasFormat();
-        context.configure({"device":this.device, "format":navigator.gpu.getPreferredCanvasFormat()});
-        const canvasTexture = context.getCurrentTexture();
-        this.textureUtils.blitTexture(object.gpuTexture.createView(), object.descriptor.format, canvasTexture.createView(), dstFormat);*/
       }
     }
   }
