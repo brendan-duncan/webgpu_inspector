@@ -54,7 +54,8 @@ import { TextureUtils } from "./src/texture_utils.js";
                 description: infoObj.description,
                 features: self._gpuToArray(adapter.features),
                 limits: self._gpuToObject(adapter.limits),
-                isFallbackAdapter: adapter.isFallbackAdapter
+                isFallbackAdapter: adapter.isFallbackAdapter,
+                wgslFeatures: self._gpuToArray(navigator.gpu.wgslLanguageFeatures)
               };
               window.postMessage({"action": "inspect_add_object", id, "type": "Adapter", "descriptor": JSON.stringify(info)}, "*");
             });
@@ -94,7 +95,6 @@ import { TextureUtils } from "./src/texture_utils.js";
         self._captureTextureRequest.delete(id);
       });
 
-      this._wrapObject(window.navigator.gpu);
       this._wrapCanvases();
 
       // Capture any dynamically created canvases
