@@ -18,7 +18,7 @@
   "devtools_page": "webgpu_inspector_devtools.html",
   "content_scripts": [
     {
-      "js": ["content-script.js"],
+      "js": ["content_script.js"],
       "matches": ["<all_urls>"],
       "run_at" : "document_start",
       "all_frames" : true
@@ -29,10 +29,11 @@
       "resources": [
         "webgpu_recorder.js",
         "webgpu_inspector.js",
-        "webgpu_inspector-panel.html",
+        "webgpu_inspector_panel.html",
         "src/texture_format_info.js",
         "src/texture_utils.js",
-        "src/base64.js"
+        "src/base64.js",
+        "src/message_port.js"
        ],
       "matches": ["*://*/*"]
     }

@@ -23,11 +23,10 @@ import { Adapter,
 import { Collapsable } from "./widget/collapsable.js";
 
 export class InspectorWindow extends Window {
-  constructor(database, port, tabId) {
+  constructor(database, port) {
     super();
 
     this.port = port;
-    this.tabId = tabId;
     this.database = database
     this.classList.add("main-window");
     this._selectedObject = null;
@@ -35,11 +34,6 @@ export class InspectorWindow extends Window {
 
     this.adapter = null;
     this.device = null;
-
-    const self = this;
-    this.port.onDisconnect.addListener(() => {
-      self.port = chrome.runtime.connect({ name: "webgpu-inspector-content" });
-    });
 
     this._tabs = new TabWidget(this);
 
@@ -98,7 +92,7 @@ export class InspectorWindow extends Window {
       try {
         self.database.reset();
         self._resetInspectorPanel();
-        self.port.postMessage({ action: "initialize_inspector", tabId: self.tabId });
+        self.port.postMessage({ action: "initialize_inspector" });
       } catch (e) {}
     } });
 
@@ -118,7 +112,7 @@ export class InspectorWindow extends Window {
 
     new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => { 
       try {
-        self.port.postMessage({ action: "inspector_capture", tabId: self.tabId });
+        self.port.postMessage({ action: "inspector_capture" });
       } catch (e) {}
     } });
 
@@ -137,7 +131,7 @@ export class InspectorWindow extends Window {
       const frames = self.recordFramesInput.value || 1;
       const filename = self.recordNameInput.value;
       self._recordingData.length = 0;
-      self.port.postMessage({ action: "initialize_recorder", frames, filename, tabId: self.tabId });
+      self.port.postMessage({ action: "initialize_recorder", frames, filename });
     }});
 
     new Span(recorderBar, { text: "Frames:", style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
@@ -150,7 +144,7 @@ export class InspectorWindow extends Window {
 
     this.recorderDataPanel = new Div(recorderPanel);
 
-    port.onMessage.addListener((message) => {
+    port.addListener((message) => {
       switch (message.action) {
         case "webgpu_recording": {
           if (message.index !== undefined && message.count !== undefined && message.data !== undefined) {
@@ -353,7 +347,6 @@ export class InspectorWindow extends Window {
     for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
       const command = commands[commandIndex];
       const className = command.class;
-      //const id = command.id;
       const method = command.method;
       const args = command.args;
       const name = `${className ?? "__"}`;
@@ -377,6 +370,14 @@ export class InspectorWindow extends Window {
       }
       new Span(cmd, { class: "capture_callnum", text: `${commandIndex}.` });
       new Span(cmd, { class: "capture_methodName", text: `${method}` });
+
+      if (method === "setViewport") {
+        new Span(cmd, { class: "capture_method_args", text: `${args[0]}, ${args[1]}, ${args[2]}, ${args[3]}, ${args[4]}, ${args[5]}` });
+      } else if (method === "setScissorRect") {
+        new Span(cmd, { class: "capture_method_args", text: `${args[0]}, ${args[1]}, ${args[2]}, ${args[3]}` });
+      } else if (method === "setBindGroup") {
+        new Span(cmd, { class: "capture_method_args", text: `${args[0]}` });
+      }
 
       const self = this;
       cmd.element.onclick = () => {
@@ -741,6 +742,81 @@ export class InspectorWindow extends Window {
     }
   }
 
+  _showCaptureCommandInfo_drawIndirect(args, commandInfo, commandIndex, commands) {
+    let pipeline = null;
+    let vertexBuffer = null;
+    let bindGroups = [];
+    for (let ci = commandIndex - 1; ci >= 0; --ci) {
+      const cmd = commands[ci];
+      if (cmd.method == "beginRenderPass") {
+        break;
+      }
+      if (cmd.method == "setVertexBuffer" && !vertexBuffer) {
+        vertexBuffer = cmd;
+      }
+      if (cmd.method == "setPipeline" && !pipeline) {
+        pipeline = cmd;
+      }
+      if (cmd.method == "setBindGroup") {
+        const bindGroupIndex = cmd.args[0];
+        if (!bindGroups[bindGroupIndex]) {
+          bindGroups[bindGroupIndex] = cmd;
+        }
+      }
+    }
+
+    if (pipeline) {
+      this._showCaptureCommandInfo_setPipeline(pipeline.args, commandInfo, true);
+    }
+    if (vertexBuffer) {
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer.args, commandInfo, true);
+    }
+    for (const index in bindGroups) {
+      this._showCaptureCommandInfo_setBindGroup(bindGroups[index].args, commandInfo, index, true);
+    }
+  }
+
+  _showCaptureCommandInfo_drawIndexedIndirect(args, commandInfo, commandIndex, commands) {
+    let pipeline = null;
+    let vertexBuffer = null;
+    let indexBuffer = null;
+    let bindGroups = [];
+    for (let ci = commandIndex - 1; ci >= 0; --ci) {
+      const cmd = commands[ci];
+      if (cmd.method == "beginRenderPass") {
+        break;
+      }
+      if (cmd.method == "setIndexBuffer" && !indexBuffer) {
+        indexBuffer = cmd;
+      }
+      if (cmd.method == "setVertexBuffer" && !vertexBuffer) {
+        vertexBuffer = cmd;
+      }
+      if (cmd.method == "setPipeline" && !pipeline) {
+        pipeline = cmd;
+      }
+      if (cmd.method == "setBindGroup") {
+        const bindGroupIndex = cmd.args[0];
+        if (!bindGroups[bindGroupIndex]) {
+          bindGroups[bindGroupIndex] = cmd;
+        }
+      }
+    }
+
+    if (pipeline) {
+      this._showCaptureCommandInfo_setPipeline(pipeline.args, commandInfo, true);
+    }
+    if (indexBuffer) {
+      this._showCaptureCommandInfo_setIndexBuffer(indexBuffer.args, commandInfo, true);
+    }
+    if (vertexBuffer) {
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer.args, commandInfo, true);
+    }
+    for (const index in bindGroups) {
+      this._showCaptureCommandInfo_setBindGroup(bindGroups[index].args, commandInfo, index, true);
+    }
+  }
+
   _showCaptureCommandInfo(name, method, args, commandInfo, commandIndex, commands) {
     commandInfo.html = "";
 
@@ -807,6 +883,10 @@ export class InspectorWindow extends Window {
       this._showCaptureCommandInfo_drawIndexed(args, commandInfo, commandIndex, commands);
     } else if (method == "draw") {
       this._showCaptureCommandInfo_draw(args, commandInfo, commandIndex, commands);
+    } else if (method == "drawIndirect") {
+      this._showCaptureCommandInfo_drawIndirect(args, commandInfo, commandIndex, commands);
+    } else if (method == "drawIndexedIndirect") {
+      this._showCaptureCommandInfo_drawIndexedIndirect(args, commandInfo, commandIndex, commands);
     }
   }
 
@@ -1137,7 +1217,7 @@ export class InspectorWindow extends Window {
     if (object instanceof Texture) {
       const self = this;
       const loadButton = new Button(descriptionBox, { label: "Load", callback: () => {
-        this.port.postMessage({ action: "inspect_request_texture", id: object.id, tabId: self.tabId });
+        self.port.postMessage({ action: "inspect_request_texture", id: object.id });
       }});
       if (TextureFormatInfo[object.descriptor.format]?.isDepthStencil) {
         loadButton.disabled = true;

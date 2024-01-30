@@ -7,11 +7,6 @@ import { TextureUtils } from "./src/texture_utils.js";
 
   class WebGPUInspector {
     constructor() {
-      if (!window.navigator.gpu) {
-        // No WebGPU support
-        return;
-      }
-
       this._frameCommands = [];
       this._frameData = [];
       this._frameRenderPassCount = 0;
@@ -33,7 +28,53 @@ import { TextureUtils } from "./src/texture_utils.js";
       this._captureTextureRequest = new Map();
       this._toDestroy = [];
 
+      if (!window.navigator.gpu) {
+        // No WebGPU support
+        return;
+      }
+
       const self = this;
+
+      // We can wrap navigator.gpu to intercept requestAdapter, but a lot of times the browser will start
+      // executing the page script before the inspector script, and will request the Adapter before we get
+      // a chance to wrap requestAdapter. Replacing GPUAdapter.requestDevice here, we can intercept that,
+      // then wrap the adapter it was called with after it was already created. Other methods will be
+      // dynamically wrapped at the object level rather than the prototype level.
+      GPUAdapter.prototype.requestDevice = (function(origFn) {
+        return async function(...args) {
+          const adapter = this;
+          if (adapter.__id === undefined) {
+            self._wrapObject(adapter);
+            const id = adapter.__id;
+            adapter.requestAdapterInfo().then((infoObj) => {
+              const info = {
+                vendor: infoObj.vendor,
+                architecture: infoObj.architecture,
+                device: infoObj.device,
+                description: infoObj.description,
+                features: self._gpuToArray(adapter.features),
+                limits: self._gpuToObject(adapter.limits),
+                isFallbackAdapter: adapter.isFallbackAdapter
+              };
+              window.postMessage({"action": "inspect_add_object", id, "type": "Adapter", "descriptor": JSON.stringify(info)}, "*");
+            });
+          }
+          const device = await origFn.call(this, ...args);
+          if (device && device.__id === undefined) {
+            self._wrapObject(device);
+            const descriptor = arguments[0] ?? {};
+            const id = device.__id;
+            const parent = adapter.__id;
+            descriptor["features"] = self._gpuToArray(device.features);
+            descriptor["limits"] = self._gpuToObject(device.limits);
+            self._trackedObjects.set(device.__id, device);
+            window.postMessage({"action": "inspect_add_object", id, parent, "type": "Device", "descriptor": JSON.stringify(descriptor)}, "*");
+          }
+          return device;
+        };
+      })(GPUAdapter.prototype.requestDevice);
+
+      
       // Try to track garbage collected WebGPU objects
       this._gcRegistry = new FinalizationRegistry((id) => {
         if (id >= 0) {
@@ -83,6 +124,7 @@ import { TextureUtils } from "./src/texture_utils.js";
         __requestAnimationFrame(callback);
       };
 
+      // Listen for messages from the content-script.
       window.addEventListener('message', (event) => {
         if (event.source !== window) {
           return;
@@ -382,9 +424,11 @@ import { TextureUtils } from "./src/texture_utils.js";
             if (texture) {
               const commandEncoder = object.__commandEncoder;
               if (commandEncoder) {
+                self.__skipRecord = true;
                 commandEncoder.copyTextureToTexture({ texture },
                   { texture: texture.__canvasTexture },
                   [texture.width, texture.height, 1]);
+                  self.__skipRecord = false;
               }
             }
           }
@@ -587,9 +631,20 @@ import { TextureUtils } from "./src/texture_utils.js";
       } else if (method == "createRenderPipeline") {
         const id = result.__id;
         window.postMessage({"action": "inspect_add_object", id, parent,"type": "RenderPipeline", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+        // There are cases when the shader modules used by the render pipeline will be garbage collected, and we won't be able to inspect them after that.
+        // Hang on to the shader modules used in the descriptor by attaching them to the pipeline.
+        if (args[0].vertex?.module) {
+          result.__vertexModule = args[0].vertex?.module;
+        }
+        if (args[0].fragment?.module) {
+          result.__fragmentModule = args[0].fragment?.module;
+        }
       } else if (method == "createComputePipeline") {
         const id = result.__id;
         window.postMessage({"action": "inspect_add_object", id, parent,"type": "ComputePipeline", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
+        if (args[0].compute?.module) {
+          result.__computeModule = args[0].compute?.module;
+        }
       } else if (method == "beginRenderPass") {
         window.postMessage({"action": "inspect_begin_render_pass", "descriptor": this._stringifyDescriptor(arg[0])}, "*");
         this._frameRenderPassCount++;

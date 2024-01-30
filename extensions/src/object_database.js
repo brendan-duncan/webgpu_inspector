@@ -180,7 +180,7 @@ export class ObjectDatabase {
     this.totalBufferMemory = 0;
 
     const self = this;
-    port.onMessage.addListener((message) => {
+    port.addListener((message) => {
       switch (message.action) {
         case "inspect_begin_frame":
           self._beginFrame();
