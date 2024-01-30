@@ -30,7 +30,6 @@
         "webgpu_recorder.js",
         "webgpu_inspector.js",
         "webgpu_inspector-panel.html",
-        "webgpu_inspector.css",
         "src/texture_format_info.js",
         "src/texture_utils.js",
         "src/base64.js"
