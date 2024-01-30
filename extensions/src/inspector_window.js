@@ -323,6 +323,11 @@ export class InspectorWindow extends Window {
         const element = document.getElementById(`RenderPass_${passId}`);
         if (element) {
           element.scrollIntoView();
+
+          const beginElement = document.getElementById(`RenderPass_${passId}_begin`);
+          if (beginElement) {
+            beginElement.click();
+          }
         }
       };
     }
@@ -367,6 +372,9 @@ export class InspectorWindow extends Window {
       }
 
       const cmd = new Div(currentPass, { class: cmdType });
+      if (method == "beginRenderPass") {
+        cmd.element.id = `RenderPass_${renderPassIndex - 1}_begin`;
+      }
       new Span(cmd, { class: "capture_callnum", text: `${commandIndex}.` });
       new Span(cmd, { class: "capture_methodName", text: `${method}` });
 
@@ -483,12 +491,21 @@ export class InspectorWindow extends Window {
         }
         return "<unknown resource type>";
       }
+      function getResourceId(resource) {
+        if (resource.__id !== undefined) {
+          return resource.__id;
+        }
+        if (resource.buffer?.__id !== undefined) {
+          return resource.buffer.__id;
+        }
+        return 0;
+      }
 
       for (const entry of bindGroupDesc.entries) {
         const binding = entry.binding;
         const resource = entry.resource;
         const groupLabel = index !== undefined ? `Group ${index} ` : "";
-        const resourceGrp = new Collapsable(commandInfo, { collapsed, label: `${groupLabel}Binding ${binding}: ${getResourceType(resource)}` });
+        const resourceGrp = new Collapsable(commandInfo, { collapsed, label: `${groupLabel}Binding ${binding}: ${getResourceType(resource)} ID:${getResourceId(resource)}` });
         if (resource.__id !== undefined) {
           const obj = this.database.getObject(resource.__id);
           if (obj) {
