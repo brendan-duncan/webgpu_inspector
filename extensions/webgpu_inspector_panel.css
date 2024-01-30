@@ -15,7 +15,6 @@
 body {
     background-color: var(--bg-color);
     color: var(--fg-color);
-    user-select: none;
 }
 
 #head {
@@ -114,8 +113,6 @@ body {
   max-height: 300px;
   overflow: auto;
   margin: 0px;
-  -webkit-user-select: none; /* Safari */
-  user-select: none; /* Standard syntax */
 }
 
 .selected {
@@ -129,13 +126,11 @@ body {
   color: rgb(200, 200, 200);
   padding: 10px;
   font-size: 14px;
-  -webkit-user-select: none; /* Safari */
-  user-select: none; /* Standard syntax */
 }
 
 li:hover {
     background-color: #777;
-    cursor: pointer;
+    cursor: default;
 }
 
 .panel_bar {
@@ -148,8 +143,6 @@ li:hover {
   padding-top: 5px;
   color: #ccc;
   cursor: grab;
-  -webkit-user-select: none; /* Safari */
-  user-select: none; /* Standard syntax */
 }
 
 .inspector_panel_bar {
@@ -162,8 +155,6 @@ li:hover {
   padding-top: 5px;
   color: #ccc;
   cursor: grab;
-  -webkit-user-select: none; /* Safari */
-  user-select: none; /* Standard syntax */
 }
 
 .inspector_panel_content {
@@ -179,18 +170,12 @@ li:hover {
   padding-top: 10px;
   padding-left: 10px;
   vertical-align: top;
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
 }
 
 .titlebar {
   width: 100%;
   height: 40px;
   background-color: #1a1a1a;
-  user-select: none;
-  -moz-user-select: none;
-  -webkit-user-select: none;
   overflow: hidden;
   display: flex;
   flex-direction: row;
@@ -479,9 +464,6 @@ span {
   color: #aaa;
   font-size: 14px;
   white-space: nowrap;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  user-select: none;
   cursor: default;
 }
 
@@ -666,54 +648,6 @@ span {
   border-top: 1px solid #000;
   border-bottom: 1px solid #3f3f3f;
   border-radius: 3px;
-}
-
-/* panel */
-.panel {
-  background: #2d2d2d;
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  cursor: default;
-  position: relative;
-}
-
-.panel_toolbar {
-  background-color: #222;
-  border: 1px solid #000;
-  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.8);
-  z-index: 100;
-}
-
-.panel_bar {
-  position: relative;
-  top: 0px;
-  left: 0px;
-  background-color: #333;
-  height: 20px;
-  line-height: 16px;
-  overflow: hidden;
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  cursor: default;
-  -webkit-box-shadow: inset 0px -10px 10px -8px #111;
-  box-shadow: inset 0px -10px 10px -8px #111;
-}
-
-.panel_bar_label {
-  margin-left: 16px;
-  max-width: 40%;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: rgba(187, 187, 187, 1);
-  font-family: Arial, sans-serif;
-  font-size: 11px;
-  user-select: none;
-  -moz-user-select: none;
-  -webkit-user-select: none;
-  cursor: default;
 }
 
 /* scrollbar */
@@ -962,6 +896,7 @@ ol::-webkit-scrollbar-thumb:hover {
   padding-left: 20px;
   font-size: 14px;
   line-height: 28px;
+  cursor: default;
 }
 
 .capture_frame {
@@ -970,6 +905,7 @@ ol::-webkit-scrollbar-thumb:hover {
   height: calc(100% - 10px);
   scrollbar-width: thin;
   scrollbar-color: var(--thumbBG) var(--scrollbarBG);
+  cursor: default;
 }
 
 .capture_commandInfo {
