@@ -371,11 +371,29 @@ export class InspectorWindow extends Window {
       new Span(cmd, { class: "capture_methodName", text: `${method}` });
 
       if (method === "setViewport") {
-        new Span(cmd, { class: "capture_method_args", text: `${args[0]}, ${args[1]}, ${args[2]}, ${args[3]}, ${args[4]}, ${args[5]}` });
+        new Span(cmd, { class: "capture_method_args", text: `x:${args[0]} y:${args[1]} w:${args[2]} h:${args[3]} minZ:${args[4]} maxZ:${args[5]}` });
       } else if (method === "setScissorRect") {
-        new Span(cmd, { class: "capture_method_args", text: `${args[0]}, ${args[1]}, ${args[2]}, ${args[3]}` });
+        new Span(cmd, { class: "capture_method_args", text: `x:${args[0]} y:${args[1]} w:${args[2]} h:${args[3]}` });
       } else if (method === "setBindGroup") {
-        new Span(cmd, { class: "capture_method_args", text: `${args[0]}` });
+        new Span(cmd, { class: "capture_method_args", text: `index:${args[0]} bindGroup:${args[1].__id}` });
+      } else if (method === "writeBuffer") {
+        const data = args[2];
+        if (data.constructor === String) {
+          const s = data.split(" ")[2];
+          new Span(cmd, { class: "capture_method_args", text: `buffer:${args[0].__id} offset:${args[1]} data:${s} Bytes` });
+        } else {
+          new Span(cmd, { class: "capture_method_args", text: `buffer:${args[0].__id} offset:${args[1]} data:${args[2].length} Bytes` });
+        }
+      } else if (method === "setPipeline") {
+        new Span(cmd, { class: "capture_method_args", text: `renderPipeline:${args[0].__id}` });
+      } else if (method === "setVertexBuffer") {
+        new Span(cmd, { class: "capture_method_args", text: `slot:${args[0]} buffer:${args[1].__id} offset:${args[2] ?? 0}` });
+      } else if (method === "setIndexBuffer") {
+        new Span(cmd, { class: "capture_method_args", text: `buffer:${args[0].__id} indexFormat:${args[1]} offset:${args[2] ?? 0}` });
+      } else if (method === "drawIndexed") {
+        new Span(cmd, { class: "capture_method_args", text: `indexCount:${args[0]} instanceCount:${args[1]} firstIndex:${args[2]} baseVertex:${args[3]} firstInstance:${args[4]}` });
+      } else if (method === "draw") {
+        new Span(cmd, { class: "capture_method_args", text: `vertexCount:${args[0]} instanceCount:${args[1]} firstVertex:${args[2]} firstInstance:${args[4]}` });
       }
 
       const self = this;
