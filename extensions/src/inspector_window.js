@@ -839,6 +839,34 @@ export class InspectorWindow extends Window {
     }
   }
 
+  _showCaptureCommandInfo_dispatchWorkgroups(args, commandInfo, commandIndex, commands) {
+    let pipeline = null;
+    let vertexBuffer = null;
+    let bindGroups = [];
+    for (let ci = commandIndex - 1; ci >= 0; --ci) {
+      const cmd = commands[ci];
+      if (cmd.method == "beginComputePass") {
+        break;
+      }
+      if (cmd.method == "setPipeline" && !pipeline) {
+        pipeline = cmd;
+      }
+      if (cmd.method == "setBindGroup") {
+        const bindGroupIndex = cmd.args[0];
+        if (!bindGroups[bindGroupIndex]) {
+          bindGroups[bindGroupIndex] = cmd;
+        }
+      }
+    }
+
+    if (pipeline) {
+      this._showCaptureCommandInfo_setPipeline(pipeline.args, commandInfo, true);
+    }
+    for (const index in bindGroups) {
+      this._showCaptureCommandInfo_setBindGroup(bindGroups[index].args, commandInfo, index, true);
+    }
+  }
+
   _showCaptureCommandInfo(name, method, args, commandInfo, commandIndex, commands) {
     commandInfo.html = "";
 
@@ -909,6 +937,8 @@ export class InspectorWindow extends Window {
       this._showCaptureCommandInfo_drawIndirect(args, commandInfo, commandIndex, commands);
     } else if (method == "drawIndexedIndirect") {
       this._showCaptureCommandInfo_drawIndexedIndirect(args, commandInfo, commandIndex, commands);
+    } else if (method == "dispatchWorkgroups") {
+      this._showCaptureCommandInfo_dispatchWorkgroups(args, commandInfo, commandIndex, commands);
     }
   }
 
