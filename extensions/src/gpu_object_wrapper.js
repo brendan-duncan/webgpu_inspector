@@ -35,6 +35,9 @@ export class GPUObjectWrapper {
   }
 
   _wrapGPUTypes() {
+    GPU.prototype.requestAdapter = this._wrapMethod("requestAdapter", GPU.prototype.requestAdapter);
+    GPU.prototype.getPreferredFormat = this._wrapMethod("getPreferredFormat", GPU.prototype.getPreferredFormat);
+
     GPUAdapter.prototype.requestDevice = this._wrapMethod("requestDevice", GPUAdapter.prototype.requestDevice);
 
     GPUDevice.prototype.destroy = this._wrapMethod("destroy", GPUDevice.prototype.destroy);

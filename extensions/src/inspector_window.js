@@ -135,7 +135,7 @@ export class InspectorWindow extends Window {
     }});
 
     new Span(recorderBar, { text: "Frames:", style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
-    this.recordFramesInput = new Input(recorderBar, { id: "record_frames", type: "number", value: 100 });
+    this.recordFramesInput = new Input(recorderBar, { id: "record_frames", type: "number", value: 10 });
 
     new Span(recorderBar, { text: "Name:", style: "margin-left: 20px; margin-right: 10px;  vertical-align: middle;" });
     this.recordNameInput = new Input(recorderBar, { id: "record_frames", type: "text", value: "webgpu_record" });
