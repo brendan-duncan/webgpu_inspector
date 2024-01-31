@@ -456,8 +456,9 @@ class WebGPURecorder {
   }
 
   _wrapMethod(object, method) {
-    if (WebGPURecorder._skipMethods.has(method))
+    if (WebGPURecorder._skipMethods.has(method)) {
       return;
+    }
     let origMethod = object[method];
     let self = this;
     object[method] = function () {
@@ -470,7 +471,7 @@ class WebGPURecorder {
           for (let buffer of object.__mappedRanges) {
             // Make a copy of the mappedRange buffer data as it is when unmap
             // is called.
-            let cacheIndex = self._getDataCache(buffer, 0, buffer.byteLength, buffer);
+            const cacheIndex = self._getDataCache(buffer, 0, buffer.byteLength, buffer);
             // Set the mappedRange buffer data in the recording to what is in the buffer
             // at the time unmap is called.
             self._recordLine(`new Uint8Array(${self._getObjectVariable(buffer)}).set(D[${cacheIndex}]);`, null);

@@ -121,6 +121,8 @@ import { TextureUtils } from "./src/texture_utils.js";
           for (let i = 0; i < colorAttachments.length; ++i) {
             const attachment = colorAttachments[i];
             if (attachment.view) {
+              // If there's a resolveTarget, get that instead of the regular view, which will
+              // have MSAA and can't be read directly.
               const texture = attachment.view.__texture;
               if (texture) {
                 if (texture.__isCanvasTexture) {
@@ -679,7 +681,7 @@ import { TextureUtils } from "./src/texture_utils.js";
       if (method == "beginRenderPass") {
         if (args[0]?.colorAttachments?.length > 0) {
           for (const attachment of args[0].colorAttachments) {
-            const captureTextureView = attachment.view;
+            const captureTextureView = attachment.resolveTarget ?? attachment.view;
             this._captureTextureViews.push(captureTextureView);
           }
           this._captureCommandEncoder = object;
