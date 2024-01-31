@@ -23,7 +23,7 @@ import { TextureUtils } from "./src/texture_utils.js";
       this._frameStartTime = -1;
       this._timeSinceLastFrame = 0;
       this._maxFramesToRecord = 1000;
-      this._recordRequest = false;
+      this._captureRequest = false;
       this.__skipRecord = false;
       this._trackedObjects = new Map();
       this._captureTextureRequest = new Map();
@@ -370,9 +370,7 @@ import { TextureUtils } from "./src/texture_utils.js";
 
       if (sessionStorage.getItem(webgpuInspectorCaptureFrameKey)) {
         sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
-        this._recordRequest = true;
-      } else {
-        this._recordRequest = false;
+        this._captureRequest = true;
       }
       this._frameData.length = 0;
       this._frameCommands.length = 0;
@@ -382,11 +380,11 @@ import { TextureUtils } from "./src/texture_utils.js";
 
     _frameEnd() {
       window.postMessage({"action": "inspect_end_frame"}, "*");
-      this._recordRequest = false;
 
       if (this._frameCommands.length) {
         window.postMessage({"action": "inspect_capture_frame_results", "frame": this._frameIndex, "commands": this._frameCommands}, "*");
         this._frameCommands.length = 0;
+        this._captureRequest = false;
       }
     }
 
@@ -606,7 +604,7 @@ import { TextureUtils } from "./src/texture_utils.js";
         }
       }
 
-      if (this._recordRequest) {
+      if (this._captureRequest) {
         this._captureCommand(object, method, args);
       }
     }
@@ -826,7 +824,7 @@ import { TextureUtils } from "./src/texture_utils.js";
     }
 
     _addCommandData(data) {
-      if (this._recordRequest) {
+      if (this._captureRequest) {
         const id = this._frameData.length;
         this._frameData.push(data);
         return id;
