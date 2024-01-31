@@ -1,4 +1,4 @@
-import { decodeBase64 } from "./base64.js";
+import { decodeBase64, decodeDataUrl } from "./base64.js";
 import { Button } from "./widget/button.js";
 import { Div } from "./widget/div.js";
 import { Input } from "./widget/input.js";
@@ -212,35 +212,34 @@ export class InspectorWindow extends Window {
       object.isImageDataLoaded = false;
     }
 
-    object.loadedImageDataChunks[index] = 1;
-
     if (!(object.imageData instanceof Uint8Array) || (object.imageData.length != size)) {
       object.imageData = new Uint8Array(size);
     }
 
-    const data = decodeBase64(chunk);
-
-    try {
-      object.imageData.set(data, offset);
-    } catch (e) {
-      console.log("TEXTURE IMAGE DATA SET ERROR", id, passId, offset, data.length, object.imageData.length);
-      object.loadedImageDataChunks.length = 0;
-      object.isImageDataLoaded = false;
-    }
-
-    let loaded = true;
-    for (let i = 0; i < count; ++i) {
-      if (!object.loadedImageDataChunks[i]) {
-        loaded = false;
-        break;
+    decodeDataUrl(chunk).then((data) => {
+      object.loadedImageDataChunks[index] = 1;
+      try {
+        object.imageData.set(data, offset);
+      } catch (e) {
+        console.log("TEXTURE IMAGE DATA SET ERROR", id, passId, offset, data.length, object.imageData.length);
+        object.loadedImageDataChunks.length = 0;
+        object.isImageDataLoaded = false;
       }
-    }
-    object.isImageDataLoaded = loaded;
-
-    if (object.isImageDataLoaded) {
-      object.loadedImageDataChunks.length = 0;
-      this._createTexture(object, passId);
-    }
+  
+      let loaded = true;
+      for (let i = 0; i < count; ++i) {
+        if (!object.loadedImageDataChunks[i]) {
+          loaded = false;
+          break;
+        }
+      }
+      object.isImageDataLoaded = loaded;
+  
+      if (object.isImageDataLoaded) {
+        object.loadedImageDataChunks.length = 0;
+        this._createTexture(object, passId);
+      }
+    });
   }
 
   _createTexture(texture, passId) {

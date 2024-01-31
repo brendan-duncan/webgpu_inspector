@@ -1,4 +1,4 @@
-import { encodeBase64 } from "./src/base64.js";
+import { encodeBase64, encodeDataUrl } from "./src/base64.js";
 import { GPUObjectTypes, GPUObjectWrapper } from "./src/gpu_object_wrapper.js";
 import { TextureFormatInfo } from "./src/texture_format_info.js";
 import { TextureUtils } from "./src/texture_utils.js";
@@ -727,18 +727,18 @@ import { TextureUtils } from "./src/texture_utils.js";
         const chunkSize = Math.min(maxChunkSize, size - offset);
         const chunk = data.slice(offset, offset + chunkSize);
 
-        const chunkData = encodeBase64(chunk);
-
-        window.postMessage({
-          "action": "inspect_capture_texture_data",
-          id,
-          passId,
-          offset,
-          size,
-          index: i,
-          count: numChunks,
-          chunk: chunkData
-        }, "*");
+        encodeDataUrl(chunk).then((chunkData) => {
+          window.postMessage({
+            "action": "inspect_capture_texture_data",
+            id,
+            passId,
+            offset,
+            size,
+            index: i,
+            count: numChunks,
+            chunk: chunkData
+          }, "*");
+        });        
       }
     }
 
