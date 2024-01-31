@@ -266,7 +266,7 @@ import { TextureUtils } from "./src/texture_utils.js";
         }
       }
 
-      this._recordCommand(object, method, result, args[0]);
+      this._recordCommand(object, method, result, args);
     }
 
     _onAsyncResolve(object, method, args, id, result) {
@@ -523,7 +523,7 @@ import { TextureUtils } from "./src/texture_utils.js";
       return s;
     }
 
-    _recordCommand(object, method, result, ...args) {
+    _recordCommand(object, method, result, args) {
       const parent = object.__id;
       if (method == "destroy") {
         const id = object.__id;
@@ -612,7 +612,7 @@ import { TextureUtils } from "./src/texture_utils.js";
     }
 
     _captureCommand(object, method, args) {
-      const a = [...args];
+      const a = args;
       if (a.length === 1 && a[0] === undefined) {
         a.length = 0;
       }

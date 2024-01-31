@@ -125,8 +125,10 @@ export class GPUObjectWrapper {
 
   _wrapMethod(method, origMethod) {
     const self = this;
-    return function (...args) {
+    return function () {
       const object = this;
+
+      const args = [...arguments];
 
       // Allow the arguments to be modified before the method is called.
       self.onPreCall.emit(object, method, args);
