@@ -23,11 +23,6 @@ class WebGPURecorder {
     this._frameVariables = {};
     this._arrayCache = [];
     this._totalData = 0;
-
-    if (!navigator.gpu) {
-      return;
-    }
-
     this._isRecording = true;
     this._initalized = true;
     this._initializeObjects = [];
@@ -38,18 +33,27 @@ class WebGPURecorder {
     this._unusedBuffers = new Set();
     this._dataCacheObjects = [];
 
+    // Check if the browser supports WebGPU
+    if (!navigator.gpu) {
+      return;
+    }
+
+    this._gpuWrapper = new GPUObjectWrapper(this);
+    this._gpuWrapper.onPromiseResolve = this._onAsyncResolve.bind(this);
+    this._gpuWrapper.onPreCall = this._preMethodCall.bind(this);
+    this._gpuWrapper.onPostCall = this._onMethodCall.bind(this);
+
     this._registerObject(navigator.gpu);
-    this._wrapObject(navigator.gpu);
     this._recordLine(`${this._getObjectVariable(navigator.gpu)} = navigator.gpu;`, null);
 
     this._wrapCanvases();
 
-    let self = this;
+    const self = this;
 
     // Capture any dynamically created canvases
-    let __createElement = document.createElement;
+    const __createElement = document.createElement;
     document.createElement = function (type) {
-      let element = __createElement.call(document, type);
+      const element = __createElement.call(document, type);
       if (type == "canvas") {
         self._wrapCanvas(element);
       }
@@ -63,7 +67,7 @@ class WebGPURecorder {
     // we would need to keep track of things like shader creation/deletion that can happen
     // at arbitrary frames prior to the start, for any objects used within that recorded
     // duration.
-    let __requestAnimationFrame = window.requestAnimationFrame;
+    const __requestAnimationFrame = window.requestAnimationFrame;
     window.requestAnimationFrame = function (cb) {
       function callback() {
         self._frameStart();
@@ -72,6 +76,10 @@ class WebGPURecorder {
       }
       __requestAnimationFrame(callback);
     };
+  }
+
+  getNextId() {
+    return this._objectIndex++;
   }
 
   // private:
@@ -144,14 +152,16 @@ class WebGPURecorder {
         }
       }
     }
-    let s =
-      `<!DOCTYPE html>
+    let s =`
+    <!DOCTYPE html>
     <html>
         <body style="text-align: center;">
             <canvas id="#webgpu" width=${this.config.canvasWidth} height=${this.config.canvasHeight}></canvas>
             <script>
     let D = new Array(${this._arrayCache.length});
     async function main() {
+      await loadData();
+
       let canvas = document.getElementById("#webgpu");
       let frameLabel = document.createElement("div");
       frameLabel.style = "position: absolute; top: 10px; left: 10px; font-size: 24pt; color: #f00;";
@@ -163,11 +173,11 @@ class WebGPURecorder {
         this._removeUnusedCommands(this._frameObjects[fi], this._frameCommands[fi], unusedObjects);
         this._frameCommands[fi] = this._frameCommands[fi].filter((cmd) => cmd != "");
       }
-      s +=
-        `async function f${fi}() {
-                    ${this._getVariableDeclarations(fi)}
-                    ${this._frameCommands[fi].join("\n  ")}
-                }\n`;
+      s += `
+      async function f${fi}() {
+          ${this._getVariableDeclarations(fi)}
+          ${this._frameCommands[fi].join("\n  ")}
+      }\n`;
     }
     s += "    let frames=[";
     for (let fi = 0, fl = this._frameCommands.length; fi < fl; ++fi) {
@@ -204,111 +214,52 @@ class WebGPURecorder {
         }
     }
     
-    function decodeBase64(str) {
-        const base64codes = [
-            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 62, 255, 255, 255, 63,
-            52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 255, 255, 255, 0, 255, 255,
-            255, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
-            15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 255, 255, 255, 255, 255,
-            255, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-            41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51
-        ];
-    
-        function getBase64Code(charCode) {
-            if (charCode >= base64codes.length) {
-                throw new Error("Unable to parse base64 string.");
-            }
-            const code = base64codes[charCode];
-            if (code === 255) {
-                throw new Error("Unable to parse base64 string.");
-            }
-            return code;
-        }
-    
-        if (str.length % 4 !== 0) {
-            throw new Error("Unable to parse base64 string.");
-        }
-    
-        const index = str.indexOf("=");
-        if (index !== -1 && index < str.length - 2) {
-            throw new Error("Unable to parse base64 string.");
-        }
-    
-        let missingOctets = str.endsWith("==") ? 2 : str.endsWith("=") ? 1 : 0;
-        let n = str.length;
-        let result = new Uint8Array(3 * (n / 4));
-        for (let i = 0, j = 0; i < n; i += 4, j += 3) {
-            let buffer =
-                getBase64Code(str.charCodeAt(i)) << 18 |
-                getBase64Code(str.charCodeAt(i + 1)) << 12 |
-                getBase64Code(str.charCodeAt(i + 2)) << 6 |
-                getBase64Code(str.charCodeAt(i + 3));
-            result[j] = buffer >> 16;
-            result[j + 1] = (buffer >> 8) & 0xFF;
-            result[j + 2] = buffer & 0xFF;
-        }
-        return result.subarray(0, result.length - missingOctets);
-    }
-    
-    function B64ToA(s, type, length) {
-        let x = decodeBase64(s);
+    async function B64ToA(s, type, length) {
+        const res = await fetch(s);
+        const x = new Uint8Array(await res.arrayBuffer());
         if (type == "Uint32Array")
             return new Uint32Array(x.buffer, 0, x.length/4);
         return new Uint8Array(x.buffer, 0, x.length);
-    }\n`;
+    }
+    
+    async function loadData() {\n`;
+    let promises = [];
     for (let ai = 0; ai < this._arrayCache.length; ++ai) {
       let a = this._arrayCache[ai];
-      let b64 = this._arrayToBase64(a.array);
-      s += `D[${ai}] = B64ToA("${b64}", "${a.type}", ${a.length});\n`;
+      //let b64 = this._arrayToBase64(a.array);
+      promises.push(new Promise((resolve) => {
+        this._encodeDataUrl(a.array).then((b64) => {
+          s += `D[${ai}] = await B64ToA("${b64}", "${a.type}", ${a.length});\n`;
+          resolve();
+        });
+      }));
     }
 
-    s += `
-    main();
-            </script>
-        </body>
-    </html>\n`;
-    this._downloadFile(s, (this.config.exportName || 'WebGpuRecord') + ".html");
+    Promise.all(promises).then(() => {
+      s += `
+      }
+      main();
+              </script>
+          </body>
+      </html>\n`;
+      this._downloadFile(s, (this.config.exportName || "WebGpuRecord") + ".html");
+    });   
   }
 
-  _encodeBase64(bytes) {
-    const _b2a = [
-      "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
-      "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
-      "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
-      "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
-      "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "+", "/"
-    ];
-
-    let result = '', i, l = bytes.length;
-    for (i = 2; i < l; i += 3) {
-      result += _b2a[bytes[i - 2] >> 2];
-      result += _b2a[((bytes[i - 2] & 0x03) << 4) | (bytes[i - 1] >> 4)];
-      result += _b2a[((bytes[i - 1] & 0x0F) << 2) | (bytes[i] >> 6)];
-      result += _b2a[bytes[i] & 0x3F];
-    }
-    if (i === l + 1) {
-      result += _b2a[bytes[i - 2] >> 2];
-      result += _b2a[(bytes[i - 2] & 0x03) << 4];
-      result += "==";
-    }
-    if (i === l) {
-      result += _b2a[bytes[i - 2] >> 2];
-      result += _b2a[((bytes[i - 2] & 0x03) << 4) | (bytes[i - 1] >> 4)];
-      result += _b2a[(bytes[i - 1] & 0x0F) << 2];
-      result += "=";
-    }
-    return result;
-  }
-
-  _arrayToBase64(a) {
-    return this._encodeBase64(new Uint8Array(a.buffer, a.byteOffset, a.byteLength));
+  async _encodeDataUrl(a, type = "application/octet-stream") {
+    const bytes = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+    return await new Promise((resolve, reject) => {
+      const reader = Object.assign(new FileReader(), {
+        onload: () => resolve(reader.result),
+        onerror: () => reject(reader.error),
+      });
+      reader.readAsDataURL(new File([bytes], "", { type }));
+    });
   }
 
   _downloadFile(data, filename) {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([data], { type: 'text/html' }));
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([data], { type: "text/html" }));
     link.download = filename;
     document.body.appendChild(link);
     link.click();
@@ -344,7 +295,7 @@ class WebGPURecorder {
     let __getContext = c.getContext;
     c.getContext = function (a1, a2) {
       let ret = __getContext.call(c, a1, a2);
-      if (a1 == 'webgpu') {
+      if (a1 == "webgpu") {
         if (ret) {
           self._wrapContext(ret);
         }
@@ -354,15 +305,15 @@ class WebGPURecorder {
   }
 
   _wrapCanvases() {
-    let canvases = document.getElementsByTagName('canvas');
+    const canvases = document.getElementsByTagName("canvas");
     for (let i = 0; i < canvases.length; ++i) {
-      let c = canvases[i];
+      const c = canvases[i];
       this._wrapCanvas(c);
     }
   }
 
   _registerObject(object) {
-    let id = this._objectIndex++;
+    const id = this.getNextId(object);
     object.__id = id;
     object.__frame = this._frameIndex;
   }
@@ -372,8 +323,8 @@ class WebGPURecorder {
   }
 
   _removeVariable(name) {
-    for (let f in this._frameVariables) {
-      let fs = this._frameVariables[f];
+    for (const f in this._frameVariables) {
+      const fs = this._frameVariables[f];
       fs.delete(name);
     }
   }
@@ -383,16 +334,19 @@ class WebGPURecorder {
   }
 
   _getVariableDeclarations(frame) {
-    let s = this._frameVariables[frame];
-    if (!s.size) return "";
+    const s = this._frameVariables[frame];
+    if (!s.size) {
+      return "";
+    }
     return `let ${[...s].join(",")};`;
   }
 
   _getObjectVariable(object) {
-    if (object.__id === undefined)
+    if (object.__id === undefined) {
       this._registerObject(object);
+    }
 
-    let name = `x${object.constructor.name.replace(/^GPU/, '')}${(object.__id || 0)}`;
+    const name = `x${object.constructor.name.replace(/^GPU/, "")}${(object.__id || 0)}`;
 
     if (this._frameIndex != object.__frame) {
       if (!this._isFrameVariable(-1, name)) {
@@ -407,39 +361,7 @@ class WebGPURecorder {
   }
 
   _wrapContext(ctx) {
-    this._recordLine(`${this._getObjectVariable(ctx)} = canvas.getContext('webgpu');`, null);
-    this._wrapObject(ctx);
-  }
-
-  _objectHasMethods(object) {
-    for (let m in object) {
-      if (typeof (object[m]) == "function" && !WebGPURecorder._skipMethods.has(m)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  _wrapObject(object) {
-    for (let m in object) {
-      if (typeof (object[m]) == "function") {
-        if (!WebGPURecorder._skipMethods.has(m)) {
-          if (WebGPURecorder._asyncMethods.has(m))
-            this._wrapAsync(object, m);
-          else
-            this._wrapMethod(object, m);
-        }
-      } else if (typeof (object[m]) == "object") {
-        let o = object[m];
-        if (!o || o.__id)
-          continue;
-        let hasMethod = this._objectHasMethods(o);
-        if (!o.__id && hasMethod) {
-          this._recordLine(`${this._getObjectVariable(o)} = ${this._getObjectVariable(object)}['${m}'];`, object);
-          this._wrapObject(o);
-        }
-      }
-    }
+    this._recordLine(`${this._getObjectVariable(ctx)} = canvas.getContext("webgpu");`, null);
   }
 
   _getBytesFromImageSource(src) {
@@ -452,83 +374,67 @@ class WebGPURecorder {
     return data.data;
   }
 
-  _wrapMethod(object, method) {
-    if (WebGPURecorder._skipMethods.has(method)) {
-      return;
+  _onAsyncResolve(object, method, args, id, result) {
+    if (method === "requestDevice") {
+      const adapter = object;
+      if (adapter.__id === undefined) {
+        this._recordCommand(true, navigator.gpu, "requestAdapter", adapter, []);
+      }
     }
-    let origMethod = object[method];
-    let self = this;
-    object[method] = function () {
-      // We can't track every change made to a mappedRange buffer since that all happens 
-      // outside the scope of what WebGPU is in control of. So we keep track of all the
-      // mapped buffer ranges, and when unmap is called, we record the content of their data
-      // so that they have their correct data for the unmap.
-      if (method == "unmap") {
-        if (object.__mappedRanges) {
-          for (let buffer of object.__mappedRanges) {
-            // Make a copy of the mappedRange buffer data as it is when unmap
-            // is called.
-            const cacheIndex = self._getDataCache(buffer, 0, buffer.byteLength, buffer);
-            // Set the mappedRange buffer data in the recording to what is in the buffer
-            // at the time unmap is called.
-            self._recordLine(`new Uint8Array(${self._getObjectVariable(buffer)}).set(D[${cacheIndex}]);`, null);
-          }
-          delete object.__mappedRanges;
-        }
-      } else if (method == "copyExternalImageToTexture") {
-        origMethod.call(object, ...arguments);
 
-        // copyExternalImageToTexture uses ImageBitmap (or canvas or offscreenCanvas) as
-        // its source, which we can't record. ConvertcopyExternalImageToTexture to
-        // writeTexture, and record the bytes from the ImageBitmap. To do that, we need
-        // to draw the ImageBitmap into a canvas, and record the bytes from that.
-        // A very heavy process, but not sure what else to do.
-        const bytes = self._getBytesFromImageSource(arguments[0].source);
-        const bytesPerPixel = 4;
-        const bytesPerRow = arguments[0].source.width * bytesPerPixel;
-        const texture = arguments[1]["texture"];
-        const cacheIndex = self._getDataCache(bytes, bytes.byteOffset, bytes.byteLength, texture);
-        self._recordLine(`${self._getObjectVariable(object)}.writeTexture(${self._stringifyObject(method, arguments[1])}, D[${cacheIndex}], {bytesPerRow:${bytesPerRow}}, ${self._stringifyObject(method, arguments[2])});`, object);
-
-        return;
-      } else if (method == "getCurrentTexture") {
-        self._recordLine(`setCanvasSize(${self._getObjectVariable(object)}.canvas, ${object.canvas.width}, ${object.canvas.height})`, null);
-      }
-
-      let result = origMethod.call(object, ...arguments);
-      self._recordCommand(false, object, method, result, arguments);
-
-      // Keep track of the mapped ranges for the buffer object. The recording will set their
-      // data when unmap is called.
-      if (method == "getMappedRange") {
-        if (!object.__mappedRanges)
-          object.__mappedRanges = [];
-        object.__mappedRanges.push(result);
-      } else if (method == "submit") {
-        // just to give the file some structure
-        self._recordLine('', null);
-      }
-      return result;
-    };
+    this._recordCommand(true, object, method, result, args);
   }
 
-  _wrapAsync(object, method) {
-    let origMethod = object[method];
-    let self = this;
-    object[method] = function () {
-      let promise = origMethod.call(object, ...arguments);
-      let wrappedPromise = new Promise((resolve) => {
-        promise.then((result) => {
-          if (result && result.__id) {
-            resolve(result);
-            return;
-          }
-          self._recordCommand(true, object, method, result, arguments);
-          resolve(result);
-        });
-      });
-      return wrappedPromise;
-    };
+  _preMethodCall(object, method, args) {
+    // We can"t track every change made to a mappedRange buffer since that all happens 
+    // outside the scope of what WebGPU is in control of. So we keep track of all the
+    // mapped buffer ranges, and when unmap is called, we record the content of their data
+    // so that they have their correct data for the unmap.
+    if (method === "unmap") {
+      if (object.__mappedRanges) {
+        for (const buffer of object.__mappedRanges) {
+          // Make a copy of the mappedRange buffer data as it is when unmap
+          // is called.
+          const cacheIndex = this._getDataCache(buffer, 0, buffer.byteLength, buffer);
+          // Set the mappedRange buffer data in the recording to what is in the buffer
+          // at the time unmap is called.
+          this._recordLine(`new Uint8Array(${this._getObjectVariable(buffer)}).set(D[${cacheIndex}]);`, null);
+        }
+        delete object.__mappedRanges;
+      }
+    } else if (method === "getCurrentTexture") {
+      this._recordLine(`setCanvasSize(${this._getObjectVariable(object)}.canvas, ${object.canvas.width}, ${object.canvas.height})`, null);
+    }
+  }
+
+  _onMethodCall(object, method, args, result) {
+    if (method == "copyExternalImageToTexture") {
+      // copyExternalImageToTexture uses ImageBitmap (or canvas or offscreenCanvas) as
+      // its source, which we can"t record. ConvertcopyExternalImageToTexture to
+      // writeTexture, and record the bytes from the ImageBitmap. To do that, we need
+      // to draw the ImageBitmap into a canvas, and record the bytes from that.
+      // A very heavy process, but not sure what else to do.
+      const bytes = this._getBytesFromImageSource(args[0].source);
+      const bytesPerPixel = 4;
+      const bytesPerRow = args[0].source.width * bytesPerPixel;
+      const texture = args[1]["texture"];
+      const cacheIndex = this._getDataCache(bytes, bytes.byteOffset, bytes.byteLength, texture);
+      this._recordLine(`${this._getObjectVariable(object)}.writeTexture(${this._stringifyObject(method, args[1])}, D[${cacheIndex}], {bytesPerRow:${bytesPerRow}}, ${this._stringifyObject(method, args[2])});`, object);
+    } else {
+      this._recordCommand(false, object, method, result, args);
+    }
+
+    if (method == "getMappedRange") {
+      // Keep track of the mapped ranges for the buffer object. The recording will set their
+      // data when unmap is called.
+      if (!object.__mappedRanges) {
+        object.__mappedRanges = [];
+      }
+      object.__mappedRanges.push(result);
+    } else if (method == "submit") {
+      // just to give the file some structure
+      this._recordLine("", null);
+    }
   }
 
   _stringifyObject(method, object) {
@@ -605,14 +511,17 @@ class WebGPURecorder {
     let self = this;
 
     function _heapAccessShiftForWebGPUHeap(heap) {
-      if (!heap.BYTES_PER_ELEMENT) return 0;
+      if (!heap.BYTES_PER_ELEMENT) {
+        return 0;
+      }
       return 31 - Math.clz32(heap.BYTES_PER_ELEMENT);
     }
 
     function _compareCacheData(ai, view) {
-      let a = self._arrayCache[ai].array;
-      if (a.length != view.length)
+      const a = self._arrayCache[ai].array;
+      if (a.length != view.length) {
         return false;
+      }
       for (let i = 0, l = a.length; i < l; ++i) {
         if (a[i] != view[i]) {
           return false;
@@ -621,15 +530,15 @@ class WebGPURecorder {
       return true;
     }
 
-    let byteOffset = (heap.byteOffset ?? 0) + ((offset ?? 0) << _heapAccessShiftForWebGPUHeap(heap));
-    let byteLength = length === undefined ? heap.byteLength : (length << _heapAccessShiftForWebGPUHeap(heap));
+    const byteOffset = (heap.byteOffset ?? 0) + ((offset ?? 0) << _heapAccessShiftForWebGPUHeap(heap));
+    const byteLength = length === undefined ? heap.byteLength : (length << _heapAccessShiftForWebGPUHeap(heap));
 
     this._totalData += byteLength;
-    let view = new Uint8Array(heap.buffer ?? heap, byteOffset, byteLength);
+    const view = new Uint8Array(heap.buffer ?? heap, byteOffset, byteLength);
 
     let cacheIndex = -1;
     for (let ai = 0; ai < self._arrayCache.length; ++ai) {
-      let c = self._arrayCache[ai];
+      const c = self._arrayCache[ai];
       if (c.length == length) {
         if (_compareCacheData(ai, view)) {
           cacheIndex = ai;
@@ -640,7 +549,7 @@ class WebGPURecorder {
 
     if (cacheIndex == -1) {
       cacheIndex = self._arrayCache.length;
-      let arrayCopy = Uint8Array.from(view);
+      const arrayCopy = Uint8Array.from(view);
       self._arrayCache.push({
         length: byteLength,
         type: heap.constructor === "ArrayBuffer" ? Uint8Array : heap.constructor.name,
@@ -659,52 +568,53 @@ class WebGPURecorder {
   }
 
   _stringifyArgs(method, args) {
-    if (args.length == 0 || (args.length == 1 && args[0] === undefined))
+    if (args.length == 0 || (args.length == 1 && args[0] === undefined)) {
       return "";
+    }
 
-    args = Array.from(args);
+    args = [...args];
 
     // In order to capture buffer data, we need to know the offset and size of the data,
     // which are arguments of specific methods. So we need to special case those methods to
     // properly capture the buffer data passed to them.
     if (method == "writeBuffer") {
-      let buffer = args[2];
-      let offset = args[3];
-      let size = args[4];
-      let cacheIndex = this._getDataCache(buffer, offset, size, buffer);
+      const buffer = args[2];
+      const offset = args[3];
+      const size = args[4];
+      const cacheIndex = this._getDataCache(buffer, offset, size, buffer);
       args[2] = { __data: cacheIndex };
       args[3] = 0;
     } else if (method == "writeTexture") {
-      let texture = args[0].texture;
-      let buffer = args[1];
-      let bytesPerRow = args[2].bytesPerRow;
-      let width = args[3].width || args[3][0];
-      let { blockWidth, blockHeight, bytesPerBlock } = WebGPURecorder._formatInfo[texture.format];
-      let widthInBlocks = width / blockWidth;
-      let rows = args[2].rowsPerImage || (args[3].height || args[3][1] || 1) / blockHeight;
-      let layers = args[3].depthOrArrayLayers || args[3][2] || 1;
-      let totalRows = rows * layers;
-      let size = totalRows > 0
+      const texture = args[0].texture;
+      const buffer = args[1];
+      const bytesPerRow = args[2].bytesPerRow;
+      const width = args[3].width || args[3][0];
+      const { blockWidth, blockHeight, bytesPerBlock } = WebGPURecorder._formatInfo[texture.format];
+      const widthInBlocks = width / blockWidth;
+      const rows = args[2].rowsPerImage || (args[3].height || args[3][1] || 1) / blockHeight;
+      const layers = args[3].depthOrArrayLayers || args[3][2] || 1;
+      const totalRows = rows * layers;
+      const size = totalRows > 0
         ? bytesPerRow * (totalRows - 1) + widthInBlocks * bytesPerBlock
         : 0;
-      let offset = args[2].offset;
+        const offset = args[2].offset;
       // offset is in bytes but source can be any TypedArray
       // getDataCache assumes offset is in TypedArray.BYTES_PER_ELEMENT size
       // so view the data as bytes.
-      let cacheIndex = this._getDataCache(new Uint8Array(buffer.buffer || buffer, buffer.byteOffset, buffer.byteLength), offset, size, texture);
+      const cacheIndex = this._getDataCache(new Uint8Array(buffer.buffer || buffer, buffer.byteOffset, buffer.byteLength), offset, size, texture);
       args[1] = { __data: cacheIndex };
       args[2].offset = 0;
     } else if (method == "setBindGroup") {
       if (args.length == 5) {
-        let buffer = args[2];
-        let offset = args[3];
-        let size = args[4];
-        let offsets = this._getDataCache(buffer, offset, size, buffer);
+        const buffer = args[2];
+        const offset = args[3];
+        const size = args[4];
+        const offsets = this._getDataCache(buffer, offset, size, buffer);
         args[2] = { __data: offsets };
         args.length = 3;
       } else if (args.length == 3) {
-        let buffer = args[2];
-        let offsets = this._getDataCache(buffer, 0, buffer.length, buffer);
+        const buffer = args[2];
+        const offsets = this._getDataCache(buffer, 0, buffer.length, buffer);
         args[2] = { __data: offsets };
         args.length = 3;
       }
@@ -770,7 +680,7 @@ class WebGPURecorder {
       }
     }
 
-    let argStrings = [];
+    const argStrings = [];
     for (let a of args) {
       if (a === undefined) {
         argStrings.push("undefined");
@@ -818,7 +728,7 @@ class WebGPURecorder {
       async = async ? "await " : "";
 
       let obj = object;
-      let hasAdapter = !!this._adapter;
+      const hasAdapter = !!this._adapter;
 
       if (!hasAdapter && method == "requestAdapter") {
         this._adapter = result;
@@ -854,23 +764,26 @@ class WebGPURecorder {
         this._recordLine("\n", null);
       }
 
-      if (result && typeof (result) == "object") {
-        this._wrapObject(result);
-      }
-
       if (!hasAdapter && method == "requestAdapter") {
         const adapter = this._getObjectVariable(result);
         this._recordLine(`const requiredFeatures = [];
-                    for (const x of ${adapter}.features) {
-                        requiredFeatures.push(x);
-                    }`, obj);
+          for (const x of ${adapter}.features) {
+              requiredFeatures.push(x);
+          }`, obj);
         this._recordLine(`const requiredLimits = {};
-                    const exclude = new Set(["minSubgroupSize", "maxSubgroupSize"]);
-                    for (const x in ${adapter}.limits) {
-                      if (!exclude.has(x)) {
-                        requiredLimits[x] = ${adapter}.limits[x];
-                      }
-                    }`, obj);
+          const exclude = new Set(["minSubgroupSize", "maxSubgroupSize"]);
+          for (const x in ${adapter}.limits) {
+            if (!exclude.has(x)) {
+              requiredLimits[x] = ${adapter}.limits[x];
+            }
+          }`, obj);
+      }
+
+      if (result instanceof GPUDevice) {
+        const q = result.queue;
+        if (q.__id === undefined) {
+          this._recordLine(`${this._getObjectVariable(q)} = ${this._getObjectVariable(result)}.queue;`, result);
+        }
       }
     }
   }
@@ -995,7 +908,174 @@ WebGPURecorder._formatInfo = {
   "astc-12x12-unorm-srgb": { "blockWidth": 12, "blockHeight": 12, "bytesPerBlock": 16 },
 };
 
+export const GPUObjectTypes = new Set([
+  GPUAdapter,
+  GPUDevice,
+  GPUBuffer,
+  GPUTexture,
+  GPUTextureView,
+  GPUExternalTexture,
+  GPUSampler,
+  GPUBindGroupLayout,
+  GPUBindGroup,
+  GPUPipelineLayout,
+  GPUShaderModule,
+  GPUComputePipeline,
+  GPURenderPipeline,
+  GPUCommandBuffer,
+  GPUCommandEncoder,
+  GPUComputePassEncoder,
+  GPURenderPassEncoder,
+  GPURenderBundle,
+  GPUQueue,
+  GPUQuerySet,
+  GPUCanvasContext
+]);
 
+export class GPUObjectWrapper {
+  constructor(idGenerator) {
+    this._idGenerator = idGenerator;
+    this.onPreCall = null;
+    this.onPostCall = null;
+    this.onPromise = null;
+    this.onPromiseResolve = null;
+    this._wrapGPUTypes();
+  }
+
+  _wrapGPUTypes() {
+    GPU.prototype.requestAdapter = this._wrapMethod("requestAdapter", GPU.prototype.requestAdapter);
+    GPU.prototype.getPreferredFormat = this._wrapMethod("getPreferredFormat", GPU.prototype.getPreferredFormat);
+
+    GPUAdapter.prototype.requestDevice = this._wrapMethod("requestDevice", GPUAdapter.prototype.requestDevice);
+
+    GPUDevice.prototype.destroy = this._wrapMethod("destroy", GPUDevice.prototype.destroy);
+    GPUDevice.prototype.createBuffer = this._wrapMethod("createBuffer", GPUDevice.prototype.createBuffer);
+    GPUDevice.prototype.createTexture = this._wrapMethod("createTexture", GPUDevice.prototype.createTexture);
+    GPUDevice.prototype.createSampler = this._wrapMethod("createSampler", GPUDevice.prototype.createSampler);
+    GPUDevice.prototype.importExternalTexture = this._wrapMethod("importExternalTexture", GPUDevice.prototype.importExternalTexture);
+    GPUDevice.prototype.createBindGroupLayout = this._wrapMethod("createBindGroupLayout", GPUDevice.prototype.createBindGroupLayout);
+    GPUDevice.prototype.createPipelineLayout = this._wrapMethod("createPipelineLayout", GPUDevice.prototype.createPipelineLayout);
+    GPUDevice.prototype.createBindGroup = this._wrapMethod("createBindGroup", GPUDevice.prototype.createBindGroup);
+    GPUDevice.prototype.createShaderModule = this._wrapMethod("createShaderModule", GPUDevice.prototype.createShaderModule);
+    GPUDevice.prototype.createComputePipeline = this._wrapMethod("createComputePipeline", GPUDevice.prototype.createComputePipeline);
+    GPUDevice.prototype.createRenderPipeline = this._wrapMethod("createRenderPipeline", GPUDevice.prototype.createRenderPipeline);
+    GPUDevice.prototype.createComputePipelineAsync = this._wrapMethod("createComputePipelineAsync", GPUDevice.prototype.createComputePipelineAsync);
+    GPUDevice.prototype.createRenderPipelineAsync = this._wrapMethod("createRenderPipelineAsync", GPUDevice.prototype.createRenderPipelineAsync);
+    GPUDevice.prototype.createCommandEncoder = this._wrapMethod("createCommandEncoder", GPUDevice.prototype.createCommandEncoder);
+    GPUDevice.prototype.createRenderBundleEncoder = this._wrapMethod("createRenderBundleEncoder", GPUDevice.prototype.createRenderBundleEncoder);
+    GPUDevice.prototype.createQuerySet = this._wrapMethod("createQuerySet", GPUDevice.prototype.createQuerySet);
+
+    GPUBuffer.prototype.mapAsync = this._wrapMethod("mapAsync", GPUBuffer.prototype.mapAsync);
+    GPUBuffer.prototype.getMappedRange = this._wrapMethod("getMappedRange", GPUBuffer.prototype.getMappedRange);
+    GPUBuffer.prototype.unmap = this._wrapMethod("unmap", GPUBuffer.prototype.unmap);
+    GPUBuffer.prototype.destroy = this._wrapMethod("destroy", GPUBuffer.prototype.destroy);
+
+    GPUTexture.prototype.createView = this._wrapMethod("createView", GPUTexture.prototype.createView);
+    GPUTexture.prototype.destroy = this._wrapMethod("destroy", GPUTexture.prototype.destroy);
+
+    GPUShaderModule.prototype.getCompilationInfo = this._wrapMethod("getCompilationInfo", GPUShaderModule.prototype.getCompilationInfo);
+
+    GPUComputePipeline.prototype.getBindGroupLayout = this._wrapMethod("getBindGroupLayout", GPUComputePipeline.prototype.getBindGroupLayout);
+
+    GPURenderPipeline.prototype.getBindGroupLayout = this._wrapMethod("getBindGroupLayout", GPURenderPipeline.prototype.getBindGroupLayout);
+
+    GPUCommandEncoder.prototype.beginRenderPass = this._wrapMethod("beginRenderPass", GPUCommandEncoder.prototype.beginRenderPass);
+    GPUCommandEncoder.prototype.beginComputePass = this._wrapMethod("beginComputePass", GPUCommandEncoder.prototype.beginComputePass);
+    GPUCommandEncoder.prototype.copyBufferToBuffer = this._wrapMethod("copyBufferToBuffer", GPUCommandEncoder.prototype.copyBufferToBuffer);
+    GPUCommandEncoder.prototype.copyBufferToTexture = this._wrapMethod("copyBufferToTexture", GPUCommandEncoder.prototype.copyBufferToTexture);
+    GPUCommandEncoder.prototype.copyTextureToBuffer = this._wrapMethod("copyTextureToBuffer", GPUCommandEncoder.prototype.copyTextureToBuffer);
+    GPUCommandEncoder.prototype.copyTextureToTexture = this._wrapMethod("copyTextureToTexture", GPUCommandEncoder.prototype.copyTextureToTexture);
+    GPUCommandEncoder.prototype.clearBuffer = this._wrapMethod("clearBuffer", GPUCommandEncoder.prototype.clearBuffer);
+    GPUCommandEncoder.prototype.resolveQuerySet = this._wrapMethod("resolveQuerySet", GPUCommandEncoder.prototype.resolveQuerySet);
+    GPUCommandEncoder.prototype.finish = this._wrapMethod("finish", GPUCommandEncoder.prototype.finish);
+    GPUCommandEncoder.prototype.pushDebugGroup = this._wrapMethod("pushDebugGroup", GPUCommandEncoder.prototype.pushDebugGroup);
+    GPUCommandEncoder.prototype.popDebugGroup = this._wrapMethod("popDebugGroup", GPUCommandEncoder.prototype.popDebugGroup);
+    GPUCommandEncoder.prototype.insertDebugMarker = this._wrapMethod("insertDebugMarker", GPUCommandEncoder.prototype.insertDebugMarker);
+
+    GPUComputePassEncoder.prototype.setPipeline = this._wrapMethod("setPipeline", GPUComputePassEncoder.prototype.setPipeline);
+    GPUComputePassEncoder.prototype.dispatchWorkgroups = this._wrapMethod("dispatchWorkgroups", GPUComputePassEncoder.prototype.dispatchWorkgroups);
+    GPUComputePassEncoder.prototype.dispatchWorkgroupsIndirect = this._wrapMethod("dispatchWorkgroupsIndirect", GPUComputePassEncoder.prototype.dispatchWorkgroupsIndirect);
+    GPUComputePassEncoder.prototype.end = this._wrapMethod("end", GPUComputePassEncoder.prototype.end);
+    GPUComputePassEncoder.prototype.setBindGroup = this._wrapMethod("setBindGroup", GPUComputePassEncoder.prototype.setBindGroup);
+    GPUComputePassEncoder.prototype.setBindGroup = this._wrapMethod("setBindGroup", GPUComputePassEncoder.prototype.setBindGroup);
+    GPUComputePassEncoder.prototype.pushDebugGroup = this._wrapMethod("pushDebugGroup", GPUComputePassEncoder.prototype.pushDebugGroup);
+    GPUComputePassEncoder.prototype.popDebugGroup = this._wrapMethod("popDebugGroup", GPUComputePassEncoder.prototype.popDebugGroup);
+    GPUComputePassEncoder.prototype.insertDebugMarker = this._wrapMethod("insertDebugMarker", GPUComputePassEncoder.prototype.insertDebugMarker);
+
+    GPURenderPassEncoder.prototype.setViewport = this._wrapMethod("setViewport", GPURenderPassEncoder.prototype.setViewport);
+    GPURenderPassEncoder.prototype.setScissorRect = this._wrapMethod("setScissorRect", GPURenderPassEncoder.prototype.setScissorRect);
+    GPURenderPassEncoder.prototype.setBlendConstant = this._wrapMethod("setBlendConstant", GPURenderPassEncoder.prototype.setBlendConstant);
+    GPURenderPassEncoder.prototype.setStencilReference = this._wrapMethod("setStencilReference", GPURenderPassEncoder.prototype.setStencilReference);
+    GPURenderPassEncoder.prototype.beginOcclusionQuery = this._wrapMethod("beginOcclusionQuery", GPURenderPassEncoder.prototype.beginOcclusionQuery);
+    GPURenderPassEncoder.prototype.endOcclusionQuery = this._wrapMethod("endOcclusionQuery", GPURenderPassEncoder.prototype.endOcclusionQuery);
+    GPURenderPassEncoder.prototype.executeBundles = this._wrapMethod("executeBundles", GPURenderPassEncoder.prototype.executeBundles);
+    GPURenderPassEncoder.prototype.end = this._wrapMethod("end", GPURenderPassEncoder.prototype.end);
+    GPURenderPassEncoder.prototype.setPipeline = this._wrapMethod("setPipeline", GPURenderPassEncoder.prototype.setPipeline);
+    GPURenderPassEncoder.prototype.setIndexBuffer = this._wrapMethod("setIndexBuffer", GPURenderPassEncoder.prototype.setIndexBuffer);
+    GPURenderPassEncoder.prototype.setVertexBuffer = this._wrapMethod("setVertexBuffer", GPURenderPassEncoder.prototype.setVertexBuffer);
+    GPURenderPassEncoder.prototype.draw = this._wrapMethod("draw", GPURenderPassEncoder.prototype.draw);
+    GPURenderPassEncoder.prototype.drawIndexed = this._wrapMethod("drawIndexed", GPURenderPassEncoder.prototype.drawIndexed);
+    GPURenderPassEncoder.prototype.drawIndirect = this._wrapMethod("drawIndirect", GPURenderPassEncoder.prototype.drawIndirect);
+    GPURenderPassEncoder.prototype.drawIndexedIndirect = this._wrapMethod("drawIndexedIndirect", GPURenderPassEncoder.prototype.drawIndexedIndirect);
+    GPURenderPassEncoder.prototype.setBindGroup = this._wrapMethod("setBindGroup", GPURenderPassEncoder.prototype.setBindGroup);
+    GPURenderPassEncoder.prototype.pushDebugGroup = this._wrapMethod("pushDebugGroup", GPURenderPassEncoder.prototype.pushDebugGroup);
+    GPURenderPassEncoder.prototype.popDebugGroup = this._wrapMethod("popDebugGroup", GPURenderPassEncoder.prototype.popDebugGroup);
+    GPURenderPassEncoder.prototype.insertDebugMarker = this._wrapMethod("insertDebugMarker", GPURenderPassEncoder.prototype.insertDebugMarker);
+
+    GPUQueue.prototype.submit = this._wrapMethod("submit", GPUQueue.prototype.submit);
+    GPUQueue.prototype.writeBuffer = this._wrapMethod("writeBuffer", GPUQueue.prototype.writeBuffer);
+    GPUQueue.prototype.writeTexture = this._wrapMethod("writeTexture", GPUQueue.prototype.writeTexture);
+    GPUQueue.prototype.copyExternalImageToTexture = this._wrapMethod("copyExternalImageToTexture", GPUQueue.prototype.copyExternalImageToTexture);
+
+    GPUQuerySet.prototype.destroy = this._wrapMethod("destroy", GPUQuerySet.prototype.destroy);
+
+    GPUCanvasContext.prototype.configure = this._wrapMethod("configure", GPUCanvasContext.prototype.configure);
+    GPUCanvasContext.prototype.unconfigure = this._wrapMethod("unconfigure", GPUCanvasContext.prototype.unconfigure);
+    GPUCanvasContext.prototype.getCurrentTexture = this._wrapMethod("getCurrentTexture", GPUCanvasContext.prototype.getCurrentTexture);
+  }
+
+  _wrapMethod(method, origMethod) {
+    const self = this;
+    return function () {
+      const object = this;
+
+      const args = [...arguments];
+
+      // Allow the arguments to be modified before the method is called.
+      if (self.onPreCall) {
+        self.onPreCall(object, method, args);
+      }
+
+      // Call the original method
+      const result = origMethod.call(object, ...args);
+
+      // If it was an async method it will have returned a Promise
+      if (result instanceof Promise) {
+        const id = self._idGenerator.getNextId(object);
+        if (self.onPromise) {
+          self.onPromise(object, method, args, id);
+        }
+        const promise = result;
+        const wrappedPromise = new Promise((resolve) => {
+          promise.then((result) => {
+            if (self.onPromiseResolve) {
+              self.onPromiseResolve(object, method, args, id, result);
+            }
+            resolve(result);
+          });
+        });
+        return wrappedPromise;
+      }
+
+      // Otherwise it"s a synchronous method
+      if (self.onPostCall) {
+        self.onPostCall(object, method, args, result);
+      }
+
+      return result;
+    };
+  }
+}
 
 
 function main() {
