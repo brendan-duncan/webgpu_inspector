@@ -359,7 +359,8 @@ export class InspectorWindow extends Window {
       }
 
       const cmdType = ["capture_command"];
-      if (method == "draw" || method == "drawIndexed" || method == "drawIndirect" || method == "drawIndexedIndirect") {
+      if (method == "draw" || method == "drawIndexed" || method == "drawIndirect" || method == "drawIndexedIndirect" ||
+          method == "dispatchWorkgroups" || method == "dispatchWorkgroupsIndirect") {
         cmdType.push("capture_drawcall");
       }
 
@@ -393,7 +394,11 @@ export class InspectorWindow extends Window {
       } else if (method === "drawIndexed") {
         new Span(cmd, { class: "capture_method_args", text: `indexCount:${args[0]} instanceCount:${args[1]} firstIndex:${args[2]} baseVertex:${args[3]} firstInstance:${args[4]}` });
       } else if (method === "draw") {
-        new Span(cmd, { class: "capture_method_args", text: `vertexCount:${args[0]} instanceCount:${args[1]} firstVertex:${args[2]} firstInstance:${args[4]}` });
+        new Span(cmd, { class: "capture_method_args", text: `vertexCount:${args[0]} instanceCount:${args[1]} firstVertex:${args[2]} firstInstance:${args[3]}` });
+      } else if (method === "dispatchWorkgroups") {
+        new Span(cmd, { class: "capture_method_args", text: `countX:${args[0]} countY:${args[1]} countZ:${args[2]}` });
+      } else if (method === "dispatchWorkgroupsIndirect") {
+        new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${args[0].__id} offset:${args[1]}` });
       }
 
       const self = this;
@@ -1346,8 +1351,8 @@ InspectorWindow._commandArgs = {
   "createTexture": ["descriptor"],
   "createView": ["descriptor"],
   "destroy": [],
-  "dispatchWorkgroup": ["workgroupCountX", "workgroupCountY", "workgroupCountZ"],
-  "dispatchWorkgroupIndirect": ["indirectBuffer", "indirectOffset"],
+  "dispatchWorkgroups": ["workgroupCountX", "workgroupCountY", "workgroupCountZ"],
+  "dispatchWorkgroupsIndirect": ["indirectBuffer", "indirectOffset"],
   "draw": ["vertexCount", "instanceCount", "firstVertex", "firstInstance"],
   "drawIndexed": ["indexCount", "instanceCount", "firstIndex", "baseVertex", "firstInstance"],
   "drawIndirect": ["indirectBuffer", "indirectOffset"],

@@ -935,10 +935,15 @@ ol::-webkit-scrollbar-thumb:hover {
   margin-right: 5px;
 }
 
+.capture_methodName {
+  font-weight: bold;
+}
+
 .capture_method_args {
   padding-left: 5px;
   font-size: 9pt;
-  color: #aaa;
+  color: #fff;
+  font-style: italic;
 }
 
 .capture_renderpass {
@@ -950,16 +955,13 @@ ol::-webkit-scrollbar-thumb:hover {
   background: #353;
 }
 
-.capture_renderpass .capture_drawcall {
+.capture_drawcall {
   color: #ff0;
 }
 
 .capture_computepass {
   margin-top: 20px;
   margin-left: 10px;
-}
-
-.capture_computepass .capture_command {
   background: #446;
 }
 
@@ -969,6 +971,7 @@ ol::-webkit-scrollbar-thumb:hover {
 
 .capture_command_selected {
   background: #ca4;
+  color: #fff;
 }
 
 .capture_pass_texture {
