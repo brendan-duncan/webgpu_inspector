@@ -187,7 +187,7 @@ import { TextureUtils } from "./src/texture_utils.js";
         if (descriptor.usage) {
           descriptor.usage |= GPUTextureUsage.COPY_DST;
         } else {
-          descriptor.usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST;
+          descriptor.usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC;
         }
         object.__device = descriptor.device;
       }       
