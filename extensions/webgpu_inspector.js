@@ -46,7 +46,7 @@ import { TextureUtils } from "./src/texture_utils.js";
         if (id >= 0) {
           window.postMessage({"action": "inspect_delete_object", id}, "*");
           if (self._trackedObjects.has(id)) {
-            const object = self._trackedObjects.get(id);
+            const object = self._trackedObjects.get(id).deref();
             // If we're here, the object was garbage collected but not explicitly destroyed.
             // Some GPU objects need to be explicitly destroyed, otherwise it's a memory
             // leak. Notify the user of this.
@@ -251,15 +251,15 @@ import { TextureUtils } from "./src/texture_utils.js";
         }
 
         if (method == "createTexture") {
-          this._trackedObjects.set(result.__id, result);
+          this._trackObject(result.__id, result);
         } else if (method == "createView" && !id) {
-          this._trackedObjects.set(result.__id, result);
+          this._trackObject(result.__id, result);
         } else if (method == "createBuffer") {
-          this._trackedObjects.set(result.__id, result);
+          this._trackObject(result.__id, result);
         } else if (method == "getCurrentTexture") {
           result.__isCanvasTexture = true;
           result.__context = object;
-          this._trackedObjects.set(result.__id, result);
+          this._trackObject(result.__id, result);
           if (object.__canvas) {
             result.__canvas = object.__canvas;
           }
@@ -316,7 +316,7 @@ import { TextureUtils } from "./src/texture_utils.js";
         const adapterId = adapter?.__id ?? 0;
         descriptor["features"] = this._gpuToArray(device.features);
         descriptor["limits"] = this._gpuToObject(device.limits);
-        this._trackedObjects.set(deviceId, device);
+        this._trackObject(deviceId, device);
         window.postMessage({"action": "inspect_add_object", id: deviceId, parent: adapterId, "type": "Device", "descriptor": JSON.stringify(descriptor)}, "*");
       }
     }
@@ -351,7 +351,7 @@ import { TextureUtils } from "./src/texture_utils.js";
       if (textureId < 0) {
         // canvas texture
         const canvasId = -textureId;
-        const canvas = this._trackedObjects.get(canvasId);
+        const canvas = this._trackedObjects.get(canvasId).deref();
         if (canvas) {
           if (canvas.__captureTexture) {
             this._captureTextureRequest.set(textureId, canvas.__captureTexture);
@@ -359,7 +359,7 @@ import { TextureUtils } from "./src/texture_utils.js";
           }
         }
       }
-      const object = this._trackedObjects.get(textureId);
+      const object = this._trackedObjects.get(textureId).deref();
       if (!object || !(object instanceof GPUTexture)) {
         return;
       }
@@ -389,13 +389,17 @@ import { TextureUtils } from "./src/texture_utils.js";
       }
     }
 
+    _trackObject(id, object) {
+      this._trackedObjects.set(id, new WeakRef(object));
+    }
+
     _wrapCanvas(c) {
       if (c.__id) {
         return;
       }
       c.__id = this.getNextId(c);
 
-      this._trackedObjects.set(c.__id, c);
+      this._trackObject(c.__id, c);
 
       const self = this;
       const __getContext = c.getContext;
@@ -448,12 +452,14 @@ import { TextureUtils } from "./src/texture_utils.js";
           enumerable: true,
           configurable: true,
           get() {
-            return object._label;
+            return this._label;
           },
           set(label) {
-            object._label = label;
-            const id = object.__id;
-            window.postMessage({ "action": "inspect_object_set_label", id, label }, "*");
+            if (label !== this._label) {
+              this._label = label;
+              const id = this.__id;
+              window.postMessage({ "action": "inspect_object_set_label", id, label }, "*");
+            }
           }
         });
       }
@@ -576,10 +582,10 @@ import { TextureUtils } from "./src/texture_utils.js";
         window.postMessage({"action": "inspect_add_object", id, parent,"type": "Sampler", "descriptor": this._stringifyDescriptor(args[0])}, "*");
       } else if (method == "createBindGroup") {
         const id = result.__id;
-        if (result.__entries === undefined) {
+        // Attach resources to the bindgroups that use them to keep them from being garbage collected so we can inspect them later.
+        /*if (result.__entries === undefined) {
           result.__entries = [];
         }
-        // Attach resources to the bindgroups that use them to keep them from being garbage collected so we can inspect them later.
         if (args[0].entries?.length > 0) {
           for (const entry of args[0].entries) {
             const resource = entry.resource;
@@ -592,7 +598,7 @@ import { TextureUtils } from "./src/texture_utils.js";
               }
             }
           }
-        }
+        }*/
         window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroup", "descriptor": this._stringifyDescriptor(args[0])}, "*");
       } else if (method == "createBindGroupLayout") {
         const id = result.__id;

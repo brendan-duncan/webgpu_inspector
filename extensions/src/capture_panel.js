@@ -208,7 +208,7 @@ export class CapturePanel {
           this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
         } else {
           const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
-          new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
+          new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(attachment.view.descriptor, undefined, 4) });
           const texDesc = this._processCommandArgs(texture.descriptor);
           if (texDesc.usage) {
             texDesc.usage = getFlagString(texDesc.usage, GPUTextureUsage);
