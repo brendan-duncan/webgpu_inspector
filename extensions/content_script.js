@@ -94,7 +94,7 @@ window.addEventListener('message', (event) => {
 function injectScriptNode(name, url, attributes) {
   const script = document.createElement("script");
   script.id = name;
-  script.type = "module";
+  //script.type = "module";
   script.src = url;
 
   if (attributes) {
@@ -108,12 +108,12 @@ function injectScriptNode(name, url, attributes) {
 
 
 if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
-  injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.js"));
+  injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.bundle.js"));
   sessionStorage.removeItem(webgpuInspectorLoadedKey);
   inspectorInitialized = true;
 } else if (sessionStorage.getItem(webgpuRecorderLoadedKey)) {
   const data = sessionStorage.getItem(webgpuRecorderLoadedKey).split("%");
-  injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder.js"), {
+  injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder.bundle.js"), {
     filename: data[1],
     frames: data[0],
     removeUnusedResources: 1,

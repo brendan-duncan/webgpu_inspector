@@ -5,12 +5,22 @@ Inspection debugger for WebGPU
 ## Installation
 
 - Download project from Github.
+  - git clone https://github.com/brendan-duncan/webgpu_inspector
 - In Chrome, open **chrome://extensions**
 - Enable Developer Mode (switch in top-right corner)
 - Press **Load Unpacked** button
 - Browse to **<webgpu_inspector directory>/extensions** and press **Select Folder**
-- Make sure the extension is enabled
+- Make sure the extension is enabled.
+
 ![Enable Extension](images/enable_extension.png "Enable Extension")
+
+## Building
+
+Building the project requires an installation of [Node.js](https://nodejs.org/en/).
+
+- Make sure the dependencies are installed: `npm install`
+- Compile the project: `npm run build`
+- If you have the DevTools open, right-click on the WebGPU Inspector DevTools panel, select `Reload frame`.
 
 ## Usage
 
@@ -19,7 +29,6 @@ The WebGPU Inspector extension is available from the Developer Tools window.
 From a page that has WebGPU content, press **F12** to open the Chrome Developer Tools window. When the WebGPU Inspector extension is enabled in the extension manager, there will be a **WebGPU Inspector** tab.
 
 ![WebGPU Inspector Panel](images/webgpu_inspector_panel.png)
-
 
 ## Tools
 

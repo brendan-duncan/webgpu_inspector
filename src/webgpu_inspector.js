@@ -1,7 +1,7 @@
-import { encodeDataUrl } from "./src/base64.js";
-import { GPUObjectTypes, GPUObjectWrapper } from "./src/gpu_object_wrapper.js";
-import { TextureFormatInfo } from "./src/texture_format_info.js";
-import { TextureUtils } from "./src/texture_utils.js";
+import { encodeDataUrl } from "./devtools/base64.js";
+import { GPUObjectTypes, GPUObjectWrapper } from "./devtools/gpu_object_wrapper.js";
+import { TextureFormatInfo } from "./devtools/texture_format_info.js";
+import { TextureUtils } from "./devtools/texture_utils.js";
 
 (() => {
   const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";

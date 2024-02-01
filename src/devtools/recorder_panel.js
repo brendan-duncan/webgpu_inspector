@@ -2,6 +2,7 @@ import { Button } from "./widget/button.js";
 import { Div } from "./widget/div.js";
 import { Input } from "./widget/input.js";
 import { Span } from "./widget/span.js";
+import { Widget } from "./widget/widget.js";
 
 export class RecorderPanel {
   constructor(window, parent) {

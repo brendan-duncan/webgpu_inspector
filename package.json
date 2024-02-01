@@ -1,0 +1,29 @@
+{
+  "name": "webgpu_inspector",
+  "version": "0.0.1",
+  "description": "WebGPU Inspection Debugger",
+  "author": "Brendan Duncan",
+  "license": "MIT",
+  "homepage": "https://github.com/brendan-duncan/webgpu_inspector",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brendan-duncan/webgpu_inspector"
+  },
+  "bugs": {
+    "url": "https://github.com/brendan-duncan/wgsl_reflect/issues"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "rollup -c rollup.config.js"
+  },
+  "keywords": [
+    "webgpu_inspector",
+    "webgpu",
+    "debugger",
+    "javascript",
+    "html5"
+  ],
+  "devDependencies": {
+    "rollup": "^2.60.0"
+  }
+}
