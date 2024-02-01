@@ -392,11 +392,11 @@ export class InspectorWindow extends Window {
       } else if (method === "setIndexBuffer") {
         new Span(cmd, { class: "capture_method_args", text: `buffer:${args[0].__id} indexFormat:${args[1]} offset:${args[2] ?? 0}` });
       } else if (method === "drawIndexed") {
-        new Span(cmd, { class: "capture_method_args", text: `indexCount:${args[0]} instanceCount:${args[1]} firstIndex:${args[2]} baseVertex:${args[3]} firstInstance:${args[4]}` });
+        new Span(cmd, { class: "capture_method_args", text: `indexCount:${args[0]} instanceCount:${args[1] ?? 1} firstIndex:${args[2] ?? 0} baseVertex:${args[3] ?? 0} firstInstance:${args[4] ?? 0}` });
       } else if (method === "draw") {
-        new Span(cmd, { class: "capture_method_args", text: `vertexCount:${args[0]} instanceCount:${args[1]} firstVertex:${args[2]} firstInstance:${args[3]}` });
+        new Span(cmd, { class: "capture_method_args", text: `vertexCount:${args[0]} instanceCount:${args[1] ?? 1} firstVertex:${args[2] ?? 0} firstInstance:${args[3] ?? 0}` });
       } else if (method === "dispatchWorkgroups") {
-        new Span(cmd, { class: "capture_method_args", text: `countX:${args[0]} countY:${args[1]} countZ:${args[2]}` });
+        new Span(cmd, { class: "capture_method_args", text: `countX:${args[0]} countY:${args[1] ?? 1} countZ:${args[2] ?? 1}` });
       } else if (method === "dispatchWorkgroupsIndirect") {
         new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${args[0].__id} offset:${args[1]}` });
       }

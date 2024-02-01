@@ -185,7 +185,7 @@ import { TextureUtils } from "./src/texture_utils.js";
       if ((object instanceof GPUCanvasContext) && method == "configure") {
         const descriptor = args[0];
         if (descriptor.usage) {
-          descriptor.usage |= GPUTextureUsage.COPY_DST;
+          descriptor.usage |= GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC;
         } else {
           descriptor.usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC;
         }
