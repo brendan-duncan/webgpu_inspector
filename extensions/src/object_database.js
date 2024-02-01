@@ -170,9 +170,6 @@ export class ObjectDatabase {
     this.onAddObject = new Signal();
     this.onBeginFrame = new Signal();
     this.onEndFrame = new Signal();
-    this.onBeginRenderPass = new Signal();
-    this.onBeginComputePass = new Signal();
-    this.onEndPass = new Signal();
     this.onAdapterInfo = new Signal();
     this.onObjectLabelChanged = new Signal();
 
@@ -187,15 +184,6 @@ export class ObjectDatabase {
           break;
         case "inspect_end_frame":
           self._endFrame();
-          break;
-        case "inspect_begin_render_pass":
-          self._beginRenderPass();
-          break;
-        case "inspect_begin_compute_pass":
-          self._beginComputePass();
-          break;
-        case "inspect_end_pass":
-          self._endPass();
           break;
         case "inspect_delete_object":
           self._deleteObject(message.id);
@@ -325,8 +313,6 @@ export class ObjectDatabase {
     this.computePipelines = new Map();
     this.pendingRenderPipelines = new Map();
     this.pendingComputePipelines = new Map();
-    this.renderPassCount = 0;
-    this.computePassCount = 0;
     this.frameTime = 0;
   }
 
@@ -377,7 +363,6 @@ export class ObjectDatabase {
 
   _beginFrame() {
     this.startFrameTime = performance.now();
-    this.renderPassCount = 0;
     this.onBeginFrame.emit();
   }
 
@@ -385,20 +370,6 @@ export class ObjectDatabase {
     this.endFrameTime = performance.now();
     this.frameTime = this.endFrameTime - this.startFrameTime;
     this.onEndFrame.emit();
-  }
-
-  _beginRenderPass() {
-    this.renderPassCount++;
-    this.onBeginRenderPass.emit();
-  }
-
-  _beginComputePass() {
-    this.computePassCount++;
-    this.onBeginComputePass.emit();
-  }
-
-  _endPass() {
-    this.onEndPass.emit();
   }
 
   getObject(id) {

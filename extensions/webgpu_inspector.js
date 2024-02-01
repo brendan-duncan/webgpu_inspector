@@ -587,13 +587,6 @@ import { TextureUtils } from "./src/texture_utils.js";
         if (args[0].compute?.module) {
           result.__computeModule = args[0].compute?.module;
         }
-      } else if (method == "beginRenderPass") {
-        window.postMessage({"action": "inspect_begin_render_pass", "descriptor": this._stringifyDescriptor(args[0])}, "*");
-        this._frameRenderPassCount++;
-      } else if (method == "beginComputePass") {
-          window.postMessage({"action": "inspect_begin_compute_pass", "descriptor": this._stringifyDescriptor(args[0])}, "*");
-      } else if (method == "end") {
-        window.postMessage({"action": "inspect_end_pass"}, "*");
       } else if (method == "createCommandEncoder") {
         // We'll need the CommandEncoder's device for capturing textures
         result.__device = object;
@@ -602,6 +595,8 @@ import { TextureUtils } from "./src/texture_utils.js";
         if (object == this._lastCommandEncoder) {
           this._lastCommandEncoder = null;
         }
+      } else if (method === "beginRenderPass") {
+        this._frameRenderPassCount++;
       }
 
       if (this._captureRequest) {
