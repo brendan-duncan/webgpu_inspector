@@ -254,6 +254,7 @@ import { TextureUtils } from "./src/texture_utils.js";
           this._trackObject(result.__id, result);
         } else if (method == "createView" && !id) {
           this._trackObject(result.__id, result);
+          result.__texture = object;
         } else if (method == "createBuffer") {
           this._trackObject(result.__id, result);
         } else if (method == "getCurrentTexture") {
@@ -533,7 +534,7 @@ import { TextureUtils } from "./src/texture_utils.js";
     }
 
     _recordCommand(object, method, result, args) {
-      if (object && object?.__id === undefined) {
+      if (object instanceof GPUDevice && object?.__id === undefined) {
         // We haven't wrapped the object yet, so do it now.
         // Probably the GPUDevice where requestDevice happened
         // before we started recording.
