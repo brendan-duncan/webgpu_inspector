@@ -304,15 +304,16 @@ import { TextureUtils } from "./src/texture_utils.js";
     }
 
     _wrapDevice(adapter, device, id, args) {
-      if (adapter.__id === undefined) {
+      if (adapter && adapter.__id === undefined) {
         this._wrapAdapter(adapter);
       }
 
       if (device && device.__id === undefined) {
+        args ??= [];
         this._wrapObject(device, id);
         const descriptor = args[0] ?? {};
         const deviceId = device.__id;
-        const adapterId = adapter.__id;
+        const adapterId = adapter?.__id ?? 0;
         descriptor["features"] = this._gpuToArray(device.features);
         descriptor["limits"] = this._gpuToObject(device.limits);
         this._trackedObjects.set(deviceId, device);
@@ -522,7 +523,15 @@ import { TextureUtils } from "./src/texture_utils.js";
     }
 
     _recordCommand(object, method, result, args) {
-      const parent = object.__id;
+      if (object && object?.__id === undefined) {
+        // We haven't wrapped the object yet, so do it now.
+        // Probably the GPUDevice where requestDevice happened
+        // before we started recording.
+        this._wrapDevice(null, object);
+      }
+
+      const parent = object?.__id ?? 0;
+
       if (method == "destroy") {
         const id = object.__id;
         this._trackedObjects.delete(id);
@@ -563,6 +572,23 @@ import { TextureUtils } from "./src/texture_utils.js";
         window.postMessage({"action": "inspect_add_object", id, parent,"type": "Sampler", "descriptor": this._stringifyDescriptor(args[0])}, "*");
       } else if (method == "createBindGroup") {
         const id = result.__id;
+        if (result.__entries === undefined) {
+          result.__entries = [];
+        }
+        // Attach resources to the bindgroups that use them to keep them from being garbage collected so we can inspect them later.
+        if (args[0].entries?.length > 0) {
+          for (const entry of args[0].entries) {
+            const resource = entry.resource;
+            if (resource) {
+              if (resource.__id !== undefined) {
+                result.__entries.push(resource);
+              } else if (resource.buffer?.__id !== undefined) {
+                result.__entries.push(resource.buffer);
+              
+              }
+            }
+          }
+        }
         window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroup", "descriptor": this._stringifyDescriptor(args[0])}, "*");
       } else if (method == "createBindGroupLayout") {
         const id = result.__id;

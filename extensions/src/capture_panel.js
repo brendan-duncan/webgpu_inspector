@@ -191,28 +191,30 @@ export class CapturePanel {
           : attachment.view.__texture
               ? this.database.getObject(attachment.view.__texture.__id)
               : null;
+      if (texture) {
         const format = texture.descriptor.format;
-      if (texture && texture.gpuTexture) {
-        const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
+        if (texture.gpuTexture) {
+          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
 
-        const viewWidth = 256;
-        const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
-        const canvas = new Widget("canvas", colorAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
-        canvas.element.width = viewWidth;
-        canvas.element.height = viewHeight;
-        const context = canvas.element.getContext('webgpu');
-        const dstFormat = navigator.gpu.getPreferredCanvasFormat();
-        context.configure({"device":this.window.device, "format":navigator.gpu.getPreferredCanvasFormat()});
-        const canvasTexture = context.getCurrentTexture();
-        this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
-      } else {
-        const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
-        new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
-        const texDesc = this._processCommandArgs(texture.descriptor);
-        if (texDesc.usage) {
-          texDesc.usage = getFlagString(texDesc.usage, GPUTextureUsage);
+          const viewWidth = 256;
+          const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
+          const canvas = new Widget("canvas", colorAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
+          canvas.element.width = viewWidth;
+          canvas.element.height = viewHeight;
+          const context = canvas.element.getContext('webgpu');
+          const dstFormat = navigator.gpu.getPreferredCanvasFormat();
+          context.configure({"device":this.window.device, "format":navigator.gpu.getPreferredCanvasFormat()});
+          const canvasTexture = context.getCurrentTexture();
+          this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
+        } else {
+          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
+          new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
+          const texDesc = this._processCommandArgs(texture.descriptor);
+          if (texDesc.usage) {
+            texDesc.usage = getFlagString(texDesc.usage, GPUTextureUsage);
+          }
+          new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(texDesc, undefined, 4) });
         }
-        new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(texDesc, undefined, 4) });
       }
     }
     const depthStencilAttachment = args[0].depthStencilAttachment;
@@ -222,27 +224,29 @@ export class CapturePanel {
           : depthStencilAttachment.view.__texture
               ? this.database.getObject(depthStencilAttachment.view.__texture.__id)
               : null;
-      if (texture && texture.gpuTexture) {
-        const format = texture.descriptor.format;
-        const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment ${format}` });
-        const viewWidth = 256;
-        const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
-        const canvas = new Widget("canvas", depthStencilAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
-        canvas.element.width = viewWidth;
-        canvas.element.height = viewHeight;
-        const context = canvas.element.getContext('webgpu');
-        const dstFormat = navigator.gpu.getPreferredCanvasFormat();
-        context.configure({"device":this.window.device, "format":navigator.gpu.getPreferredCanvasFormat()});
-        const canvasTexture = context.getCurrentTexture();
-        this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
-      } else {
-        const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.descriptor?.format ?? "<unknown format>"}` });
-        new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
-        const texDesc = this._processCommandArgs(texture.descriptor);
-        if (texDesc.usage) {
-          texDesc.usage = getFlagString(texDesc.usage, GPUTextureUsage);
+      if (texture) {
+        if (texture.gpuTexture) {
+          const format = texture.descriptor.format;
+          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment ${format}` });
+          const viewWidth = 256;
+          const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
+          const canvas = new Widget("canvas", depthStencilAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
+          canvas.element.width = viewWidth;
+          canvas.element.height = viewHeight;
+          const context = canvas.element.getContext('webgpu');
+          const dstFormat = navigator.gpu.getPreferredCanvasFormat();
+          context.configure({"device":this.window.device, "format":navigator.gpu.getPreferredCanvasFormat()});
+          const canvasTexture = context.getCurrentTexture();
+          this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
+        } else {
+          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.descriptor?.format ?? "<unknown format>"}` });
+          new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
+          const texDesc = this._processCommandArgs(texture.descriptor);
+          if (texDesc.usage) {
+            texDesc.usage = getFlagString(texDesc.usage, GPUTextureUsage);
+          }
+          new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(texDesc, undefined, 4) });
         }
-        new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(texDesc, undefined, 4) });
       }
     }
   }

@@ -15,15 +15,16 @@ import {
 } from "./object_database.js";
 
 export class InspectorWindow extends Window {
-  constructor(port) {
+  constructor() {
     super();
 
-    this.port = port;
-    this.database = new ObjectDatabase(port);
+    const tabId = chrome.devtools.inspectedWindow.tabId;
+    this.port = new MessagePort("webgpu-inspector-panel", tabId);
+    this.database = new ObjectDatabase(this.port);
     this.classList.add("main-window");
     this._selectedObject = null;
     this._inspectedObject = null;
-    this.objectDatabase = new ObjectDatabase(port);
+    this.objectDatabase = new ObjectDatabase(this.port);
 
     this.adapter = null;
     this.device = null;
@@ -45,7 +46,7 @@ export class InspectorWindow extends Window {
     this._recorderPanel = new RecorderPanel(this, recorderPanel);
 
     const self = this;
-    port.addListener((message) => {
+    this.port.addListener((message) => {
       switch (message.action) {
         case "inspect_capture_texture_data": {
           const id = message.id;
@@ -60,6 +61,8 @@ export class InspectorWindow extends Window {
         }
       }
     });
+
+    this.initialize();
   }
 
   async initialize() {
@@ -86,6 +89,8 @@ export class InspectorWindow extends Window {
     this.device = await this.adapter.requestDevice({requiredFeatures: features, requiredLimits: limits});
 
     this.textureUtils = new TextureUtils(this.device);
+
+    this.port.postMessage({action: "PanelLoaded"});
   }
 
   _captureTextureData(id, passId, offset, size, index, count, chunk) {
@@ -176,13 +181,7 @@ export class InspectorWindow extends Window {
 
 
 async function main() {
-  const tabId = chrome.devtools.inspectedWindow.tabId;
-  const port = new MessagePort("webgpu-inspector-panel", tabId);
-  
-  const inspector = new InspectorWindow(port);
-  await inspector.initialize();
-
-  port.postMessage({action: "PanelLoaded"});
+  new InspectorWindow();
 }
 
 main();
