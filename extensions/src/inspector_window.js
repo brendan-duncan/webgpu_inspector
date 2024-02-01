@@ -261,7 +261,7 @@ export class InspectorWindow extends Window {
 
     const gpuFormat = formatInfo.depthOnlyFormat ?? format;
     texture.descriptor.format = gpuFormat;
-    texture.descriptor.usage = (usage ?? GPUTextureUsage.RENDER_ATTACHMENT) | GPUTextureUsage.TEXTURE_BINDING;
+    texture.descriptor.usage = (usage ?? GPUTextureUsage.RENDER_ATTACHMENT) | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST;
     texture.gpuTexture = this.device.createTexture(texture.descriptor);
     texture.descriptor.usage = usage;
     texture.descriptor.format = format;
