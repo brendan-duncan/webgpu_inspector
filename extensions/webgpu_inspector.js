@@ -475,16 +475,20 @@ import { TextureUtils } from "./src/texture_utils.js";
 
     _gpuToArray(gpu) {
       const array = [];
-      for (const v of gpu) {
-        array.push(v);
+      if (gpu) {
+        for (const v of gpu) {
+          array.push(v);
+        }
       }
       return array;
     }
 
     _gpuToObject(gpu) {
       const obj = {};
-      for (const v in gpu) {
-        obj[v] = gpu[v];
+      if (gpu) {
+        for (const v in gpu) {
+          obj[v] = gpu[v];
+        }
       }
       return obj;
     }
