@@ -21,6 +21,10 @@ Building the project requires an installation of [Node.js](https://nodejs.org/en
 - Make sure the dependencies are installed: `npm install`
 - Compile the project: `npm run build`.
 - Compile on file changes: `npm run watch`.
+- To use source maps, edit `rollup.config.js` and change `sourcemap: false` to `sourcemap: true`.
+
+After the project is built:
+
 - If you have the DevTools open, right-click on the WebGPU Inspector DevTools panel, select `Reload frame`.
 
 ## Usage
