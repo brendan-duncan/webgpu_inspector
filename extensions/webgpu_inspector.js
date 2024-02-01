@@ -1,4 +1,4 @@
-import { encodeBase64, encodeDataUrl } from "./src/base64.js";
+import { encodeDataUrl } from "./src/base64.js";
 import { GPUObjectTypes, GPUObjectWrapper } from "./src/gpu_object_wrapper.js";
 import { TextureFormatInfo } from "./src/texture_format_info.js";
 import { TextureUtils } from "./src/texture_utils.js";

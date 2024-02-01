@@ -108,7 +108,7 @@ function injectScriptNode(name, url, attributes) {
 
 
 if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
-  injectScriptNode("__webgpu_inspector", chrome.runtime.getURL(`webgpu_inspector.js`));
+  injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.js"));
   sessionStorage.removeItem(webgpuInspectorLoadedKey);
   inspectorInitialized = true;
 } else if (sessionStorage.getItem(webgpuRecorderLoadedKey)) {

@@ -29,7 +29,6 @@
       "resources": [
         "webgpu_recorder.js",
         "webgpu_inspector.js",
-        "webgpu_inspector_panel.html",
         "src/texture_format_info.js",
         "src/texture_utils.js",
         "src/base64.js",

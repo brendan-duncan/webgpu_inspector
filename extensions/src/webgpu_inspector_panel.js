@@ -1,3 +1,5 @@
+import { ObjectDatabase } from "./object_database.js";
+import { MessagePort } from "./message_port.js";
 import { Div } from "./widget/div.js";
 import { TabWidget } from "./widget/tab_widget.js";
 import { TextureUtils } from "./texture_utils.js";
@@ -13,14 +15,15 @@ import {
 } from "./object_database.js";
 
 export class InspectorWindow extends Window {
-  constructor(database, port) {
+  constructor(port) {
     super();
 
     this.port = port;
-    this.database = database
+    this.database = new ObjectDatabase(port);
     this.classList.add("main-window");
     this._selectedObject = null;
     this._inspectedObject = null;
+    this.objectDatabase = new ObjectDatabase(port);
 
     this.adapter = null;
     this.device = null;
@@ -168,45 +171,18 @@ export class InspectorWindow extends Window {
       texture.descriptor.size);
 
     this.onTextureLoaded.emit(texture, passId);
-
-   
-
-    if (passId == -1) {
-      return;
-    }
-
-    const frameImages = this._frameImages;
-    if (frameImages) {
-      const aspect = texture.height / texture.width;
-      const viewWidth = 256;
-      const viewHeight = Math.round(viewWidth * aspect);
-
-      const passFrame = new Div(frameImages, { class: "capture_pass_texture" });
-
-      new Div(passFrame, { text: `Render Pass ${passId}`, style: "color: #ddd; margin-bottom: 5px;" });
-      const textureId = texture.id < 0 ? "CANVAS" : texture.id;
-      new Div(passFrame, { text: `${texture.name} ID:${textureId}`, style: "color: #ddd; margin-bottom: 10px;" })
-      
-      const canvas = new Widget("canvas", passFrame);
-      canvas.element.width = viewWidth;
-      canvas.element.height = viewHeight;
-      const context = canvas.element.getContext('webgpu');
-      const dstFormat = navigator.gpu.getPreferredCanvasFormat();
-      context.configure({"device":this.window.device, "format":navigator.gpu.getPreferredCanvasFormat()});
-      const canvasTexture = context.getCurrentTexture();
-      this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
-
-      canvas.element.onclick = () => {
-        const element = document.getElementById(`RenderPass_${passId}`);
-        if (element) {
-          element.scrollIntoView();
-
-          const beginElement = document.getElementById(`RenderPass_${passId}_begin`);
-          if (beginElement) {
-            beginElement.click();
-          }
-        }
-      };
-    }
   }
 }
+
+
+async function main() {
+  const tabId = chrome.devtools.inspectedWindow.tabId;
+  const port = new MessagePort("webgpu-inspector-panel", tabId);
+  
+  const inspector = new InspectorWindow(port);
+  await inspector.initialize();
+
+  port.postMessage({action: "PanelLoaded"});
+}
+
+main();
