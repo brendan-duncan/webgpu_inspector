@@ -14,7 +14,7 @@ Inspection debugger for WebGPU
 
 ![Enable Extension](images/enable_extension.png "Enable Extension")
 
-## Building
+## Development
 
 Building the project requires an installation of [Node.js](https://nodejs.org/en/).
 
