@@ -908,6 +908,13 @@ ol::-webkit-scrollbar-thumb:hover {
   cursor: default;
 }
 
+.capture_debugGroup {
+  padding: 10px;
+  background-color: #115;
+  font-size: 12pt;
+  line-height: 20px;
+}
+
 .capture_commandInfo {
   overflow: auto;
   width: calc(50% - 10px);

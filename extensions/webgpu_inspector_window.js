@@ -6608,8 +6608,13 @@ var __webgpu_inspector_window = (function (exports) {
       const frameContents = new Span(contents, { class: "capture_frame" });
       const commandInfo = new Span(contents, { class: "capture_commandInfo" });
       
-      let currentPass = new Div(frameContents, { class: "capture_commandBlock" });
       let renderPassIndex = 0;
+
+      const debugGroupStack = [frameContents];
+      const debugGroupLabelStack = [];
+      let debugGroupIndex = 0;
+
+      let currentBlock = new Div(frameContents, { class: "capture_commandBlock" });
 
       this._lastSelectedCommand = null;
 
@@ -6621,21 +6626,27 @@ var __webgpu_inspector_window = (function (exports) {
         const args = command.args;
         const name = `${className ?? "__"}`;
 
-        if (method == "beginRenderPass") {
-          currentPass = new Div(frameContents, { class: "capture_renderpass" });
-          new Div(currentPass, { text: `Render Pass ${renderPassIndex}`, id: `RenderPass_${renderPassIndex}`, style: "padding-left: 20px; font-size: 12pt; color: #ddd; margin-bottom: 5px; background-color: #553; line-height: 30px;" });
+        let debugGroup = debugGroupStack[debugGroupStack.length - 1];
+
+        if (method === "beginRenderPass") {
+          currentBlock = new Div(debugGroup, { class: "capture_renderpass" });
+          new Div(currentBlock, { text: `Render Pass ${renderPassIndex}`, id: `RenderPass_${renderPassIndex}`, style: "padding-left: 20px; font-size: 12pt; color: #ddd; margin-bottom: 5px; background-color: #553; line-height: 30px;" });
           renderPassIndex++;
-        } else if (method == "beginComputePass") {
-          currentPass = new Div(frameContents, { class: "capture_computepass" });
+        } else if (method === "beginComputePass") {
+          currentBlock = new Div(debugGroup, { class: "capture_computepass" });
+        } else if (method === "popDebugGroup") {
+          debugGroupStack.pop();
+          debugGroup = debugGroupStack[debugGroupStack.length - 1];
+          currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
         }
 
         const cmdType = ["capture_command"];
-        if (method == "draw" || method == "drawIndexed" || method == "drawIndirect" || method == "drawIndexedIndirect" ||
-            method == "dispatchWorkgroups" || method == "dispatchWorkgroupsIndirect") {
+        if (method === "draw" || method === "drawIndexed" || method === "drawIndirect" || method === "drawIndexedIndirect" ||
+            method === "dispatchWorkgroups" || method == "dispatchWorkgroupsIndirect") {
           cmdType.push("capture_drawcall");
         }
 
-        const cmd = new Div(currentPass, { class: cmdType });
+        const cmd = new Div(currentBlock, { class: cmdType });
         if (method == "beginRenderPass") {
           cmd.element.id = `RenderPass_${renderPassIndex - 1}_begin`;
         }
@@ -6670,6 +6681,12 @@ var __webgpu_inspector_window = (function (exports) {
           new Span(cmd, { class: "capture_method_args", text: `countX:${args[0]} countY:${args[1] ?? 1} countZ:${args[2] ?? 1}` });
         } else if (method === "dispatchWorkgroupsIndirect") {
           new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${args[0].__id} offset:${args[1]}` });
+        } else if (method === "pushDebugGroup") {
+          new Span(cmd, { class: "capture_method_args", text: args[0] });
+          debugGroupLabelStack.push(args[0]);
+        } else if (method === "popDebugGroup") {
+          const label = debugGroupLabelStack.pop();
+          new Span(cmd, { class: "capture_method_args", text: label });
         }
 
         const self = this;
@@ -6691,8 +6708,17 @@ var __webgpu_inspector_window = (function (exports) {
           first = false;
         }
 
-        if (method == "end") {
-          currentPass = new Div(frameContents, { class: "capture_commandBlock" });
+        if (method === "pushDebugGroup") {
+          const grp = new Div(debugGroup, { text: `Debug Group: ${args[0]}`, id: `DebugGroup_${debugGroupIndex}`,  class: "capture_debugGroup" });
+          debugGroupStack.push(grp);
+          debugGroupIndex++;
+          debugGroup = grp;
+
+          currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
+        }
+
+        if (method === "end") {
+          currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
         }
       }
     }
@@ -7068,29 +7094,6 @@ var __webgpu_inspector_window = (function (exports) {
       for (const index in state.bindGroups) {
         this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true);
       }
-
-      /*const pipeline = this.database.getObject(state.pipeline?.args[0]?.__id);
-      if (pipeline) {
-        const vertexId = pipeline.descriptor?.vertex?.module?.__id;
-        const fragmentId = pipeline.descriptor?.fragment?.module?.__id;
-        
-        if (vertexId === fragmentId) {
-          const vertex = this.database.getObject(vertexId);
-          if (vertex) {
-            this._shaderInfo("Vertex+Fragment", vertex, commandInfo);
-          }
-        } else {
-          const vertex = this.database.getObject(vertexId);
-          if (vertex) {
-            this._shaderInfo("Vertex", vertex, commandInfo);
-          }
-    
-          const fragment = this.database.getObject(fragmentId);
-          if (fragment) {
-            this._shaderInfo("Fragment", fragment, commandInfo);
-          }
-        }
-      }*/
     }
 
     _showCaptureCommandInfo_drawIndexed(args, commandInfo, commandIndex, commands) {
