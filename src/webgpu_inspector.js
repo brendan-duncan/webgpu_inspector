@@ -730,7 +730,12 @@ import { TextureUtils } from "./devtools/texture_utils.js";
       }
     }
 
-    _sendCaptureTextureBuffers() {     
+    _sendCaptureTextureBuffers() {
+      if (this._captureTexturedBuffers.length > 0) {
+        window.postMessage({
+          "action": "inspect_capture_texture_frames", "count": this._captureTexturedBuffers.length }, "*");
+      }
+
       for (const textureBuffer of this._captureTexturedBuffers) {
         const { id, buffer, width, height, depthOrArrayLayers, format, passId } = textureBuffer;
 

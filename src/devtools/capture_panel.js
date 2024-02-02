@@ -24,14 +24,22 @@ export class CapturePanel {
       } catch (e) {}
     } });
 
-    this._captureFrame = new Span(controlBar, { text: ``, style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
+    this._captureFrame = new Span(controlBar, { style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
+    this._captureStatus = new Span(controlBar, { style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
 
     this._capturePanel = new Div(parent, { style: "overflow: hidden; white-space: nowrap; height: calc(-100px + 100vh); display: flex;" });
 
     window.onTextureLoaded.addListener(this._textureLoaded, this);
 
+    this._loadingImages = 0;
+
     port.addListener((message) => {
       switch (message.action) {
+        case "inspect_capture_texture_frames": {
+          self._loadingImages = message.count ?? 0;
+          self._captureStatus.text = `Loading Images: ${self._loadingImages}`;
+          break;
+        }
         case "inspect_capture_frame_results": {
           const commands = message.commands;
           const frame = message.frame;
@@ -751,6 +759,14 @@ export class CapturePanel {
   _textureLoaded(texture, passId) {
     if (passId == -1) {
       return;
+    }
+
+    this._loadingImages--;
+    if (this._loadingImages <= 0) {
+      this._captureStatus.text = "";
+      this._loadingImages = 0;
+    } else {
+      this._captureStatus.text = `Loading Images: ${this._loadingImages}`;
     }
 
     const frameImages = this._frameImages;
