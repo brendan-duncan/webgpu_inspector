@@ -1,5 +1,6 @@
 import { Signal } from "./widget/signal.js";
 import { TextureFormatInfo } from "./texture_format_info.js";
+import { WgslReflect } from "./wgsl_reflect.module.js";
 
 export class GPUObject {
   constructor(id) {
@@ -119,10 +120,22 @@ export class TextureView extends GPUObject {
 export class ShaderModule extends GPUObject {
   constructor(id, descriptor) {
     super(id);
+    this._reflection = null;
     this.descriptor = descriptor;
     this.hasVertexEntries = descriptor?.code ? descriptor.code.indexOf("@vertex") != -1 : false;
     this.hasFragmentEntries = descriptor?.code ? descriptor.code.indexOf("@fragment") != -1 : false;
     this.hasComputeEntries = descriptor?.code ? descriptor.code.indexOf("@compute") != -1 : false;
+  }
+
+  get code() {
+    return this.descriptor?.code ?? "";
+  }
+
+  get reflection() {
+    if (this._reflection === null) {
+      this._reflection = new WgslReflect(this.code);
+    }
+    return this._reflection;
   }
 }
 
@@ -151,6 +164,10 @@ export class RenderPipeline extends GPUObject {
   constructor(id, descriptor) {
     super(id);
     this.descriptor = descriptor;
+  }
+
+  get topology() {
+    return this.descriptor?.primitive?.topology ?? "triangle-list";
   }
 }
 
