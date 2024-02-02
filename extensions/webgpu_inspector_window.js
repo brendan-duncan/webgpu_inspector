@@ -4507,7 +4507,11 @@ var __webgpu_inspector_window = (function (exports) {
       if (this.tabId) {
         message.tabId = this.tabId;
       }
-      this._port.postMessage(message);
+      try {
+        this._port.postMessage(message);
+      } catch (e) {
+        this.reset();
+      }
     }
   }
 

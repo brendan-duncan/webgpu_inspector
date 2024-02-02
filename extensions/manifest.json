@@ -27,14 +27,8 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "webgpu_recorder.bundle.js",
-        "webgpu_inspector.bundle.js",
-        "src/texture_format_info.js",
-        "src/texture_utils.js",
-        "src/base64.js",
-        "src/message_port.js",
-        "src/gpu_object_wrapper.js",
-        "src/widget/signal.js"
+        "webgpu_recorder.js",
+        "webgpu_inspector.js"
        ],
       "matches": ["<all_urls>"]
     }
