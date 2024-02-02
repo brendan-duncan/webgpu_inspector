@@ -182,15 +182,26 @@ export class CapturePanel {
     }
   }
 
+  _getTextureFromAttachment(attachment) {
+    if (!attachment.view) {
+      return null;
+    }
+    if (attachment.view.__texture) {
+      return attachment.view.__texture;
+    }
+    const view = this.database.getObject(attachment.view.__id);
+    if (!view) {
+      return null;
+    }
+    return view.parent;
+  }
+
   _showCaptureCommandInfo_beginRenderPass(args, commandInfo) {
     const colorAttachments = args[0].colorAttachments;
     for (const i in colorAttachments) {
       const attachment = colorAttachments[i];
-      const texture = attachment.view.__id
-          ? this.database.getObject(attachment.view.__id).parent
-          : attachment.view.__texture
-              ? this.database.getObject(attachment.view.__texture.__id)
-              : null;
+      const texture = this._getTextureFromAttachment(attachment);
+
       if (texture) {
         const format = texture.descriptor.format;
         if (texture.gpuTexture) {
@@ -219,11 +230,7 @@ export class CapturePanel {
     }
     const depthStencilAttachment = args[0].depthStencilAttachment;
     if (depthStencilAttachment) {
-      const texture = depthStencilAttachment.view.__id
-          ? this.database.getObject(depthStencilAttachment.view.__id).parent
-          : depthStencilAttachment.view.__texture
-              ? this.database.getObject(depthStencilAttachment.view.__texture.__id)
-              : null;
+      const texture = this._getTextureFromAttachment(depthStencilAttachment);
       if (texture) {
         if (texture.gpuTexture) {
           const format = texture.descriptor.format;
