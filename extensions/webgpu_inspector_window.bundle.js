@@ -3058,7 +3058,7 @@ var __webgpu_inspector_window = (function (exports) {
         return null;
       }
       if (attachment.view.__texture) {
-        return attachment.view.__texture;
+        return this.database.getObject(attachment.view.__texture.__id);
       }
       const view = this.database.getObject(attachment.view.__id);
       if (!view) {
@@ -4042,6 +4042,8 @@ var __webgpu_inspector_window = (function (exports) {
         this.uiSamplers.count.text = `${this.database.samplers.size}`;
       } else if (object instanceof Texture) {
         this.uiTextures.count.text = `${this.database.textures.size}`;
+      } else if (object instanceof TextureView) {
+        this.uiTextureViews.count.text = `${this.database.textureViews.size}`;
       } else if (object instanceof ShaderModule) {
         this.uiShaderModules.count.text = `${this.database.shaderModules.size}`;
       } else if (object instanceof BindGroupLayout) {

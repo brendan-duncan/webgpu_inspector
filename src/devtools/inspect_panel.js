@@ -131,6 +131,8 @@ export class InspectPanel {
       this.uiSamplers.count.text = `${this.database.samplers.size}`;
     } else if (object instanceof Texture) {
       this.uiTextures.count.text = `${this.database.textures.size}`;
+    } else if (object instanceof TextureView) {
+      this.uiTextureViews.count.text = `${this.database.textureViews.size}`;
     } else if (object instanceof ShaderModule) {
       this.uiShaderModules.count.text = `${this.database.shaderModules.size}`;
     } else if (object instanceof BindGroupLayout) {

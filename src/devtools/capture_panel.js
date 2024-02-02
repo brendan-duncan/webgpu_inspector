@@ -187,7 +187,7 @@ export class CapturePanel {
       return null;
     }
     if (attachment.view.__texture) {
-      return attachment.view.__texture;
+      return this.database.getObject(attachment.view.__texture.__id);
     }
     const view = this.database.getObject(attachment.view.__id);
     if (!view) {
