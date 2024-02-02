@@ -279,6 +279,9 @@ export class CapturePanel {
         if (resource.buffer) {
           return "Buffer";
         }
+        if (resource.__class) {
+          return resource.__class;
+        }
         return "<unknown resource type>";
       }
       function getResourceId(resource) {

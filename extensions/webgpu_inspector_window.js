@@ -6794,6 +6794,9 @@ var __webgpu_inspector_window = (function (exports) {
           if (resource.buffer) {
             return "Buffer";
           }
+          if (resource.__class) {
+            return resource.__class;
+          }
           return "<unknown resource type>";
         }
         function getResourceId(resource) {
