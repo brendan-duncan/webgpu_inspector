@@ -291,6 +291,25 @@
     GPUCanvasContext
   ]);
 
+  const GPUCreateMethods = new Set([
+    "createBuffer",
+    "createTexture",
+    "createSampler",
+    "importExternalTexture",
+    "createBindGroupLayout",
+    "createPipelineLayout",
+    "createBindGroup",
+    "createShaderModule",
+    "createComputePipeline",
+    "createRenderPipeline",
+    "createComputePipelineAsync",
+    "createRenderPipelineAsync",
+    "createCommandEncoder",
+    "createRenderBundleEncoder",
+    "createQuerySet",
+    "createView"
+  ]);
+
   class GPUObjectWrapper {
     constructor(idGenerator) {
       this._idGenerator = idGenerator;
@@ -298,6 +317,7 @@
       this.onPostCall = new Signal();
       this.onPromise = new Signal();
       this.onPromiseResolve = new Signal();
+      this.recordStacktraces = false;
       this._wrapGPUTypes();
     }
 
@@ -406,7 +426,9 @@
         // Call the original method
         const result = origMethod.call(object, ...args);
 
-        const stacktrace = getStacktrace();
+        const isCreate = GPUCreateMethods.has(method);
+
+        const stacktrace = self.recordStacktraces || isCreate ? getStacktrace() : undefined;
 
         // If it was an async method it will have returned a Promise
         if (result instanceof Promise) {
@@ -773,7 +795,6 @@
         this._timeSinceLastFrame = 0;
         this._maxFramesToRecord = 1000;
         this._captureRequest = false;
-        this._captureStacktrace = false;
         this.__skipRecord = false;
         this._trackedObjects = new Map();
         this._captureTextureRequest = new Map();
@@ -790,11 +811,15 @@
         this._gpuWrapper.onPromiseResolve.addListener(this._onAsyncResolve, this);
         this._gpuWrapper.onPreCall.addListener(this._preMethodCall, this);
         this._gpuWrapper.onPostCall.addListener(this._onMethodCall, this);
+
+        this._garbageCollectectedObjects = [];
        
         // Try to track garbage collected WebGPU objects
-        this._gcRegistry = new FinalizationRegistry((id) => {
+        this._garbageCollectionRegistry = new FinalizationRegistry((id) => {
           if (id >= 0) {
-            window.postMessage({"action": "inspect_delete_object", id}, "*");
+            // It's too slow to send a message for every object that gets garbage collected,
+            // so we'll batch them up and send them every so often.
+            this._garbageCollectectedObjects.push(id);
             if (self._trackedObjects.has(id)) {
               const object = self._trackedObjects.get(id).deref();
               // If we're here, the object was garbage collected but not explicitly destroyed.
@@ -809,6 +834,14 @@
           self._trackedObjects.delete(id);
           self._captureTextureRequest.delete(id);
         });
+
+        const garbageCollectionInterval = 500;
+        setInterval(() => {
+          if (self._garbageCollectectedObjects.length > 0) {
+            window.postMessage({"action": "inspect_delete_objects", "idList": self._garbageCollectectedObjects}, "*");
+            self._garbageCollectectedObjects.length = 0;
+          }
+        }, garbageCollectionInterval);
 
         this._wrapCanvases();
 
@@ -1123,7 +1156,7 @@
         if (captureMode) {
           sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
           this._captureRequest = true;
-          this._captureStacktrace = captureMode == 2;
+          this._gpuWrapper.recordStacktraces = true;
         }
         this._frameData.length = 0;
         this._frameCommands.length = 0;
@@ -1135,9 +1168,24 @@
         window.postMessage({"action": "inspect_end_frame"}, "*");
 
         if (this._frameCommands.length) {
-          window.postMessage({"action": "inspect_capture_frame_results", "frame": this._frameIndex, "commands": this._frameCommands}, "*");
+          const maxFrameCount = 2000;
+          const batches = Math.ceil(this._frameCommands.length / maxFrameCount);
+          window.postMessage({"action": "inspect_capture_frame_results", "frame": this._frameIndex, "count": this._frameCommands.length, "batches": batches}, "*");
+
+          for (let i = 0; i < this._frameCommands.length; i += maxFrameCount) {
+            const length = Math.min(maxFrameCount, this._frameCommands.length - i);
+            const commands = this._frameCommands.slice(i, length);
+            window.postMessage({"action": "inspect_capture_frame_commands",
+                "frame": this._frameIndex,
+                "commands": commands,
+                "index": i,
+                "count": length
+              }, "*");
+          }
+          //window.postMessage({"action": "inspect_capture_frame_results", "frame": this._frameIndex, "commands": this._frameCommands}, "*");
           this._frameCommands.length = 0;
           this._captureRequest = false;
+          this._gpuWrapper.recordStacktraces = false;
         }
       }
 
@@ -1194,7 +1242,7 @@
         }
         object.__id = id ?? this.getNextId(object);
 
-        this._gcRegistry.register(object, object.__id);
+        this._garbageCollectionRegistry.register(object, object.__id);
 
         if (object.label !== undefined) {
           // Capture chaning of the GPUObjectBase label

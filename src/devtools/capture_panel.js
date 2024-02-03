@@ -1,5 +1,4 @@
 import { Button } from "./widget/button.js";
-import { Checkbox } from "./widget/checkbox.js";
 import { Collapsable } from "./widget/collapsable.js";
 import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
@@ -34,6 +33,10 @@ export class CapturePanel {
 
     this._loadingImages = 0;
 
+    this._captureCommands = [];
+    this._catpureFrameIndex = 0;
+    this._captureCount = 0;
+
     port.addListener((message) => {
       switch (message.action) {
         case "inspect_capture_texture_frames": {
@@ -42,10 +45,29 @@ export class CapturePanel {
           break;
         }
         case "inspect_capture_frame_results": {
-          const commands = message.commands;
           const frame = message.frame;
-          self._captureFrameResults(frame, commands);
+          const count = message.count;
+          const batches = message.batches;
+          self._captureCommands.length = count;
+          self._catpureFrameIndex = frame;
+          self._captureCount = batches;
           break;
+        }
+        case "inspect_capture_frame_commands": {
+          const commands = message.commands;
+          const index = message.index;
+          const count = message.count;
+          const frame = message.frame;
+          if (frame !== self._catpureFrameIndex) {
+            return;
+          }
+          for (let i = 0, j = index; i < count; ++i, ++j) {
+            self._captureCommands[j] = commands[i];
+          }
+          self._captureCount--;
+          if (self._captureCount === 0) {
+            self._captureFrameResults(frame, self._captureCommands);
+          }
         }
       }
     });
@@ -115,6 +137,9 @@ export class CapturePanel {
     let first = true;
     for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
       const command = commands[commandIndex];
+      if (!command) {
+        break;
+      }
       const className = command.class;
       const method = command.method;
       const args = command.args;

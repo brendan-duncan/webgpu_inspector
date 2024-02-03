@@ -4174,6 +4174,13 @@ var __webgpu_inspector_window = (function (exports) {
           case "inspect_delete_object":
             self._deleteObject(message.id);
             break;
+          case "inspect_delete_objects": {
+            const objects = message.idList;
+            for (const id of objects) {
+              self._deleteObject(id);
+            }
+            break;
+          }
           case "inspect_resolve_async_object":
             self._resolvePendingObject(message.id);
             break;
@@ -6469,157 +6476,6 @@ var __webgpu_inspector_window = (function (exports) {
     }
   }
 
-  class Label extends Widget {
-    constructor(text, parent, options) {
-      super('label', parent, options);
-      this.classList.add('label');
-      this.text = text;
-    }
-
-    configure(options) {
-      if (!options) {
-        return;
-      }
-      super.configure(options);
-      if (options.for) {
-        this.for = options.for;
-      }
-    }
-
-    get for() {
-      return this._element.htmlFor;
-    }
-
-    set for(v) {
-      if (!v) {
-        this._element.htmlFor = '';
-      } else if (v.constructor === String) {
-        this._element.htmlFor = v;
-      } else {
-        this._element.htmlFor = v.id;
-      }
-    }
-  }
-
-  class Input extends Widget {
-    constructor(parent, options) {
-      super('input', parent, options);
-      this.onChange = new Signal();
-      this.onEdit = new Signal();
-      const self = this;
-
-      this.element.addEventListener('change', function () {
-        let v = self.type === 'checkbox' ? self.checked : self.value;
-        self.onChange.emit(v);
-        if (self._onChange) {
-          self._onChange(v);
-        }
-      });
-
-      this.element.addEventListener('input', function () {
-        let v = self.type === 'checkbox' ? self.checked : self.value;
-        self.onEdit.emit(v);
-        if (self._onEdit) {
-          self._onEdit(v);
-        }
-      });
-    }
-
-    configure(options) {
-      if (!options) {
-        return;
-      }
-      super.configure(options);
-
-      if (options.type !== undefined) {
-        this.type = options.type;
-      }
-
-      if (options.checked !== undefined) {
-        this.checked = options.checked;
-      }
-
-      if (options.value !== undefined) {
-        this.value = options.value;
-      }
-
-      if (options.label !== undefined) {
-        if (options.label.constructor === String) {
-          this.label = new Label(options.label, this.parent, {
-            for: this,
-          });
-        } else {
-          this.label = options.label;
-          this.label.for = this.id;
-        }
-      }
-
-      if (options.readOnly !== undefined) {
-        this.readOnly = options.readOnly;
-      }
-
-      if (options.onChange !== undefined) {
-        this._onChange = options.onChange;
-      }
-
-      if (options.onEdit !== undefined) {
-        this._onEdit = options.onEdit;
-      }
-    }
-
-    get type() {
-      return this._element.type;
-    }
-
-    set type(v) {
-      this._element.type = v;
-    }
-
-    get checked() {
-      return this._element.checked;
-    }
-
-    set checked(v) {
-      this._element.checked = v;
-    }
-
-    get indeterminate() {
-      return this._element.indeterminate;
-    }
-
-    set indeterminate(v) {
-      this._element.indeterminate = v;
-    }
-
-    get value() {
-      return this._element.value;
-    }
-
-    set value(v) {
-      this._element.value = v;
-    }
-
-    get readOnly() {
-      return this._element.readOnly;
-    }
-
-    set readOnly(v) {
-      this._element.readOnly = v;
-    }
-
-    focus() {
-      this._element.focus();
-    }
-
-    blur() {
-      this._element.blur();
-    }
-
-    select() {
-      this._element.select();
-    }
-  }
-
   /**
    * A SPAN element widget.
    */
@@ -6701,6 +6557,10 @@ var __webgpu_inspector_window = (function (exports) {
 
       this._loadingImages = 0;
 
+      this._captureCommands = [];
+      this._catpureFrameIndex = 0;
+      this._captureCount = 0;
+
       port.addListener((message) => {
         switch (message.action) {
           case "inspect_capture_texture_frames": {
@@ -6709,10 +6569,29 @@ var __webgpu_inspector_window = (function (exports) {
             break;
           }
           case "inspect_capture_frame_results": {
-            const commands = message.commands;
             const frame = message.frame;
-            self._captureFrameResults(frame, commands);
+            const count = message.count;
+            const batches = message.batches;
+            self._captureCommands.length = count;
+            self._catpureFrameIndex = frame;
+            self._captureCount = batches;
             break;
+          }
+          case "inspect_capture_frame_commands": {
+            const commands = message.commands;
+            const index = message.index;
+            const count = message.count;
+            const frame = message.frame;
+            if (frame !== self._catpureFrameIndex) {
+              return;
+            }
+            for (let i = 0, j = index; i < count; ++i, ++j) {
+              self._captureCommands[j] = commands[i];
+            }
+            self._captureCount--;
+            if (self._captureCount === 0) {
+              self._captureFrameResults(frame, self._captureCommands);
+            }
           }
         }
       });
@@ -6782,6 +6661,9 @@ var __webgpu_inspector_window = (function (exports) {
       let first = true;
       for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
         const command = commands[commandIndex];
+        if (!command) {
+          break;
+        }
         const className = command.class;
         const method = command.method;
         const args = command.args;
@@ -7539,6 +7421,157 @@ var __webgpu_inspector_window = (function (exports) {
     "writeTexture": ["destination", "data", "dataLayout", "size", "bytesPerRow"],
     "copyExternalImageToTexture": ["source", "destination", "copySize"],
   };
+
+  class Label extends Widget {
+    constructor(text, parent, options) {
+      super('label', parent, options);
+      this.classList.add('label');
+      this.text = text;
+    }
+
+    configure(options) {
+      if (!options) {
+        return;
+      }
+      super.configure(options);
+      if (options.for) {
+        this.for = options.for;
+      }
+    }
+
+    get for() {
+      return this._element.htmlFor;
+    }
+
+    set for(v) {
+      if (!v) {
+        this._element.htmlFor = '';
+      } else if (v.constructor === String) {
+        this._element.htmlFor = v;
+      } else {
+        this._element.htmlFor = v.id;
+      }
+    }
+  }
+
+  class Input extends Widget {
+    constructor(parent, options) {
+      super('input', parent, options);
+      this.onChange = new Signal();
+      this.onEdit = new Signal();
+      const self = this;
+
+      this.element.addEventListener('change', function () {
+        let v = self.type === 'checkbox' ? self.checked : self.value;
+        self.onChange.emit(v);
+        if (self._onChange) {
+          self._onChange(v);
+        }
+      });
+
+      this.element.addEventListener('input', function () {
+        let v = self.type === 'checkbox' ? self.checked : self.value;
+        self.onEdit.emit(v);
+        if (self._onEdit) {
+          self._onEdit(v);
+        }
+      });
+    }
+
+    configure(options) {
+      if (!options) {
+        return;
+      }
+      super.configure(options);
+
+      if (options.type !== undefined) {
+        this.type = options.type;
+      }
+
+      if (options.checked !== undefined) {
+        this.checked = options.checked;
+      }
+
+      if (options.value !== undefined) {
+        this.value = options.value;
+      }
+
+      if (options.label !== undefined) {
+        if (options.label.constructor === String) {
+          this.label = new Label(options.label, this.parent, {
+            for: this,
+          });
+        } else {
+          this.label = options.label;
+          this.label.for = this.id;
+        }
+      }
+
+      if (options.readOnly !== undefined) {
+        this.readOnly = options.readOnly;
+      }
+
+      if (options.onChange !== undefined) {
+        this._onChange = options.onChange;
+      }
+
+      if (options.onEdit !== undefined) {
+        this._onEdit = options.onEdit;
+      }
+    }
+
+    get type() {
+      return this._element.type;
+    }
+
+    set type(v) {
+      this._element.type = v;
+    }
+
+    get checked() {
+      return this._element.checked;
+    }
+
+    set checked(v) {
+      this._element.checked = v;
+    }
+
+    get indeterminate() {
+      return this._element.indeterminate;
+    }
+
+    set indeterminate(v) {
+      this._element.indeterminate = v;
+    }
+
+    get value() {
+      return this._element.value;
+    }
+
+    set value(v) {
+      this._element.value = v;
+    }
+
+    get readOnly() {
+      return this._element.readOnly;
+    }
+
+    set readOnly(v) {
+      this._element.readOnly = v;
+    }
+
+    focus() {
+      this._element.focus();
+    }
+
+    blur() {
+      this._element.blur();
+    }
+
+    select() {
+      this._element.select();
+    }
+  }
 
   class RecorderPanel {
     constructor(window, parent) {

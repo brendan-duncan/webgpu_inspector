@@ -25,6 +25,25 @@ export const GPUObjectTypes = new Set([
   GPUCanvasContext
 ]);
 
+export const GPUCreateMethods = new Set([
+  "createBuffer",
+  "createTexture",
+  "createSampler",
+  "importExternalTexture",
+  "createBindGroupLayout",
+  "createPipelineLayout",
+  "createBindGroup",
+  "createShaderModule",
+  "createComputePipeline",
+  "createRenderPipeline",
+  "createComputePipelineAsync",
+  "createRenderPipelineAsync",
+  "createCommandEncoder",
+  "createRenderBundleEncoder",
+  "createQuerySet",
+  "createView"
+]);
+
 export class GPUObjectWrapper {
   constructor(idGenerator) {
     this._idGenerator = idGenerator;
@@ -32,6 +51,7 @@ export class GPUObjectWrapper {
     this.onPostCall = new Signal();
     this.onPromise = new Signal();
     this.onPromiseResolve = new Signal();
+    this.recordStacktraces = false;
     this._wrapGPUTypes();
   }
 
@@ -140,7 +160,9 @@ export class GPUObjectWrapper {
       // Call the original method
       const result = origMethod.call(object, ...args);
 
-      const stacktrace = getStacktrace();
+      const isCreate = GPUCreateMethods.has(method);
+
+      const stacktrace = self.recordStacktraces || isCreate ? getStacktrace() : undefined;
 
       // If it was an async method it will have returned a Promise
       if (result instanceof Promise) {

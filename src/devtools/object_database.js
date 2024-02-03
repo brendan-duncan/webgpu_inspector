@@ -206,6 +206,13 @@ export class ObjectDatabase {
         case "inspect_delete_object":
           self._deleteObject(message.id);
           break;
+        case "inspect_delete_objects": {
+          const objects = message.idList;
+          for (const id of objects) {
+            self._deleteObject(id);
+          }
+          break;
+        }
         case "inspect_resolve_async_object":
           self._resolvePendingObject(message.id);
           break;
