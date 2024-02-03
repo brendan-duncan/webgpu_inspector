@@ -1,4 +1,4 @@
-import { MessagePort } from "./devtools/message_port.js";
+import { MessagePort } from "./utils/message_port.js";
 
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
@@ -51,7 +51,6 @@ window.addEventListener('message', (event) => {
 function injectScriptNode(name, url, attributes) {
   const script = document.createElement("script");
   script.id = name;
-  //script.type = "module";
   script.src = url;
 
   if (attributes) {

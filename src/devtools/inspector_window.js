@@ -1,15 +1,15 @@
 import { ObjectDatabase } from "./object_database.js";
-import { MessagePort } from "./message_port.js";
+import { MessagePort } from "../utils/message_port.js";
 import { Div } from "./widget/div.js";
 import { TabWidget } from "./widget/tab_widget.js";
-import { TextureUtils } from "./texture_utils.js";
+import { TextureUtils } from "../utils/texture_utils.js";
 import { Window } from "./widget/window.js";
 import { CapturePanel } from "./capture_panel.js";
 import { RecorderPanel } from "./recorder_panel.js";
 import { InspectPanel } from "./inspect_panel.js";
-import { Signal } from "./widget/signal.js";
-import { decodeDataUrl } from "./base64.js";
-import { TextureFormatInfo } from "./texture_format_info.js";
+import { Signal } from "../utils/signal.js";
+import { decodeDataUrl } from "../utils/base64.js";
+import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import {
   Texture
 } from "./object_database.js";

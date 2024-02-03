@@ -3971,9 +3971,10 @@ var __webgpu_inspector_window = (function (exports) {
   });
 
   class GPUObject {
-    constructor(id) {
+    constructor(id, stacktrace) {
       this.id = id;
       this.label = "";
+      this.stacktrace = stacktrace ?? "";
       this.parent = null;
       this.children = [];
     }
@@ -3984,36 +3985,36 @@ var __webgpu_inspector_window = (function (exports) {
   }
 
   class Adapter extends GPUObject {
-    constructor(id, descriptor) {
-      super(id);
+    constructor(id, descriptor, stacktrace) {
+      super(id, stacktrace);
       this.descriptor = descriptor;
     }
   }
 
   class Device extends GPUObject {
-    constructor(id, descriptor) {
-      super(id);
+    constructor(id, descriptor, stacktrace) {
+      super(id, stacktrace);
       this.descriptor = descriptor;
     }
   }
 
   class Buffer extends GPUObject {
-    constructor(id, descriptor) {
-      super(id);
+    constructor(id, descriptor, stacktrace) {
+      super(id, stacktrace);
       this.descriptor = descriptor;
     }
   }
 
   class Sampler extends GPUObject {
-    constructor(id, descriptor) {
-      super(id);
+    constructor(id, descriptor, stacktrace) {
+      super(id, stacktrace);
       this.descriptor = descriptor;
     }
   }
 
   class Texture extends GPUObject {
-    constructor(id, descriptor) {
-      super(id);
+    constructor(id, descriptor, stacktrace) {
+      super(id, stacktrace);
       this.descriptor = descriptor;
       this.imageData = null;
       this.loadedImageDataChunks = [];
@@ -4079,15 +4080,15 @@ var __webgpu_inspector_window = (function (exports) {
   }
 
   class TextureView extends GPUObject {
-    constructor(id, descriptor) {
-      super(id);
+    constructor(id, descriptor, stacktrace) {
+      super(id, stacktrace);
       this.descriptor = descriptor;
     }
   }
 
   class ShaderModule extends GPUObject {
-    constructor(id, descriptor) {
-      super(id);
+    constructor(id, descriptor, stacktrace) {
+      super(id, stacktrace);
       this._reflection = null;
       this.descriptor = descriptor;
       this.hasVertexEntries = descriptor?.code ? descriptor.code.indexOf("@vertex") != -1 : false;
@@ -4108,29 +4109,29 @@ var __webgpu_inspector_window = (function (exports) {
   }
 
   class BindGroupLayout extends GPUObject {
-    constructor(id, descriptor) {
-      super(id);
+    constructor(id, descriptor, stacktrace) {
+      super(id, stacktrace);
       this.descriptor = descriptor;
     }
   }
 
   class PipelineLayout extends GPUObject {
-    constructor(id, descriptor) {
-      super(id);
+    constructor(id, descriptor, stacktrace) {
+      super(id, stacktrace);
       this.descriptor = descriptor;
     }
   }
 
   class BindGroup extends GPUObject {
-    constructor(id, descriptor) {
-      super(id);
+    constructor(id, descriptor, stacktrace) {
+      super(id, stacktrace);
       this.descriptor = descriptor;
     }
   }
 
   class RenderPipeline extends GPUObject {
-    constructor(id, descriptor) {
-      super(id);
+    constructor(id, descriptor, stacktrace) {
+      super(id, stacktrace);
       this.descriptor = descriptor;
     }
 
@@ -4140,8 +4141,8 @@ var __webgpu_inspector_window = (function (exports) {
   }
 
   class ComputePipeline extends GPUObject {
-    constructor(id, descriptor) {
-      super(id);
+    constructor(id, descriptor, stacktrace) {
+      super(id, stacktrace);
       this.descriptor = descriptor;
     }
   }
@@ -4183,6 +4184,7 @@ var __webgpu_inspector_window = (function (exports) {
             const pending = !!message.pending;
             const id = message.id;
             const parent = message.parent;
+            const stacktrace = message.stacktrace ?? "";
             let descriptor = null;
             try {
               descriptor = message.descriptor ? JSON.parse(message.descriptor) : null;
@@ -4191,23 +4193,23 @@ var __webgpu_inspector_window = (function (exports) {
             }
             switch (message.type) {
               case "Adapter": {
-                const obj = new Adapter(id, descriptor);
+                const obj = new Adapter(id, descriptor, stacktrace);
                 self._addObject(obj, parent, pending);
                 break;
               }
               case "Device": {
-                const obj = new Device(id, descriptor);
+                const obj = new Device(id, descriptor, stacktrace);
                 self._addObject(obj, parent, pending);
                 break;
               }
               case "ShaderModule": {
-                const obj = new ShaderModule(id, descriptor);
+                const obj = new ShaderModule(id, descriptor, stacktrace);
                 self._addObject(obj, parent, pending);
                 obj.size = descriptor?.code?.length ?? 0;
                 break;
               }
               case "Buffer": {
-                const obj = new Buffer(id, descriptor);
+                const obj = new Buffer(id, descriptor, stacktrace);
                 self._addObject(obj, parent, pending);
                 obj.size = descriptor?.size ?? 0;
                 this.totalBufferMemory += obj.size;
@@ -4227,7 +4229,7 @@ var __webgpu_inspector_window = (function (exports) {
                   }
                   return;
                 }
-                const obj = new Texture(id, descriptor);
+                const obj = new Texture(id, descriptor, stacktrace);
                 const size = obj.getGpuSize();
                 if (size != -1) {
                   this.totalTextureMemory += size;
@@ -4241,37 +4243,37 @@ var __webgpu_inspector_window = (function (exports) {
                   prevView.descriptor = descriptor;
                   return;
                 }
-                const obj = new TextureView(id, descriptor);
+                const obj = new TextureView(id, descriptor, stacktrace);
                 self._addObject(obj, parent, pending);
                 break;
               }
               case "Sampler": {
-                const obj = new Sampler(id, descriptor);
+                const obj = new Sampler(id, descriptor, stacktrace);
                 self._addObject(obj, parent, pending);
                 break;
               }
               case "BindGroup": {
-                const obj = new BindGroup(id, descriptor);
+                const obj = new BindGroup(id, descriptor, stacktrace);
                 self._addObject(obj, parent, pending);
                 break;
               }
               case "BindGroupLayout": {
-                const obj = new BindGroupLayout(id, descriptor);
+                const obj = new BindGroupLayout(id, descriptor, stacktrace);
                 self._addObject(obj, parent, pending);
                 break;
               }
               case "RenderPipeline": {
-                const obj = new RenderPipeline(id, descriptor);
+                const obj = new RenderPipeline(id, descriptor, stacktrace);
                 self._addObject(obj, parent, pending);
                 break;
               }
               case "ComputePipeline": {
-                const obj = new ComputePipeline(id, descriptor);
+                const obj = new ComputePipeline(id, descriptor, stacktrace);
                 self._addObject(obj, parent, pending);
                 break;
               }
               case "PipelineLayout": {
-                const obj = new PipelineLayout(id, descriptor);
+                const obj = new PipelineLayout(id, descriptor, stacktrace);
                 self._addObject(obj, parent, pending);
                 break;
               }
@@ -6467,6 +6469,157 @@ var __webgpu_inspector_window = (function (exports) {
     }
   }
 
+  class Label extends Widget {
+    constructor(text, parent, options) {
+      super('label', parent, options);
+      this.classList.add('label');
+      this.text = text;
+    }
+
+    configure(options) {
+      if (!options) {
+        return;
+      }
+      super.configure(options);
+      if (options.for) {
+        this.for = options.for;
+      }
+    }
+
+    get for() {
+      return this._element.htmlFor;
+    }
+
+    set for(v) {
+      if (!v) {
+        this._element.htmlFor = '';
+      } else if (v.constructor === String) {
+        this._element.htmlFor = v;
+      } else {
+        this._element.htmlFor = v.id;
+      }
+    }
+  }
+
+  class Input extends Widget {
+    constructor(parent, options) {
+      super('input', parent, options);
+      this.onChange = new Signal();
+      this.onEdit = new Signal();
+      const self = this;
+
+      this.element.addEventListener('change', function () {
+        let v = self.type === 'checkbox' ? self.checked : self.value;
+        self.onChange.emit(v);
+        if (self._onChange) {
+          self._onChange(v);
+        }
+      });
+
+      this.element.addEventListener('input', function () {
+        let v = self.type === 'checkbox' ? self.checked : self.value;
+        self.onEdit.emit(v);
+        if (self._onEdit) {
+          self._onEdit(v);
+        }
+      });
+    }
+
+    configure(options) {
+      if (!options) {
+        return;
+      }
+      super.configure(options);
+
+      if (options.type !== undefined) {
+        this.type = options.type;
+      }
+
+      if (options.checked !== undefined) {
+        this.checked = options.checked;
+      }
+
+      if (options.value !== undefined) {
+        this.value = options.value;
+      }
+
+      if (options.label !== undefined) {
+        if (options.label.constructor === String) {
+          this.label = new Label(options.label, this.parent, {
+            for: this,
+          });
+        } else {
+          this.label = options.label;
+          this.label.for = this.id;
+        }
+      }
+
+      if (options.readOnly !== undefined) {
+        this.readOnly = options.readOnly;
+      }
+
+      if (options.onChange !== undefined) {
+        this._onChange = options.onChange;
+      }
+
+      if (options.onEdit !== undefined) {
+        this._onEdit = options.onEdit;
+      }
+    }
+
+    get type() {
+      return this._element.type;
+    }
+
+    set type(v) {
+      this._element.type = v;
+    }
+
+    get checked() {
+      return this._element.checked;
+    }
+
+    set checked(v) {
+      this._element.checked = v;
+    }
+
+    get indeterminate() {
+      return this._element.indeterminate;
+    }
+
+    set indeterminate(v) {
+      this._element.indeterminate = v;
+    }
+
+    get value() {
+      return this._element.value;
+    }
+
+    set value(v) {
+      this._element.value = v;
+    }
+
+    get readOnly() {
+      return this._element.readOnly;
+    }
+
+    set readOnly(v) {
+      this._element.readOnly = v;
+    }
+
+    focus() {
+      this._element.focus();
+    }
+
+    blur() {
+      this._element.blur();
+    }
+
+    select() {
+      this._element.select();
+    }
+  }
+
   /**
    * A SPAN element widget.
    */
@@ -7228,6 +7381,12 @@ var __webgpu_inspector_window = (function (exports) {
         }
       }
 
+      const cmd = commands[commandIndex];
+      if (cmd.stacktrace) {
+        const stacktrace = new Collapsable(commandInfo, { collapsed: true, label: "Stacktrace" });
+        new Div(stacktrace.body, { text: cmd.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" });
+      }
+
       const argsGroup = new Collapsable(commandInfo, { label: "Arguments" });
       const newArgs = this._processCommandArgs(args);
       if (CapturePanel._commandArgs[method]) {
@@ -7380,157 +7539,6 @@ var __webgpu_inspector_window = (function (exports) {
     "writeTexture": ["destination", "data", "dataLayout", "size", "bytesPerRow"],
     "copyExternalImageToTexture": ["source", "destination", "copySize"],
   };
-
-  class Label extends Widget {
-    constructor(text, parent, options) {
-      super('label', parent, options);
-      this.classList.add('label');
-      this.text = text;
-    }
-
-    configure(options) {
-      if (!options) {
-        return;
-      }
-      super.configure(options);
-      if (options.for) {
-        this.for = options.for;
-      }
-    }
-
-    get for() {
-      return this._element.htmlFor;
-    }
-
-    set for(v) {
-      if (!v) {
-        this._element.htmlFor = '';
-      } else if (v.constructor === String) {
-        this._element.htmlFor = v;
-      } else {
-        this._element.htmlFor = v.id;
-      }
-    }
-  }
-
-  class Input extends Widget {
-    constructor(parent, options) {
-      super('input', parent, options);
-      this.onChange = new Signal();
-      this.onEdit = new Signal();
-      const self = this;
-
-      this.element.addEventListener('change', function () {
-        let v = self.type === 'checkbox' ? self.checked : self.value;
-        self.onChange.emit(v);
-        if (self._onChange) {
-          self._onChange(v);
-        }
-      });
-
-      this.element.addEventListener('input', function () {
-        let v = self.type === 'checkbox' ? self.checked : self.value;
-        self.onEdit.emit(v);
-        if (self._onEdit) {
-          self._onEdit(v);
-        }
-      });
-    }
-
-    configure(options) {
-      if (!options) {
-        return;
-      }
-      super.configure(options);
-
-      if (options.type !== undefined) {
-        this.type = options.type;
-      }
-
-      if (options.checked !== undefined) {
-        this.checked = options.checked;
-      }
-
-      if (options.value !== undefined) {
-        this.value = options.value;
-      }
-
-      if (options.label !== undefined) {
-        if (options.label.constructor === String) {
-          this.label = new Label(options.label, this.parent, {
-            for: this,
-          });
-        } else {
-          this.label = options.label;
-          this.label.for = this.id;
-        }
-      }
-
-      if (options.readOnly !== undefined) {
-        this.readOnly = options.readOnly;
-      }
-
-      if (options.onChange !== undefined) {
-        this._onChange = options.onChange;
-      }
-
-      if (options.onEdit !== undefined) {
-        this._onEdit = options.onEdit;
-      }
-    }
-
-    get type() {
-      return this._element.type;
-    }
-
-    set type(v) {
-      this._element.type = v;
-    }
-
-    get checked() {
-      return this._element.checked;
-    }
-
-    set checked(v) {
-      this._element.checked = v;
-    }
-
-    get indeterminate() {
-      return this._element.indeterminate;
-    }
-
-    set indeterminate(v) {
-      this._element.indeterminate = v;
-    }
-
-    get value() {
-      return this._element.value;
-    }
-
-    set value(v) {
-      this._element.value = v;
-    }
-
-    get readOnly() {
-      return this._element.readOnly;
-    }
-
-    set readOnly(v) {
-      this._element.readOnly = v;
-    }
-
-    focus() {
-      this._element.focus();
-    }
-
-    blur() {
-      this._element.blur();
-    }
-
-    select() {
-      this._element.select();
-    }
-  }
 
   class RecorderPanel {
     constructor(window, parent) {
@@ -7903,6 +7911,10 @@ var __webgpu_inspector_window = (function (exports) {
       const depGrp = new Div(infoBox, { style: "font-size: 10pt; color: #aaa; padding-left: 20px; max-height: 50px; overflow: auto;" });
       for (const dep of dependencies) {
         new Div(depGrp, { text: `${dep.name} ${dep.id}` });
+      }
+      if (object.stacktrace) {
+        new Div(infoBox, { text: "Stacktrace:", style: "font-size: 10pt;color: #fff;padding-left: 10px;margin-top: 10px;line-height: 30px;background-color: rgb(85, 85, 119);" });
+        new Div(infoBox, { text: object.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" });
       }
 
       const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-200px + 100vh); overflow: auto;" });

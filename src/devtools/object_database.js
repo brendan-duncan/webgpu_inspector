@@ -1,11 +1,12 @@
-import { Signal } from "./widget/signal.js";
-import { TextureFormatInfo } from "./texture_format_info.js";
+import { Signal } from "../utils/signal.js";
+import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import { WgslReflect } from "./wgsl_reflect.module.js";
 
 export class GPUObject {
-  constructor(id) {
+  constructor(id, stacktrace) {
     this.id = id;
     this.label = "";
+    this.stacktrace = stacktrace ?? "";
     this.parent = null;
     this.children = [];
   }
@@ -16,36 +17,36 @@ export class GPUObject {
 }
 
 export class Adapter extends GPUObject {
-  constructor(id, descriptor) {
-    super(id);
+  constructor(id, descriptor, stacktrace) {
+    super(id, stacktrace);
     this.descriptor = descriptor;
   }
 }
 
 export class Device extends GPUObject {
-  constructor(id, descriptor) {
-    super(id);
+  constructor(id, descriptor, stacktrace) {
+    super(id, stacktrace);
     this.descriptor = descriptor;
   }
 }
 
 export class Buffer extends GPUObject {
-  constructor(id, descriptor) {
-    super(id);
+  constructor(id, descriptor, stacktrace) {
+    super(id, stacktrace);
     this.descriptor = descriptor;
   }
 }
 
 export class Sampler extends GPUObject {
-  constructor(id, descriptor) {
-    super(id);
+  constructor(id, descriptor, stacktrace) {
+    super(id, stacktrace);
     this.descriptor = descriptor;
   }
 }
 
 export class Texture extends GPUObject {
-  constructor(id, descriptor) {
-    super(id);
+  constructor(id, descriptor, stacktrace) {
+    super(id, stacktrace);
     this.descriptor = descriptor;
     this.imageData = null;
     this.loadedImageDataChunks = [];
@@ -111,15 +112,15 @@ export class Texture extends GPUObject {
 }
 
 export class TextureView extends GPUObject {
-  constructor(id, descriptor) {
-    super(id);
+  constructor(id, descriptor, stacktrace) {
+    super(id, stacktrace);
     this.descriptor = descriptor;
   }
 }
 
 export class ShaderModule extends GPUObject {
-  constructor(id, descriptor) {
-    super(id);
+  constructor(id, descriptor, stacktrace) {
+    super(id, stacktrace);
     this._reflection = null;
     this.descriptor = descriptor;
     this.hasVertexEntries = descriptor?.code ? descriptor.code.indexOf("@vertex") != -1 : false;
@@ -140,29 +141,29 @@ export class ShaderModule extends GPUObject {
 }
 
 export class BindGroupLayout extends GPUObject {
-  constructor(id, descriptor) {
-    super(id);
+  constructor(id, descriptor, stacktrace) {
+    super(id, stacktrace);
     this.descriptor = descriptor;
   }
 }
 
 export class PipelineLayout extends GPUObject {
-  constructor(id, descriptor) {
-    super(id);
+  constructor(id, descriptor, stacktrace) {
+    super(id, stacktrace);
     this.descriptor = descriptor;
   }
 }
 
 export class BindGroup extends GPUObject {
-  constructor(id, descriptor) {
-    super(id);
+  constructor(id, descriptor, stacktrace) {
+    super(id, stacktrace);
     this.descriptor = descriptor;
   }
 }
 
 export class RenderPipeline extends GPUObject {
-  constructor(id, descriptor) {
-    super(id);
+  constructor(id, descriptor, stacktrace) {
+    super(id, stacktrace);
     this.descriptor = descriptor;
   }
 
@@ -172,8 +173,8 @@ export class RenderPipeline extends GPUObject {
 }
 
 export class ComputePipeline extends GPUObject {
-  constructor(id, descriptor) {
-    super(id);
+  constructor(id, descriptor, stacktrace) {
+    super(id, stacktrace);
     this.descriptor = descriptor;
   }
 }
@@ -215,6 +216,7 @@ export class ObjectDatabase {
           const pending = !!message.pending;
           const id = message.id;
           const parent = message.parent;
+          const stacktrace = message.stacktrace ?? "";
           let descriptor = null;
           try {
             descriptor = message.descriptor ? JSON.parse(message.descriptor) : null;
@@ -223,23 +225,23 @@ export class ObjectDatabase {
           }
           switch (message.type) {
             case "Adapter": {
-              const obj = new Adapter(id, descriptor);
+              const obj = new Adapter(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
               break;
             }
             case "Device": {
-              const obj = new Device(id, descriptor);
+              const obj = new Device(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
               break;
             }
             case "ShaderModule": {
-              const obj = new ShaderModule(id, descriptor);
+              const obj = new ShaderModule(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
               obj.size = descriptor?.code?.length ?? 0;
               break;
             }
             case "Buffer": {
-              const obj = new Buffer(id, descriptor);
+              const obj = new Buffer(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
               obj.size = descriptor?.size ?? 0;
               this.totalBufferMemory += obj.size;
@@ -259,7 +261,7 @@ export class ObjectDatabase {
                 }
                 return;
               }
-              const obj = new Texture(id, descriptor);
+              const obj = new Texture(id, descriptor, stacktrace);
               const size = obj.getGpuSize();
               if (size != -1) {
                 this.totalTextureMemory += size;
@@ -273,37 +275,37 @@ export class ObjectDatabase {
                 prevView.descriptor = descriptor;
                 return;
               }
-              const obj = new TextureView(id, descriptor);
+              const obj = new TextureView(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
               break;
             }
             case "Sampler": {
-              const obj = new Sampler(id, descriptor);
+              const obj = new Sampler(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
               break;
             }
             case "BindGroup": {
-              const obj = new BindGroup(id, descriptor);
+              const obj = new BindGroup(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
               break;
             }
             case "BindGroupLayout": {
-              const obj = new BindGroupLayout(id, descriptor);
+              const obj = new BindGroupLayout(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
               break;
             }
             case "RenderPipeline": {
-              const obj = new RenderPipeline(id, descriptor);
+              const obj = new RenderPipeline(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
               break;
             }
             case "ComputePipeline": {
-              const obj = new ComputePipeline(id, descriptor);
+              const obj = new ComputePipeline(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
               break;
             }
             case "PipelineLayout": {
-              const obj = new PipelineLayout(id, descriptor);
+              const obj = new PipelineLayout(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
               break;
             }

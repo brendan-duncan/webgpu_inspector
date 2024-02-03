@@ -1,6 +1,6 @@
 import { Widget } from './widget.js';
 import { Label } from './label.js';
-import { Signal } from './signal.js';
+import { Signal } from '../../utils/signal.js';
 
 export class Input extends Widget {
   constructor(parent, options) {

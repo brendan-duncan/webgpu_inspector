@@ -249,6 +249,24 @@
 
   Signal._disableSignals = 0;
 
+  function getStacktrace() {
+    if (!Error.captureStackTrace) {
+      return "";
+    }
+    const stacktrace = {};
+    Error.captureStackTrace(stacktrace, getStacktrace);
+    if (!stacktrace.stack) {
+      return "";
+    }
+    let stack = stacktrace.stack
+      .split("\n")
+      .map((line) => line.split("at ")[1])
+      .slice(2) // Skip the Error line and the GPU.* line.
+      .filter((line) => line && !line.includes("webgpu_inspector.js"));
+
+    return stack.join("\n");
+  }
+
   const GPUObjectTypes = new Set([
     GPUAdapter,
     GPUDevice,
@@ -388,14 +406,16 @@
         // Call the original method
         const result = origMethod.call(object, ...args);
 
+        const stacktrace = getStacktrace();
+
         // If it was an async method it will have returned a Promise
         if (result instanceof Promise) {
           const id = self._idGenerator.getNextId(object);
-          self.onPromise.emit(object, method, args, id);
+          self.onPromise.emit(object, method, args, id, stacktrace);
           const promise = result;
           const wrappedPromise = new Promise((resolve) => {
             promise.then((result) => {
-              self.onPromiseResolve.emit(object, method, args, id, result);
+              self.onPromiseResolve.emit(object, method, args, id, result, stacktrace);
               resolve(result);
             });
           });
@@ -403,7 +423,7 @@
         }
 
         // Otherwise it's a synchronous method
-        self.onPostCall.emit(object, method, args, result);
+        self.onPostCall.emit(object, method, args, result, stacktrace);
 
         return result;
       };
@@ -753,6 +773,7 @@
         this._timeSinceLastFrame = 0;
         this._maxFramesToRecord = 1000;
         this._captureRequest = false;
+        this._captureStacktrace = false;
         this.__skipRecord = false;
         this._trackedObjects = new Map();
         this._captureTextureRequest = new Map();
@@ -801,13 +822,8 @@
           return element;
         };
 
-        // Wrap requestAnimationFrame so it can keep track of per-frame recording and know when
-        // the maximum number of frames has been reached.
-        //
-        // It would be nice to be able to arbitrarily start/stop recording. To do this,
-        // we would need to keep track of things like shader creation/deletion that can happen
-        // at arbitrary frames prior to the start, for any objects used within that recorded
-        // duration.
+        // Wrap requestAnimationFrame so it can keep track of framerates and frame captures.
+        // This requires that the page uses requestAnimationFrame to drive the rendering loop.
         const __requestAnimationFrame = window.requestAnimationFrame;
         window.requestAnimationFrame = function (cb) {
           function callback() {
@@ -834,6 +850,8 @@
         });
       }
 
+      // Called before a GPU method is called, allowing the inspector to modify
+      // the arguments or the object before the method is called.
       _preMethodCall(object, method, args) {
         const self = this;
 
@@ -934,7 +952,8 @@
         }
       }
 
-      _onMethodCall(object, method, args, result) {
+      // Called after a GPU method is called, allowing the inspector to wrap the result.
+      _onMethodCall(object, method, args, result, stacktrace) {
         if (method == "beginRenderPass") {
           result.__commandEncoder = object;
           if (this._capturedRenderView) {
@@ -996,25 +1015,26 @@
           }
         }
 
-        this._recordCommand(object, method, result, args);
+        this._recordCommand(object, method, result, args, stacktrace);
       }
 
-      _onAsyncResolve(object, method, args, id, result) {
+      // Called when an async GPU method promise resolves, allowing the inspector to wrap the result.
+      _onAsyncResolve(object, method, args, id, result, stacktrace) {
         if (method === "requestAdapter") {
           const adapter = result;
           if (adapter) {
-            this._wrapAdapter(result, id);
+            this._wrapAdapter(result, id, stacktrace);
           }
         } else if (method === "requestDevice") {
           const adapter = object;
           const device = result;
           if (device) {
-            this._wrapDevice(adapter, device, id, args);
+            this._wrapDevice(adapter, device, id, args, stacktrace);
           }
         }
       }
 
-      _wrapAdapter(adapter, id) {
+      _wrapAdapter(adapter, id, stacktrace) {
         this._wrapObject(adapter, id);
         id ??= adapter.__id;
         const self = this;
@@ -1029,13 +1049,13 @@
             isFallbackAdapter: adapter.isFallbackAdapter,
             wgslFeatures: self._gpuToArray(navigator.gpu.wgslLanguageFeatures)
           };
-          window.postMessage({"action": "inspect_add_object", id, "type": "Adapter", "descriptor": JSON.stringify(info)}, "*");
+          window.postMessage({"action": "inspect_add_object", id, "type": "Adapter", "descriptor": JSON.stringify(info), stacktrace}, "*");
         });
       }
 
-      _wrapDevice(adapter, device, id, args) {
+      _wrapDevice(adapter, device, id, args, stacktrace) {
         if (adapter && adapter.__id === undefined) {
-          this._wrapAdapter(adapter);
+          this._wrapAdapter(adapter, undefined, stacktrace);
         }
 
         if (device && device.__id === undefined) {
@@ -1047,7 +1067,7 @@
           descriptor["features"] = this._gpuToArray(device.features);
           descriptor["limits"] = this._gpuToObject(device.limits);
           this._trackObject(deviceId, device);
-          window.postMessage({"action": "inspect_add_object", id: deviceId, parent: adapterId, "type": "Device", "descriptor": JSON.stringify(descriptor)}, "*");
+          window.postMessage({"action": "inspect_add_object", id: deviceId, parent: adapterId, "type": "Device", "descriptor": JSON.stringify(descriptor), stacktrace}, "*");
         }
       }
 
@@ -1099,9 +1119,11 @@
       _frameStart() {
         window.postMessage({"action": "inspect_begin_frame"}, "*");
 
-        if (sessionStorage.getItem(webgpuInspectorCaptureFrameKey)) {
+        const captureMode = sessionStorage.getItem(webgpuInspectorCaptureFrameKey);
+        if (captureMode) {
           sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
           this._captureRequest = true;
+          this._captureStacktrace = captureMode == 2;
         }
         this._frameData.length = 0;
         this._frameCommands.length = 0;
@@ -1262,7 +1284,7 @@
         return s;
       }
 
-      _recordCommand(object, method, result, args) {
+      _recordCommand(object, method, result, args, stacktrace) {
         if (object instanceof GPUDevice && object?.__id === undefined) {
           // We haven't wrapped the object yet, so do it now.
           // Probably the GPUDevice where requestDevice happened
@@ -1281,13 +1303,13 @@
           }
         } else if (method == "createShaderModule") {
           const id = result.__id;
-          window.postMessage({"action": "inspect_add_object", id, parent, "type": "ShaderModule", "descriptor": this._stringifyDescriptor(args[0])}, "*");
+          window.postMessage({"action": "inspect_add_object", id, parent, "type": "ShaderModule", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
         } else if (method == "createBuffer") {
           const id = result.__id;
-          window.postMessage({"action": "inspect_add_object", id, parent,"type": "Buffer", "descriptor": this._stringifyDescriptor(args[0])}, "*");
+          window.postMessage({"action": "inspect_add_object", id, parent,"type": "Buffer", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
         } else if (method == "createTexture") {
           const id = result.__id;
-          window.postMessage({"action": "inspect_add_object", id, parent,"type": "Texture", "descriptor": this._stringifyDescriptor(args[0])}, "*");
+          window.postMessage({"action": "inspect_add_object", id, parent,"type": "Texture", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
           result.__device = object;
         } else if (method == "getCurrentTexture") {
           const id = result.__id;
@@ -1306,10 +1328,10 @@
         } else if (method == "createView") {
           const id = result.__id;
           result.__texture = object;
-          window.postMessage({"action": "inspect_add_object", id, parent,"type": "TextureView", "descriptor": this._stringifyDescriptor(args[0])}, "*");
+          window.postMessage({"action": "inspect_add_object", id, parent,"type": "TextureView", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
         } else if (method == "createSampler") {
           const id = result.__id;
-          window.postMessage({"action": "inspect_add_object", id, parent,"type": "Sampler", "descriptor": this._stringifyDescriptor(args[0])}, "*");
+          window.postMessage({"action": "inspect_add_object", id, parent,"type": "Sampler", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
         } else if (method == "createBindGroup") {
           const id = result.__id;
           // Attach resources to the bindgroups that use them to keep them from being garbage collected so we can inspect them later.
@@ -1329,16 +1351,16 @@
               }
             }
           }*/
-          window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroup", "descriptor": this._stringifyDescriptor(args[0])}, "*");
+          window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroup", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
         } else if (method == "createBindGroupLayout") {
           const id = result.__id;
-          window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroupLayout", "descriptor": this._stringifyDescriptor(args[0])}, "*");
+          window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroupLayout", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
         } else if (method == "createPipelineLayout") {
           const id = result.__id;
-          window.postMessage({"action": "inspect_add_object", id, parent,"type": "PipelineLayout", "descriptor": this._stringifyDescriptor(args[0])}, "*");
+          window.postMessage({"action": "inspect_add_object", id, parent,"type": "PipelineLayout", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
         } else if (method == "createRenderPipeline") {
           const id = result.__id;
-          window.postMessage({"action": "inspect_add_object", id, parent,"type": "RenderPipeline", "descriptor": this._stringifyDescriptor(args[0])}, "*");
+          window.postMessage({"action": "inspect_add_object", id, parent,"type": "RenderPipeline", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
           // There are cases when the shader modules used by the render pipeline will be garbage collected, and we won't be able to inspect them after that.
           // Hang on to the shader modules used in the descriptor by attaching them to the pipeline.
           if (args[0].vertex?.module) {
@@ -1349,7 +1371,7 @@
           }
         } else if (method == "createComputePipeline") {
           const id = result.__id;
-          window.postMessage({"action": "inspect_add_object", id, parent,"type": "ComputePipeline", "descriptor": this._stringifyDescriptor(args[0])}, "*");
+          window.postMessage({"action": "inspect_add_object", id, parent,"type": "ComputePipeline", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
           if (args[0].compute?.module) {
             result.__computeModule = args[0].compute?.module;
           }
@@ -1366,11 +1388,11 @@
         }
 
         if (this._captureRequest) {
-          this._captureCommand(object, method, args);
+          this._captureCommand(object, method, args, stacktrace);
         }
       }
 
-      _captureCommand(object, method, args) {
+      _captureCommand(object, method, args, stacktrace) {
         const a = args;
         if (a.length === 1 && a[0] === undefined) {
           a.length = 0;
@@ -1432,7 +1454,8 @@
           "class": object.constructor.name,
           "id": object.__id,
           method,
-          args: newArgs
+          args: newArgs,
+          stacktrace
         });
 
         if (method == "beginRenderPass") {
@@ -1641,9 +1664,9 @@
 
       _recordAsyncCommand(object, method, id, ...args) {
         if (method == "createRenderPipelineAsync") {
-          window.postMessage({"action": "inspect_add_object", id, "pending": true, "type": "RenderPipelinePipeline", "descriptor": JSON.stringify(args[0])}, "*");
+          window.postMessage({"action": "inspect_add_object", id, "pending": true, "type": "RenderPipelinePipeline", "descriptor": JSON.stringify(args[0]), stacktrace}, "*");
         } else if (method == "createComputePipelineAsync") {
-          window.postMessage({"action": "inspect_add_object", id, "pending": true, "type": "ComputePipelinePipeline", "descriptor": JSON.stringify(args[0])}, "*");
+          window.postMessage({"action": "inspect_add_object", id, "pending": true, "type": "ComputePipelinePipeline", "descriptor": JSON.stringify(args[0]), stacktrace}, "*");
         }
       }
 

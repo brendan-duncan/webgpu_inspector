@@ -1,5 +1,5 @@
 import { Widget } from './widget.js';
-import { Signal } from './signal.js';
+import { Signal } from '../../utils/signal.js';
 
 /**
  * A window widget fills the entire browser window. It will resize with the

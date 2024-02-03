@@ -1,9 +1,10 @@
 import { Button } from "./widget/button.js";
+import { Checkbox } from "./widget/checkbox.js";
 import { Collapsable } from "./widget/collapsable.js";
 import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
 import { Widget } from "./widget/widget.js";
-import { getFlagString } from "./flags.js";
+import { getFlagString } from "../utils/flags.js";
 import {
   Sampler,
   TextureView
@@ -711,6 +712,12 @@ export class CapturePanel {
           new Div(commandInfo, { text: `Lines: ${vertexCount - 1}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
         }
       }
+    }
+
+    const cmd = commands[commandIndex];
+    if (cmd.stacktrace) {
+      const stacktrace = new Collapsable(commandInfo, { collapsed: true, label: "Stacktrace" });
+      new Div(stacktrace.body, { text: cmd.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" })
     }
 
     const argsGroup = new Collapsable(commandInfo, { label: "Arguments" });

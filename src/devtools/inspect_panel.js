@@ -2,7 +2,7 @@ import { Button } from "./widget/button.js";
 import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
 import { TabWidget } from "./widget/tab_widget.js";
-import { TextureFormatInfo } from "./texture_format_info.js";
+import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import { Widget } from "./widget/widget.js";
 import { Adapter,
   Device,
@@ -16,7 +16,7 @@ import { Adapter,
   BindGroup,
   RenderPipeline,
   ComputePipeline } from "./object_database.js";
-import { getFlagString } from "./flags.js";
+import { getFlagString } from "../utils/flags.js";
 
 export class InspectPanel {
   constructor(window, parent) {
@@ -292,6 +292,10 @@ export class InspectPanel {
     const depGrp = new Div(infoBox, { style: "font-size: 10pt; color: #aaa; padding-left: 20px; max-height: 50px; overflow: auto;" })
     for (const dep of dependencies) {
       new Div(depGrp, { text: `${dep.name} ${dep.id}` });
+    }
+    if (object.stacktrace) {
+      new Div(infoBox, { text: "Stacktrace:", style: "font-size: 10pt;color: #fff;padding-left: 10px;margin-top: 10px;line-height: 30px;background-color: rgb(85, 85, 119);" });
+      new Div(infoBox, { text: object.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" })
     }
 
     const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-200px + 100vh); overflow: auto;" });

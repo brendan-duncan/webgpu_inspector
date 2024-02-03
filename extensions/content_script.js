@@ -93,7 +93,6 @@
   function injectScriptNode(name, url, attributes) {
     const script = document.createElement("script");
     script.id = name;
-    //script.type = "module";
     script.src = url;
 
     if (attributes) {
