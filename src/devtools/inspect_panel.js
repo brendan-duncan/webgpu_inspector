@@ -256,13 +256,35 @@ export class InspectPanel {
     } else if (object instanceof Texture) {
       const depth = object.depthOrArrayLayers > 1 ? `x${object.depthOrArrayLayers}` : "";
       type += ` ${object.width}x${object.height}${depth} ${object.descriptor.format}`;
+    } else if (object instanceof Buffer) {
+      const access = object.descriptor.usage;
+
+      if (access & GPUBufferUsage.INDEX) {
+        type += " INDEX";
+      }
+      if (access & GPUBufferUsage.VERTEX) {
+        type += " VERTEX";
+      }
+      if (access & GPUBufferUsage.STORAGE) {
+        type += " STORAGE";
+      }
+      if (access & GPUBufferUsage.INDIRECT) {
+        type += " INDIRECT";
+      }
+      if (access & GPUBufferUsage.QUERY_RESOLVE) {
+        type += " QUERY_RESOLVE";
+      }
+
+      type += ` ${object.descriptor.size.toLocaleString("en-US")} Bytes`;
     }
+
+    const idName = object.id < 0 ? "CANVAS" : object.id;
 
     let widget = this._recycledWidgets[object.constructor.name].pop();
     if (widget) {
       widget.element.style.display = undefined;
       widget.nameWidget.text = name;
-      widget.idWidget.text = `ID: ${object.id < 0 ? "CANVAS" : object.id}`;
+      widget.idWidget.text = `ID: ${idName}`;
       if (type) {
         widget.typeWidget.text = type;
       }
@@ -270,7 +292,7 @@ export class InspectPanel {
       widget = new Widget("li", ui.objectList);
 
       widget.nameWidget = new Span(widget, { text: name });
-      const idName = object.id < 0 ? "CANVAS" : object.id;
+      
       widget.idWidget = new Span(widget, { text: `ID: ${idName}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
       if (type) {
         widget.typeWidget = new Span(widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
