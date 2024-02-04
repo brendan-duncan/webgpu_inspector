@@ -6561,6 +6561,8 @@ var __webgpu_inspector_window = (function (exports) {
       this.titleBar = new Div(this, { class: "title_bar" });
       this.collapseButton = new Span(this.titleBar, { class: "object_list_collapse", text: collapsed ? "+" : "-", style: "margin-right: 10px;" });
       this.label = new Span(this.titleBar, { class: "object_type", text: options?.label ?? "" });
+      this.onExpanded = new Signal();
+      this.onCollapsed = new Signal();
 
       this.body = new Div(this, { class: ["object_list"] });
       if (collapsed) {
@@ -6573,11 +6575,32 @@ var __webgpu_inspector_window = (function (exports) {
         if (self.collapseButton.text == "-") {
           self.collapseButton.text = "+";
           self.body.element.className = "object_list collapsed";
+          self.onCollapsed.emit();
         } else {
           self.collapseButton.text = "-";
           self.body.element.className = "object_list";
+          self.onExpanded.emit();
         }
       };
+    }
+
+    get collapsed() {
+      return this.collapseButton.text == "+";
+    }
+
+    set collapsed(value) {
+      if (this.collapsed == value) {
+        return;
+      }
+      if (value) {
+        this.collapseButton.text = "+";
+        this.body.element.className = "object_list collapsed";
+        this.onCollapsed.emit();
+      } else {
+        this.collapseButton.text = "-";
+        this.body.element.className = "object_list";
+        this.onExpanded.emit();
+      }
     }
   }
 
@@ -7879,31 +7902,31 @@ var __webgpu_inspector_window = (function (exports) {
 
     _updateObjectStat(object) {
       if (object instanceof Adapter) {
-        this.uiAdapters.count.text = `${this.database.adapters.size}`;
+        this.uiAdapters.label.text = `Adapters ${this.database.adapters.size}`;
       } else if (object instanceof Device) {
-        this.uiDevices.count.text = `${this.database.devices.size}`;
+        this.uiDevices.label.text = `Devices ${this.database.devices.size}`;
       } else if (object instanceof Buffer) {
-        this.uiBuffers.count.text = `${this.database.buffers.size}`;
+        this.uiBuffers.label.text = `Buffers ${this.database.buffers.size}`;
       } else if (object instanceof Sampler) {
-        this.uiSamplers.count.text = `${this.database.samplers.size}`;
+        this.uiSamplers.label.text = `Samplers ${this.database.samplers.size}`;
       } else if (object instanceof Texture) {
-        this.uiTextures.count.text = `${this.database.textures.size}`;
+        this.uiTextures.label.text = `Textures ${this.database.textures.size}`;
       } else if (object instanceof TextureView) {
-        this.uiTextureViews.count.text = `${this.database.textureViews.size}`;
+        this.uiTextureViews.label.text = `TextureViews ${this.database.textureViews.size}`;
       } else if (object instanceof ShaderModule) {
-        this.uiShaderModules.count.text = `${this.database.shaderModules.size}`;
+        this.uiShaderModules.label.text = `ShaderModules ${this.database.shaderModules.size}`;
       } else if (object instanceof BindGroupLayout) {
-        this.uiBindGroupLayouts.count.text = `${this.database.bindGroupLayouts.size}`;
+        this.uiBindGroupLayouts.label.text = `BindGroupLayouts ${this.database.bindGroupLayouts.size}`;
       } else if (object instanceof PipelineLayout) {
-        this.uiPipelineLayouts.count.text = `${this.database.pipelineLayouts.size}`;
+        this.uiPipelineLayouts.label.text = `PipelineLayouts ${this.database.pipelineLayouts.size}`;
       } else if (object instanceof BindGroup) {
-        this.uiBindGroups.count.text = `${this.database.bindGroups.size}`;
+        this.uiBindGroups.label.text = `BindGroups ${this.database.bindGroups.size}`;
       } else if (object instanceof RenderPipeline) {
-        this.uiPendingAsyncRenderPipelines.count.text = `${this.database.pendingRenderPipelines.size}`;
-        this.uiRenderPipelines.count.text = `${this.database.renderPipelines.size}`;
+        this.uiPendingAsyncRenderPipelines.label.text = `Pending Async Render Pipelines ${this.database.pendingRenderPipelines.size}`;
+        this.uiRenderPipelines.label.text = `Render Pipelines ${this.database.renderPipelines.size}`;
       } else if (object instanceof ComputePipeline) {
-        this.uiPendingAsyncComputePipelines.count.text = `${this.database.pendingComputePipelines.size}`;
-        this.uiComputePipelines.count.text = `${this.database.computePipelines.size}`;
+        this.uiPendingAsyncComputePipelines.label.text = `Pending Async Compute Pipelines ${this.database.pendingComputePipelines.size}`;
+        this.uiComputePipelines.label.text = `Compute Pipelines ${this.database.computePipelines.size}`;
       }
     }
 
@@ -7911,84 +7934,46 @@ var __webgpu_inspector_window = (function (exports) {
       this._updateObjectStat(object);
       if (object instanceof Adapter) {
         this._addObjectToUI(object, this.uiAdapters);
-        this.uiAdapters.count.text = `${this.database.adapters.size}`;
       } else if (object instanceof Device) {
         this._addObjectToUI(object, this.uiDevices);
-        this.uiDevices.count.text = `${this.database.devices.size}`;
       } else if (object instanceof Buffer) {
         this._addObjectToUI(object, this.uiBuffers);
-        this.uiBuffers.count.text = `${this.database.buffers.size}`;
       } else if (object instanceof Sampler) {
         this._addObjectToUI(object, this.uiSamplers);
-        this.uiSamplers.count.text = `${this.database.samplers.size}`;
       } else if (object instanceof Texture) {
         this._addObjectToUI(object, this.uiTextures);
-        this.uiTextures.count.text = `${this.database.textures.size}`;
       } else if (object instanceof TextureView) {
-          this._addObjectToUI(object, this.uiTextureViews);
-          this.uiTextureViews.count.text = `${this.database.textureViews.size}`;
+        this._addObjectToUI(object, this.uiTextureViews);
       } else if (object instanceof ShaderModule) {
         this._addObjectToUI(object, this.uiShaderModules);
-        this.uiShaderModules.count.text = `${this.database.shaderModules.size}`;
       } else if (object instanceof BindGroupLayout) {
         this._addObjectToUI(object, this.uiBindGroupLayouts);
-        this.uiBindGroupLayouts.count.text = `${this.database.bindGroupLayouts.size}`;
       } else if (object instanceof PipelineLayout) {
         this._addObjectToUI(object, this.uiPipelineLayouts);
-        this.uiPipelineLayouts.count.text = `${this.database.pipelineLayouts.size}`;
       } else if (object instanceof BindGroup) {
         this._addObjectToUI(object, this.uiBindGroups);
-        this.uiBindGroups.count.text = `${this.database.bindGroups.size}`;
       } else if (object instanceof RenderPipeline) {
         this._addObjectToUI(object, pending ? this.uiPendingAsyncRenderPipelines : this.uiRenderPipelines);
-        if (pending) {
-          this.uiPendingAsyncRenderPipelines.count.text = `${this.database.pendingRenderPipelines.size}`;
-        } else {
-          this.uiRenderPipelines.count.text = `${this.database.renderPipelines.size}`;
-        }
       } else if (object instanceof ComputePipeline) {
         this._addObjectToUI(object, pending ? this.uiPendingAsyncComputePipelines : this.uiComputePipelines);
-        if (pending) {
-          this.uiPendingAsyncComputePipelines.count.text = `${this.database.pendingComputePipelines.size}`;
-        } else {
-          this.uiComputePipelines.count.text = `${this.database.computePipelines.size}`;
-        }
       }
     }
 
     _createObjectListUI(parent, name) {
-      const div = new Div(parent);
-
-      const titleBar = new Div(div, { class: "title_bar" });
-      
-      const collapse = new Span(titleBar, { class: "object_list_collapse", text: "+", style: "margin-right: 10px;" });
-
-      new Span(titleBar, { class: "object_type", text: name });
-      const objectCount = new Span(titleBar, { class: "object_type", text: "0", style: "margin-left: 10px;" });
-
-      const objectList = new Widget("ol", div, { class: ["object_list", "collapsed"] });
-      objectList.collapse = collapse;
-      objectList.count = objectCount;
+      const panel = new Collapsable(parent, { collapsed: true, label: `${name} 0` });
 
       const self = this;
-
-      titleBar.element.onclick = function() {
-        if (self._selectedGroup && self._selectedGroup != objectList) {
-          self._selectedGroup.collapse.text = "+";
-          self._selectedGroup.element.className = "object_list collapsed";
-          self._selectedGroup = null;
+      panel.onExpanded.addListener(() => {
+        if (self._selectedGroup && self._selectedGroup != panel) {
+          self._selectedGroup.collapsed = true;
         }
-        if (collapse.text == "-") {
-          collapse.text = "+";
-          objectList.element.className = "object_list collapsed";
-        } else {
-          collapse.text = "-";
-          objectList.element.className = "object_list";
-          self._selectedGroup = objectList;
-        }
-      };
+        self._selectedGroup = panel;
+      });
 
-      return objectList;
+      const objectList = new Widget("ol", panel.body, { style: "margin-top: 10px; margin-bottom: 10px;"});
+      panel.objectList = objectList;
+
+      return panel;
     }
 
     _addObjectToUI(object, ui) {
@@ -8011,20 +7996,20 @@ var __webgpu_inspector_window = (function (exports) {
 
       let widget = this._recycledWidgets[object.constructor.name].pop();
       if (widget) {
-        widget.element.style.display = "block";
+        widget.element.style.display = undefined;
         widget.nameWidget.text = name;
         widget.idWidget.text = `ID: ${object.id < 0 ? "CANVAS" : object.id}`;
         if (type) {
           widget.typeWidget.text = type;
         }
       } else {
-        widget = new Widget("li", ui);
+        widget = new Widget("li", ui.objectList);
 
         widget.nameWidget = new Span(widget, { text: name });
         const idName = object.id < 0 ? "CANVAS" : object.id;
-        widget.idWidget = new Span(object.widget, { text: `ID: ${idName}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+        widget.idWidget = new Span(widget, { text: `ID: ${idName}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
         if (type) {
-          widget.typeWidget = new Span(object.widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+          widget.typeWidget = new Span(widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
         }
       }
 
@@ -8063,8 +8048,8 @@ var __webgpu_inspector_window = (function (exports) {
         new Div(depGrp, { text: `${dep.name} ${dep.id}` });
       }
       if (object.stacktrace) {
-        new Div(infoBox, { text: "Stacktrace:", style: "font-size: 10pt;color: #fff;padding-left: 10px;margin-top: 10px;line-height: 30px;background-color: rgb(85, 85, 119);" });
-        new Div(infoBox, { text: object.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" });
+        const stacktraceGrp = new Collapsable(infoBox, { collapsed: true, label: "Stacktrace", collapsed: true });
+        new Div(stacktraceGrp.body, { text: object.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" });
       }
 
       const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-200px + 100vh); overflow: auto;" });

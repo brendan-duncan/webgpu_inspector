@@ -82,6 +82,10 @@ body {
   margin-bottom: 0px;
   font-size: 12pt;
   font-weight: bold;
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 .collapse {
@@ -113,6 +117,22 @@ body {
   max-height: 300px;
   overflow: auto;
   margin: 0px;
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.object_list_collapse {
+  font-family: monospace;
+  font-size: 14pt;
+  color: #ddd;
+  margin-left: 10px;
+  width: 20px;
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 .selected {
