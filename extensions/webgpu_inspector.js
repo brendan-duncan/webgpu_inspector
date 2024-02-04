@@ -15,11 +15,6 @@
    * A Signal is like a proxy function that can have multiple "listeners" assigned to it, such that
    * when the Signal is executed (or "emitted"), it executes each of its associated listeners.
    * A listener is a callback function, object method, or another Signal.
-   *
-   * Signals are used extensively throughout Loki3D. They are similar to Javascript events, with the
-   * advantage of being bound to an object rather than a string, so they are very explicit about what
-   * signals are provided and reduce errors from mis-spelling event names.
-   * @category Util
    */
   class Signal {
     /**
