@@ -6667,9 +6667,6 @@ var __webgpu_inspector_window = (function (exports) {
             const index = message.index;
             const count = message.count;
             const frame = message.frame;
-            if (frame !== self._catpureFrameIndex) {
-              return;
-            }
             for (let i = 0, j = index; i < count; ++i, ++j) {
               self._captureCommands[j] = commands[i];
             }
@@ -6785,6 +6782,8 @@ var __webgpu_inspector_window = (function (exports) {
           new Span(cmd, { class: "capture_method_args", text: `x:${args[0]} y:${args[1]} w:${args[2]} h:${args[3]} minZ:${args[4]} maxZ:${args[5]}` });
         } else if (method === "setScissorRect") {
           new Span(cmd, { class: "capture_method_args", text: `x:${args[0]} y:${args[1]} w:${args[2]} h:${args[3]}` });
+        } else if (method === "setStencilReference") {
+          new Span(cmd, { class: "capture_method_args", text: `reference:${args[0]}` });
         } else if (method === "setBindGroup") {
           new Span(cmd, { class: "capture_method_args", text: `index:${args[0]} bindGroup:${args[1].__id}` });
         } else if (method === "writeBuffer") {

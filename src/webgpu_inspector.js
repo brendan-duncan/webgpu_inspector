@@ -431,7 +431,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
 
         for (let i = 0; i < this._frameCommands.length; i += maxFrameCount) {
           const length = Math.min(maxFrameCount, this._frameCommands.length - i);
-          const commands = this._frameCommands.slice(i, length);
+          const commands = this._frameCommands.slice(i, i + length);
           window.postMessage({"action": "inspect_capture_frame_commands",
               "frame": this._frameIndex,
               "commands": commands,
