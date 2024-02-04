@@ -5,7 +5,7 @@ function build(name, input, format, file) {
           {
               format,
               file,
-              sourcemap: false,
+              sourcemap: true,
               name
           }
       ]

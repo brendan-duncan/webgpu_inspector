@@ -239,6 +239,29 @@ var __webgpu_inspector_window = (function (exports) {
 
   Signal._disableSignals = 0;
 
+  // Cache stacktraces since many objects will have the same stacktrace.
+  class StacktraceCache {
+    constructor() {
+      this._cache = [];
+    }
+
+    getStacktrace(id) {
+      return id < 0 ? "" : this._cache[id] ?? "";
+    }
+
+    setStacktrace(stacktrace) {
+      if (!stacktrace) {
+        return -1;
+      }
+      const id = this._cache.indexOf(stacktrace);
+      if (id !== -1) {
+        return id;
+      }
+      this._cache.push(stacktrace);
+      return this._cache.length - 1;
+    }
+  }
+
   const TextureFormatInfo = {
       "r8unorm": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false },
       "r8snorm": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false },
@@ -3970,17 +3993,24 @@ var __webgpu_inspector_window = (function (exports) {
       return t.name;
   });
 
+  const stacktraceCache = new StacktraceCache();
+
   class GPUObject {
     constructor(id, stacktrace) {
       this.id = id;
       this.label = "";
-      this.stacktrace = stacktrace ?? "";
+      this._stacktrace = stacktraceCache.setStacktrace(stacktrace ?? "");
       this.parent = null;
       this.children = [];
+      this._deletionTime = 0;
     }
 
     get name() {
       return this.label || this.constructor.name;
+    }
+
+    get stacktrace() {
+      return stacktraceCache.getStacktrace(this._stacktrace);
     }
   }
 
@@ -4163,6 +4193,7 @@ var __webgpu_inspector_window = (function (exports) {
       this.totalBufferMemory = 0;
 
       const self = this;
+     
       port.addListener((message) => {
         switch (message.action) {
           case "inspect_begin_frame":
@@ -4291,6 +4322,19 @@ var __webgpu_inspector_window = (function (exports) {
       });
     }
 
+    _deleteOldRecycledObjects(objectList) {
+      const recycleTime = 200;
+      const time = performance.now();
+      const numBindGroups = objectList.length;
+      for (let i = numBindGroups - 1; i >= 0; --i) {
+        const obj = objectList[i];
+        if (!obj || (time - obj._deletionTime > recycleTime)) {
+          objectList = objectList.splice(i, 1);
+        }
+      }
+      return objectList;
+    }
+
     reset() {
       this.allObjects = new Map();
       this.adapters = new Map();
@@ -4414,7 +4458,7 @@ var __webgpu_inspector_window = (function (exports) {
       if (parent) {
         const parentObject = this.getObject(parent);
         if (parentObject) {
-          parentObject.children.push(object);
+          parentObject.children.push(new WeakRef(object));
           object.parent = parentObject;
         }
       }
@@ -4437,49 +4481,67 @@ var __webgpu_inspector_window = (function (exports) {
 
     _deleteObject(id) {
       const object = this.allObjects.get(id);
-      this.allObjects.delete(id);
-      this.adapters.delete(id);
-      this.devices.delete(id);
-      this.samplers.delete(id);
-      this.textures.delete(id);
-      this.textureViews.delete(id);
-      this.buffers.delete(id);
-      this.bindGroups.delete(id);
-      this.bindGroupLayouts.delete(id);
-      this.shaderModules.delete(id);
-      this.renderPipelines.delete(id);
-      this.pipelineLayouts.delete(id);
-      this.computePipelines.delete(id);
-      this.pendingRenderPipelines.delete(id);
-      this.pendingComputePipelines.delete(id);
-
-      if (object) {
-        if (object instanceof Texture) {
-          const size = object.getGpuSize();
-          if (size != -1) {
-            this.totalTextureMemory -= size;
-          }
-        } else if (object instanceof Buffer) {
-          const size = object.size;
-          this.totalBufferMemory -= size ?? 0;
-        }
-
-        if (object.parent) {
-          const parent = object.parent;
-          const index = parent.children.indexOf(object);
-          if (index != -1) {
-            parent.children.splice(index, 1);
-          }
-        }
-
-        if (object.children) {
-          for (const child of object.children) {
-            this._deleteObject(child.id);
-          }
-        }
-
-        this.onDeleteObject.emit(id, object);
+      if (!object) {
+        return;
       }
+
+      this.allObjects.delete(id);
+
+      if (object instanceof Adapter) {
+        this.adapters.delete(id, object);
+      } else if (object instanceof Device) {
+        this.devices.delete(id, object);
+      } else if (object instanceof Sampler) {
+        this.samplers.delete(id, object);
+      } else if (object instanceof Texture) {
+        this.textures.delete(id, object);
+        const size = object.getGpuSize();
+        if (size != -1) {
+          this.totalTextureMemory -= size;
+        }
+      } else if (object instanceof TextureView) {
+        this.textureViews.delete(id, object);
+        object._deletionTime = performance.now();
+      } else if (object instanceof Buffer) {
+        this.buffers.delete(id, object);
+        const size = object.size;
+        this.totalBufferMemory -= size ?? 0;
+      } else if (object instanceof BindGroup) {
+        this.bindGroups.delete(id, object);
+        object._deletionTime = performance.now();
+      } else if (object instanceof BindGroupLayout) {
+        this.bindGroupLayouts.delete(id, object);
+      } else if (object instanceof PipelineLayout) {
+        this.pipelineLayouts.delete(id, object);
+      } else if (object instanceof ShaderModule) {
+        this.shaderModules.delete(id, object);
+      } else if (object instanceof RenderPipeline) {
+        this.pendingRenderPipelines.delete(id, object);
+        this.renderPipelines.delete(id, object);
+      } else if (object instanceof ComputePipeline) {
+        this.computePipelines.set(id, object);
+        this.pendingComputePipelines.delete(id, object);
+      }
+
+      if (object.parent) {
+        const parent = object.parent;
+        for (const ci in parent.children) {
+          const child = parent.children[ci].deref();
+          if (!child || child === object) {
+            parent.children.splice(ci, 1);
+            break;
+          }
+        }
+      }
+
+      for (const childRef of object.children) {
+        const child = childRef.deref();
+        if (child) {
+          this._deleteObject(child.id);
+        }
+      }
+
+      this.onDeleteObject.emit(id, object);
     }
   }
 
@@ -7699,6 +7761,40 @@ var __webgpu_inspector_window = (function (exports) {
 
       window.onTextureLoaded.addListener(this._textureLoaded, this);
 
+      // Recycle DOM elements as objects are created and destroyed.
+      // The DevTools panel will crash after a while if there is too much thrashing
+      // of DOM elements.
+      this._recycledWidgets = {
+        Adapter: [],
+        Device: [],
+        Buffer: [],
+        Sampler: [],
+        Texture: [],
+        TextureView: [],
+        ShaderModule: [],
+        BindGroupLayout: [],
+        PipelineLayout: [],
+        BindGroup: [],
+        RenderPipeline: [],
+        ComputePipeline: [],
+      };
+
+      // Periodically clean up old recycled widgets.
+      setInterval(() => {
+        const time = performance.now();
+        for (const type in this._recycledWidgets) {
+          const list = this._recycledWidgets[type];
+          const length = list.length;
+          for (let i = length - 1; i >= 0; --i) {
+            const widget = list[i];
+            if ((time - widget._destroyTime) > 1000) {
+              widget.element.remove();
+              list.splice(i, 1);
+            }
+          }
+        }
+      }, 1000);
+
       this._reset();
     }
 
@@ -7768,7 +7864,16 @@ var __webgpu_inspector_window = (function (exports) {
     }
 
     _deleteObject(id, object) {
-      object?.widget?.remove();
+      // Instead of deleting the objects widget from the DOM, recycle
+      // it so the next time an object of this type is created, it will
+      // use the recycled widget instead of creating a new one.
+      const widget = object?.widget;
+      if (widget) {
+        this._recycledWidgets[object.constructor.name].push(widget);
+        widget.element.style.display = "none";
+        widget._destroyTime = performance.now();
+        object.widget = null;
+      }
       this._updateObjectStat(object);
     }
 
@@ -7904,14 +8009,26 @@ var __webgpu_inspector_window = (function (exports) {
         type += ` ${object.width}x${object.height}${depth} ${object.descriptor.format}`;
       }
 
-      object.widget = new Widget("li", ui);
+      let widget = this._recycledWidgets[object.constructor.name].pop();
+      if (widget) {
+        widget.element.style.display = "block";
+        widget.nameWidget.text = name;
+        widget.idWidget.text = `ID: ${object.id < 0 ? "CANVAS" : object.id}`;
+        if (type) {
+          widget.typeWidget.text = type;
+        }
+      } else {
+        widget = new Widget("li", ui);
 
-      object.nameWidget = new Span(object.widget, { text: name });
-      const idName = object.id < 0 ? "CANVAS" : object.id;
-      new Span(object.widget, { text: `ID: ${idName}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
-      if (type) {
-        new Span(object.widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+        widget.nameWidget = new Span(widget, { text: name });
+        const idName = object.id < 0 ? "CANVAS" : object.id;
+        widget.idWidget = new Span(object.widget, { text: `ID: ${idName}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+        if (type) {
+          widget.typeWidget = new Span(object.widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+        }
       }
+
+      object.widget = widget;
 
       const self = this;
       object.widget.element.onclick = () => {
@@ -8244,3 +8361,4 @@ var __webgpu_inspector_window = (function (exports) {
   return exports;
 
 })({});
+//# sourceMappingURL=webgpu_inspector_window.js.map

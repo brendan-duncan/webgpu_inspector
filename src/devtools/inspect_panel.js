@@ -47,6 +47,40 @@ export class InspectPanel {
 
     window.onTextureLoaded.addListener(this._textureLoaded, this);
 
+    // Recycle DOM elements as objects are created and destroyed.
+    // The DevTools panel will crash after a while if there is too much thrashing
+    // of DOM elements.
+    this._recycledWidgets = {
+      Adapter: [],
+      Device: [],
+      Buffer: [],
+      Sampler: [],
+      Texture: [],
+      TextureView: [],
+      ShaderModule: [],
+      BindGroupLayout: [],
+      PipelineLayout: [],
+      BindGroup: [],
+      RenderPipeline: [],
+      ComputePipeline: [],
+    };
+
+    // Periodically clean up old recycled widgets.
+    setInterval(() => {
+      const time = performance.now();
+      for (const type in this._recycledWidgets) {
+        const list = this._recycledWidgets[type];
+        const length = list.length;
+        for (let i = length - 1; i >= 0; --i) {
+          const widget = list[i];
+          if ((time - widget._destroyTime) > 1000) {
+            widget.element.remove();
+            list.splice(i, 1);
+          }
+        }
+      }
+    }, 1000);
+
     this._reset();
   }
 
@@ -116,7 +150,16 @@ export class InspectPanel {
   }
 
   _deleteObject(id, object) {
-    object?.widget?.remove();
+    // Instead of deleting the objects widget from the DOM, recycle
+    // it so the next time an object of this type is created, it will
+    // use the recycled widget instead of creating a new one.
+    const widget = object?.widget;
+    if (widget) {
+      this._recycledWidgets[object.constructor.name].push(widget);
+      widget.element.style.display = "none";
+      widget._destroyTime = performance.now();
+      object.widget = null;
+    }
     this._updateObjectStat(object);
   }
 
@@ -252,14 +295,26 @@ export class InspectPanel {
       type += ` ${object.width}x${object.height}${depth} ${object.descriptor.format}`;
     }
 
-    object.widget = new Widget("li", ui);
+    let widget = this._recycledWidgets[object.constructor.name].pop();
+    if (widget) {
+      widget.element.style.display = "block";
+      widget.nameWidget.text = name;
+      widget.idWidget.text = `ID: ${object.id < 0 ? "CANVAS" : object.id}`;
+      if (type) {
+        widget.typeWidget.text = type;
+      }
+    } else {
+      widget = new Widget("li", ui);
 
-    object.nameWidget = new Span(object.widget, { text: name });
-    const idName = object.id < 0 ? "CANVAS" : object.id;
-    new Span(object.widget, { text: `ID: ${idName}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
-    if (type) {
-      new Span(object.widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+      widget.nameWidget = new Span(widget, { text: name });
+      const idName = object.id < 0 ? "CANVAS" : object.id;
+      widget.idWidget = new Span(object.widget, { text: `ID: ${idName}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+      if (type) {
+        widget.typeWidget = new Span(object.widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+      }
     }
+
+    object.widget = widget;
 
     const self = this;
     object.widget.element.onclick = () => {

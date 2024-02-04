@@ -26,6 +26,8 @@ import { TextureUtils } from "./utils/texture_utils.js";
       this._captureRequest = false;
       this.__skipRecord = false;
       this._trackedObjects = new Map();
+      this._trackedObjectInfo = new Map();
+      this._bindGroupCount = 0;
       this._captureTextureRequest = new Map();
       this._toDestroy = [];
 
@@ -43,28 +45,40 @@ import { TextureUtils } from "./utils/texture_utils.js";
 
       this._garbageCollectectedObjects = [];
      
-      // Try to track garbage collected WebGPU objects
+      // Track garbage collected WebGPU objects
       this._garbageCollectionRegistry = new FinalizationRegistry((id) => {
-        if (id >= 0) {
+        if (id > 0) {
           // It's too slow to send a message for every object that gets garbage collected,
           // so we'll batch them up and send them every so often.
-          this._garbageCollectectedObjects.push(id);
-          if (self._trackedObjects.has(id)) {
-            const object = self._trackedObjects.get(id).deref();
+          self._garbageCollectectedObjects.push(id);
+          const objectClass = self._trackedObjectInfo.get(id);
+          const object = self._trackedObjects.get(id)?.deref();
+
+          if (objectClass) {
+            if (objectClass === GPUBindGroup) {
+              self._bindGroupCount--;
+            }
             // If we're here, the object was garbage collected but not explicitly destroyed.
             // Some GPU objects need to be explicitly destroyed, otherwise it's a memory
             // leak. Notify the user of this.
-            if (object instanceof GPUBuffer || object instanceof GPUTexture || object instanceof GPUDevice) {
-              self._memoryLeakWarning(object);
+            if (objectClass === GPUBuffer || object === GPUTexture || object === GPUDevice) {
+              self._memoryLeakWarning(id);
             }
-            self._trackedObjects.delete(id);
+          }
+
+          if (self._garbageCollectectedObjects.length > 100) {
+            window.postMessage({"action": "inspect_delete_objects", "idList": self._garbageCollectectedObjects}, "*");
+            self._garbageCollectectedObjects.length = 0;
           }
         }
+
         self._trackedObjects.delete(id);
+        self._trackedObjectInfo.delete(id);
         self._captureTextureRequest.delete(id);
       });
 
-      const garbageCollectionInterval = 500;
+      // Clean out the garbage collected objects every so often.
+      const garbageCollectionInterval = 100;
       setInterval(() => {
         if (self._garbageCollectectedObjects.length > 0) {
           window.postMessage({"action": "inspect_delete_objects", "idList": self._garbageCollectectedObjects}, "*");
@@ -72,9 +86,10 @@ import { TextureUtils } from "./utils/texture_utils.js";
         }
       }, garbageCollectionInterval);
 
+      // Wrap the canvas elements so we can capture when their context is created.
       this._wrapCanvases();
 
-      // Capture any dynamically created canvases
+      // Capture any dynamically created canvases.
       const __createElement = document.createElement;
       document.createElement = function (type) {
         let element = __createElement.call(document, type);
@@ -254,8 +269,16 @@ import { TextureUtils } from "./utils/texture_utils.js";
           id = object.__id - 0.5;
         }
       }
+
+      if (object instanceof GPUDevice && object?.__id === undefined) {
+        // We haven't wrapped the object yet, so do it now.
+        // Probably the GPUDevice where requestDevice happened
+        // before we started recording.
+        this._wrapDevice(null, object);
+      }
       
       if (result) {
+        // Wrap GPU objects
         if (GPUObjectTypes.has(result.constructor)) {
           this._wrapObject(result, id);
         }
@@ -274,6 +297,8 @@ import { TextureUtils } from "./utils/texture_utils.js";
           if (object.__canvas) {
             result.__canvas = object.__canvas;
           }
+        } else if (method === "createBindGroup") {
+          this._trackObject(result.__id, result);
         }
       }
 
@@ -311,7 +336,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
           isFallbackAdapter: adapter.isFallbackAdapter,
           wgslFeatures: self._gpuToArray(navigator.gpu.wgslLanguageFeatures)
         };
-        window.postMessage({"action": "inspect_add_object", id, "type": "Adapter", "descriptor": JSON.stringify(info), stacktrace}, "*");
+        self._sendAddObjectMessage(id, 0, "Adapter", JSON.stringify(info), stacktrace);
       });
     }
 
@@ -329,7 +354,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
         descriptor["features"] = this._gpuToArray(device.features);
         descriptor["limits"] = this._gpuToObject(device.limits);
         this._trackObject(deviceId, device);
-        window.postMessage({"action": "inspect_add_object", id: deviceId, parent: adapterId, "type": "Device", "descriptor": JSON.stringify(descriptor), stacktrace}, "*");
+        this._sendAddObjectMessage(id, adapterId, "Device", JSON.stringify(descriptor), stacktrace);
       }
     }
 
@@ -420,6 +445,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
 
     _trackObject(id, object) {
       this._trackedObjects.set(id, new WeakRef(object));
+      this._trackedObjectInfo.set(id, object.constructor);
     }
 
     _wrapCanvas(c) {
@@ -466,14 +492,17 @@ import { TextureUtils } from "./utils/texture_utils.js";
     }
 
     _wrapObject(object, id) {
+      // The object has already been wrapped
       if (object.__id) {
         return;
       }
+
       object.__id = id ?? this.getNextId(object);
 
+      // Track garbage collected objects
       this._garbageCollectionRegistry.register(object, object.__id);
 
-      if (object.label !== undefined) {
+      /*if (object.label !== undefined) {
         // Capture chaning of the GPUObjectBase label
         const l = object.label;
         object._label = l;
@@ -491,9 +520,10 @@ import { TextureUtils } from "./utils/texture_utils.js";
             }
           }
         });
-      }
+      }*/
 
       if (object instanceof GPUDevice) {
+        // Automatically wrap the device's queue
         if (object.queue.__id === undefined) {
           this._wrapObject(object.queue);
         }
@@ -557,36 +587,38 @@ import { TextureUtils } from "./utils/texture_utils.js";
 
     _stringifyDescriptor(args) {
       const descriptor = this._prepareDescriptor(args) ?? {};
+      //return descriptor;
       const s = JSON.stringify(descriptor);
       return s;
     }
 
-    _recordCommand(object, method, result, args, stacktrace) {
-      if (object instanceof GPUDevice && object?.__id === undefined) {
-        // We haven't wrapped the object yet, so do it now.
-        // Probably the GPUDevice where requestDevice happened
-        // before we started recording.
-        this._wrapDevice(null, object);
-      }
+    _sendAddObjectMessage(id, parent, type, descriptor, stacktrace, pending) {
+      window.postMessage({ "action": "inspect_add_object", id, parent, type, descriptor, stacktrace, pending }, "*");
+    }
 
+    _recordCommand(object, method, result, args, stacktrace) {
       const parent = object?.__id ?? 0;
 
       if (method == "destroy") {
         const id = object.__id;
         this._trackedObjects.delete(id);
+        this._trackedObjectInfo.delete(id);
+        if (object instanceof GPUBindGroup) {
+          this._bindGroupCount--;
+        }
         if (id >= 0) {
           this._captureTextureRequest.delete(id);
           window.postMessage({"action": "inspect_delete_object", id}, "*");
         }
       } else if (method == "createShaderModule") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent, "type": "ShaderModule", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
+        this._sendAddObjectMessage(id, parent, "ShaderModule", this._stringifyDescriptor(args[0]), stacktrace);
       } else if (method == "createBuffer") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Buffer", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
+        this._sendAddObjectMessage(id, parent, "Buffer", this._stringifyDescriptor(args[0]), stacktrace);
       } else if (method == "createTexture") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Texture", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
+        this._sendAddObjectMessage(id, parent, "Texture", this._stringifyDescriptor(args[0]), stacktrace);
         result.__device = object;
       } else if (method == "getCurrentTexture") {
         const id = result.__id;
@@ -600,16 +632,17 @@ import { TextureUtils } from "./utils/texture_utils.js";
             usage: result.usage
           };
           const infoStr = JSON.stringify(info);
-          window.postMessage({"action": "inspect_add_object", id, parent, "type": "Texture", "descriptor": infoStr}, "*");
+          this._sendAddObjectMessage(id, parent, "Texture", infoStr, stacktrace);
         }
       } else if (method == "createView") {
         const id = result.__id;
         result.__texture = object;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "TextureView", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
+        this._sendAddObjectMessage(id, parent, "TextureView", this._stringifyDescriptor(args[0]), stacktrace);
       } else if (method == "createSampler") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "Sampler", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
+        this._sendAddObjectMessage(id, parent, "Sampler", this._stringifyDescriptor(args[0]), stacktrace);
       } else if (method == "createBindGroup") {
+        this._bindGroupCount++;
         const id = result.__id;
         // Attach resources to the bindgroups that use them to keep them from being garbage collected so we can inspect them later.
         /*if (result.__entries === undefined) {
@@ -623,21 +656,20 @@ import { TextureUtils } from "./utils/texture_utils.js";
                 result.__entries.push(resource);
               } else if (resource.buffer?.__id !== undefined) {
                 result.__entries.push(resource.buffer);
-              
               }
             }
           }
         }*/
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroup", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
+        this._sendAddObjectMessage(id, parent, "BindGroup", this._stringifyDescriptor(args[0]), stacktrace);
       } else if (method == "createBindGroupLayout") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "BindGroupLayout", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
+        this._sendAddObjectMessage(id, parent, "BindGroupLayout", this._stringifyDescriptor(args[0]), stacktrace);
       } else if (method == "createPipelineLayout") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "PipelineLayout", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
+        this._sendAddObjectMessage(id, parent, "PipelineLayout", this._stringifyDescriptor(args[0]), stacktrace);
       } else if (method == "createRenderPipeline") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "RenderPipeline", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
+        this._sendAddObjectMessage(id, parent, "RenderPipeline", this._stringifyDescriptor(args[0]), stacktrace);
         // There are cases when the shader modules used by the render pipeline will be garbage collected, and we won't be able to inspect them after that.
         // Hang on to the shader modules used in the descriptor by attaching them to the pipeline.
         if (args[0].vertex?.module) {
@@ -648,7 +680,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
         }
       } else if (method == "createComputePipeline") {
         const id = result.__id;
-        window.postMessage({"action": "inspect_add_object", id, parent,"type": "ComputePipeline", "descriptor": this._stringifyDescriptor(args[0]), stacktrace}, "*");
+        this._sendAddObjectMessage(id, parent, "ComputePipeline", this._stringifyDescriptor(args[0]), stacktrace);
         if (args[0].compute?.module) {
           result.__computeModule = args[0].compute?.module;
         }
@@ -939,18 +971,6 @@ import { TextureUtils } from "./utils/texture_utils.js";
         return newObject;
       }
       return object;
-    }
-
-    _recordAsyncCommand(object, method, id, ...args) {
-      if (method == "createRenderPipelineAsync") {
-        window.postMessage({"action": "inspect_add_object", id, "pending": true, "type": "RenderPipelinePipeline", "descriptor": JSON.stringify(args[0]), stacktrace}, "*");
-      } else if (method == "createComputePipelineAsync") {
-        window.postMessage({"action": "inspect_add_object", id, "pending": true, "type": "ComputePipelinePipeline", "descriptor": JSON.stringify(args[0]), stacktrace}, "*");
-      }
-    }
-
-    _resolveAsyncCommand(id, time, result) {
-      window.postMessage({"action": "inspect_resolve_async_object", id, time}, "*");
     }
   }
 

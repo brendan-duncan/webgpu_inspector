@@ -1,18 +1,26 @@
 import { Signal } from "../utils/signal.js";
+import { StacktraceCache } from "../utils/stacktrace_cache.js";
 import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import { WgslReflect } from "./wgsl_reflect.module.js";
+
+const stacktraceCache = new StacktraceCache();
 
 export class GPUObject {
   constructor(id, stacktrace) {
     this.id = id;
     this.label = "";
-    this.stacktrace = stacktrace ?? "";
+    this._stacktrace = stacktraceCache.setStacktrace(stacktrace ?? "");
     this.parent = null;
     this.children = [];
+    this._deletionTime = 0;
   }
 
   get name() {
     return this.label || this.constructor.name;
+  }
+
+  get stacktrace() {
+    return stacktraceCache.getStacktrace(this._stacktrace);
   }
 }
 
@@ -195,6 +203,7 @@ export class ObjectDatabase {
     this.totalBufferMemory = 0;
 
     const self = this;
+   
     port.addListener((message) => {
       switch (message.action) {
         case "inspect_begin_frame":
@@ -323,6 +332,19 @@ export class ObjectDatabase {
     });
   }
 
+  _deleteOldRecycledObjects(objectList) {
+    const recycleTime = 200;
+    const time = performance.now();
+    const numBindGroups = objectList.length;
+    for (let i = numBindGroups - 1; i >= 0; --i) {
+      const obj = objectList[i];
+      if (!obj || (time - obj._deletionTime > recycleTime)) {
+        objectList = objectList.splice(i, 1);
+      }
+    }
+    return objectList;
+  }
+
   reset() {
     this.allObjects = new Map();
     this.adapters = new Map();
@@ -446,7 +468,7 @@ export class ObjectDatabase {
     if (parent) {
       const parentObject = this.getObject(parent);
       if (parentObject) {
-        parentObject.children.push(object);
+        parentObject.children.push(new WeakRef(object));
         object.parent = parentObject;
       }
     }
@@ -469,48 +491,66 @@ export class ObjectDatabase {
 
   _deleteObject(id) {
     const object = this.allObjects.get(id);
-    this.allObjects.delete(id);
-    this.adapters.delete(id);
-    this.devices.delete(id);
-    this.samplers.delete(id);
-    this.textures.delete(id);
-    this.textureViews.delete(id);
-    this.buffers.delete(id);
-    this.bindGroups.delete(id);
-    this.bindGroupLayouts.delete(id);
-    this.shaderModules.delete(id);
-    this.renderPipelines.delete(id);
-    this.pipelineLayouts.delete(id);
-    this.computePipelines.delete(id);
-    this.pendingRenderPipelines.delete(id);
-    this.pendingComputePipelines.delete(id);
-
-    if (object) {
-      if (object instanceof Texture) {
-        const size = object.getGpuSize();
-        if (size != -1) {
-          this.totalTextureMemory -= size;
-        }
-      } else if (object instanceof Buffer) {
-        const size = object.size;
-        this.totalBufferMemory -= size ?? 0;
-      }
-
-      if (object.parent) {
-        const parent = object.parent;
-        const index = parent.children.indexOf(object);
-        if (index != -1) {
-          parent.children.splice(index, 1);
-        }
-      }
-
-      if (object.children) {
-        for (const child of object.children) {
-          this._deleteObject(child.id);
-        }
-      }
-
-      this.onDeleteObject.emit(id, object);
+    if (!object) {
+      return;
     }
+
+    this.allObjects.delete(id);
+
+    if (object instanceof Adapter) {
+      this.adapters.delete(id, object);
+    } else if (object instanceof Device) {
+      this.devices.delete(id, object);
+    } else if (object instanceof Sampler) {
+      this.samplers.delete(id, object);
+    } else if (object instanceof Texture) {
+      this.textures.delete(id, object);
+      const size = object.getGpuSize();
+      if (size != -1) {
+        this.totalTextureMemory -= size;
+      }
+    } else if (object instanceof TextureView) {
+      this.textureViews.delete(id, object);
+      object._deletionTime = performance.now();
+    } else if (object instanceof Buffer) {
+      this.buffers.delete(id, object);
+      const size = object.size;
+      this.totalBufferMemory -= size ?? 0;
+    } else if (object instanceof BindGroup) {
+      this.bindGroups.delete(id, object);
+      object._deletionTime = performance.now();
+    } else if (object instanceof BindGroupLayout) {
+      this.bindGroupLayouts.delete(id, object);
+    } else if (object instanceof PipelineLayout) {
+      this.pipelineLayouts.delete(id, object);
+    } else if (object instanceof ShaderModule) {
+      this.shaderModules.delete(id, object);
+    } else if (object instanceof RenderPipeline) {
+      this.pendingRenderPipelines.delete(id, object);
+      this.renderPipelines.delete(id, object);
+    } else if (object instanceof ComputePipeline) {
+      this.computePipelines.set(id, object);
+      this.pendingComputePipelines.delete(id, object);
+    }
+
+    if (object.parent) {
+      const parent = object.parent;
+      for (const ci in parent.children) {
+        const child = parent.children[ci].deref();
+        if (!child || child === object) {
+          parent.children.splice(ci, 1);
+          break;
+        }
+      }
+    }
+
+    for (const childRef of object.children) {
+      const child = childRef.deref();
+      if (child) {
+        this._deleteObject(child.id);
+      }
+    }
+
+    this.onDeleteObject.emit(id, object);
   }
 }
