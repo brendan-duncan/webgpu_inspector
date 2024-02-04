@@ -187,7 +187,22 @@ export class ComputePipeline extends GPUObject {
 
 export class ObjectDatabase {
   constructor(port) {
-    this.reset();
+    this.allObjects = new Map();
+    this.adapters = new Map();
+    this.devices = new Map();
+    this.samplers = new Map();
+    this.textures = new Map();
+    this.textureViews = new Map();
+    this.buffers = new Map();
+    this.bindGroups = new Map();
+    this.bindGroupLayouts = new Map();
+    this.shaderModules = new Map();
+    this.pipelineLayouts = new Map();
+    this.renderPipelines = new Map();
+    this.computePipelines = new Map();
+    this.pendingRenderPipelines = new Map();
+    this.pendingComputePipelines = new Map();
+    this.frameTime = 0;
 
     this.onDeleteObject = new Signal();
     this.onResolvePendingObject = new Signal();
@@ -199,6 +214,9 @@ export class ObjectDatabase {
 
     this.totalTextureMemory = 0;
     this.totalBufferMemory = 0;
+
+    this.startFrameTime = -1;
+    this.endFrameTime = -1;
 
     const self = this;
    
@@ -408,6 +426,10 @@ export class ObjectDatabase {
   }
 
   _beginFrame() {
+    const t = performance.now();
+    if (this.startFrameTime != -1) {
+      this.frameTime = t - this.startFrameTime;
+    }
     this.startFrameTime = performance.now();
     this.onBeginFrame.emit();
   }
@@ -417,7 +439,7 @@ export class ObjectDatabase {
       return;
     }
     this.endFrameTime = performance.now();
-    this.frameTime = this.endFrameTime - this.startFrameTime;
+    //this.frameTime = this.endFrameTime - this.startFrameTime;
     if (this.frameTime != 0) {
       this.onEndFrame.emit();
     }

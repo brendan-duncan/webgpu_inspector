@@ -92,7 +92,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
       // Capture any dynamically created canvases.
       const __createElement = document.createElement;
       document.createElement = function (type) {
-        let element = __createElement.call(document, type);
+        const element = __createElement.call(document, type);
         if (type == "canvas") {
           self._wrapCanvas(element);
         }

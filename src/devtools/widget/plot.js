@@ -38,6 +38,9 @@ export class PlotData {
   }
 
   get(index) {
+    if (this.count < this._size) {
+      return this.data[index];
+    }
     return this.data[(this.index + index) % this._size];
   }
 }
@@ -90,13 +93,11 @@ export class Plot extends Div {
   _drawDraw(data) {
     const ctx = this.context;
     ctx.strokeStyle = "#aaa";
-    ctx.beginPath();
-    ctx.moveTo(0, this.height - data.get(0));
     const h = this.height;
     let min = 1.0e10;
     let max = -1.0e10;
     const count = data.count;
-    for (let i = 1; i < count; ++i) {
+    for (let i = 0; i < count; ++i) {
       let v = data.get(i);
       if (v < min) {
         min = v;
@@ -105,16 +106,26 @@ export class Plot extends Div {
         max = v;
       }
     }
-    if (max === min) {
+
+    if (count == 0) {
       return;
     }
 
     ctx.fillStyle = "#fff";
-    ctx.fillText(max.toFixed(2), 0, 10);
-    ctx.fillText(min.toFixed(2), 0, h);
+    ctx.fillText(`${max.toFixed(2)}ms`, 2, 10);
+    ctx.fillText(`${min.toFixed(2)}ms`, 2, h - 1);
 
+    if (max === min) {
+      min -= 1;
+      max += 1;
+    }
+
+    ctx.beginPath();
+    let v = data.get(0);
+    v = ((v - min) / (max - min)) * h;
+    ctx.moveTo(0, h - v);
     for (let i = 1; i < data.count; ++i) {
-      let v = data.get(i);
+      v = data.get(i);
       v = ((v - min) / (max - min)) * h;
       ctx.lineTo(i, h - v);
     }

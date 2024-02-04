@@ -4172,7 +4172,22 @@ var __webgpu_inspector_window = (function (exports) {
 
   class ObjectDatabase {
     constructor(port) {
-      this.reset();
+      this.allObjects = new Map();
+      this.adapters = new Map();
+      this.devices = new Map();
+      this.samplers = new Map();
+      this.textures = new Map();
+      this.textureViews = new Map();
+      this.buffers = new Map();
+      this.bindGroups = new Map();
+      this.bindGroupLayouts = new Map();
+      this.shaderModules = new Map();
+      this.pipelineLayouts = new Map();
+      this.renderPipelines = new Map();
+      this.computePipelines = new Map();
+      this.pendingRenderPipelines = new Map();
+      this.pendingComputePipelines = new Map();
+      this.frameTime = 0;
 
       this.onDeleteObject = new Signal();
       this.onResolvePendingObject = new Signal();
@@ -4184,6 +4199,9 @@ var __webgpu_inspector_window = (function (exports) {
 
       this.totalTextureMemory = 0;
       this.totalBufferMemory = 0;
+
+      this.startFrameTime = -1;
+      this.endFrameTime = -1;
 
       const self = this;
      
@@ -4393,6 +4411,10 @@ var __webgpu_inspector_window = (function (exports) {
     }
 
     _beginFrame() {
+      const t = performance.now();
+      if (this.startFrameTime != -1) {
+        this.frameTime = t - this.startFrameTime;
+      }
       this.startFrameTime = performance.now();
       this.onBeginFrame.emit();
     }
@@ -4402,7 +4424,7 @@ var __webgpu_inspector_window = (function (exports) {
         return;
       }
       this.endFrameTime = performance.now();
-      this.frameTime = this.endFrameTime - this.startFrameTime;
+      //this.frameTime = this.endFrameTime - this.startFrameTime;
       if (this.frameTime != 0) {
         this.onEndFrame.emit();
       }
@@ -7763,6 +7785,9 @@ var __webgpu_inspector_window = (function (exports) {
     }
 
     get(index) {
+      if (this.count < this._size) {
+        return this.data[index];
+      }
       return this.data[(this.index + index) % this._size];
     }
   }
@@ -7815,13 +7840,11 @@ var __webgpu_inspector_window = (function (exports) {
     _drawDraw(data) {
       const ctx = this.context;
       ctx.strokeStyle = "#aaa";
-      ctx.beginPath();
-      ctx.moveTo(0, this.height - data.get(0));
       const h = this.height;
       let min = 1.0e10;
       let max = -1.0e10;
       const count = data.count;
-      for (let i = 1; i < count; ++i) {
+      for (let i = 0; i < count; ++i) {
         let v = data.get(i);
         if (v < min) {
           min = v;
@@ -7830,16 +7853,26 @@ var __webgpu_inspector_window = (function (exports) {
           max = v;
         }
       }
-      if (max === min) {
+
+      if (count == 0) {
         return;
       }
 
       ctx.fillStyle = "#fff";
-      ctx.fillText(max.toFixed(2), 0, 10);
-      ctx.fillText(min.toFixed(2), 0, h);
+      ctx.fillText(`${max.toFixed(2)}ms`, 2, 10);
+      ctx.fillText(`${min.toFixed(2)}ms`, 2, h - 1);
 
+      if (max === min) {
+        min -= 1;
+        max += 1;
+      }
+
+      ctx.beginPath();
+      let v = data.get(0);
+      v = ((v - min) / (max - min)) * h;
+      ctx.moveTo(0, h - v);
       for (let i = 1; i < data.count; ++i) {
-        let v = data.get(i);
+        v = data.get(i);
         v = ((v - min) / (max - min)) * h;
         ctx.lineTo(i, h - v);
       }
@@ -7863,17 +7896,13 @@ var __webgpu_inspector_window = (function (exports) {
       } });
 
       const stats = new Span(controlBar, { style: "border-left: 1px solid #aaa; padding-left: 10px; margin-left: 20px; height: 20px; padding-top: 5px; color: #ddd;" });
-      this.uiFrameTime = new Span(stats);
+      this.uiFrameTime = new Span(stats, { style: "width: 140px; overflow: hidden;" });
       this.uiTotalTextureMemory = new Span(stats, { style: "margin-left: 20px;" });
       this.uiTotalBufferMemory = new Span(stats, { style: "margin-left: 20px;" });
 
       this.plots = new Div(parent, { style: "display: flex; flex-direction: row; margin-bottom: 10px; height: 30px;" });
       this.frameRatePlot = new Plot(this.plots, { style: "flex-grow: 1; margin-right: 10px;" });
       
-      /*const plots = new TabWidget(parent, { style: "margin-bottom: 10px; display: flex; margin-right: 10px;" });
-      this.frameRatePlot = new Plot(null, { style: "flex-grow: 1; margin-right: 10px;" });
-      plots.addTab("Frame Rate", this.frameRatePlot);*/
-
       this.frameRateData = this.frameRatePlot.addData("Frame Time");
 
       this.inspectorGUI = new Div(parent, { style: "overflow: hidden; white-space: nowrap; height: calc(-85px + 100vh); display: flex;" });
@@ -7904,6 +7933,7 @@ var __webgpu_inspector_window = (function (exports) {
       };
 
       // Periodically clean up old recycled widgets.
+      const cleanupInterval = 2000;
       setInterval(() => {
         const time = performance.now();
         for (const type in this._recycledWidgets) {
@@ -7917,7 +7947,7 @@ var __webgpu_inspector_window = (function (exports) {
             }
           }
         }
-      }, 1000);
+      }, cleanupInterval);
 
       this._reset();
     }
