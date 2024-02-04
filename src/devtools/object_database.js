@@ -210,7 +210,7 @@ export class ObjectDatabase {
           self._beginFrame();
           break;
         case "inspect_end_frame":
-          self._endFrame();
+          self._endFrame(message.commandCount);
           break;
         case "inspect_delete_object":
           self._deleteObject(message.id);
@@ -414,10 +414,15 @@ export class ObjectDatabase {
     this.onBeginFrame.emit();
   }
 
-  _endFrame() {
+  _endFrame(commandCount) {
+    if (commandCount === 0) {
+      return;
+    }
     this.endFrameTime = performance.now();
     this.frameTime = this.endFrameTime - this.startFrameTime;
-    this.onEndFrame.emit();
+    if (this.frameTime != 0) {
+      this.onEndFrame.emit();
+    }
   }
 
   getObject(id) {

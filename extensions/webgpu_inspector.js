@@ -788,7 +788,7 @@
         this._nonTrackingID = 0.5;
         this._frameStartTime = -1;
         this._timeSinceLastFrame = 0;
-        this._maxFramesToRecord = 1000;
+        this._frameCommandCount = 0;
         this._captureRequest = false;
         this.__skipRecord = false;
         this._trackedObjects = new Map();
@@ -997,6 +997,8 @@
 
       // Called after a GPU method is called, allowing the inspector to wrap the result.
       _onMethodCall(object, method, args, result, stacktrace) {
+        this._frameCommandCount++;
+
         if (method == "beginRenderPass") {
           result.__commandEncoder = object;
           if (this._capturedRenderView) {
@@ -1182,10 +1184,11 @@
         this._frameCommands.length = 0;
         this._frameRenderPassCount = 0;
         this._frameIndex++;
+        this._frameCommandCount = 0;
       }
 
       _frameEnd() {
-        window.postMessage({"action": "inspect_end_frame"}, "*");
+        window.postMessage({ "action": "inspect_end_frame", "commandCount": this._frameCommandCount }, "*");
 
         if (this._frameCommands.length) {
           const maxFrameCount = 2000;

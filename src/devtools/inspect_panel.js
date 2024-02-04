@@ -18,6 +18,7 @@ import { Adapter,
   RenderPipeline,
   ComputePipeline } from "./object_database.js";
 import { getFlagString } from "../utils/flags.js";
+import { Plot } from "./widget/plot.js";
 
 export class InspectPanel {
   constructor(window, parent) {
@@ -38,6 +39,15 @@ export class InspectPanel {
     this.uiFrameTime = new Span(stats);
     this.uiTotalTextureMemory = new Span(stats, { style: "margin-left: 20px;" });
     this.uiTotalBufferMemory = new Span(stats, { style: "margin-left: 20px;" });
+
+    this.plots = new Div(parent, { style: "display: flex; flex-direction: row; margin-bottom: 10px; height: 30px;" });
+    this.frameRatePlot = new Plot(this.plots, { style: "flex-grow: 1; margin-right: 10px;" });
+    
+    /*const plots = new TabWidget(parent, { style: "margin-bottom: 10px; display: flex; margin-right: 10px;" });
+    this.frameRatePlot = new Plot(null, { style: "flex-grow: 1; margin-right: 10px;" });
+    plots.addTab("Frame Rate", this.frameRatePlot);*/
+
+    this.frameRateData = this.frameRatePlot.addData("Frame Time");
 
     this.inspectorGUI = new Div(parent, { style: "overflow: hidden; white-space: nowrap; height: calc(-85px + 100vh); display: flex;" });
 
@@ -142,6 +152,9 @@ export class InspectPanel {
     this.uiTotalTextureMemory.text = `Texture Memory: ${totalTextureMemory} Bytes`;
     const totalBufferMemory = this.database.totalBufferMemory.toLocaleString("en-US");
     this.uiTotalBufferMemory.text = `Buffer Memory: ${totalBufferMemory} Bytes`;
+
+    this.frameRateData.add(this.database.frameTime);
+    this.frameRatePlot.draw();
   }
 
   _objectLabelChanged(id, object, label) {
