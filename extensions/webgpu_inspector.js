@@ -844,7 +844,7 @@
         });
 
         // Clean out the garbage collected objects every so often.
-        const garbageCollectionInterval = 100;
+        const garbageCollectionInterval = 200;
         setInterval(() => {
           if (self._garbageCollectectedObjects.length > 0) {
             window.postMessage({"action": "inspect_delete_objects", "idList": self._garbageCollectectedObjects}, "*");

@@ -84,7 +84,7 @@ export class InspectPanel {
         const length = list.length;
         for (let i = length - 1; i >= 0; --i) {
           const widget = list[i];
-          if ((time - widget._destroyTime) > 1000) {
+          if ((time - widget._destroyTime) > 5000) {
             widget.element.remove();
             list.splice(i, 1);
           }

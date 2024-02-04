@@ -10,8 +10,6 @@ export class GPUObject {
     this.id = id;
     this.label = "";
     this._stacktrace = stacktraceCache.setStacktrace(stacktrace ?? "");
-    this.parent = null;
-    this.children = [];
     this._deletionTime = 0;
   }
 
@@ -470,14 +468,6 @@ export class ObjectDatabase {
       this.computePipelines.set(id, object);
     }
 
-    if (parent) {
-      const parentObject = this.getObject(parent);
-      if (parentObject) {
-        parentObject.children.push(new WeakRef(object));
-        object.parent = parentObject;
-      }
-    }
-
     this.onAddObject.emit(object, pending);
   }
 
@@ -536,24 +526,6 @@ export class ObjectDatabase {
     } else if (object instanceof ComputePipeline) {
       this.computePipelines.set(id, object);
       this.pendingComputePipelines.delete(id, object);
-    }
-
-    if (object.parent) {
-      const parent = object.parent;
-      for (const ci in parent.children) {
-        const child = parent.children[ci].deref();
-        if (!child || child === object) {
-          parent.children.splice(ci, 1);
-          break;
-        }
-      }
-    }
-
-    for (const childRef of object.children) {
-      const child = childRef.deref();
-      if (child) {
-        this._deleteObject(child.id);
-      }
     }
 
     this.onDeleteObject.emit(id, object);
