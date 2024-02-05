@@ -30,6 +30,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
       this._bindGroupCount = 0;
       this._captureTextureRequest = new Map();
       this._toDestroy = [];
+      this._objectMap = new Map();
 
       if (!window.navigator.gpu) {
         // No WebGPU support
@@ -75,6 +76,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
         self._trackedObjects.delete(id);
         self._trackedObjectInfo.delete(id);
         self._captureTextureRequest.delete(id);
+        self._objectMap.delete(id);
       });
 
       // Clean out the garbage collected objects every so often.
@@ -124,6 +126,11 @@ import { TextureUtils } from "./utils/texture_utils.js";
           const textureId = message.id;
           self._requestTexture(textureId);
         }
+        if (message.action === "inspect_compile_shader") {
+          const shaderId = message.id;
+          const code = message.code;
+          self._compileShader(shaderId, code);
+        }
       });
     }
 
@@ -131,6 +138,19 @@ import { TextureUtils } from "./utils/texture_utils.js";
     // the arguments or the object before the method is called.
     _preMethodCall(object, method, args) {
       const self = this;
+
+      if (method === "setPipeline") {
+        // If a shader has been recompiled, that means the pipelines that
+        // used that shader were also re-created. Patch in the replacement
+        // pipeline so the new version of the shader is used.
+        let pipeline = args[0];
+        const objectRef = this._objectMap.get(pipeline.__id);
+        if (objectRef) {
+          if (objectRef.replacement) {
+            args[0] = objectRef.replacement;
+          }
+        }
+      }
 
       if (method === "createTexture") {
         // Add COPY_SRC usage to all textures so we can capture them
@@ -315,6 +335,12 @@ import { TextureUtils } from "./utils/texture_utils.js";
           this._wrapObject(result, id);
         }
 
+        if (method === "createShaderModule" || method === "createRenderPipeline") {
+          result.__descriptor = args[0];
+          result.__device = object;
+          this._objectMap.set(result.__id, { object: new WeakRef(result), replacement: null });
+        }
+
         if (method === "createTexture") {
           this._trackObject(result.__id, result);
         } else if (method === "createView" && !id) {
@@ -414,6 +440,141 @@ import { TextureUtils } from "./utils/texture_utils.js";
       const id = object.__id;
       const message = `WebGPU ${type} ${id} ${label} was garbage collected without being explicitly destroyed. This is a memory leak.`;
       window.postMessage({"action": "inspect_memory_leak_warning", id, "message": message}, "*");
+    }
+
+    _isPrimitiveType(obj) {
+      return !obj || obj.constructor === String || obj.constructor === Number || obj.constructor === Boolean;
+    }
+
+    _isTypedArray(obj) {
+      return obj && (obj instanceof ArrayBuffer || obj.buffer instanceof ArrayBuffer);
+    }
+
+    _isArray(obj) {
+      return obj && obj.constructor === Array;
+    }
+
+    _duplicateArray(array, replaceGpuObjects) {
+      const newArray = new Array(array.length);
+      for (let i = 0, l = array.length; i < l; ++i) {
+        const x = array[i];
+        if (this._isPrimitiveType(x)) {
+          newArray[i] = x;
+        } else if (x.__id !== undefined) {
+          if (replaceGpuObjects) {
+            newArray[i] = { __id: x }
+          } else {
+            newArray[i] = x;
+          }
+        } else if (this._isTypedArray(x)) {
+          newArray[i] = x;
+        } else if (this._isArray(x)) {
+          newArray[i] = this._duplicateArray(x);
+        } else if (x instanceof Object) {
+          newArray[i] = this._duplicateObject(x);
+        } else {
+          newArray[i] = x;
+        }
+      }
+      return newArray;
+    }
+
+    _duplicateObject(object, replaceGpuObjects) {
+      const obj = {};
+      for (const key in object) {
+        const x = object[key];
+        if (this._isPrimitiveType(x)) {
+          obj[key] = x;
+        } else if (x.__id !== undefined) {
+          if (replaceGpuObjects) {
+            obj[key] = { __id: x }
+          } else {
+            obj[key] = x;
+          }
+        } else if (this._isTypedArray(x)) {
+          obj[key] = x;
+        } else if (this._isArray(x)) {
+          obj[key] = this._duplicateArray(x);
+        } else if (x instanceof Object) {
+          obj[key] = this._duplicateObject(x);
+        } else {
+          obj[key] = x;
+        }
+      }
+      return obj;
+    }
+
+    _compileShader(shaderId, code) {
+      const objectMap = this._objectMap.get(shaderId);
+      if (!objectMap) {
+        return;
+      }
+      const shader = objectMap.object?.deref();
+      if (!shader) {
+        return;
+      }
+
+      const device = shader.__device;
+      const descriptor = this._duplicateObject(shader.__descriptor);
+      descriptor.code = code;
+
+      this.__skipRecord = true;
+      device.pushErrorScope('validation');
+      const newShaderModule = device.createShaderModule(descriptor);
+      device.popErrorScope().then((error) => {
+        if (error) {
+          console.log(error.message);
+        }
+      });
+      this.__skipRecord = false;
+
+      objectMap.replacement = newShaderModule;
+
+      // Create replacements for any RenderPipeline that uses shaderId
+      for (const objectRef of this._objectMap.values()) {
+        const object = objectRef.object.deref();
+        const isRenderPipeline = object instanceof GPURenderPipeline;
+        const isComputePipeline = object instanceof GPUComputePipeline;
+        if (isRenderPipeline || isComputePipeline) {
+          const descriptor = object.__descriptor;
+          let newDescriptor = null;
+          
+          if (descriptor.vertex?.module === shader) {
+            if (!newDescriptor) {
+              newDescriptor = this._duplicateObject(descriptor);
+            }
+            newDescriptor.vertex.module = newShaderModule;
+          }
+          if (descriptor.fragment?.module === shader) {
+            if (!newDescriptor) {
+              newDescriptor = this._duplicateObject(descriptor);
+            }
+            newDescriptor.fragment.module = newShaderModule;
+          }
+          if (descriptor.compute?.module === shader) {
+            if (!newDescriptor) {
+              newDescriptor = this._duplicateObject(descriptor);
+            }
+            newDescriptor.compute.module = newShaderModule;
+          }
+
+          if (newDescriptor !== null) {
+            this.__skipRecord = true;
+            device.pushErrorScope('validation');
+            const newPipeline = isRenderPipeline ?
+                device.createRenderPipeline(newDescriptor) :
+                device.createComputePipeline(newDescriptor);
+            device.popErrorScope().then((error) => {
+              if (error) {
+                console.log(error.message);
+              }
+            });
+            this.__skipRecord = false;
+
+            objectRef.replacement = newPipeline;
+          }
+        }
+      }
     }
 
     _requestTexture(textureId) {
@@ -635,6 +796,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
         const id = object.__id;
         this._trackedObjects.delete(id);
         this._trackedObjectInfo.delete(id);
+        this._objectMap.delete(id);
         if (object instanceof GPUBindGroup) {
           this._bindGroupCount--;
         }

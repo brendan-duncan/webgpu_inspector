@@ -381,8 +381,10 @@ export class InspectPanel {
     const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-200px + 100vh); overflow: auto;" });
 
     if (object instanceof ShaderModule) {
+      const self = this;
+      const compileButton = new Button(descriptionBox, { label: "Compile", style: "background-color: rgb(200, 150, 51);" });
       const text = object.descriptor.code;
-      new EditorView({
+      const editor = new EditorView({
         doc: text,
         extensions: [
           basicSetup,
@@ -392,7 +394,11 @@ export class InspectPanel {
         ],
         parent: descriptionBox.element,
       });
-      //new Widget("pre", descriptionBox, { text });
+
+      compileButton.callback = () => {
+        const text = editor.state.doc.toString();
+        self._compileShader(object, text);
+      };
     } else if (object instanceof ValidationError) {
       const objectId = object.object;
       if (objectId) {
@@ -432,6 +438,10 @@ export class InspectPanel {
         this._createTexturePreview(object, descriptionBox);
       }
     }
+  }
+
+  _compileShader(object, code) {
+    this.port.postMessage({ action: "inspect_compile_shader", id: object.id, code });
   }
 
   _createTexturePreview(texture, parent, width, height) {

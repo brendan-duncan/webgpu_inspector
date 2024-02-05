@@ -17,7 +17,7 @@ const port = new MessagePort("webgpu-inspector-content", 0, (message) => {
     }
   }
   
-  if (action == "inspect_request_texture") {
+  if (action === "inspect_request_texture" || action === "inspect_compile_shader") {
     window.postMessage(message, "*");
   }
   
@@ -28,7 +28,7 @@ const port = new MessagePort("webgpu-inspector-content", 0, (message) => {
     }, 50);
   }
   
-  if (action == "initialize_recorder") {
+  if (action === "initialize_recorder") {
     sessionStorage.setItem(webgpuRecorderLoadedKey, `${message.frames}%${message.filename}`);
     setTimeout(function () {
       window.location.reload();
