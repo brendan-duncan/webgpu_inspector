@@ -254,9 +254,8 @@ import { TextureUtils } from "./utils/texture_utils.js";
         this.__skipRecord = true;
         object.popErrorScope().then((error) => {
           if (error) {
-            //console.log(error.message);
-            //console.log(stacktrace);
-            window.postMessage({ "action": "inspect_validation_error", "message": error.message, stacktrace }, "*");
+            const id = result?.__id ?? 0;
+            window.postMessage({ "action": "inspect_validation_error", id, "message": error.message, stacktrace }, "*");
           }
         });
         this.__skipRecord = false;
@@ -267,8 +266,6 @@ import { TextureUtils } from "./utils/texture_utils.js";
         const self = this;
         object.__commandEncoder.__device.popErrorScope().then((error) => {
           if (error) {
-            //console.log(error.message);
-            //console.log(stacktrace);
             window.postMessage({ "action": "inspect_validation_error", "message": error.message, stacktrace }, "*");
           }
         });

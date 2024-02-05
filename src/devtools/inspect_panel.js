@@ -331,6 +331,7 @@ export class InspectPanel {
     }
 
     object.widget = widget;
+    widget.group = ui;
 
     const self = this;
     object.widget.element.onclick = () => {
@@ -369,6 +370,14 @@ export class InspectPanel {
       new Div(stacktraceGrp.body, { text: object.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" })
     }
 
+    const errors = this.database.findObjectErrors(object.id);
+    if (errors.length > 0) {
+      const errorsGrp = new Collapsable(infoBox, { collapsed: true, label: "Errors", collapsed: true });
+      for (const error of errors) {
+        new Div(errorsGrp.body, { text: error.message, class: "inspect_info_error" });
+      }
+    }
+
     const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-200px + 100vh); overflow: auto;" });
 
     if (object instanceof ShaderModule) {
@@ -385,6 +394,23 @@ export class InspectPanel {
       });
       //new Widget("pre", descriptionBox, { text });
     } else if (object instanceof ValidationError) {
+      const objectId = object.object;
+      if (objectId) {
+        const obj = this.database.getObject(objectId);
+        if (obj) {
+          const self = this;
+          new Button(infoBox, { label: `Object: ${obj.name}.${obj.id}`, style: "background-color: #557; color: #fff;" , callback: () => {
+            if (obj.widget) {
+              if (obj.widget.group) {
+                obj.widget.group.collapsed = false;
+              }
+              obj.widget.element.click();
+            } else {
+              self._inspectObject(obj);
+            }
+          } });
+        }
+      }
       const text = object.message;
       new Widget("pre", descriptionBox, { text });
     } else {

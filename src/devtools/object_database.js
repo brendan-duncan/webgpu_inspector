@@ -198,9 +198,10 @@ export class ComputePipeline extends GPUObject {
 ComputePipeline.className = "ComputePipeline";
 
 export class ValidationError extends GPUObject {
-  constructor(id, message, stacktrace) {
+  constructor(id, object, message, stacktrace) {
     super(id, stacktrace);
     this.message = message;
+    this.object = object ?? 0;
   }
 }
 ValidationError.className = "ValidationError";
@@ -255,10 +256,11 @@ export class ObjectDatabase {
         case "inspect_validation_error": {
           const errorMessage = message.message;
           const stacktrace = message.stacktrace;
+          const objectId = message.id ?? 0;
           if (self.validationErrors.has(errorMessage)) {
             return;
           }
-          const errorObj = new ValidationError(++self.errorCount, errorMessage, stacktrace);
+          const errorObj = new ValidationError(++self.errorCount, objectId, errorMessage, stacktrace);
           self.validationErrors.set(errorMessage, errorObj);
           self.onValidationError.emit(errorObj);
           break;
@@ -381,6 +383,16 @@ export class ObjectDatabase {
         }
       }
     });
+  }
+
+  findObjectErrors(id) {
+    const errors = [];
+    for (const error of this.validationErrors.values()) {
+      if (error.object === id) {
+        errors.push(error);
+      }
+    }
+    return errors;
   }
 
   _deleteOldRecycledObjects(objectList) {

@@ -183,6 +183,13 @@ li:hover {
   font-size: 14pt;
 }
 
+.inspect_info_error {
+  background-color: #733;
+  color: #eee;
+  padding: 5px;
+  font-size: 10pt;
+}
+
 /* ---------------------------------------- */
 
 .inspector-window {
