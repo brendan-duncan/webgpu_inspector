@@ -399,7 +399,7 @@ export class InspectPanel {
         const obj = this.database.getObject(objectId);
         if (obj) {
           const self = this;
-          new Button(infoBox, { label: `Object: ${obj.name}.${obj.id}`, style: "background-color: #557; color: #fff;" , callback: () => {
+          new Button(infoBox, { label: `${obj.name}.${obj.id}`, style: "background-color: #733; color: #fff;" , callback: () => {
             if (obj.widget) {
               if (obj.widget.group) {
                 obj.widget.group.collapsed = false;
