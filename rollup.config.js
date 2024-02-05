@@ -1,3 +1,6 @@
+import { nodeResolve } from "@rollup/plugin-node-resolve";
+import { terser } from "rollup-plugin-terser";
+
 function build(name, input, format, file) {
   return {
       input,
@@ -8,6 +11,20 @@ function build(name, input, format, file) {
               sourcemap: true,
               name
           }
+      ],
+      plugins: [
+        nodeResolve(),
+        terser({
+          ecma: 2020,
+          compress: {
+            module: true,
+            toplevel: true,
+            unsafe_arrows: true,
+            drop_console: false,
+            drop_debugger: false
+          },
+          output: { quote_style: 1 }
+        })
       ]
   }
 }

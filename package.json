@@ -25,7 +25,13 @@
     "javascript",
     "html5"
   ],
+  "dependencies": {
+    "codemirror": "^6.0.1",
+    "thememirror": "^2.0.1"
+  },
   "devDependencies": {
-    "rollup": "^2.60.0"
+    "rollup": "^2.79.1",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "rollup-plugin-terser": "^7.0.2"
   }
 }

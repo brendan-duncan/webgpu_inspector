@@ -80,3 +80,10 @@ When the recording has finished, it will be automatically downloaded by the brow
 * Because it records all commands and data, file sizes can get quite large. Record is best suited for smaller tests.
 
 ![WebGPU Inspector Panel](images/record.png)
+
+----
+
+### Third Party Code
+
+* CodeMirror: https://codemirror.net/
+* CodeMirror WGSL Langauge: https://github.com/iizukak/codemirror-lang-wgsl

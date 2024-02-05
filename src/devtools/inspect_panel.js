@@ -20,6 +20,11 @@ import { Adapter,
   ValidationError } from "./object_database.js";
 import { getFlagString } from "../utils/flags.js";
 import { Plot } from "./widget/plot.js";
+import { basicSetup, EditorView } from "codemirror";
+import { indentWithTab } from "@codemirror/commands"
+import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
+import { dracula } from 'thememirror';
+import { keymap } from "@codemirror/view";
 
 export class InspectPanel {
   constructor(window, parent) {
@@ -58,21 +63,7 @@ export class InspectPanel {
     // Recycle DOM elements as objects are created and destroyed.
     // The DevTools panel will crash after a while if there is too much thrashing
     // of DOM elements.
-    this._recycledWidgets = {
-      Adapter: [],
-      Device: [],
-      Buffer: [],
-      Sampler: [],
-      Texture: [],
-      TextureView: [],
-      ShaderModule: [],
-      BindGroupLayout: [],
-      PipelineLayout: [],
-      BindGroup: [],
-      RenderPipeline: [],
-      ComputePipeline: [],
-      ValidationError: []
-    };
+    this._recycledWidgets = {};
 
     // Periodically clean up old recycled widgets.
     const cleanupInterval = 2000;
@@ -170,13 +161,29 @@ export class InspectPanel {
     }
   }
 
+  _getRecycledWidget(object) {
+    const objectType = object.constructor.name;
+    if (this._recycledWidgets[objectType]) {
+      return this._recycledWidgets[objectType].pop();
+    }
+    return null;
+  }
+
+  _recycleWidget(object, widget) {
+    const objectType = object.constructor.name;
+    if (!this._recycledWidgets[objectType]) {
+      this._recycledWidgets[objectType] = [];
+    }
+    this._recycledWidgets[objectType].push(widget);
+  }
+
   _deleteObject(id, object) {
     // Instead of deleting the objects widget from the DOM, recycle
     // it so the next time an object of this type is created, it will
     // use the recycled widget instead of creating a new one.
     const widget = object?.widget;
     if (widget) {
-      this._recycledWidgets[object.constructor.name].push(widget);
+      this._recycleWidget(object, widget);
       widget.element.style.display = "none";
       widget._destroyTime = performance.now();
       object.widget = null;
@@ -304,7 +311,7 @@ export class InspectPanel {
 
     const idName = object.id < 0 ? "CANVAS" : object.id;
 
-    let widget = this._recycledWidgets[object.constructor.name].pop();
+    let widget = this._getRecycledWidget(object);
     if (widget) {
       widget.element.style.display = undefined;
       widget.nameWidget.text = name;
@@ -366,7 +373,17 @@ export class InspectPanel {
 
     if (object instanceof ShaderModule) {
       const text = object.descriptor.code;
-      new Widget("pre", descriptionBox, { text });
+      new EditorView({
+        doc: text,
+        extensions: [
+          basicSetup,
+          keymap.of([indentWithTab]),
+          dracula,
+          wgsl()
+        ],
+        parent: descriptionBox.element,
+      });
+      //new Widget("pre", descriptionBox, { text });
     } else if (object instanceof ValidationError) {
       const text = object.message;
       new Widget("pre", descriptionBox, { text });
