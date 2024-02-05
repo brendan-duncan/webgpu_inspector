@@ -338,7 +338,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
         if (method === "createShaderModule" || method === "createRenderPipeline") {
           result.__descriptor = args[0];
           result.__device = object;
-          this._objectMap.set(result.__id, { object: new WeakRef(result), replacement: null });
+          this._objectMap.set(result.__id, { id: result.__id, object: new WeakRef(result), replacement: null });
         }
 
         if (method === "createTexture") {
@@ -469,9 +469,9 @@ import { TextureUtils } from "./utils/texture_utils.js";
         } else if (this._isTypedArray(x)) {
           newArray[i] = x;
         } else if (this._isArray(x)) {
-          newArray[i] = this._duplicateArray(x);
+          newArray[i] = this._duplicateArray(x, replaceGpuObjects);
         } else if (x instanceof Object) {
-          newArray[i] = this._duplicateObject(x);
+          newArray[i] = this._duplicateObject(x, replaceGpuObjects);
         } else {
           newArray[i] = x;
         }
@@ -494,9 +494,9 @@ import { TextureUtils } from "./utils/texture_utils.js";
         } else if (this._isTypedArray(x)) {
           obj[key] = x;
         } else if (this._isArray(x)) {
-          obj[key] = this._duplicateArray(x);
+          obj[key] = this._duplicateArray(x, replaceGpuObjects);
         } else if (x instanceof Object) {
-          obj[key] = this._duplicateObject(x);
+          obj[key] = this._duplicateObject(x, replaceGpuObjects);
         } else {
           obj[key] = x;
         }
@@ -520,10 +520,12 @@ import { TextureUtils } from "./utils/texture_utils.js";
 
       this.__skipRecord = true;
       device.pushErrorScope('validation');
+      descriptor.__replacement = shaderId;
       const newShaderModule = device.createShaderModule(descriptor);
       device.popErrorScope().then((error) => {
         if (error) {
-          console.log(error.message);
+          const id = shaderId ?? 0;
+          window.postMessage({ "action": "inspect_validation_error", id, "message": error.message }, "*");
         }
       });
       this.__skipRecord = false;
@@ -560,13 +562,15 @@ import { TextureUtils } from "./utils/texture_utils.js";
 
           if (newDescriptor !== null) {
             this.__skipRecord = true;
+            newDescriptor.__replacement = objectRef.id;
             device.pushErrorScope('validation');
             const newPipeline = isRenderPipeline ?
                 device.createRenderPipeline(newDescriptor) :
                 device.createComputePipeline(newDescriptor);
             device.popErrorScope().then((error) => {
               if (error) {
-                console.log(error.message);
+                const id = objectRef.id ?? 0;
+                window.postMessage({ "action": "inspect_validation_error", id, "message": error.message }, "*");
               }
             });
             this.__skipRecord = false;
@@ -695,7 +699,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
       // Track garbage collected objects
       this._garbageCollectionRegistry.register(object, object.__id);
 
-      /*if (object.label !== undefined) {
+      if (object.label !== undefined) {
         // Capture chaning of the GPUObjectBase label
         const l = object.label;
         object._label = l;
@@ -713,7 +717,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
             }
           }
         });
-      }*/
+      }
 
       if (object instanceof GPUDevice) {
         // Automatically wrap the device's queue
@@ -751,35 +755,8 @@ import { TextureUtils } from "./utils/texture_utils.js";
       return obj;
     }
 
-    _prepareDescriptor(args) {
-      if (!args || args.constructor === Number || args.constructor === String || args.constructor === Boolean) {
-        return args;
-      }
-      if (args.buffer === ArrayBuffer || args instanceof ArrayBuffer) {
-        return args;
-      }
-      if (args instanceof Array) {
-        const array = [];
-        for (const v of args) {
-          array.push(this._prepareDescriptor(v));
-        }
-        return array;
-      }
-
-      if (args.__id !== undefined) {
-        return {"__id": args.__id, "__class": args.constructor.name };
-      }
-      
-      const descriptor = {};
-      for (const key in args) {
-        descriptor[key] = this._prepareDescriptor(args[key]);
-      }
-
-      return descriptor;
-    }
-
     _stringifyDescriptor(args) {
-      const descriptor = this._prepareDescriptor(args) ?? {};
+      const descriptor = this._duplicateObject(args, true) ?? {};
       //return descriptor;
       const s = JSON.stringify(descriptor);
       return s;
@@ -806,7 +783,9 @@ import { TextureUtils } from "./utils/texture_utils.js";
         }
       } else if (method === "createShaderModule") {
         const id = result.__id;
-        this._sendAddObjectMessage(id, parent, "ShaderModule", this._stringifyDescriptor(args[0]), stacktrace);
+        if (!args[0].__replacement) {
+          this._sendAddObjectMessage(id, parent, "ShaderModule", this._stringifyDescriptor(args[0]), stacktrace);
+        }
       } else if (method === "createBuffer") {
         const id = result.__id;
         this._sendAddObjectMessage(id, parent, "Buffer", this._stringifyDescriptor(args[0]), stacktrace);
@@ -863,20 +842,24 @@ import { TextureUtils } from "./utils/texture_utils.js";
         this._sendAddObjectMessage(id, parent, "PipelineLayout", this._stringifyDescriptor(args[0]), stacktrace);
       } else if (method === "createRenderPipeline") {
         const id = result.__id;
-        this._sendAddObjectMessage(id, parent, "RenderPipeline", this._stringifyDescriptor(args[0]), stacktrace);
-        // There are cases when the shader modules used by the render pipeline will be garbage collected, and we won't be able to inspect them after that.
-        // Hang on to the shader modules used in the descriptor by attaching them to the pipeline.
-        if (args[0].vertex?.module) {
-          result.__vertexModule = args[0].vertex?.module;
-        }
-        if (args[0].fragment?.module) {
-          result.__fragmentModule = args[0].fragment?.module;
+        if (!args[0].__replacement) {
+          this._sendAddObjectMessage(id, parent, "RenderPipeline", this._stringifyDescriptor(args[0]), stacktrace);
+          // There are cases when the shader modules used by the render pipeline will be garbage collected, and we won't be able to inspect them after that.
+          // Hang on to the shader modules used in the descriptor by attaching them to the pipeline.
+          if (args[0].vertex?.module) {
+            result.__vertexModule = args[0].vertex?.module;
+          }
+          if (args[0].fragment?.module) {
+            result.__fragmentModule = args[0].fragment?.module;
+          }
         }
       } else if (method === "createComputePipeline") {
         const id = result.__id;
-        this._sendAddObjectMessage(id, parent, "ComputePipeline", this._stringifyDescriptor(args[0]), stacktrace);
-        if (args[0].compute?.module) {
-          result.__computeModule = args[0].compute?.module;
+        if (!args[0].__replacement) {
+          this._sendAddObjectMessage(id, parent, "ComputePipeline", this._stringifyDescriptor(args[0]), stacktrace);
+          if (args[0].compute?.module) {
+            result.__computeModule = args[0].compute?.module;
+          }
         }
       } else if (method === "createCommandEncoder") {
         // We'll need the CommandEncoder's device for capturing textures

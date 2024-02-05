@@ -383,7 +383,7 @@ export class InspectPanel {
     if (object instanceof ShaderModule) {
       const self = this;
       const compileButton = new Button(descriptionBox, { label: "Compile", style: "background-color: rgb(200, 150, 51);" });
-      const text = object.descriptor.code;
+      const text = object.replacementCode || object.descriptor.code;
       const editor = new EditorView({
         doc: text,
         extensions: [
@@ -398,6 +398,7 @@ export class InspectPanel {
       compileButton.callback = () => {
         const text = editor.state.doc.toString();
         self._compileShader(object, text);
+        object.replacementCode = text;
       };
     } else if (object instanceof ValidationError) {
       const objectId = object.object;

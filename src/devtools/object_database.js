@@ -138,10 +138,11 @@ export class ShaderModule extends GPUObject {
     this.hasVertexEntries = descriptor?.code ? descriptor.code.indexOf("@vertex") != -1 : false;
     this.hasFragmentEntries = descriptor?.code ? descriptor.code.indexOf("@fragment") != -1 : false;
     this.hasComputeEntries = descriptor?.code ? descriptor.code.indexOf("@compute") != -1 : false;
+    this.replacementCode = null;
   }
 
   get code() {
-    return this.descriptor?.code ?? "";
+    return this.replacementCode ?? this.descriptor?.code ?? "";
   }
 
   get reflection() {
