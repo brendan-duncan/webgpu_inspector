@@ -30,7 +30,6 @@ export class InspectPanel {
 
     this.inspectButton = new Button(controlBar, { label: "Start", callback: () => { 
       try {
-        self.database.reset();
         self._reset();
         self.port.postMessage({ action: "initialize_inspector" });
       } catch (e) {}
@@ -108,6 +107,9 @@ export class InspectPanel {
   }
 
   _reset() {
+    this.database.reset();
+    this.frameRatePlot.reset();
+
     this._selectedObject = null;
     this._selectedGroup = null;
     this.inspectorGUI.html = "";

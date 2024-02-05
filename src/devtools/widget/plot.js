@@ -13,6 +13,13 @@ export class PlotData {
     this.max = -1.0e10;
   }
 
+  reset() {
+    this.index = 0;
+    this.count = 0;
+    this.min = 1.0e10;
+    this.max = -1.0e10;
+  }
+
   get size() {
     return this._size;
   }
@@ -60,6 +67,12 @@ export class Plot extends Div {
     this.draw();
   }
 
+  reset() {
+    for (const data of this.data.values()) {
+      data.reset();
+    }
+  }
+
   onResize() {
     if (this.canvas) {
       this.canvas.element.width = this.width;
@@ -92,7 +105,7 @@ export class Plot extends Div {
 
   _drawDraw(data) {
     const ctx = this.context;
-    ctx.strokeStyle = "#aaa";
+    ctx.strokeStyle = "#999";
     const h = this.height;
     let min = 1.0e10;
     let max = -1.0e10;
