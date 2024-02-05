@@ -35,7 +35,7 @@ export class InspectorWindow extends Window {
 
     const inspectorPanel = new Div(null, { class: "inspector_panel" });
     this._tabs.addTab("Inspect", inspectorPanel);
-    this._inspectPanel = new InspectPanel(this, inspectorPanel);
+    this._inspectPanel = new InspectPanel(this, inspectorPanel);   
 
     const capturePanel = new Div(null, { class: "capture_panel" });
     this._tabs.addTab("Capture", capturePanel);

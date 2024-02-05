@@ -859,7 +859,7 @@
         const __createElement = document.createElement;
         document.createElement = function (type) {
           const element = __createElement.call(document, type);
-          if (type == "canvas") {
+          if (type === "canvas") {
             self._wrapCanvas(element);
           }
           return element;
@@ -886,7 +886,7 @@
           if (typeof message !== 'object' || message === null) {
             return;
           }
-          if (message.action == "inspect_request_texture") {
+          if (message.action === "inspect_request_texture") {
             const textureId = message.id;
             self._requestTexture(textureId);
           }
@@ -898,13 +898,23 @@
       _preMethodCall(object, method, args) {
         const self = this;
 
-        if (method == "createTexture") {
+        if (method === "createTexture") {
           // Add COPY_SRC usage to all textures so we can capture them
           args[0].usage |= GPUTextureUsage.COPY_SRC;
         }
 
+        if (method === "createShaderModule"|| method === "createRenderPipeline" || method === "createComputePipeline" || method === "createBindGroup") {
+          this.__skipRecord = true;
+          object.pushErrorScope("validation");
+          this.__skipRecord = false;
+        }
+
         this._capturedRenderView = null;
-        if (method == "beginRenderPass") {
+        if (method === "beginRenderPass") {
+          this.__skipRecord = true;
+          object.__device.pushErrorScope("validation");
+          this.__skipRecord = false;
+
           const descriptor = args[0];
           const colorAttachments = descriptor.colorAttachments;
           if (colorAttachments) {
@@ -964,7 +974,7 @@
         }
 
         // Before we finish the command encoder, inject any pending texture captures
-        if ((object == this._lastCommandEncoder) && method == "finish") {
+        if ((object === this._lastCommandEncoder) && method === "finish") {
           if (this._captureTextureRequest.size > 0) {
             this._captureTextureBuffers();
           }
@@ -972,7 +982,7 @@
 
         // We want to be able to capture canvas textures, so we need to add COPY_SRC to
         // the usage flags of any textures created from canvases.
-        if ((object instanceof GPUCanvasContext) && method == "configure") {
+        if ((object instanceof GPUCanvasContext) && method === "configure") {
           const descriptor = args[0];
           if (descriptor.usage) {
             descriptor.usage |= GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC;
@@ -982,7 +992,7 @@
           object.__device = descriptor.device;
         }       
 
-        if (method == "submit") {
+        if (method === "submit") {
           this.__skipRecord = true;
           object.onSubmittedWorkDone().then(() => {
             self._sendCaptureTextureBuffers();
@@ -999,14 +1009,36 @@
       _onMethodCall(object, method, args, result, stacktrace) {
         this._frameCommandCount++;
 
-        if (method == "beginRenderPass") {
+        if (method === "beginRenderPass") {
           result.__commandEncoder = object;
           if (this._capturedRenderView) {
             result.__capturedRenderView = this._capturedRenderView;
           }
         }
 
-        if (method == "end") {
+        if (method === "createShaderModule" || method === "createRenderPipeline" || method === "createComputePipeline" || method === "createBindGroup") {
+          this.__skipRecord = true;
+          object.popErrorScope().then((error) => {
+            if (error) {
+              //console.log(error.message);
+              //console.log(stacktrace);
+              window.postMessage({ "action": "inspect_validation_error", "message": error.message, stacktrace }, "*");
+            }
+          });
+          this.__skipRecord = false;
+        }
+
+        if (method === "end") {
+          this.__skipRecord = true;
+          object.__commandEncoder.__device.popErrorScope().then((error) => {
+            if (error) {
+              //console.log(error.message);
+              //console.log(stacktrace);
+              window.postMessage({ "action": "inspect_validation_error", "message": error.message, stacktrace }, "*");
+            }
+          });
+          this.__skipRecord = false;
+
           // If the captured canvas texture was rendered to, blit it to the real canvas texture
           if (object.__capturedRenderView) {
             const texture = object.__capturedRenderView.__texture;
@@ -1030,9 +1062,9 @@
         }
 
         let id = undefined;
-        if (method == "getCurrentTexture" && result) {
+        if (method === "getCurrentTexture" && result) {
           id = -(object.__canvas?.__id ?? 1);
-        } else if (method == "createView") {
+        } else if (method === "createView") {
           if (object.__isCanvasTexture) {
             id = object.__id - 0.5;
           }
@@ -1051,14 +1083,14 @@
             this._wrapObject(result, id);
           }
 
-          if (method == "createTexture") {
+          if (method === "createTexture") {
             this._trackObject(result.__id, result);
-          } else if (method == "createView" && !id) {
+          } else if (method === "createView" && !id) {
             this._trackObject(result.__id, result);
             result.__texture = object;
-          } else if (method == "createBuffer") {
+          } else if (method === "createBuffer") {
             this._trackObject(result.__id, result);
-          } else if (method == "getCurrentTexture") {
+          } else if (method === "getCurrentTexture") {
             result.__isCanvasTexture = true;
             result.__context = object;
             this._trackObject(result.__id, result);
@@ -1205,7 +1237,6 @@
                 "count": length
               }, "*");
           }
-          //window.postMessage({"action": "inspect_capture_frame_results", "frame": this._frameIndex, "commands": this._frameCommands}, "*");
           this._frameCommands.length = 0;
           this._captureRequest = false;
           this._gpuWrapper.recordStacktraces = false;
@@ -1230,7 +1261,7 @@
 
         c.getContext = function (a1, a2) {
           const ret = __getContext.call(c, a1, a2);
-          if (a1 == "webgpu") {
+          if (a1 === "webgpu") {
             if (ret) {
               self._wrapObject(ret);
               ret.__canvas = c;
@@ -1251,7 +1282,7 @@
       _objectHasMethods(object) {
         for (const m in object) {
           if (
-            typeof object[m] == "function" &&
+            typeof object[m] === "function" &&
             WebGPUInspector._skipMethods.indexOf(m) == -1
           ) {
             return true;
@@ -1368,7 +1399,7 @@
       _recordCommand(object, method, result, args, stacktrace) {
         const parent = object?.__id ?? 0;
 
-        if (method == "destroy") {
+        if (method === "destroy") {
           const id = object.__id;
           this._trackedObjects.delete(id);
           this._trackedObjectInfo.delete(id);
@@ -1379,17 +1410,17 @@
             this._captureTextureRequest.delete(id);
             window.postMessage({"action": "inspect_delete_object", id}, "*");
           }
-        } else if (method == "createShaderModule") {
+        } else if (method === "createShaderModule") {
           const id = result.__id;
           this._sendAddObjectMessage(id, parent, "ShaderModule", this._stringifyDescriptor(args[0]), stacktrace);
-        } else if (method == "createBuffer") {
+        } else if (method === "createBuffer") {
           const id = result.__id;
           this._sendAddObjectMessage(id, parent, "Buffer", this._stringifyDescriptor(args[0]), stacktrace);
-        } else if (method == "createTexture") {
+        } else if (method === "createTexture") {
           const id = result.__id;
           this._sendAddObjectMessage(id, parent, "Texture", this._stringifyDescriptor(args[0]), stacktrace);
           result.__device = object;
-        } else if (method == "getCurrentTexture") {
+        } else if (method === "getCurrentTexture") {
           const id = result.__id;
           if (result) {
             const info = {
@@ -1403,14 +1434,14 @@
             const infoStr = JSON.stringify(info);
             this._sendAddObjectMessage(id, parent, "Texture", infoStr, stacktrace);
           }
-        } else if (method == "createView") {
+        } else if (method === "createView") {
           const id = result.__id;
           result.__texture = object;
           this._sendAddObjectMessage(id, parent, "TextureView", this._stringifyDescriptor(args[0]), stacktrace);
-        } else if (method == "createSampler") {
+        } else if (method === "createSampler") {
           const id = result.__id;
           this._sendAddObjectMessage(id, parent, "Sampler", this._stringifyDescriptor(args[0]), stacktrace);
-        } else if (method == "createBindGroup") {
+        } else if (method === "createBindGroup") {
           this._bindGroupCount++;
           const id = result.__id;
           // Attach resources to the bindgroups that use them to keep them from being garbage collected so we can inspect them later.
@@ -1430,13 +1461,13 @@
             }
           }*/
           this._sendAddObjectMessage(id, parent, "BindGroup", this._stringifyDescriptor(args[0]), stacktrace);
-        } else if (method == "createBindGroupLayout") {
+        } else if (method === "createBindGroupLayout") {
           const id = result.__id;
           this._sendAddObjectMessage(id, parent, "BindGroupLayout", this._stringifyDescriptor(args[0]), stacktrace);
-        } else if (method == "createPipelineLayout") {
+        } else if (method === "createPipelineLayout") {
           const id = result.__id;
           this._sendAddObjectMessage(id, parent, "PipelineLayout", this._stringifyDescriptor(args[0]), stacktrace);
-        } else if (method == "createRenderPipeline") {
+        } else if (method === "createRenderPipeline") {
           const id = result.__id;
           this._sendAddObjectMessage(id, parent, "RenderPipeline", this._stringifyDescriptor(args[0]), stacktrace);
           // There are cases when the shader modules used by the render pipeline will be garbage collected, and we won't be able to inspect them after that.
@@ -1447,17 +1478,17 @@
           if (args[0].fragment?.module) {
             result.__fragmentModule = args[0].fragment?.module;
           }
-        } else if (method == "createComputePipeline") {
+        } else if (method === "createComputePipeline") {
           const id = result.__id;
           this._sendAddObjectMessage(id, parent, "ComputePipeline", this._stringifyDescriptor(args[0]), stacktrace);
           if (args[0].compute?.module) {
             result.__computeModule = args[0].compute?.module;
           }
-        } else if (method == "createCommandEncoder") {
+        } else if (method === "createCommandEncoder") {
           // We'll need the CommandEncoder's device for capturing textures
           result.__device = object;
           this._lastCommandEncoder = result;
-        } else if (method == "finish") {
+        } else if (method === "finish") {
           if (object == this._lastCommandEncoder) {
             this._lastCommandEncoder = null;
           }
@@ -1477,7 +1508,7 @@
         }
 
         let newArgs = null;
-        if (method == "setBindGroup") {
+        if (method === "setBindGroup") {
           newArgs = [];
           const binding = a[0];
           const bindGroup = a[1];
@@ -1501,7 +1532,7 @@
               }
             }
           }
-        } else if (method == "writeBuffer") {
+        } else if (method === "writeBuffer") {
           newArgs = [];
           const buffer = a[0];
           const bufferOffset = a[1];
@@ -1528,15 +1559,17 @@
 
         newArgs = this._processCommandArgs(newArgs);
 
+        const commandId = this._frameCommands.length;
         this._frameCommands.push({
           "class": object.constructor.name,
           "id": object.__id,
+          commandId,
           method,
           args: newArgs,
           stacktrace
         });
 
-        if (method == "beginRenderPass") {
+        if (method === "beginRenderPass") {
           if (args[0]?.colorAttachments?.length > 0) {
             for (const attachment of args[0].colorAttachments) {
               const captureTextureView = attachment.resolveTarget ?? attachment.view;
@@ -1544,7 +1577,7 @@
             }
             this._captureCommandEncoder = object;
           }
-        } else if (method == "end") {
+        } else if (method === "end") {
           if (this._captureTextureViews.length > 0) {
             for (const captureTextureView of this._captureTextureViews) {
               const texture = captureTextureView.__texture;

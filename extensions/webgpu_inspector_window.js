@@ -4170,6 +4170,13 @@ var __webgpu_inspector_window = (function (exports) {
     }
   }
 
+  class ValidationError extends GPUObject {
+    constructor(id, message, stacktrace) {
+      super(id, stacktrace);
+      this.message = message;
+    }
+  }
+
   class ObjectDatabase {
     constructor(port) {
       this.allObjects = new Map();
@@ -4187,7 +4194,9 @@ var __webgpu_inspector_window = (function (exports) {
       this.computePipelines = new Map();
       this.pendingRenderPipelines = new Map();
       this.pendingComputePipelines = new Map();
+      this.validationErrors = new Map();
       this.frameTime = 0;
+      this.errorCount = 0;
 
       this.onDeleteObject = new Signal();
       this.onResolvePendingObject = new Signal();
@@ -4196,12 +4205,14 @@ var __webgpu_inspector_window = (function (exports) {
       this.onEndFrame = new Signal();
       this.onAdapterInfo = new Signal();
       this.onObjectLabelChanged = new Signal();
+      this.onValidationError = new Signal();
 
       this.totalTextureMemory = 0;
       this.totalBufferMemory = 0;
 
       this.startFrameTime = -1;
       this.endFrameTime = -1;
+      
 
       const self = this;
      
@@ -4213,6 +4224,17 @@ var __webgpu_inspector_window = (function (exports) {
           case "inspect_end_frame":
             self._endFrame(message.commandCount);
             break;
+          case "inspect_validation_error": {
+            const errorMessage = message.message;
+            const stacktrace = message.stacktrace;
+            if (self.validationErrors.has(errorMessage)) {
+              return;
+            }
+            const errorObj = new ValidationError(++self.errorCount, errorMessage, stacktrace);
+            self.validationErrors.set(errorMessage, errorObj);
+            self.onValidationError.emit(errorObj);
+            break;
+          }
           case "inspect_delete_object":
             self._deleteObject(message.id);
             break;
@@ -7911,6 +7933,7 @@ var __webgpu_inspector_window = (function (exports) {
       this.database.onAddObject.addListener(this._addObject, this);
       this.database.onDeleteObject.addListener(this._deleteObject, this);
       this.database.onEndFrame.addListener(this._updateFrameStats, this);
+      this.database.onValidationError.addListener(this._validationError, this);
 
       window.onTextureLoaded.addListener(this._textureLoaded, this);
 
@@ -7930,6 +7953,7 @@ var __webgpu_inspector_window = (function (exports) {
         BindGroup: [],
         RenderPipeline: [],
         ComputePipeline: [],
+        ValidationError: []
       };
 
       // Periodically clean up old recycled widgets.
@@ -7995,6 +8019,11 @@ var __webgpu_inspector_window = (function (exports) {
       this.uiPipelineLayouts = this._createObjectListUI(objectsPanel, "PipelineLayouts");
       this.uiPendingAsyncRenderPipelines = this._createObjectListUI(objectsPanel, "Pending Async Render Pipelines");
       this.uiPendingAsyncComputePipelines = this._createObjectListUI(objectsPanel, "Pending Async Compute Pipelines");
+      this.uiValidationErrors = this._createObjectListUI(objectsPanel, "Validation Errors");
+    }
+
+    _validationError(error) {
+      this._addObject(error, false);
     }
 
     _textureLoaded(texture) {
@@ -8061,6 +8090,8 @@ var __webgpu_inspector_window = (function (exports) {
       } else if (object instanceof ComputePipeline) {
         this.uiPendingAsyncComputePipelines.label.text = `Pending Async Compute Pipelines ${this.database.pendingComputePipelines.size}`;
         this.uiComputePipelines.label.text = `Compute Pipelines ${this.database.computePipelines.size}`;
+      } else if (object instanceof ValidationError) {
+        this.uiValidationErrors.label.text = `Validation Errors ${this.database.validationErrors.size}`;
       }
     }
 
@@ -8090,6 +8121,8 @@ var __webgpu_inspector_window = (function (exports) {
         this._addObjectToUI(object, pending ? this.uiPendingAsyncRenderPipelines : this.uiRenderPipelines);
       } else if (object instanceof ComputePipeline) {
         this._addObjectToUI(object, pending ? this.uiPendingAsyncComputePipelines : this.uiComputePipelines);
+      } else if (object instanceof ValidationError) {
+        this._addObjectToUI(object, this.uiValidationErrors);
       }
     }
 
@@ -8212,6 +8245,9 @@ var __webgpu_inspector_window = (function (exports) {
 
       if (object instanceof ShaderModule) {
         const text = object.descriptor.code;
+        new Widget("pre", descriptionBox, { text });
+      } else if (object instanceof ValidationError) {
+        const text = object.message;
         new Widget("pre", descriptionBox, { text });
       } else {
         const desc = this._getDescriptorInfo(object, object.descriptor);
@@ -8344,7 +8380,7 @@ var __webgpu_inspector_window = (function (exports) {
 
       const inspectorPanel = new Div(null, { class: "inspector_panel" });
       this._tabs.addTab("Inspect", inspectorPanel);
-      this._inspectPanel = new InspectPanel(this, inspectorPanel);
+      this._inspectPanel = new InspectPanel(this, inspectorPanel);   
 
       const capturePanel = new Div(null, { class: "capture_panel" });
       this._tabs.addTab("Capture", capturePanel);

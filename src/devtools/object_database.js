@@ -185,6 +185,13 @@ export class ComputePipeline extends GPUObject {
   }
 }
 
+export class ValidationError extends GPUObject {
+  constructor(id, message, stacktrace) {
+    super(id, stacktrace);
+    this.message = message;
+  }
+}
+
 export class ObjectDatabase {
   constructor(port) {
     this.allObjects = new Map();
@@ -202,7 +209,9 @@ export class ObjectDatabase {
     this.computePipelines = new Map();
     this.pendingRenderPipelines = new Map();
     this.pendingComputePipelines = new Map();
+    this.validationErrors = new Map();
     this.frameTime = 0;
+    this.errorCount = 0;
 
     this.onDeleteObject = new Signal();
     this.onResolvePendingObject = new Signal();
@@ -211,12 +220,14 @@ export class ObjectDatabase {
     this.onEndFrame = new Signal();
     this.onAdapterInfo = new Signal();
     this.onObjectLabelChanged = new Signal();
+    this.onValidationError = new Signal();
 
     this.totalTextureMemory = 0;
     this.totalBufferMemory = 0;
 
     this.startFrameTime = -1;
     this.endFrameTime = -1;
+    
 
     const self = this;
    
@@ -228,6 +239,17 @@ export class ObjectDatabase {
         case "inspect_end_frame":
           self._endFrame(message.commandCount);
           break;
+        case "inspect_validation_error": {
+          const errorMessage = message.message;
+          const stacktrace = message.stacktrace;
+          if (self.validationErrors.has(errorMessage)) {
+            return;
+          }
+          const errorObj = new ValidationError(++self.errorCount, errorMessage, stacktrace);
+          self.validationErrors.set(errorMessage, errorObj);
+          self.onValidationError.emit(errorObj);
+          break;
+        }
         case "inspect_delete_object":
           self._deleteObject(message.id);
           break;

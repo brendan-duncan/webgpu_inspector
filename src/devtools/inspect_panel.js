@@ -16,7 +16,8 @@ import { Adapter,
   PipelineLayout,
   BindGroup,
   RenderPipeline,
-  ComputePipeline } from "./object_database.js";
+  ComputePipeline,
+  ValidationError } from "./object_database.js";
 import { getFlagString } from "../utils/flags.js";
 import { Plot } from "./widget/plot.js";
 
@@ -51,6 +52,7 @@ export class InspectPanel {
     this.database.onAddObject.addListener(this._addObject, this);
     this.database.onDeleteObject.addListener(this._deleteObject, this);
     this.database.onEndFrame.addListener(this._updateFrameStats, this);
+    this.database.onValidationError.addListener(this._validationError, this);
 
     window.onTextureLoaded.addListener(this._textureLoaded, this);
 
@@ -70,6 +72,7 @@ export class InspectPanel {
       BindGroup: [],
       RenderPipeline: [],
       ComputePipeline: [],
+      ValidationError: []
     };
 
     // Periodically clean up old recycled widgets.
@@ -135,6 +138,11 @@ export class InspectPanel {
     this.uiPipelineLayouts = this._createObjectListUI(objectsPanel, "PipelineLayouts");
     this.uiPendingAsyncRenderPipelines = this._createObjectListUI(objectsPanel, "Pending Async Render Pipelines");
     this.uiPendingAsyncComputePipelines = this._createObjectListUI(objectsPanel, "Pending Async Compute Pipelines");
+    this.uiValidationErrors = this._createObjectListUI(objectsPanel, "Validation Errors");
+  }
+
+  _validationError(error) {
+    this._addObject(error, false);
   }
 
   _textureLoaded(texture) {
@@ -201,6 +209,8 @@ export class InspectPanel {
     } else if (object instanceof ComputePipeline) {
       this.uiPendingAsyncComputePipelines.label.text = `Pending Async Compute Pipelines ${this.database.pendingComputePipelines.size}`;
       this.uiComputePipelines.label.text = `Compute Pipelines ${this.database.computePipelines.size}`;
+    } else if (object instanceof ValidationError) {
+      this.uiValidationErrors.label.text = `Validation Errors ${this.database.validationErrors.size}`;
     }
   }
 
@@ -230,6 +240,8 @@ export class InspectPanel {
       this._addObjectToUI(object, pending ? this.uiPendingAsyncRenderPipelines : this.uiRenderPipelines);
     } else if (object instanceof ComputePipeline) {
       this._addObjectToUI(object, pending ? this.uiPendingAsyncComputePipelines : this.uiComputePipelines);
+    } else if (object instanceof ValidationError) {
+      this._addObjectToUI(object, this.uiValidationErrors);
     }
   }
 
@@ -352,6 +364,9 @@ export class InspectPanel {
 
     if (object instanceof ShaderModule) {
       const text = object.descriptor.code;
+      new Widget("pre", descriptionBox, { text });
+    } else if (object instanceof ValidationError) {
+      const text = object.message;
       new Widget("pre", descriptionBox, { text });
     } else {
       const desc = this._getDescriptorInfo(object, object.descriptor);
