@@ -14,7 +14,7 @@ export class GPUObject {
   }
 
   get name() {
-    return this.label || this.constructor.name;
+    return this.label || this.constructor.className;
   }
 
   get stacktrace() {
@@ -28,6 +28,7 @@ export class Adapter extends GPUObject {
     this.descriptor = descriptor;
   }
 }
+Adapter.className = "Adapter";
 
 export class Device extends GPUObject {
   constructor(id, descriptor, stacktrace) {
@@ -35,6 +36,7 @@ export class Device extends GPUObject {
     this.descriptor = descriptor;
   }
 }
+Device.className = "Device";
 
 export class Buffer extends GPUObject {
   constructor(id, descriptor, stacktrace) {
@@ -42,6 +44,7 @@ export class Buffer extends GPUObject {
     this.descriptor = descriptor;
   }
 }
+Buffer.className = "Buffer";
 
 export class Sampler extends GPUObject {
   constructor(id, descriptor, stacktrace) {
@@ -49,6 +52,7 @@ export class Sampler extends GPUObject {
     this.descriptor = descriptor;
   }
 }
+Sampler.className = "Sampler";
 
 export class Texture extends GPUObject {
   constructor(id, descriptor, stacktrace) {
@@ -116,6 +120,7 @@ export class Texture extends GPUObject {
     return -1;
   }
 }
+Texture.className = "Texture";
 
 export class TextureView extends GPUObject {
   constructor(id, descriptor, stacktrace) {
@@ -123,6 +128,7 @@ export class TextureView extends GPUObject {
     this.descriptor = descriptor;
   }
 }
+TextureView.className = "TextureView";
 
 export class ShaderModule extends GPUObject {
   constructor(id, descriptor, stacktrace) {
@@ -145,6 +151,7 @@ export class ShaderModule extends GPUObject {
     return this._reflection;
   }
 }
+ShaderModule.className = "ShaderModule";
 
 export class BindGroupLayout extends GPUObject {
   constructor(id, descriptor, stacktrace) {
@@ -152,6 +159,7 @@ export class BindGroupLayout extends GPUObject {
     this.descriptor = descriptor;
   }
 }
+BindGroupLayout.className = "BindGroupLayout";
 
 export class PipelineLayout extends GPUObject {
   constructor(id, descriptor, stacktrace) {
@@ -159,6 +167,7 @@ export class PipelineLayout extends GPUObject {
     this.descriptor = descriptor;
   }
 }
+PipelineLayout.className = "PipelineLayout";
 
 export class BindGroup extends GPUObject {
   constructor(id, descriptor, stacktrace) {
@@ -166,6 +175,7 @@ export class BindGroup extends GPUObject {
     this.descriptor = descriptor;
   }
 }
+BindGroup.className = "BindGroup";
 
 export class RenderPipeline extends GPUObject {
   constructor(id, descriptor, stacktrace) {
@@ -177,6 +187,7 @@ export class RenderPipeline extends GPUObject {
     return this.descriptor?.primitive?.topology ?? "triangle-list";
   }
 }
+RenderPipeline.className = "RenderPipeline";
 
 export class ComputePipeline extends GPUObject {
   constructor(id, descriptor, stacktrace) {
@@ -184,6 +195,7 @@ export class ComputePipeline extends GPUObject {
     this.descriptor = descriptor;
   }
 }
+ComputePipeline.className = "ComputePipeline";
 
 export class ValidationError extends GPUObject {
   constructor(id, message, stacktrace) {
@@ -191,6 +203,7 @@ export class ValidationError extends GPUObject {
     this.message = message;
   }
 }
+ValidationError.className = "ValidationError";
 
 export class ObjectDatabase {
   constructor(port) {

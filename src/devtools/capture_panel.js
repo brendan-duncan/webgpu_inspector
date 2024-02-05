@@ -89,7 +89,7 @@ export class CapturePanel {
     if (object.__id !== undefined) {
       const obj = this.database.getObject(object.__id);
       if (obj) {
-        return `${obj.constructor.name} ID:${object.__id}`;
+        return `${obj.constructor.className} ID:${object.__id}`;
       }
       return `${object.__class || "Object"}.${object.__id}`;
     }
@@ -332,7 +332,7 @@ export class CapturePanel {
         if (resource.__id !== undefined) {
           const obj = self.database.getObject(resource.__id);
           if (obj) {
-            return obj.constructor.name;
+            return obj.constructor.className;
           }
         }
         if (resource.buffer) {

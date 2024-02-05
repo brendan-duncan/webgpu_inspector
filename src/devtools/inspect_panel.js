@@ -157,12 +157,12 @@ export class InspectPanel {
 
   _objectLabelChanged(id, object, label) {
     if (object && object.widget) {
-      object.nameWidget.text = label || object.constructor.name;
+      object.nameWidget.text = label || object.constructor.className;
     }
   }
 
   _getRecycledWidget(object) {
-    const objectType = object.constructor.name;
+    const objectType = object.constructor.className;
     if (this._recycledWidgets[objectType]) {
       return this._recycledWidgets[objectType].pop();
     }
@@ -170,7 +170,7 @@ export class InspectPanel {
   }
 
   _recycleWidget(object, widget) {
-    const objectType = object.constructor.name;
+    const objectType = object.constructor.className;
     if (!this._recycledWidgets[objectType]) {
       this._recycledWidgets[objectType] = [];
     }
@@ -458,7 +458,7 @@ export class InspectPanel {
     if (descriptor["__id"] !== undefined) {
       const obj = this.database.getObject(descriptor["__id"]);
       if (obj) {
-        return `${obj.constructor.name} ${descriptor["__id"]}`;
+        return `${obj.constructor.className} ${descriptor["__id"]}`;
       }
       return `Object ${descriptor["__id"]}`;
     }
@@ -477,7 +477,7 @@ export class InspectPanel {
         if (value["__id"] !== undefined) {
           const obj = this.database.getObject(value["__id"]);
           if (obj) {
-            info[key] = `${obj.constructor.name} ${value["__id"]}`;
+            info[key] = `${obj.constructor.className} ${value["__id"]}`;
           } else {
             info[key] = `Object ${value["__id"]}`;
           }

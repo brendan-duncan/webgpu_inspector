@@ -19,6 +19,7 @@ function build(name, input, format, file) {
           compress: {
             module: true,
             toplevel: true,
+            keep_classnames: true,
             unsafe_arrows: true,
             drop_console: false,
             drop_debugger: false
