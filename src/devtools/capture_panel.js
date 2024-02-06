@@ -4,10 +4,11 @@ import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
 import { Widget } from "./widget/widget.js";
 import { getFlagString } from "../utils/flags.js";
+import { CaptureStatistics } from "./capture_statistics.js";
 import {
   Sampler,
   TextureView
- } from "./object_database.js";
+} from "./object_database.js";
 
 export class CapturePanel {
   constructor(window, parent) {
@@ -15,6 +16,8 @@ export class CapturePanel {
 
     const self = this;
     const port = window.port;
+
+    this.statistics = new CaptureStatistics();
 
     const controlBar = new Div(parent, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
 
@@ -25,6 +28,7 @@ export class CapturePanel {
     } });
 
     this._captureFrame = new Span(controlBar, { style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
+    this._captureStats = new Button(controlBar, { label: "Frame Stats", style: "display: none;" });
     this._captureStatus = new Span(controlBar, { style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
 
     this._capturePanel = new Div(parent, { style: "overflow: hidden; white-space: nowrap; height: calc(-100px + 100vh); display: flex;" });
@@ -114,12 +118,18 @@ export class CapturePanel {
     const contents = this._capturePanel;
 
     this._captureFrame.text = `Frame ${frame}`;
+    this._captureStats.style.display = "inline-block";
 
     contents.html = "";   
 
     this._frameImages = new Span(contents, { class: "capture_frameImages" });
     const frameContents = new Span(contents, { class: "capture_frame" });
     const commandInfo = new Span(contents, { class: "capture_commandInfo" });
+    
+    const self = this;
+    this._captureStats.callback = () => {
+      self._inspectStats(commandInfo);
+    };
     
     let renderPassIndex = 0;
 
@@ -131,6 +141,8 @@ export class CapturePanel {
 
     this._lastSelectedCommand = null;
 
+    const stats = this.statistics;
+
     let first = true;
     for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
       const command = commands[commandIndex];
@@ -141,6 +153,8 @@ export class CapturePanel {
       const method = command.method;
       const args = command.args;
       const name = `${className ?? "__"}`;
+
+      stats.updateStats(className, method, args);
 
       let debugGroup = debugGroupStack[debugGroupStack.length - 1];
 
@@ -686,6 +700,19 @@ export class CapturePanel {
     }
     for (const index in bindGroups) {
       this._showCaptureCommandInfo_setBindGroup(bindGroups[index].args, commandInfo, index, true);
+    }
+  }
+
+  _inspectStats(commandInfo) {
+    commandInfo.html = "";
+
+    const group = new Collapsable(commandInfo, { label: "Frame Statistics" });
+    group.body.style.maxHeight = "unset";
+
+    const ol = new Widget("ul", group.body);
+    const stats = this.statistics;
+    for (const key in stats) {
+      new Widget("li", ol, { text: `${key}: ${stats[key]}`, style: "padding-left: 20px; line-height: 25px; font-size: 12pt;" });
     }
   }
 
