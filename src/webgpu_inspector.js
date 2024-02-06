@@ -283,12 +283,14 @@ import { TextureUtils } from "./utils/texture_utils.js";
 
       if (method === "end") {
         this.__skipRecord = true;
-        const self = this;
-        object.__commandEncoder.__device.popErrorScope().then((error) => {
-          if (error) {
-            window.postMessage({ "action": "inspect_validation_error", "message": error.message, stacktrace }, "*");
-          }
-        });
+        const device = object.__device;
+        if (device) {
+          device.popErrorScope().then((error) => {
+            if (error) {
+              window.postMessage({ "action": "inspect_validation_error", "message": error.message, stacktrace }, "*");
+            }
+          });
+        }
         this.__skipRecord = false;
 
         // If the captured canvas texture was rendered to, blit it to the real canvas texture
@@ -462,7 +464,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
           newArray[i] = x;
         } else if (x.__id !== undefined) {
           if (replaceGpuObjects) {
-            newArray[i] = { __id: x }
+            newArray[i] = { __id: x.__id, __class: x.constructor.name }
           } else {
             newArray[i] = x;
           }
@@ -487,7 +489,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
           obj[key] = x;
         } else if (x.__id !== undefined) {
           if (replaceGpuObjects) {
-            obj[key] = { __id: x }
+            obj[key] = { __id: x.__id, __class: x.constructor.name }
           } else {
             obj[key] = x;
           }
