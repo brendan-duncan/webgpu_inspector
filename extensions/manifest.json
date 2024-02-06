@@ -6,8 +6,6 @@
   "description": "WebGPU Debugging Tools",
   "author": "Brendan Duncan",
   "minimum_chrome_version": "116",
-  "permissions": [],
-  "host_permissions": ["<all_urls>"],
   "icons": {
     "19": "images/webgpu_inspector_on-19.png",
     "38": "images/webgpu_inspector_on-38.png"

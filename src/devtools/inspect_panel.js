@@ -200,8 +200,8 @@ export class InspectPanel {
   }
 
   _objectLabelChanged(id, object, label) {
-    if (object && object.widget) {
-      object.nameWidget.text = label || object.constructor.className;
+    if (object?.widget?.nameWidget) {
+      object.widget.nameWidget.text = label || object.constructor.className;
     }
   }
 
