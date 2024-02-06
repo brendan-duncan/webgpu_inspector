@@ -3,7 +3,7 @@
   "short_name": "webgpu_inspector",
   "version": "0.0.1",
   "manifest_version": 3,
-  "description": "WebGPU Debugging Tools",
+  "description": "WebGPU Inspector Debugging Tools",
   "author": "Brendan Duncan",
   "minimum_chrome_version": "116",
   "icons": {
@@ -17,7 +17,9 @@
   "content_scripts": [
     {
       "js": ["content_script.js"],
-      "matches": ["<all_urls>"],
+      "matches": ["http://*/*",
+          "https://*/*",
+          "file://*/*"],
       "run_at" : "document_start",
       "all_frames" : true
     }
@@ -28,7 +30,9 @@
         "webgpu_recorder.js",
         "webgpu_inspector.js"
        ],
-      "matches": ["<all_urls>"]
+      "matches": ["http://*/*",
+          "https://*/*",
+          "file://*/*"]
     }
   ]
 }
