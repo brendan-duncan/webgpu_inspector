@@ -20,11 +20,52 @@ import { Adapter,
   ValidationError } from "./object_database.js";
 import { getFlagString } from "../utils/flags.js";
 import { Plot } from "./widget/plot.js";
-import { basicSetup, EditorView } from "codemirror";
-import { indentWithTab } from "@codemirror/commands"
+import { EditorView } from "codemirror";
+
+import { keymap, highlightSpecialChars, drawSelection, highlightActiveLine, dropCursor,
+  rectangularSelection, crosshairCursor,
+  lineNumbers, highlightActiveLineGutter } from "@codemirror/view";
+import { EditorState } from "@codemirror/state";
+import { defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
+  foldGutter, foldKeymap } from "@codemirror/language";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
+import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { lintKeymap } from "@codemirror/lint";
 import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
-import { dracula } from 'thememirror';
-import { keymap } from "@codemirror/view";
+import { cobalt } from 'thememirror';
+
+const shaderEditorSetup = (() => [
+  lineNumbers(),
+  //highlightActiveLine(),
+  highlightActiveLineGutter(),
+  highlightSpecialChars(),
+  history(),
+  foldGutter(),
+  drawSelection(),
+  dropCursor(),
+  EditorState.allowMultipleSelections.of(true),
+  indentOnInput(),
+  syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
+  bracketMatching(),
+  closeBrackets(),
+  autocompletion(),
+  //rectangularSelection(),
+  crosshairCursor(),
+  //highlightSelectionMatches(),
+  cobalt,
+  wgsl(),
+  keymap.of([
+    indentWithTab,
+    ...closeBracketsKeymap,
+    ...defaultKeymap,
+    ...searchKeymap,
+    ...historyKeymap,
+    ...foldKeymap,
+    ...completionKeymap,
+    ...lintKeymap
+  ])
+])();
 
 export class InspectPanel {
   constructor(window, parent) {
@@ -373,33 +414,44 @@ export class InspectPanel {
       new Div(stacktraceGrp.body, { text: object.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" })
     }
 
+    const errorLines = [];
+
     const errors = this.database.findObjectErrors(object.id);
     if (errors.length > 0) {
       const errorsGrp = new Collapsable(infoBox, { collapsed: true, label: "Errors", collapsed: true });
       for (const error of errors) {
         new Div(errorsGrp.body, { text: error.message, class: "inspect_info_error" });
+
+        const errorRegEx = /.+ :([0-9]+):([0-9]+) error: (.+)/.exec(error.message);
+        if (errorRegEx.length == 4) {
+          const line = errorRegEx[1];
+          const message = errorRegEx[3];
+          errorLines.push({ line, message });
+        }
       }
     }
 
-    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-200px + 100vh); overflow: auto;" });
+    let compileButton = null;
+    let revertButton = null;
+    if (object instanceof ShaderModule) {
+      const isModified = object.replacementCode && object.replacementCode !== object.descriptor.code;
+
+      const compileRow = new Div(this.inspectPanel);
+      compileButton = new Button(compileRow, { label: "Compile", style: "background-color: rgb(200, 150, 51);" });
+      revertButton = isModified ? new Button(compileRow, { label: "Revert", style: "background-color: rgb(200, 150, 51);" }) : null;
+    }
+
+    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-270px + 100vh); overflow: auto;" });
 
     if (object instanceof ShaderModule) {
       const self = this;
-
-      const isModified = object.replacementCode && object.replacementCode !== object.descriptor.code;
-
-      const compileRow = new Div(descriptionBox);
-      const compileButton = new Button(compileRow, { label: "Compile", style: "background-color: rgb(200, 150, 51);" });
-      const revertButton = isModified ? new Button(compileRow, { label: "Revert", style: "background-color: rgb(200, 150, 51);" }) : null;
-      
+     
       const text = object.replacementCode || object.descriptor.code;
+
       const editor = new EditorView({
         doc: text,
         extensions: [
-          basicSetup,
-          keymap.of([indentWithTab]),
-          dracula,
-          wgsl()
+          shaderEditorSetup
         ],
         parent: descriptionBox.element,
       });

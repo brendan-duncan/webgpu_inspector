@@ -27,7 +27,15 @@
   ],
   "dependencies": {
     "codemirror": "^6.0.1",
-    "thememirror": "^2.0.1"
+    "thememirror": "^2.0.1",
+
+    "@codemirror/autocomplete": "^6.0.0",
+    "@codemirror/commands": "^6.0.0",
+    "@codemirror/language": "^6.0.0",
+    "@codemirror/lint": "^6.0.0",
+    "@codemirror/search": "^6.0.0",
+    "@codemirror/state": "^6.0.0",
+    "@codemirror/view": "^6.0.0"
   },
   "devDependencies": {
     "rollup": "^2.79.1",

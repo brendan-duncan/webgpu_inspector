@@ -188,6 +188,8 @@ li:hover {
   color: #eee;
   padding: 5px;
   font-size: 10pt;
+  user-select: text;
+  -moz-user-select: text;
 }
 
 /* ---------------------------------------- */
