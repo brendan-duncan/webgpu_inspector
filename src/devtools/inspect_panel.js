@@ -136,6 +136,9 @@ export class InspectPanel {
 
   _validationError(error) {
     this._addObject(error, false);
+    if (error.object === this._inspectedObject?.id) {
+      this._inspectObject(this._inspectedObject);
+    }
   }
 
   _textureLoaded(texture) {
@@ -382,7 +385,13 @@ export class InspectPanel {
 
     if (object instanceof ShaderModule) {
       const self = this;
-      const compileButton = new Button(descriptionBox, { label: "Compile", style: "background-color: rgb(200, 150, 51);" });
+
+      const isModified = object.replacementCode && object.replacementCode !== object.descriptor.code;
+
+      const compileRow = new Div(descriptionBox);
+      const compileButton = new Button(compileRow, { label: "Compile", style: "background-color: rgb(200, 150, 51);" });
+      const revertButton = isModified ? new Button(compileRow, { label: "Revert", style: "background-color: rgb(200, 150, 51);" }) : null;
+      
       const text = object.replacementCode || object.descriptor.code;
       const editor = new EditorView({
         doc: text,
@@ -396,10 +405,20 @@ export class InspectPanel {
       });
 
       compileButton.callback = () => {
-        const text = editor.state.doc.toString();
-        self._compileShader(object, text);
-        object.replacementCode = text;
+        const code = editor.state.doc.toString();
+        self._compileShader(object, code);
+        object.replacementCode = code;
+        self._inspectObject(object); // refresh the inspection info panel
       };
+
+      if (revertButton) {
+        revertButton.callback = () => {
+          const code = object.descriptor.code;
+          self._compileShader(object, code);
+          object.replacementCode = null;
+          self._inspectObject(object); // refresh the inspection info panel
+        };
+      }
     } else if (object instanceof ValidationError) {
       const objectId = object.object;
       if (objectId) {
@@ -442,6 +461,10 @@ export class InspectPanel {
   }
 
   _compileShader(object, code) {
+    if (code === object.code) {
+      return;
+    }
+    this.database.removeErrorsForObject(object.id);
     this.port.postMessage({ action: "inspect_compile_shader", id: object.id, code });
   }
 

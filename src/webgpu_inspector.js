@@ -25,6 +25,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
       this._frameCommandCount = 0;
       this._captureRequest = false;
       this.__skipRecord = false;
+      this.__errorChecking = true;
       this._trackedObjects = new Map();
       this._trackedObjectInfo = new Map();
       this._bindGroupCount = 0;
@@ -158,16 +159,20 @@ import { TextureUtils } from "./utils/texture_utils.js";
       }
 
       if (method === "createShaderModule"|| method === "createRenderPipeline" || method === "createComputePipeline" || method === "createBindGroup") {
-        this.__skipRecord = true;
-        object.pushErrorScope("validation");
-        this.__skipRecord = false;
+        if (this.__errorChecking) {
+          this.__skipRecord = true;
+          object.pushErrorScope("validation");
+          this.__skipRecord = false;
+        }
       }
 
       this._capturedRenderView = null;
       if (method === "beginRenderPass") {
-        this.__skipRecord = true;
-        object.__device.pushErrorScope("validation");
-        this.__skipRecord = false;
+        if (this.__errorChecking) {
+          this.__skipRecord = true;
+          object.__device.pushErrorScope("validation");
+          this.__skipRecord = false;
+        }
 
         const descriptor = args[0];
         const colorAttachments = descriptor.colorAttachments;
@@ -271,27 +276,31 @@ import { TextureUtils } from "./utils/texture_utils.js";
       }
 
       if (method === "createShaderModule" || method === "createRenderPipeline" || method === "createComputePipeline" || method === "createBindGroup") {
-        this.__skipRecord = true;
-        object.popErrorScope().then((error) => {
-          if (error) {
-            const id = result?.__id ?? 0;
-            window.postMessage({ "action": "inspect_validation_error", id, "message": error.message, stacktrace }, "*");
-          }
-        });
-        this.__skipRecord = false;
+        if (this.__errorChecking) {
+          this.__skipRecord = true;
+          object.popErrorScope().then((error) => {
+            if (error) {
+              const id = result?.__id ?? 0;
+              window.postMessage({ "action": "inspect_validation_error", id, "message": error.message, stacktrace }, "*");
+            }
+          });
+          this.__skipRecord = false;
+        }
       }
 
       if (method === "end") {
-        this.__skipRecord = true;
-        const device = object.__device;
-        if (device) {
-          device.popErrorScope().then((error) => {
-            if (error) {
-              window.postMessage({ "action": "inspect_validation_error", "message": error.message, stacktrace }, "*");
-            }
-          });
+        if (this.__errorChecking) {
+          this.__skipRecord = true;
+          const device = object.__device;
+          if (device) {
+            device.popErrorScope().then((error) => {
+              if (error) {
+                window.postMessage({ "action": "inspect_validation_error", "message": error.message, stacktrace }, "*");
+              }
+            });
+          }
+          this.__skipRecord = false;
         }
-        this.__skipRecord = false;
 
         // If the captured canvas texture was rendered to, blit it to the real canvas texture
         if (object.__capturedRenderView) {
@@ -521,6 +530,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
       descriptor.code = code;
 
       this.__skipRecord = true;
+      this.__errorChecking = false;
       device.pushErrorScope('validation');
       descriptor.__replacement = shaderId;
       const newShaderModule = device.createShaderModule(descriptor);
@@ -530,6 +540,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
           window.postMessage({ "action": "inspect_validation_error", id, "message": error.message }, "*");
         }
       });
+      this.__errorChecking = true;
       this.__skipRecord = false;
 
       objectMap.replacement = newShaderModule;
@@ -564,6 +575,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
 
           if (newDescriptor !== null) {
             this.__skipRecord = true;
+            this.__errorChecking = false;
             newDescriptor.__replacement = objectRef.id;
             device.pushErrorScope('validation');
             const newPipeline = isRenderPipeline ?
@@ -575,6 +587,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
                 window.postMessage({ "action": "inspect_validation_error", id, "message": error.message }, "*");
               }
             });
+            this.__errorChecking = true;
             this.__skipRecord = false;
 
             objectRef.replacement = newPipeline;

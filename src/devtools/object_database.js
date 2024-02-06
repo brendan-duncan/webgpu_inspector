@@ -386,6 +386,17 @@ export class ObjectDatabase {
     });
   }
 
+  removeErrorsForObject(id) {
+    const map = this.validationErrors;
+    for (const key of map.keys()) {
+      const error = map.get(key);
+      if (error.object === id) {
+        map.delete(key);
+        this.onDeleteObject.emit(id, error);
+      }
+    }
+  }
+
   findObjectErrors(id) {
     const errors = [];
     for (const error of this.validationErrors.values()) {
