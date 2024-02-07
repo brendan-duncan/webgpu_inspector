@@ -63,6 +63,10 @@ export class Texture extends GPUObject {
     this.isImageDataLoaded = false;
   }
 
+  get format() {
+    return this.descriptor?.format ?? "<unknown format>";
+  }
+
   get dimension() {
     return this.descriptor?.dimension ?? "2d";
   }
@@ -513,6 +517,19 @@ export class ObjectDatabase {
 
   getObject(id) {
     return this.allObjects.get(id);
+  }
+
+  getTextureFromView(view) {
+    if (!view) {
+      return null;
+    }
+    if (view.__texture) {
+      return view.__texture;
+    }
+    if (view.texture) {
+      view.__texture = this.getObject(view.texture);
+    }
+    return view.__texture;
   }
 
   _setObjectLabel(id, label) {

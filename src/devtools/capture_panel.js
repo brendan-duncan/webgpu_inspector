@@ -256,19 +256,6 @@ export class CapturePanel {
     }
   }
 
-  _getTextureFromView(view) {
-    if (!view) {
-      return null;
-    }
-    if (view.__texture) {
-      return view.__texture;
-    }
-    if (view.texture) {
-      view.__texture = this.database.getObject(view.texture);
-    }
-    return view.__texture;
-  }
-
   _getTextureFromAttachment(attachment) {
     if (!attachment?.view) {
       return null;
@@ -280,7 +267,7 @@ export class CapturePanel {
     if (!view) {
       return null;
     }
-    return this._getTextureFromView(view);
+    return this.database.getTextureFromView(view);
   }
 
   _showCaptureCommandInfo_beginRenderPass(args, commandInfo) {

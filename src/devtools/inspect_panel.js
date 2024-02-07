@@ -183,8 +183,13 @@ export class InspectPanel {
   }
 
   _textureLoaded(texture) {
-    if (this._inspectedObject == texture) {
+    if (this._inspectedObject === texture) {
       this._inspectObject(texture);
+    } else if (this._inspectedObject instanceof TextureView) {
+      const inspectedTexture = this.database.getTextureFromView(this._inspectedObject);
+      if (inspectedTexture === texture) {
+        this._inspectObject(this._inspectedObject);
+      }
     }
   }
 
@@ -508,6 +513,29 @@ export class InspectPanel {
       }
       if (object.gpuTexture) {
         this._createTexturePreview(object, descriptionBox);
+      }
+    } else if (object instanceof TextureView) {
+      const texture = this.database.getTextureFromView(object);
+      if (texture) {
+        const textureGrp = new Collapsable(descriptionBox, { label: `Texture ${texture.dimension} ${texture.format} ${texture.width}x${texture.height}` });
+        textureGrp.body.style.maxHeight = "unset";
+
+        const desc = this._getDescriptorInfo(texture, texture.descriptor);
+        const text = JSON.stringify(desc, undefined, 4);
+        new Widget("pre", textureGrp.body, { text });
+
+        const self = this;
+        
+        const loadButton = new Button(textureGrp.body, { label: "Load", callback: () => {
+          self.port.postMessage({ action: "inspect_request_texture", id: texture.id });
+        }});
+        if (TextureFormatInfo[texture.descriptor.format]?.isDepthStencil) {
+          loadButton.disabled = true;
+          loadButton.tooltip = "Previewing depth-stencil textures is currently disabled.";
+        }
+        if (texture.gpuTexture) {
+          this._createTexturePreview(texture, textureGrp.body);
+        }
       }
     }
   }
