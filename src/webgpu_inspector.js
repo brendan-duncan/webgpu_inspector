@@ -987,8 +987,14 @@ import { TextureUtils } from "./utils/texture_utils.js";
 
     _sendCaptureTextureBuffers() {
       if (this._captureTexturedBuffers.length > 0) {
+        const textures = [];
+        for (const textureBuffer of this._captureTexturedBuffers) {
+          textures.push(textureBuffer.id);
+        }
         window.postMessage({
-          "action": "inspect_capture_texture_frames", "count": this._captureTexturedBuffers.length }, "*");
+          "action": "inspect_capture_texture_frames", 
+          "count": this._captureTexturedBuffers.length,
+          textures }, "*");
       }
 
       for (const textureBuffer of this._captureTexturedBuffers) {

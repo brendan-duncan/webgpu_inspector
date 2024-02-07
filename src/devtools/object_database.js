@@ -5,6 +5,8 @@ import * as GPU from "./gpu_objects/index.js";
 
 export class ObjectDatabase {
   constructor(port) {
+    this.port = port;
+
     this.allObjects = new Map();
     this.adapters = new Map();
     this.devices = new Map();
@@ -38,7 +40,6 @@ export class ObjectDatabase {
 
     this.startFrameTime = -1;
     this.endFrameTime = -1;
-    
 
     const self = this;
    
@@ -180,6 +181,18 @@ export class ObjectDatabase {
         }
       }
     });
+  }
+
+  requestTextureData(texture) {
+    // TODO implement depth-stencil texture loading
+    if (texture.isDepthStencil) {
+      return;
+    }
+    if (texture.imageDataPending) {
+      return;
+    }
+    texture.imageDataPending = true;
+    this.port.postMessage({ action: "inspect_request_texture", id: texture.id });
   }
 
   removeErrorsForObject(id) {

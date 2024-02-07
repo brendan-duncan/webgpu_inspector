@@ -7,6 +7,7 @@ export class Texture extends GPUObject {
     this.descriptor = descriptor;
     this.imageData = null;
     this.loadedImageDataChunks = [];
+    this.imageDataPending = false;
     this.isImageDataLoaded = false;
   }
 
@@ -46,6 +47,15 @@ export class Texture extends GPUObject {
       return size.depthOrArrayLayers ?? 1;
     }
     return 0;
+  }
+
+  get isDepthStencil() {
+    const format = this.descriptor?.format;
+    const formatInfo = TextureFormatInfo[format];
+    if (!formatInfo) {
+      return false;
+    }
+    return formatInfo.isDepthStencil;
   }
 
   getGpuSize() {

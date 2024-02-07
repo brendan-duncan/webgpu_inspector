@@ -502,7 +502,7 @@ export class InspectPanel {
     if (object instanceof Texture) {
       const self = this;
       const loadButton = new Button(descriptionBox, { label: "Load", callback: () => {
-        self.port.postMessage({ action: "inspect_request_texture", id: object.id });
+        self.database.requestTextureData(object);
       }});
       if (TextureFormatInfo[object.descriptor.format]?.isDepthStencil) {
         loadButton.disabled = true;
@@ -524,7 +524,7 @@ export class InspectPanel {
         const self = this;
         
         const loadButton = new Button(textureGrp.body, { label: "Load", callback: () => {
-          self.port.postMessage({ action: "inspect_request_texture", id: texture.id });
+          self.database.requestTextureData(texture);
         }});
         if (TextureFormatInfo[texture.descriptor.format]?.isDepthStencil) {
           loadButton.disabled = true;

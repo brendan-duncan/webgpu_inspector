@@ -127,6 +127,7 @@ export class InspectorWindow extends Window {
   
       if (object.isImageDataLoaded) {
         object.loadedImageDataChunks.length = 0;
+        object.imageDataPending = false;
         this._createTexture(object, passId);
       }
     });

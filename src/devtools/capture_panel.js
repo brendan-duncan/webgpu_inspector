@@ -45,7 +45,16 @@ export class CapturePanel {
     port.addListener((message) => {
       switch (message.action) {
         case "inspect_capture_texture_frames": {
-          self._loadingImages = message.count ?? 0;
+          self._loadingImages += message.count ?? 0;
+          const textures = message.textures;
+          if (textures) {
+            for (const textureId of textures) {
+              const texture = self.database.getObject(textureId);
+              if (texture) {
+                texture.imageDataPending = true;
+              }
+            }
+          }
           self._captureStatus.text = `Loading Images: ${self._loadingImages}`;
           break;
         }
@@ -334,7 +343,7 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_setBindGroup(args, commandInfo, index) {
+  _showCaptureCommandInfo_setBindGroup(args, commandInfo, index, skipInputs) {
     const id = args[1].__id;
     const bindGroup = this.database.getObject(id);
     if (!bindGroup) {
@@ -375,31 +384,33 @@ export class CapturePanel {
       return 0;
     }
 
-    const inputs = [];    
-    if (bindGroup?.entries) {
-      for (const entry of bindGroup.entries) {
-        if (entry.resource?.__id) {
-          const resource = this.database.getObject(entry.resource.__id);
-          if (resource instanceof TextureView) {
-            const binding = entry.binding;
-            inputs.push({textureView: resource, group, binding });
+    if (!skipInputs) {
+      const inputs = [];    
+      if (bindGroup?.entries) {
+        for (const entry of bindGroup.entries) {
+          if (entry.resource?.__id) {
+            const resource = this.database.getObject(entry.resource.__id);
+            if (resource instanceof TextureView) {
+              const binding = entry.binding;
+              inputs.push({textureView: resource, group, binding });
+            }
           }
         }
       }
-    }
 
-    if (inputs.length) {
-      const inputGrp = new Collapsable(commandInfo, { collapsed: true, label: "Input Textures" });
-      inputGrp.body.style.maxHeight = "unset";
-      for (const resource of inputs) {
-        const texture = this.database.getTextureFromView(resource.textureView);
-        if (texture) {
-          if (texture.gpuTexture) {
-            const canvasDiv = new Div(inputGrp.body);
-            new Div(canvasDiv, { text: `Group: ${resource.group} Binding: ${resource.binding} Texture: ${texture.id} ${texture.format} ${texture.width}x${texture.height}` });
-            this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
-          } else {
-            this.port.postMessage({ action: "inspect_request_texture", id: texture.id });
+      if (inputs.length) {
+        const inputGrp = new Collapsable(commandInfo, { collapsed: true, label: "Input Textures" });
+        inputGrp.body.style.maxHeight = "unset";
+        for (const resource of inputs) {
+          const texture = this.database.getTextureFromView(resource.textureView);
+          if (texture) {
+            if (texture.gpuTexture) {
+              const canvasDiv = new Div(inputGrp.body);
+              new Div(canvasDiv, { text: `Group: ${resource.group} Binding: ${resource.binding} Texture: ${texture.id} ${texture.format} ${texture.width}x${texture.height}` });
+              this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
+            } else {
+              this.database.requestTextureData(texture);
+            }
           }
         }
       }
@@ -751,7 +762,7 @@ export class CapturePanel {
             new Div(canvasDiv, { text: `Color: ${index} Texture: ${texture.id} ${texture.format} ${texture.width}x${texture.height}` });
             this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
           } else {
-            this.port.postMessage({ action: "inspect_request_texture", id: texture.id });
+            this.database.requestTextureData(texture);
           }
         }
       }
@@ -763,7 +774,7 @@ export class CapturePanel {
             new Div(canvasDiv, { text: `DepthStencil Texture: ${texture.id} ${texture.format} ${texture.width}x${texture.height}` });
             this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
           } else {
-            this.port.postMessage({ action: "inspect_request_texture", id: texture.id });
+            this.database.requestTextureData(texture);
           }
         }
       }
@@ -780,7 +791,7 @@ export class CapturePanel {
             new Div(canvasDiv, { text: `Group: ${resource.group} Binding: ${resource.binding} Texture: ${texture.id} ${texture.format} ${texture.width}x${texture.height}` });
             this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
           } else {
-            this.port.postMessage({ action: "inspect_request_texture", id: texture.id });
+            this.database.requestTextureData(texture);
           }
         }
       }
@@ -994,15 +1005,15 @@ export class CapturePanel {
       this._lastSelectedCommand.element.click();
     }
 
-    if (passId != -1) {
-      this._loadingImages--;
-      if (this._loadingImages <= 0) {
-        this._captureStatus.text = "";
-        this._loadingImages = 0;
-      } else {
-        this._captureStatus.text = `Loading Images: ${this._loadingImages}`;
-      }
+    this._loadingImages--;
+    if (this._loadingImages <= 0) {
+      this._captureStatus.text = "";
+      this._loadingImages = 0;
+    } else {
+      this._captureStatus.text = `Loading Images: ${this._loadingImages}`;
+    }
 
+    if (passId != -1) {
       const frameImages = this._frameImages;
       if (frameImages) {
         const passFrame = new Div(frameImages, { class: "capture_pass_texture" });

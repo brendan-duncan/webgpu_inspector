@@ -22,7 +22,7 @@ export class ShaderModule extends GPUObject {
         this._reflection = new WgslReflect(this.code);
       } catch (e) {
         console.log(e);
-        console.log(this.code);
+        //console.log(this.code);
         this._reflection = null;
       }
     }
