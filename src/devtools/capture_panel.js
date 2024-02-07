@@ -8,7 +8,7 @@ import { CaptureStatistics } from "./capture_statistics.js";
 import {
   Sampler,
   TextureView
-} from "./object_database.js";
+} from "./gpu_objects/index.js";
 
 export class CapturePanel {
   constructor(window, parent) {

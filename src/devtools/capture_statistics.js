@@ -1,4 +1,4 @@
-import { TextureView, Sampler } from "./object_database.js";
+import { TextureView, Sampler } from "./gpu_objects/index.js";
 
 export class CaptureStatistics {
   constructor() {

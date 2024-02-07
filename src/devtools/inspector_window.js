@@ -10,9 +10,7 @@ import { InspectPanel } from "./inspect_panel.js";
 import { Signal } from "../utils/signal.js";
 import { decodeDataUrl } from "../utils/base64.js";
 import { TextureFormatInfo } from "../utils/texture_format_info.js";
-import {
-  Texture
-} from "./object_database.js";
+import { Texture } from "./gpu_objects/texture.js";
 
 export class InspectorWindow extends Window {
   constructor() {

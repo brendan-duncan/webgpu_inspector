@@ -5,7 +5,8 @@ import { Span } from "./widget/span.js";
 import { TabWidget } from "./widget/tab_widget.js";
 import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import { Widget } from "./widget/widget.js";
-import { Adapter,
+import { Adapter } from "./gpu_objects/adapter.js";
+import { 
   Device,
   Buffer,
   Sampler,
@@ -17,14 +18,13 @@ import { Adapter,
   BindGroup,
   RenderPipeline,
   ComputePipeline,
-  ValidationError } from "./object_database.js";
+  ValidationError } from "./gpu_objects/index.js";
 import { getFlagString } from "../utils/flags.js";
 import { Plot } from "./widget/plot.js";
 import { EditorView } from "codemirror";
 
-import { keymap, highlightSpecialChars, drawSelection, highlightActiveLine, dropCursor,
-  rectangularSelection, crosshairCursor,
-  lineNumbers, highlightActiveLineGutter } from "@codemirror/view";
+import { keymap, highlightSpecialChars, drawSelection, dropCursor,
+  crosshairCursor, lineNumbers, highlightActiveLineGutter } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
   foldGutter, foldKeymap } from "@codemirror/language";
