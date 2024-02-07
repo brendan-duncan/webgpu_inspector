@@ -1,3 +1,5 @@
+import { TextureView, Sampler } from "./object_database.js";
+
 export class CaptureStatistics {
   constructor() {
     this.apiCalls = 0;
@@ -9,15 +11,15 @@ export class CaptureStatistics {
     this.setVertexBuffer = 0;
     this.setIndexBuffer = 0;
     this.setBindGroup = 0;
-    //this.uniformBuffers = 0;
-    //this.storageBuffers = 0;
-    //this.textures = 0;
-    //this.samplers = 0;
+    this.uniformBuffers = 0;
+    this.storageBuffers = 0;
+    this.textures = 0;
+    this.samplers = 0;
     this.setPipeline = 0;
 
-    //this.vertexShaders = 0;
-    //this.fragmentShaders = 0;
-    //this.computeShaders = 0;
+    this.vertexShaders = 0;
+    this.fragmentShaders = 0;
+    this.computeShaders = 0;
 
     this.computePasses = 0;
     this.renderPasses = 0;
@@ -30,11 +32,13 @@ export class CaptureStatistics {
     //this.textureBytesWritten = 0;
     this.totalBytesWritten = 0;
 
-    //this.totalInstances = 0;
-    //this.totalVertices = 0;
-    //this.totalTriangles = 0;
-    //this.totalLines = 0;
-    //this.totalPoints = 0;
+    this.totalInstances = 0;
+    this.totalVertices = 0;
+    this.totalTriangles = 0;
+    this.totalLines = 0;
+    this.totalPoints = 0;
+
+    Object.defineProperty(this, '_lastPipeline', { enumerable: false, writable: true, value: 0 });
   }
 
   reset() {
@@ -47,15 +51,15 @@ export class CaptureStatistics {
     this.setVertexBuffer = 0;
     this.setIndexBuffer = 0;
     this.setBindGroup = 0;
-    //this.uniformBuffers = 0;
-    //this.storageBuffers = 0;
-    //this.textures = 0;
-    //this.samplers = 0;
+    this.uniformBuffers = 0;
+    this.storageBuffers = 0;
+    this.textures = 0;
+    this.samplers = 0;
     this.setPipeline = 0;
 
-    //this.vertexShaders = 0;
-    //this.fragmentShaders = 0;
-    //this.computeShaders = 0;
+    this.vertexShaders = 0;
+    this.fragmentShaders = 0;
+    this.computeShaders = 0;
 
     this.computePasses = 0;
     this.renderPasses = 0;
@@ -68,20 +72,45 @@ export class CaptureStatistics {
     //this.textureBytesWritten = 0;
     this.totalBytesWritten = 0;
 
-    //this.totalInstances = 0;
-    //this.totalVertices = 0;
-    //this.totalTriangles = 0;
-    //this.totalLines = 0;
-    //this.totalPoints = 0;
+    this.totalInstances = 0;
+    this.totalVertices = 0;
+    this.totalTriangles = 0;
+    this.totalLines = 0;
+    this.totalPoints = 0;
+
+    this._lastPipeline = 0;
   }
 
-  updateStats(className, method, args) {
+  updateStats(database, className, method, args) {
     this.apiCalls++;
 
     if (method === "dispatchWorkgroups" || method === "dispatchWorkgroupsIndirect") {
       this.dispatch++;
     } else if (method === "draw" || method === "drawIndexed") {
       this.draw++;
+      const numVertices = parseInt(args[0] ?? 0);
+      this.totalInstances += parseInt(args[1] ?? 1);
+      this.totalVertices += numVertices;
+
+      if (this._lastPipeline) {
+        const pipeline = database.getObject(this._lastPipeline.__id);
+        if (pipeline?.descriptor) {
+          const topology = pipeline.descriptor.primitive?.topology ?? "triangle-list";
+          if (topology === "triangle-list") {
+            const numTriangles = numVertices / 3;
+            this.totalTriangles += numTriangles;
+          } else if (topology === "triangle-strip") {
+            const numTriangles = numVertices - 2;
+            this.totalTriangles += numTriangles;
+          } else if (topology === "point-list") {
+            this.totalPoints += numVertices;
+          } else if (topology === "line-list") {
+            this.totalLines += numVertices / 2;
+          } else if (topology === "line-strip") {
+            this.totalLines += numVertices - 1;
+          }
+        }
+      }
     } else if (method === "drawIndirect" || method === "drawIndexedIndirect") {
       this.drawIndirect++;
     } else if (method === "setIndexBuffer") {
@@ -90,6 +119,44 @@ export class CaptureStatistics {
       this.setVertexBuffer++;
     } else if (method === "setPipeline") {
       this.setPipeline++;
+      this._lastPipeline = args[0];
+      const pipeline = database.getObject(args[0].__id);
+      if (pipeline) {
+        if (pipeline.descriptor.vertex) {
+          this.vertexShaders++;
+        }
+        if (pipeline.descriptor.fragment) {
+          this.fragmentShaders++;
+        }
+        if (pipeline.descriptor.compute) {
+          this.computeShaders++;
+        }
+      }
+    } else if (method === "setBindGroup") {
+      this.setBindGroup++;
+      const bindgroup = database.getObject(args[1].__id);
+      if (bindgroup) {
+        for (const entry of bindgroup.descriptor.entries) {
+          if (entry.resource?.buffer) {
+            const buffer = database.getObject(entry.resource.buffer.__id);
+            if (buffer) {
+              if (buffer.descriptor.usage & GPUBufferUsage.STORAGE) {
+                this.storageBuffers++;
+              }
+              if (buffer.descriptor.usage & GPUBufferUsage.UNIFORM) {
+                this.uniformBuffers++;
+              }
+            }
+          } else if (entry.resource?.__id) {
+            const resource = database.getObject(entry.resource.__id);
+            if (resource instanceof TextureView) {
+              this.textures++;
+            } else if (resource instanceof Sampler) {
+              this.samplers++;
+            }
+          }
+        }
+      }
     } else if (method === "beginComputePass") {
       this.computePasses++;
     } else if (method === "beginRenderPass") {

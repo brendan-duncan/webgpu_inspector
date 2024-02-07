@@ -155,7 +155,7 @@ export class CapturePanel {
       const args = command.args;
       const name = `${className ?? "__"}`;
 
-      stats.updateStats(className, method, args);
+      stats.updateStats(this.database, className, method, args);
 
       let debugGroup = debugGroupStack[debugGroupStack.length - 1];
 
@@ -770,7 +770,7 @@ export class CapturePanel {
     const ol = new Widget("ul", group.body);
     const stats = this.statistics;
     for (const key in stats) {
-      new Widget("li", ol, { text: `${key}: ${stats[key]}`, style: "padding-left: 20px; line-height: 25px; font-size: 12pt;" });
+      new Widget("li", ol, { text: `${key}: ${stats[key].toLocaleString("en-US")}`, style: "padding-left: 20px; line-height: 25px; font-size: 12pt;" });
     }
   }
 

@@ -148,7 +148,13 @@ export class ShaderModule extends GPUObject {
 
   get reflection() {
     if (this._reflection === null) {
-      this._reflection = new WgslReflect(this.code);
+      try {
+        this._reflection = new WgslReflect(this.code);
+      } catch (e) {
+        console.log(e);
+        console.log(this.code);
+        this._reflection = null;
+      }
     }
     return this._reflection;
   }
