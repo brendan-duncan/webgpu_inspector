@@ -256,18 +256,25 @@ export class CapturePanel {
     }
   }
 
+  _getTextureFromView(view) {
+    if (view.__texture) {
+      return view.__texture;
+    }
+    if (view.texture) {
+      view.__texture = this.database.getObject(view.texture);
+    }
+    return view.__texture;
+  }
+
   _getTextureFromAttachment(attachment) {
     if (!attachment.view) {
       return null;
-    }
-    if (attachment.view.__texture) {
-      return this.database.getObject(attachment.view.__texture.__id);
     }
     const view = this.database.getObject(attachment.view.__id);
     if (!view) {
       return null;
     }
-    return view.parent;
+    return this._getTextureFromView(view);
   }
 
   _showCaptureCommandInfo_beginRenderPass(args, commandInfo) {
@@ -279,7 +286,7 @@ export class CapturePanel {
       if (texture) {
         const format = texture.descriptor.format;
         if (texture.gpuTexture) {
-          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
+          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format} ${texture.width}x${texture.height}` });
 
           const viewWidth = 256;
           const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
@@ -292,7 +299,7 @@ export class CapturePanel {
           const canvasTexture = context.getCurrentTexture();
           this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
         } else {
-          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format}` });
+          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format} ${texture.width}x${texture.height}` });
           new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(attachment.view.descriptor, undefined, 4) });
           const texDesc = this._processCommandArgs(texture.descriptor);
           if (texDesc.usage) {
@@ -308,7 +315,7 @@ export class CapturePanel {
       if (texture) {
         if (texture.gpuTexture) {
           const format = texture.descriptor.format;
-          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment ${format}` });
+          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment ${format} ${texture.width}x${texture.height}` });
           const viewWidth = 256;
           const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
           const canvas = new Widget("canvas", depthStencilAttachmentGrp, { style: "margin-left: 20px; margin-top: 10px;" });
@@ -320,7 +327,7 @@ export class CapturePanel {
           const canvasTexture = context.getCurrentTexture();
           this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.descriptor.format, canvasTexture.createView(), dstFormat);
         } else {
-          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.descriptor?.format ?? "<unknown format>"}` });
+          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.descriptor?.format ?? "<unknown format>"} ${texture.width}x${texture.height}` });
           new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
           const texDesc = this._processCommandArgs(texture.descriptor);
           if (texDesc.usage) {
@@ -778,23 +785,19 @@ export class CapturePanel {
       for (const i in colorAttachments) {
         const attachment = colorAttachments[i];
         const textureView = this.database.getObject(attachment.view.__id);
-        if (textureView) {
-          const texture = textureView.parent;
-          if (texture) {
-            const format = texture.descriptor.format;
-            new Div(commandInfo, { text: `Color ${i}: ${format}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
-          }
+        const texture = this._getTextureFromView(textureView);
+        if (texture) {
+          const format = texture.descriptor.format;
+          new Div(commandInfo, { text: `Color ${i}: ${format} ${texture.width}x${texture.height}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
         }
       }
       const depthStencilAttachment = desc.depthStencilAttachment;
       if (depthStencilAttachment) {
         const textureView = this.database.getObject(depthStencilAttachment.view.__id);
-        if (textureView) {
-          const texture = textureView.parent;
-          if (texture) {
-            const format = texture.descriptor.format;
-            new Div(commandInfo, { text: `Depth-Stencil: ${format}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
-          }
+        const texture = this._getTextureFromView(textureView);
+        if (texture) {
+          const format = texture.descriptor.format;
+          new Div(commandInfo, { text: `Depth-Stencil: ${format} ${texture.width}x${texture.height}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
         }
       }
     } else if (method === "draw") {

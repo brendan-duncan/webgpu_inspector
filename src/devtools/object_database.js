@@ -123,9 +123,10 @@ export class Texture extends GPUObject {
 Texture.className = "Texture";
 
 export class TextureView extends GPUObject {
-  constructor(id, descriptor, stacktrace) {
+  constructor(id, texture, descriptor, stacktrace) {
     super(id, stacktrace);
     this.descriptor = descriptor;
+    this.texture = texture;
   }
 }
 TextureView.className = "TextureView";
@@ -345,7 +346,7 @@ export class ObjectDatabase {
                 prevView.descriptor = descriptor;
                 return;
               }
-              const obj = new TextureView(id, descriptor, stacktrace);
+              const obj = new TextureView(id, parent, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
               break;
             }
