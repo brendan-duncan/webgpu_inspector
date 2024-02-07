@@ -257,6 +257,9 @@ export class CapturePanel {
   }
 
   _getTextureFromView(view) {
+    if (!view) {
+      return null;
+    }
     if (view.__texture) {
       return view.__texture;
     }
@@ -267,8 +270,11 @@ export class CapturePanel {
   }
 
   _getTextureFromAttachment(attachment) {
-    if (!attachment.view) {
+    if (!attachment?.view) {
       return null;
+    }
+    if (attachment.view.__texture) {
+      return this.database.getObject(attachment.view.__texture.__id);
     }
     const view = this.database.getObject(attachment.view.__id);
     if (!view) {
@@ -784,8 +790,7 @@ export class CapturePanel {
       const colorAttachments = desc.colorAttachments;
       for (const i in colorAttachments) {
         const attachment = colorAttachments[i];
-        const textureView = this.database.getObject(attachment.view.__id);
-        const texture = this._getTextureFromView(textureView);
+        const texture = this._getTextureFromAttachment(attachment);
         if (texture) {
           const format = texture.descriptor.format;
           new Div(commandInfo, { text: `Color ${i}: ${format} ${texture.width}x${texture.height}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
@@ -793,8 +798,7 @@ export class CapturePanel {
       }
       const depthStencilAttachment = desc.depthStencilAttachment;
       if (depthStencilAttachment) {
-        const textureView = this.database.getObject(depthStencilAttachment.view.__id);
-        const texture = this._getTextureFromView(textureView);
+        const texture = this._getTextureFromAttachment(depthStencilAttachment);
         if (texture) {
           const format = texture.descriptor.format;
           new Div(commandInfo, { text: `Depth-Stencil: ${format} ${texture.width}x${texture.height}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
