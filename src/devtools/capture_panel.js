@@ -142,6 +142,7 @@ export class CapturePanel {
     this._lastSelectedCommand = null;
 
     const stats = this.statistics;
+    stats.reset();
 
     let first = true;
     for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
