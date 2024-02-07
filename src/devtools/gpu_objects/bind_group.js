@@ -5,5 +5,9 @@ export class BindGroup extends GPUObject {
     super(id, stacktrace);
     this.descriptor = descriptor;
   }
+
+  get entries() {
+    return this.descriptor?.entries;
+  }
 }
 BindGroup.className = "BindGroup";

@@ -29,7 +29,7 @@ import { EditorState } from "@codemirror/state";
 import { defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
   foldGutter, foldKeymap } from "@codemirror/language";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
+import { searchKeymap } from "@codemirror/search";
 import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { lintKeymap } from "@codemirror/lint";
 import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
@@ -37,7 +37,6 @@ import { cobalt } from 'thememirror';
 
 const shaderEditorSetup = (() => [
   lineNumbers(),
-  //highlightActiveLine(),
   highlightActiveLineGutter(),
   highlightSpecialChars(),
   history(),
@@ -50,9 +49,7 @@ const shaderEditorSetup = (() => [
   bracketMatching(),
   closeBrackets(),
   autocompletion(),
-  //rectangularSelection(),
   crosshairCursor(),
-  //highlightSelectionMatches(),
   cobalt,
   wgsl(),
   keymap.of([

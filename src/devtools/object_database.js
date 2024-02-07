@@ -301,6 +301,9 @@ export class ObjectDatabase {
   }
 
   getObject(id) {
+    if (id === undefined || id === null) {
+      return null;
+    }
     return this.allObjects.get(id);
   }
 
