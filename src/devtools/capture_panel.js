@@ -579,16 +579,21 @@ export class CapturePanel {
     }
   }
 
-  _getDrawState(commandIndex, commands) {
+  _getPipelineState(commandIndex, commands) {
     let pipeline = null;
     let vertexBuffer = null;
     let indexBuffer = null;
     let bindGroups = [];
     let renderPass = null;
+    let computePass = null;
     for (let ci = commandIndex - 1; ci >= 0; --ci) {
       const cmd = commands[ci];
       if (cmd.method === "beginRenderPass") {
         renderPass = cmd;
+        break;
+      }
+      if (cmd.method === "beginComputePass") {
+        computePass = cmd;
         break;
       }
       if (cmd.method === "setIndexBuffer" && !indexBuffer) {
@@ -608,7 +613,7 @@ export class CapturePanel {
       }
     }
 
-    return { renderPass, pipeline, vertexBuffer, indexBuffer, bindGroups };
+    return { renderPass, computePass, pipeline, vertexBuffer, indexBuffer, bindGroups };
   }
 
   _getTypeName(t) {
@@ -717,7 +722,7 @@ export class CapturePanel {
     }
   }
 
-  _showTextureInputsOutputs(state, parent) {
+  _showTextureOutputs(state, parent) {
     const outputs = { color: [], depthStencil: null };
     if (state.renderPass) {
       const renderPass = state.renderPass.args[0];
@@ -730,23 +735,6 @@ export class CapturePanel {
       if (renderPass?.depthStencilAttachment) {
         const textureView = this._getTextureViewFromAttachment(renderPass.depthStencilAttachment);
         outputs.depthStencil = textureView;
-      }
-    }
-
-    const inputs = [];
-    for (const bindGroupCmd of state.bindGroups) {
-      const group = bindGroupCmd.args[0];
-      const bindGroup = this.database.getObject(bindGroupCmd.args[1]?.__id);
-      if (bindGroup?.entries) {
-        for (const entry of bindGroup.entries) {
-          if (entry.resource?.__id) {
-            const resource = this.database.getObject(entry.resource.__id);
-            if (resource instanceof TextureView) {
-              const binding = entry.binding;
-              inputs.push({textureView: resource, group, binding });
-            }
-          }
-        }
       }
     }
 
@@ -779,6 +767,25 @@ export class CapturePanel {
         }
       }
     }
+  }
+
+  _showTextureInputs(state, parent) {
+    const inputs = [];
+    for (const bindGroupCmd of state.bindGroups) {
+      const group = bindGroupCmd.args[0];
+      const bindGroup = this.database.getObject(bindGroupCmd.args[1]?.__id);
+      if (bindGroup?.entries) {
+        for (const entry of bindGroup.entries) {
+          if (entry.resource?.__id) {
+            const resource = this.database.getObject(entry.resource.__id);
+            if (resource instanceof TextureView) {
+              const binding = entry.binding;
+              inputs.push({textureView: resource, group, binding });
+            }
+          }
+        }
+      }
+    }
 
     if (inputs.length) {
       const inputGrp = new Collapsable(parent, { collapsed: true, label: "Input Textures" });
@@ -798,10 +805,16 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_draw(args, commandInfo, commandIndex, commands) {
-    const state = this._getDrawState(commandIndex, commands);
+  _showCaptureCommandInfo_end(args, commandInfo, commandIndex, commands) {
+    const state = this._getPipelineState(commandIndex, commands);
+    this._showTextureOutputs(state, commandInfo);
+  }
 
-    this._showTextureInputsOutputs(state, commandInfo);
+  _showCaptureCommandInfo_draw(args, commandInfo, commandIndex, commands) {
+    const state = this._getPipelineState(commandIndex, commands);
+
+    this._showTextureOutputs(state, commandInfo);
+    this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
       this._showCaptureCommandInfo_setPipeline(state.pipeline.args, commandInfo, true);
@@ -815,9 +828,10 @@ export class CapturePanel {
   }
 
   _showCaptureCommandInfo_drawIndexed(args, commandInfo, commandIndex, commands) {
-    const state = this._getDrawState(commandIndex, commands);
+    const state = this._getPipelineState(commandIndex, commands);
 
-    this._showTextureInputsOutputs(state, commandInfo);
+    this._showTextureOutputs(state, commandInfo);
+    this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
       this._showCaptureCommandInfo_setPipeline(state.pipeline.args, commandInfo, true);
@@ -834,9 +848,10 @@ export class CapturePanel {
   }
 
   _showCaptureCommandInfo_drawIndirect(args, commandInfo, commandIndex, commands) {
-    const state = this._getDrawState(commandIndex, commands);
+    const state = this._getPipelineState(commandIndex, commands);
 
-    this._showTextureInputsOutputs(state, commandInfo);
+    this._showTextureOutputs(state, commandInfo);
+    this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
       this._showCaptureCommandInfo_setPipeline(state.pipeline.args, commandInfo, true);
@@ -850,9 +865,10 @@ export class CapturePanel {
   }
 
   _showCaptureCommandInfo_drawIndexedIndirect(args, commandInfo, commandIndex, commands) {
-    const state = this._getDrawState(commandIndex, commands);
+    const state = this._getPipelineState(commandIndex, commands);
 
-    this._showTextureInputsOutputs(state, commandInfo);
+    this._showTextureOutputs(state, commandInfo);
+    this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
       this._showCaptureCommandInfo_setPipeline(state.pipeline.args, commandInfo, true);
@@ -932,21 +948,26 @@ export class CapturePanel {
           new Div(commandInfo, { text: `Depth-Stencil: ${format} ${texture.width}x${texture.height}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
         }
       }
-    } else if (method === "draw" || method === "drawindexed") {
-      const state = this._getDrawState(commandIndex, commands);
+    } else if (method === "draw" || method === "drawIndexed") {
+      const state = this._getPipelineState(commandIndex, commands);
       if (state.pipeline) {
         const topology = this.database.getObject(state.pipeline.args[0].__id)?.topology ?? "triangle-list";
         const vertexCount = args[0] ?? 0;
         if (topology === "triangle-list") {
-          new Div(commandInfo, { text: `Triangles: ${vertexCount / 3}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          const count = (vertexCount / 3).toLocaleString("en-US");
+          new Div(commandInfo, { text: `Triangles: ${count}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
         } else if (topology === "triangle-strip") {
-          new Div(commandInfo, { text: `Triangles: ${vertexCount - 2}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          const count = (vertexCount - 2).toLocaleString("en-US");
+          new Div(commandInfo, { text: `Triangles: ${count}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
         } else if (topology === "point-list") {
-          new Div(commandInfo, { text: `Points: ${vertexCount}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          const count = (vertexCount).toLocaleString("en-US");
+          new Div(commandInfo, { text: `Points: ${count}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
         } else if (topology === "line-list") {
-          new Div(commandInfo, { text: `Lines: ${vertexCount / 2}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          const count = (vertexCount / 2).toLocaleString("en-US");
+          new Div(commandInfo, { text: `Lines: ${count}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
         } else if (topology === "line-strip") {
-          new Div(commandInfo, { text: `Lines: ${vertexCount - 1}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          const count = (vertexCount - 1).toLocaleString("en-US");
+          new Div(commandInfo, { text: `Lines: ${count}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
         }
       }
     }
@@ -977,26 +998,28 @@ export class CapturePanel {
 
     if (method == "beginRenderPass") {
       this._showCaptureCommandInfo_beginRenderPass(args, commandInfo);
-    } else if (method == "setBindGroup") {
+    } else if (method === "setBindGroup") {
       this._showCaptureCommandInfo_setBindGroup(args, commandInfo);
-    } else if (method == "setPipeline") {
+    } else if (method === "setPipeline") {
       this._showCaptureCommandInfo_setPipeline(args, commandInfo);
-    } else if (method == "writeBuffer") {
+    } else if (method === "writeBuffer") {
       this._showCaptureCommandInfo_writeBuffer(args, commandInfo);
-    } else if (method == "setIndexBuffer") {
+    } else if (method === "setIndexBuffer") {
       this._showCaptureCommandInfo_setIndexBuffer(args, commandInfo);
-    } else if (method == "setVertexBuffer") {
+    } else if (method === "setVertexBuffer") {
       this._showCaptureCommandInfo_setVertexBuffer(args, commandInfo);
-    } else if (method == "drawIndexed") {
+    } else if (method === "drawIndexed") {
       this._showCaptureCommandInfo_drawIndexed(args, commandInfo, commandIndex, commands);
-    } else if (method == "draw") {
+    } else if (method === "draw") {
       this._showCaptureCommandInfo_draw(args, commandInfo, commandIndex, commands);
-    } else if (method == "drawIndirect") {
+    } else if (method === "drawIndirect") {
       this._showCaptureCommandInfo_drawIndirect(args, commandInfo, commandIndex, commands);
-    } else if (method == "drawIndexedIndirect") {
+    } else if (method === "drawIndexedIndirect") {
       this._showCaptureCommandInfo_drawIndexedIndirect(args, commandInfo, commandIndex, commands);
-    } else if (method == "dispatchWorkgroups") {
+    } else if (method === "dispatchWorkgroups") {
       this._showCaptureCommandInfo_dispatchWorkgroups(args, commandInfo, commandIndex, commands);
+    } else if (method === "end") {
+      this._showCaptureCommandInfo_end(args, commandInfo, commandIndex, commands);
     }
   }
 
