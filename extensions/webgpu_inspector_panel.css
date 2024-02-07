@@ -117,10 +117,10 @@ body {
   max-height: 300px;
   overflow: auto;
   margin: 0px;
-  -moz-user-select: none;
+  /*-moz-user-select: none;
   -webkit-user-select: none;
   -ms-user-select: none;
-  user-select: none;
+  user-select: none;*/
 }
 
 .object_list_collapse {

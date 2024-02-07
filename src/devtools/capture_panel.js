@@ -571,39 +571,89 @@ export class CapturePanel {
     return { pipeline, vertexBuffer, indexBuffer, bindGroups };
   }
 
-  _getTypeName(type) {
-    let name = type.name;
-    if (type.format) {
-      name += `<${type.format.name}>`;
+  _getTypeName(t) {
+    if (t.format) {
+      if (t.name === "array" && t.count) {
+        return `${t.name}<${t.format.name}, ${t.count}>`
+      }
+      return `${t.name}<${t.format.name}>`
     }
-    return name;
+    return t.name;
+  }
+
+  _addStructMembers(l2, members) {
+    new Widget("li", l2, { text: `Members:` });
+    const l3 = new Widget("ul", l2);
+    for (const m in members) {
+      new Widget("li", l3, { text: `${s.type.members[m].name}: ${this._getTypeName(s.type.members[m].type)}` });
+      const l4 = new Widget("ul", l3);
+      new Widget("li", l4, { text: `Offset: ${members[m].offset}` });
+      new Widget("li", l4, { text: `Size: ${members[m].size}` });
+
+      if (m.type.name === "array") {
+        new Widget("li", l4, { text: `Array Count: ${members[m].count}` });
+        if (m.type.format?.members) {
+          this._addStructMembers(l3, f.format.members);
+        }
+      }
+    }
+  }
+
+  _addShaderTypeInfo(ui, type) {
+    if (!type) {
+      return;
+    }
+    if (type.members) {
+      new Widget("li", ui, { text: `Members:` });
+      const l2 = new Widget("ul", ui);
+      for (const m of type.members) {
+        new Widget("li", l2, { text: `${m.name}: ${this._getTypeName(m.type)}` });
+        const l3 = new Widget("ul", l2);
+        new Widget("li", l3, { text: `Offset: ${m.offset}` });
+        new Widget("li", l3, { text: `Size: ${m.size || "<runtime>"}` });
+
+        this._addShaderTypeInfo(l3, m.type.format);
+      }
+    } else if (type.name === "array") {
+      this._addShaderTypeInfo(type.format);
+    }
   }
 
   _shaderInfo(type, shader, commandInfo) {
     const reflect = shader.reflection;
     if (reflect) {
       const grp = new Collapsable(commandInfo, { collapsed: true, label: `${type} Shader Info` });
-      new Div(grp.body, { text: `Uniforms: ${reflect.uniforms.length}` });
-      const list = new Widget("ul", grp.body);
-      for (const s of reflect.uniforms) {
-        new Widget("li", list, { text: `Uniform: ${s.name}` });
-        const l2 = new Widget("ul", list);
-        new Widget("li", l2, { text: `Buffer Size: ${s.type.size}` });
-        new Widget("li", l2, { text: `Bind Group: ${s.group}` });
-        new Widget("li", l2, { text: `Bind Index: ${s.binding}` });
-        new Widget("li", l2, { text: `Members:` });
-        const l3 = new Widget("ul", l2);
-        for (const m in s.type.members) {
-          new Widget("li", l3, { text: `${s.type.members[m].name}: ${this._getTypeName(s.type.members[m].type)}` });
-          const l4 = new Widget("ul", l3);
-          new Widget("li", l4, { text: `Offset: ${s.type.members[m].offset}` });
-          new Widget("li", l4, { text: `Size: ${s.type.members[m].size}` });
+      grp.body.style.maxHeight = "600px";
+      
+      if (reflect.uniforms.length) {
+        new Div(grp.body, { text: `Uniform Buffers: ${reflect.uniforms.length}` });
+        const list = new Widget("ul", grp.body);
+        for (const s of reflect.uniforms) {
+          new Widget("li", list, { text: `${s.name}: ${this._getTypeName(s.type)}` });
+          const l2 = new Widget("ul", list);
+          new Widget("li", l2, { text: `Bind Group: ${s.group}` });
+          new Widget("li", l2, { text: `Bind Index: ${s.binding}` });
+          new Widget("li", l2, { text: `Buffer Size: ${s.type.size || "<runtime>"}` });
+          
+          this._addShaderTypeInfo(l2, s.type);
         }
       }
-      /*new Div(grp.body, { text: `Storage: ${reflect.storage.length}` });
-      for (const storage of reflect.storage) {
-        new Widget("pre", grp.body, { text: JSON.stringify(storage, null, 4) });
+
+      if (reflect.storage.length) {
+        new Div(grp.body, { text: `Storage Buffers: ${reflect.storage.length}` });
+        const list = new Widget("ul", grp.body);
+        for (const s of reflect.storage) {
+          new Widget("li", list, { text: `${s.name}: ${this._getTypeName(s.type)}` });
+          const l2 = new Widget("ul", list);
+          new Widget("li", l2, { text: `Bind Group: ${s.group}` });
+          new Widget("li", l2, { text: `Bind Index: ${s.binding}` });
+          new Widget("li", l2, { text: `Buffer Size: ${s.type.size || "<runtime>"}` });
+
+          this._addShaderTypeInfo(l2, s.type);
+        }
       }
+      
+      /*
       new Div(grp.body, { text: `Textures: ${reflect.textures.length}` });
       for (const texture of reflect.textures) {
         new Widget("pre", grp.body, { text: JSON.stringify(texture, null, 4) });
