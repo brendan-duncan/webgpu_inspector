@@ -424,6 +424,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
         descriptor["limits"] = this._gpuToObject(device.limits);
         this._trackObject(deviceId, device);
         this._sendAddObjectMessage(id, adapterId, "Device", JSON.stringify(descriptor), stacktrace);
+        device.__adapter = adapter; // prevent adapter from being garbage collected
       }
     }
 

@@ -5,8 +5,8 @@ import { Span } from "./widget/span.js";
 import { TabWidget } from "./widget/tab_widget.js";
 import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import { Widget } from "./widget/widget.js";
-import { Adapter } from "./gpu_objects/adapter.js";
 import { 
+  Adapter,
   Device,
   Buffer,
   Sampler,
@@ -359,7 +359,7 @@ export class InspectPanel {
 
     let widget = this._getRecycledWidget(object);
     if (widget) {
-      widget.element.style.display = undefined;
+      widget.element.style.display = "list-item";
       widget.nameWidget.text = name;
       widget.idWidget.text = `ID: ${idName}`;
       if (type) {
