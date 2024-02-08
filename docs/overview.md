@@ -12,7 +12,7 @@ From a page that has WebGPU content, press **F12** to open the Chrome Developer 
 
 [Inspect](inspect.md) reports all GPU objects that have been created and lets you inspect information about them, and in some cases edit them.
 
-![WebGPU Inspector](images/webgpu_inspector.png)
+![WebGPU Inspector](images/inspect.png)
 
 ## [Capture](capture.md)
 
