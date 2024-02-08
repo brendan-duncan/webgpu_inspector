@@ -165,8 +165,8 @@ export class InspectPanel {
     this.uiTextureViews = this._createObjectListUI(objectsPanel, "Texture Views");
     this.uiSamplers = this._createObjectListUI(objectsPanel, "Samplers");
     this.uiBindGroups = this._createObjectListUI(objectsPanel, "BindGroups");
-    this.uiBindGroupLayouts = this._createObjectListUI(objectsPanel, "BindGroupLayouts");
-    this.uiPipelineLayouts = this._createObjectListUI(objectsPanel, "PipelineLayouts");
+    this.uiBindGroupLayouts = this._createObjectListUI(objectsPanel, "Bind Group Layouts");
+    this.uiPipelineLayouts = this._createObjectListUI(objectsPanel, "Pipeline Layouts");
     this.uiPendingAsyncRenderPipelines = this._createObjectListUI(objectsPanel, "Pending Async Render Pipelines");
     this.uiPendingAsyncComputePipelines = this._createObjectListUI(objectsPanel, "Pending Async Compute Pipelines");
     this.uiValidationErrors = this._createObjectListUI(objectsPanel, "Validation Errors");
@@ -249,15 +249,15 @@ export class InspectPanel {
     } else if (object instanceof Texture) {
       this.uiTextures.label.text = `Textures ${this.database.textures.size}`;
     } else if (object instanceof TextureView) {
-      this.uiTextureViews.label.text = `TextureViews ${this.database.textureViews.size}`;
+      this.uiTextureViews.label.text = `Texture Views ${this.database.textureViews.size}`;
     } else if (object instanceof ShaderModule) {
-      this.uiShaderModules.label.text = `ShaderModules ${this.database.shaderModules.size}`;
+      this.uiShaderModules.label.text = `Shader Modules ${this.database.shaderModules.size}`;
     } else if (object instanceof BindGroupLayout) {
-      this.uiBindGroupLayouts.label.text = `BindGroupLayouts ${this.database.bindGroupLayouts.size}`;
+      this.uiBindGroupLayouts.label.text = `Bind Group Layouts ${this.database.bindGroupLayouts.size}`;
     } else if (object instanceof PipelineLayout) {
-      this.uiPipelineLayouts.label.text = `PipelineLayouts ${this.database.pipelineLayouts.size}`;
+      this.uiPipelineLayouts.label.text = `Pipeline Layouts ${this.database.pipelineLayouts.size}`;
     } else if (object instanceof BindGroup) {
-      this.uiBindGroups.label.text = `BindGroups ${this.database.bindGroups.size}`;
+      this.uiBindGroups.label.text = `Bind Groups ${this.database.bindGroups.size}`;
     } else if (object instanceof RenderPipeline) {
       this.uiPendingAsyncRenderPipelines.label.text = `Pending Async Render Pipelines ${this.database.pendingRenderPipelines.size}`;
       this.uiRenderPipelines.label.text = `Render Pipelines ${this.database.renderPipelines.size}`;
