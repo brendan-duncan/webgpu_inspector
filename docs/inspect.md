@@ -1,3 +1,5 @@
+[Overview](overview.md) . [Capture](capture.md) . [Record](record.md)
+
 # Inspect
 
 ![WebGPU Inspector Panel](images/inspect.png)

@@ -1,8 +1,12 @@
+[Inspect](inspect.md) . [Capture](capture.md) . [Record](record.md)
+
 # WebGPU Inspector
 
-WebGPU Inspector is a Developer Tools extension for debugging WebGPU content.
+The WebGPU Inspector extension is available from the Developer Tools window.
 
-It includes multiple tools for graphical debugging.
+From a page that has WebGPU content, press **F12** to open the Chrome Developer Tools window. When the WebGPU Inspector extension is enabled in the extension manager, there will be a **WebGPU Inspector** tab.
+
+## Tools
 
 ## [Inspect](inspect.md)
 
