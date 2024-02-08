@@ -163,6 +163,7 @@ class WebGPURecorder {
       await loadData();
 
       let canvas = document.getElementById("#webgpu");
+      let context = canvas.getContext("webgpu");
       let frameLabel = document.createElement("div");
       frameLabel.style = "position: absolute; top: 10px; left: 10px; font-size: 24pt; color: #f00;";
       document.body.append(frameLabel);
@@ -342,6 +343,10 @@ class WebGPURecorder {
   }
 
   _getObjectVariable(object) {
+    if (object instanceof GPUCanvasContext) {
+      return "context";
+    }
+
     if (object.__id === undefined) {
       this._registerObject(object);
     }
