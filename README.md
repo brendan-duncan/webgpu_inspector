@@ -2,11 +2,18 @@
 
 Inspection debugger for WebGPU.
 
-![WebGPU Inspector](docs/images/webgpu_inspector.png)
-
 ## Installation
 
-**WebGPU Inspector is still in active development and not yet published on the Chrome Extension Store. You'll need to install it manually from source for now.**
+### Chrome Web Store
+
+**WebGPU Inspector is still in active development, expect many frequent changes and the published version will lag behind the source version.**
+
+Install WebGPU Inspector from the [Chrome Web Store](https://chromewebstore.google.com/detail/webgpu-inspector/holcbbnljhkpkjkhgkagjkhhpeochfal).
+
+### From Source
+
+To get the most up to date version of WebGPU Inspector, you can install the extension from source.
+
 - Download project from Github.
   - git clone https://github.com/brendan-duncan/webgpu_inspector
 - In Chrome, open **chrome://extensions**
