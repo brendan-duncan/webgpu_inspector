@@ -913,7 +913,7 @@ WebGPURecorder._formatInfo = {
   "astc-12x12-unorm-srgb": { "blockWidth": 12, "blockHeight": 12, "bytesPerBlock": 16 },
 };
 
-export const GPUObjectTypes = new Set([
+const GPUObjectTypes = new Set([
   GPUAdapter,
   GPUDevice,
   GPUBuffer,
@@ -937,7 +937,7 @@ export const GPUObjectTypes = new Set([
   GPUCanvasContext
 ]);
 
-export class GPUObjectWrapper {
+class GPUObjectWrapper {
   constructor(idGenerator) {
     this._idGenerator = idGenerator;
     this.onPreCall = null;
