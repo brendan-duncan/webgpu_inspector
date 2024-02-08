@@ -44,36 +44,34 @@ Each object category displays how many objects of that type are allocated.
 ![Inspect Objects](images/inspect_objects.png)
 
 
-### Adapters
+## Object Stacktrace
 
-An Adapter is the root object for WebGPU. It provides information about the GPU, and is used to create a Device.
+The stacktrace for each object is recorded, identifying where in the code the object was created.
 
-### Devices
+![Inspect Stacktrace](images/inspect_stacktrace.png)
 
-Devices are the main object for accessing the GPU by creating objects.
+## Textures
 
-### Render Pipelines
+When you inspect a texture, a Load button pulls the texture image from the page for visualizing.
 
-### Compute Pipelines
+![Inspect Texture](images/inspect_texture.png)
 
-### Shader Modules
+## Shaders
 
-### Buffers
+When you inspect a shader, it provides an editor for the shader's code.
 
-### Textures
+### Editing Shaders
 
-### Texture Views
+You can make changes to the shader code and press the Compile button. The modified shader will be sent to the page and replace the original version of the shader, letting you immediately see shader changes live on the page.
 
-### Samplers
+There are limitations to the types of changes you can make to the shader. The page already has a pipeline and bind groups for the original version of the shader, so making any changes to the bindings used by the modified version of the shader will likely result in WebGPU errors.
 
-### Bind Groups
+![Inspect Shader](images/inspect_shader.png)
 
-### Bind Group Layouts
+## Profiling Tips
 
-### Pipeline Layouts
+Profiling tools have not been added yet, but the Inspector can reveal some oportunities for optimizations.
 
-### Pending Async Render Pipelines
-
-### Pending Async Compute Pipelines
-
-### Validation Errors
+* Periodic spices in the frame time graph indicate your page is doing periodic garbage collection. Try to minimize Javascripts garbage collection by caching and re-using GPU objects as much as possible.
+* Object numbers rising and falling over time indicate the page is allocating and destroying objects frequently. If the objects accumilate quickly and go down gradually, it indicates you are creating objects and relying on garbage collection to destroy them.
+    * Buffer and texture objects in particular are expensive to create and destroy, so you should try to cache buffers and textures in particular as much as possible.
