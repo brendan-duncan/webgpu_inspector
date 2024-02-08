@@ -1,4 +1,4 @@
-# WebGPU Inspector 
+# WebGPU Inspector v0.0.2
 
 Inspection debugger for WebGPU.
 
