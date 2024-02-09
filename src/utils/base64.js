@@ -13,12 +13,3 @@ export async function decodeDataUrl(dataUrl) {
   return new Uint8Array(await res.arrayBuffer());
 }
 
-export function decodeBase64(base64) {
-  const binString = atob(base64);
-  return Uint8Array.from(binString, (m) => m.codePointAt(0));
-}
-
-export function encodeBase64(bytes) {
-  const binString = String.fromCodePoint(...bytes);
-  return btoa(binString);
-}

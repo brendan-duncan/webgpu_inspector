@@ -9,6 +9,7 @@ import {
   Sampler,
   TextureView
 } from "./gpu_objects/index.js";
+import { decodeDataUrl } from "../utils/base64.js";
 
 export class CapturePanel {
   constructor(window, parent) {
@@ -55,7 +56,7 @@ export class CapturePanel {
               }
             }
           }
-          self._captureStatus.text = `Loading Images: ${self._loadingImages}`;
+          self._updateCaptureStatus();
           break;
         }
         case "inspect_capture_frame_results": {
@@ -79,9 +80,110 @@ export class CapturePanel {
           if (self._captureCount === 0) {
             self._captureFrameResults(frame, self._captureCommands);
           }
+          break;
+        }
+        case "inspect_capture_buffers": {
+          self._loadingBuffers += message.count ?? 0;
+          self._updateCaptureStatus();
+          break;
+        }
+        case "inspect_capture_buffer_data": {
+          const id = message.commandId;
+          const entryIndex = message.entryIndex;
+          const offset = message.offset;
+          const size = message.size;
+          const index = message.index;
+          const count = message.count;
+          const chunk = message.chunk;
+          self._captureBufferData(id, entryIndex, offset, size, index, count, chunk);
+          break;
         }
       }
     });
+  }
+
+  _captureBufferData(id, entryIndex, offset, size, index, count, chunk) {
+    if (id < 0 || id > this._captureCommands.length || id?.constructor !== Number) {
+      return;
+    }
+    const command = this._captureCommands[id];
+    if (!command) {
+      return;
+    }
+
+    if (!command.bufferData) {
+      command.bufferData = [];
+    }
+
+    if (!command.dataPending) {
+      command.dataPending = [];
+    }
+
+    if (!command.bufferData[entryIndex]) {
+      command.bufferData[entryIndex] = new Uint8Array(size);
+      command.dataPending[entryIndex] = true;
+    }
+
+    const bufferData = command.bufferData[entryIndex];
+    
+    if (bufferData.length != size) {
+      return;
+    }
+
+    if (!command.loadedDataChunks) {
+      command.loadedDataChunks = [];
+    }
+
+    if (!command.loadedDataChunks[entryIndex]) {
+      command.loadedDataChunks[entryIndex] = [];
+    }
+
+    if (command.loadedDataChunks[entryIndex].length !== count) {
+      command.loadedDataChunks[entryIndex].length = count;
+    }
+
+    if (!command.isBufferDataLoaded) {
+      command.isBufferDataLoaded = [];
+    }
+
+    decodeDataUrl(chunk).then((chunkData) => {
+      try {
+        command.bufferData[entryIndex].set(chunkData, offset);
+        command.loadedDataChunks[entryIndex][index] = true;
+      } catch (e) {
+        console.log(e);
+        command.loadedDataChunks[entryIndex].length = 0;
+        command.isBufferDataLoaded[entryIndex] = false;
+      }
+
+      let loaded = true;
+      for (let i = 0; i < count; ++i) {
+        if (!command.loadedDataChunks[entryIndex][i]) {
+          loaded = false;
+          break;
+        }
+      }
+      command.isBufferDataLoaded[entryIndex] = loaded;
+
+      if (command.isBufferDataLoaded[entryIndex]) {       
+        command.loadedDataChunks[entryIndex].length = 0;
+      }
+    });
+  }
+
+  _updateCaptureStatus() {
+    let text = "";
+    if (this._loadingImages || this._loadingBuffers) {
+      text = "Loading ";
+
+      if (this._loadingImages) {
+        text += `Images: ${this._loadingImages} `;
+      }
+      if (this._loadingBuffers) {
+        text += `Buffers: ${this._loadingBuffers} `;
+      }
+    }
+    this._captureStatus.text = text;
   }
 
   get database() {
@@ -343,7 +445,152 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_setBindGroup(args, commandInfo, index, skipInputs) {
+  _showBufferDataType(ui, type, bufferData, offset = 0) {
+    if (!type) {
+      return;
+    }
+
+    const typeName = this._getTypeName(type);
+
+    if (typeName === "f32") {
+      const data = new Float32Array(bufferData.buffer, offset, 1);
+      new Widget("li", ui, { text: `${data[0]}`});
+    } else if (typeName === "i32") {
+      const data = new Int32Array(bufferData.buffer, offset, 1);
+      new Widget("li", ui, { text: `${data[0]}`});
+    } else if (typeName === "u32") {
+      const data = new Uint32Array(bufferData.buffer, offset, 1);
+      new Widget("li", ui, { text: `${data[0]}`});
+    } else if (typeName === "bool") {
+      const data = new Uint32Array(bufferData.buffer, offset, 1);
+      new Widget("li", ui, { text: `${data[0] ? "true" : "false"}`});
+    } else if (typeName === "vec2i" || typeName === "vec2<i32>") {
+      const data = new Int32Array(bufferData.buffer, offset, 2);
+      new Widget("li", ui, { text: `${data[0]}, ${data[1]}`});
+    } else if (typeName === "vec2u" || typeName === "vec2<u32>") {
+      const data = new Uint32Array(bufferData.buffer, offset, 2);
+      new Widget("li", ui, { text: `${data[0]}, ${data[1]}`});
+    } else if (typeName === "vec2f" || typeName === "vec2<f32>") {
+      const data = new Float32Array(bufferData.buffer, offset, 2);
+      new Widget("li", ui, { text: `${data[0]}, ${data[1]}`});
+    } else if (typeName === "vec3i" || typeName === "vec3<i32>") {
+      const data = new Int32Array(bufferData.buffer, offset, 3);
+      new Widget("li", ui, { text: `${data[0]}, ${data[1]}, ${data[2]}`});
+    } else if (typeName === "vec3u" || typeName === "vec3<u32>") {
+      const data = new Uint32Array(bufferData.buffer, offset, 3);
+      new Widget("li", ui, { text: `${data[0]}, ${data[1]}, ${data[2]}`});
+    } else if (typeName === "vec3f" || typeName === "vec3<f32>") {
+      const data = new Float32Array(bufferData.buffer, offset, 3);
+      new Widget("li", ui, { text: `${data[0]}, ${data[1]}, ${data[2]}`});
+    } else if (typeName === "vec4i" || typeName === "vec4<i32>") {
+      const data = new Int32Array(bufferData.buffer, offset, 4);
+      new Widget("li", ui, { text: `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`});
+    } else if (typeName === "vec4u" || typeName === "vec4<u32>") {
+      const data = new Uint32Array(bufferData.buffer, offset, 4);
+      new Widget("li", ui, { text: `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`});
+    } else if (typeName === "vec4f" || typeName === "vec4<f32>") {
+      const data = new Float32Array(bufferData.buffer, offset, 4);
+      new Widget("li", ui, { text: `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`});
+    } else if (CapturePanel.matrixTypes[type.name]) {
+      const t = CapturePanel.matrixTypes[type.name];
+      const rows = t.rows;
+      const columns = t.columns;
+      const data = new Float32Array(bufferData.buffer, offset, rows * columns);
+      for (let r = 0, mi = 0; r < rows; ++r) {
+        let text = "";
+        for (let c = 0; c < columns; ++c, ++mi) {
+          text += `${c == 0 ? "" : " "}${data[mi]}`;
+        }
+        new Widget("li", ui, { text });
+      }
+    } else if (type.members) {
+      const l2 = new Widget("ul", ui);
+      for (const m of type.members) {
+        const typeName = this._getTypeName(m.type);
+        new Widget("li", l2, { text: `${m.name}: ${typeName}` });
+        const l3 = new Widget("ul", l2);
+        this._showBufferDataType(l3, m.type, bufferData, offset + m.offset);
+      }
+    } else if (type.name === "array") {
+      const ul = new Widget("ul", ui);
+      let count = type.count ?? 0;
+      if (count == 0) {
+        // Runtime length array
+        count = (bufferData.length - offset) / (type.stride || 1);
+        console.log(`!!!! RUNTIME LENGTH ARRAY size:${bufferData.length} offset:${offset} remaining:${bufferData.length - offset} stride:${type.stride} runtimeCount:${(bufferData.length - offset) / (type.stride)}`);
+      }
+      if (count) {
+        let elementOffset = offset;
+        let stride = type.stride;
+        let format = type.format;
+        for (let i = 0; i < count; ++i) { 
+          new Widget("li", ul, { text: `[${i}]: ${this._getTypeName(format)}` });
+          const ul2 = new Widget("ul", ul);
+          this._showBufferDataType(ul2,format, bufferData, elementOffset);
+          elementOffset += stride;
+        }
+      }
+      //this._showBufferDataType(type.format);
+    }
+  }
+
+  _showBufferDataInfo(parentWidget, module, groupIndex, bindingIndex, bufferData) {
+    const reflection = module.reflection;
+    for (const uniform of reflection.uniforms) {
+      if (uniform.group != groupIndex || uniform.binding != bindingIndex) {
+        continue;
+      }
+      const typeName = this._getTypeName(uniform.type);
+      new Div(parentWidget, { text: `UNIFORM: ${uniform.name}: ${typeName}` });
+      this._showBufferDataType(parentWidget, uniform.type, bufferData);
+      return;
+    }
+    for (const storage of reflection.storage) {
+      if (storage.group != groupIndex || storage.binding != bindingIndex) {
+        continue;
+      }
+      const typeName = this._getTypeName(storage.type);
+      new Div(parentWidget, { text: `STORAGE: ${storage.name}: ${typeName}` });
+      this._showBufferDataType(parentWidget, storage.type, bufferData);
+      return;
+    }
+  }
+
+  _showBufferData(parentWidget, groupIndex, entryIndex, bindGroup, state, bufferData) {
+    new Div(parentWidget, { text: `Bind Group ${groupIndex} Binding ${entryIndex} size: ${bufferData.length}` });
+
+    const id = state.pipeline?.args[0].__id;
+    const pipeline = this.database.getObject(id);
+    if (pipeline) {
+      const desc = pipeline.descriptor;
+      const vertexId = desc.vertex?.module?.__id;
+      const fragmentId = desc.fragment?.module?.__id;
+      const computeId = desc.compute?.module?.__id;
+      if (computeId) {
+        const module = this.database.getObject(computeId);
+        if (module) {
+          this._showBufferDataInfo(parentWidget, module, groupIndex, entryIndex, bufferData);
+        }
+      } else if (vertexId !== undefined && vertexId === fragmentId) {
+        const module = this.database.getObject(vertexId);
+        if (module) {
+          this._showBufferDataInfo(parentWidget, module, groupIndex, entryIndex, bufferData);
+        }
+      } else {
+        const vertexModule = this.database.getObject(vertexId);
+        if (vertexModule) {
+          this._showBufferDataInfo(parentWidget, vertexModule, groupIndex, entryIndex, bufferData);
+        }
+
+        const fragmentModule = this.database.getObject(fragmentId);
+        if (fragmentModule) {
+          this._showBufferDataInfo(parentWidget, fragmentModule, groupIndex, entryIndex, bufferData);
+        }
+      }
+    }
+  }
+
+  _showCaptureCommandInfo_setBindGroup(args, commandInfo, groupIndex, skipInputs, state) {
     const id = args[1].__id;
     const bindGroup = this.database.getObject(id);
     if (!bindGroup) {
@@ -351,7 +598,7 @@ export class CapturePanel {
     }
 
     const group = args[0];
-    const bindGroupGrp = new Collapsable(commandInfo, { collapsed: true, label: `BindGroup ${index ?? ""} ID:${id}` });
+    const bindGroupGrp = new Collapsable(commandInfo, { collapsed: true, label: `BindGroup ${groupIndex ?? ""} ID:${id}` });
     const bindGroupDesc = bindGroup.descriptor;
     const newDesc = this._processCommandArgs(bindGroupDesc);
     const descStr = JSON.stringify(newDesc, undefined, 4);
@@ -382,6 +629,19 @@ export class CapturePanel {
         return resource.buffer.__id;
       }
       return 0;
+    }
+
+    function getResourceUsage(resource) {
+      if (resource.buffer) {
+        const buffer = self.database.getObject(resource.buffer.__id);
+        if (buffer) {
+          const usage = buffer.descriptor.usage & GPUBufferUsage.UNIFORM ? "Uniform" :
+                buffer.descriptor.usage & GPUBufferUsage.STORAGE ? "Storage" :
+                "";
+          return usage;
+        }
+      }
+      return "";
     }
 
     if (!skipInputs) {
@@ -416,11 +676,15 @@ export class CapturePanel {
       }
     }
 
-    for (const entry of bindGroupDesc.entries) {
+    const bindGroupCmd = state?.bindGroups[groupIndex];  
+
+    for (const entryIndex in bindGroupDesc.entries) {
+      const entry = bindGroupDesc.entries[entryIndex];
+
       const binding = entry.binding;
       const resource = entry.resource;
-      const groupLabel = index !== undefined ? `Group ${index} ` : "";
-      const resourceGrp = new Collapsable(commandInfo, { collapsed: true, label: `${groupLabel}Binding ${binding}: ${getResourceType(resource)} ID:${getResourceId(resource)}` });
+      const groupLabel = groupIndex !== undefined ? `Group ${groupIndex} ` : "";
+      const resourceGrp = new Collapsable(commandInfo, { collapsed: true, label: `${groupLabel}Binding ${binding}: ${getResourceType(resource)} ID:${getResourceId(resource)} ${getResourceUsage(resource)}` });
       if (resource.__id !== undefined) {
         const obj = this.database.getObject(resource.__id);
         if (obj) {
@@ -464,6 +728,15 @@ export class CapturePanel {
           } else {
             new Div(resourceGrp.body, { text: `Buffer ID:${bufferId}` });
           }
+
+          if (bindGroupCmd?.isBufferDataLoaded) {
+            if (bindGroupCmd.isBufferDataLoaded[entryIndex]) {
+              const bufferData = bindGroupCmd.bufferData[entryIndex];
+              if (bufferData) {
+                this._showBufferData(resourceGrp.body, groupIndex, entryIndex, bindGroup, state, bufferData);
+              }
+            }
+          }
         } else {
           new Widget("pre", resourceGrp.body, { text: JSON.stringify(resource, undefined, 4) });
         }
@@ -471,7 +744,7 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_setPipeline(args, commandInfo, collapsed) {
+  _showCaptureCommandInfo_setPipeline(args, commandInfo) {
     const id = args[0].__id;
     const pipeline = this.database.getObject(id);
     if (pipeline) {
@@ -810,7 +1083,7 @@ export class CapturePanel {
     this._showTextureOutputs(state, commandInfo);
   }
 
-  _showCaptureCommandInfo_draw(args, commandInfo, commandIndex, commands) {
+    _showCaptureCommandInfo_draw(args, commandInfo, commandIndex, commands) {
     const state = this._getPipelineState(commandIndex, commands);
 
     this._showTextureOutputs(state, commandInfo);
@@ -823,7 +1096,7 @@ export class CapturePanel {
       this._showCaptureCommandInfo_setVertexBuffer(state.vertexBuffer.args, commandInfo, true);
     }
     for (const index in state.bindGroups) {
-      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true);
+      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
     }
   }
 
@@ -843,7 +1116,7 @@ export class CapturePanel {
       this._showCaptureCommandInfo_setVertexBuffer(state.vertexBuffer.args, commandInfo, true);
     }
     for (const index in state.bindGroups) {
-      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true);
+      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
     }
   }
 
@@ -860,7 +1133,7 @@ export class CapturePanel {
       this._showCaptureCommandInfo_setVertexBuffer(state.vertexBuffer.args, commandInfo, true);
     }
     for (const index in state.bindGroups) {
-      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true);
+      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
     }
   }
 
@@ -880,34 +1153,17 @@ export class CapturePanel {
       this._showCaptureCommandInfo_setVertexBuffer(state.vertexBuffer.args, commandInfo, true);
     }
     for (const index in state.bindGroups) {
-      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true);
+      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
     }
   }
 
   _showCaptureCommandInfo_dispatchWorkgroups(args, commandInfo, commandIndex, commands) {
-    let pipeline = null;
-    let bindGroups = [];
-    for (let ci = commandIndex - 1; ci >= 0; --ci) {
-      const cmd = commands[ci];
-      if (cmd.method == "beginComputePass") {
-        break;
-      }
-      if (cmd.method == "setPipeline" && !pipeline) {
-        pipeline = cmd;
-      }
-      if (cmd.method == "setBindGroup") {
-        const bindGroupIndex = cmd.args[0];
-        if (!bindGroups[bindGroupIndex]) {
-          bindGroups[bindGroupIndex] = cmd;
-        }
-      }
+    const state = this._getPipelineState(commandIndex, commands);
+    if (state.pipeline) {
+      this._showCaptureCommandInfo_setPipeline(state.pipeline.args, commandInfo, true);
     }
-
-    if (pipeline) {
-      this._showCaptureCommandInfo_setPipeline(pipeline.args, commandInfo, true);
-    }
-    for (const index in bindGroups) {
-      this._showCaptureCommandInfo_setBindGroup(bindGroups[index].args, commandInfo, index, true);
+    for (const index in state.bindGroups) {
+      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
     }
   }
 
@@ -999,7 +1255,7 @@ export class CapturePanel {
     if (method == "beginRenderPass") {
       this._showCaptureCommandInfo_beginRenderPass(args, commandInfo);
     } else if (method === "setBindGroup") {
-      this._showCaptureCommandInfo_setBindGroup(args, commandInfo);
+      this._showCaptureCommandInfo_setBindGroup(args, commandInfo, 0, false);
     } else if (method === "setPipeline") {
       this._showCaptureCommandInfo_setPipeline(args, commandInfo);
     } else if (method === "writeBuffer") {
@@ -1062,6 +1318,29 @@ export class CapturePanel {
     }
   }
 }
+
+CapturePanel.matrixTypes = {
+  "mat2x2": { columns: 2, rows: 2 },
+  "mat2x2f": { columns: 2, rows: 2 },
+  "mat2x3": { columns: 2, rows: 3 },
+  "mat2x3f": { columns: 2, rows: 3 },
+  "mat2x4": { columns: 2, rows: 4 },
+  "mat2x4f": { columns: 2, rows: 4 },
+  
+  "mat3x2": { columns: 3, rows: 2 },
+  "mat3x2f": { columns: 3, rows: 2 },
+  "mat3x3": { columns: 3, rows: 3 },
+  "mat3x3f": { columns: 3, rows: 3 },
+  "mat3x4": { columns: 3, rows: 4 },
+  "mat3x4f": { columns: 3, rows: 4 },
+
+  "mat4x2": { columns: 4, rows: 2 },
+  "mat4x2f": { columns: 4, rows: 2 },
+  "mat4x3": { columns: 4, rows: 3 },
+  "mat4x3f": { columns: 4, rows: 3 },
+  "mat4x2": { columns: 4, rows: 4 },
+  "mat4x4f": { columns: 4, rows: 4 }
+};
 
 CapturePanel._commandArgs = {
   "beginComputePass": ["descriptor"],
