@@ -1126,7 +1126,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
 
     _recordCaptureBuffers(commandEncoder) {
       const buffers = this._captureBuffers;
-      const device = commandEncoder.__device;
+      const device = commandEncoder?.__device;
       if (!device) {
         return;
       }
@@ -1155,7 +1155,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
     }
 
     _captureTexture(commandEncoder, texture, passId) {
-      const device = commandEncoder.__device;
+      const device = commandEncoder?.__device;
       // can't capture canvas texture
       if (!device) {
         return;
