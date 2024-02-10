@@ -10,13 +10,21 @@ The Inspect tool shows you a real-time view of all WebGPU Objects that have been
 
 WebGPU Inspector does not interfer with a page by default, so you must start the tool for the information to be reported.
 
-Press the Start button on the Inspect panel. This will **reload** the page, injecting the inspector script. The inspector will intercept all WebGPU commands and report data back to the inspector panel.
+Press the **Start** button on the Inspect panel. This will **reload** the page, injecting the inspector script. The inspector will intercept all WebGPU commands and report data back to the inspector panel.
 
 ![GPU Start](images/inspector_start.png)
 
-If the page is refreshed, it will no longer have the injected inspector script. Press the Start button on the Inspector tool to start inspecting again.
+When the WebGPU Inspector is active on the page, there will be a small icon drawn on the upper-left corner of the page.
 
-If you close the DevTools window and open it again, it will have lost the data it collected before. Press the Start button to re-start data collection.
+![Inspector Status](images/inspect_status.png)
+
+### Notes
+
+* If you press the Start button and the page does not reload, manually refresh the page and press the Start button again. Sometimes the DevTools extension doesn't get injected into the page correctly.
+
+* If you refresh the page, it will no longer have the injected inspector script. Press the Start button on the Inspector tool to start inspecting again.
+
+* If you close the DevTools window and open it again, it will have lost the data it collected before. Press the Start button to re-start data collection.
 
 ## GPU Stats
 

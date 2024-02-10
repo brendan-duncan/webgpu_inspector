@@ -49,8 +49,8 @@ import { Actions, PanelActions } from "./utils/actions.js";
       }
 
       const statusContainer = document.createElement("div");
-      statusContainer.style = "z-index: 10000; margin-left: 10px; margin-top: 5px;";
-      window.document.body.appendChild(statusContainer);
+      statusContainer.style = "position: absolute; z-index: 1000000; margin-left: 10px; margin-top: 5px;";
+      document.body.insertBefore(statusContainer, document.body.firstChild);
 
       this._inspectingStatus = document.createElement("div");
       this._inspectingStatus.title = "WebGPU Inspector Running";
