@@ -82,4 +82,4 @@ Profiling tools have not been added yet, but the Inspector can reveal some oport
 
 * Periodic spikes in the frame time graph indicate your page is probably doing garbage collection during those frames. Try to minimize Javascripts garbage collection by caching and re-using GPU objects as much as possible.
 * Object numbers rising and falling over time indicate the page is allocating and destroying objects frequently. If the objects accumilate quickly and go down gradually, it indicates you are creating objects and relying on garbage collection to destroy them.
-    * Buffer and texture objects in particular are expensive to create and destroy, so you should try to cache buffers and textures in particular as much as possible.
+    * Buffer and texture objects in particular are expensive to create and destroy, so you should try to cache buffers and textures in particular as much as possible. Other types of objects, like Texture Views, may be inexpensive but can still cause garbage collection stalls.
