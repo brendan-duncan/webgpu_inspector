@@ -1396,7 +1396,7 @@ CapturePanel.matrixTypes = {
   "mat4x2f": { columns: 4, rows: 2 },
   "mat4x3": { columns: 4, rows: 3 },
   "mat4x3f": { columns: 4, rows: 3 },
-  "mat4x2": { columns: 4, rows: 4 },
+  "mat4x4": { columns: 4, rows: 4 },
   "mat4x4f": { columns: 4, rows: 4 }
 };
 
