@@ -37,3 +37,9 @@ If you select a Draw or Dispatch command, it will inspect the BindGroups and Pip
 If the page pushes/pops Debug Groups, they will be be used to group commands in the capture.
 
 ![Debug Groups](images/capture_debug_groups.png)
+
+## Frame Stats
+
+The Capture tool can provide various statistics about the capture. Press the **Frame Stats** to show the capture statistics. These include how many graphics commands were called; how many draw calls; and so on.
+
+![Frame Stats](images/capture_frame_stats.png)
