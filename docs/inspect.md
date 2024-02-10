@@ -8,7 +8,7 @@ The Inspect tool shows you a real-time view of all WebGPU Objects that have been
 
 ## Starting the Inspect Tool
 
-WebGPU Inspector does not interfer with a page by default, so you must start the tool for the information to be reported.
+WebGPU Inspector does not interfere with a page by default, so you must start the tool for the information to be reported.
 
 Press the **Start** button on the Inspect panel. This will **reload** the page, injecting the inspector script. The inspector will intercept all WebGPU commands and report data back to the inspector panel.
 
