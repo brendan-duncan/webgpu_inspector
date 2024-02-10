@@ -80,6 +80,6 @@ There are limitations to the types of changes you can make to the shader. The pa
 
 Profiling tools have not been added yet, but the Inspector can reveal some oportunities for optimizations.
 
-* Periodic spices in the frame time graph indicate your page is doing periodic garbage collection. Try to minimize Javascripts garbage collection by caching and re-using GPU objects as much as possible.
+* Periodic spikes in the frame time graph indicate your page is doing periodic garbage collection. Try to minimize Javascripts garbage collection by caching and re-using GPU objects as much as possible.
 * Object numbers rising and falling over time indicate the page is allocating and destroying objects frequently. If the objects accumilate quickly and go down gradually, it indicates you are creating objects and relying on garbage collection to destroy them.
     * Buffer and texture objects in particular are expensive to create and destroy, so you should try to cache buffers and textures in particular as much as possible.
