@@ -38,6 +38,10 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._objectMap = new Map();
       this._captureBuffers = [];
       this._captureTempBuffers = [];
+      this._mappedTextureBufferCount = 0;
+      this._encodingTextureChunkCount = 0;
+      this._mappedBufferCount = 0;
+      this._encodingBufferChunkCount = 0;
 
       if (!window.navigator.gpu) {
         // No WebGPU support
@@ -50,12 +54,11 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
       this._inspectingStatus = document.createElement("div");
       this._inspectingStatus.title = "WebGPU Inspector Running";
-      this._inspectingStatus.style = "height: 10px; width: 10px; display: inline-block; margin-right: 5px; background-color: #fff; border-radius: 50%; border: 1px solid #000; box-shadow: inset -4px -4px 4px -3px rgb(0,100,0), 2px 2px 3px rgba(0,0,0,0.8);";
+      this._inspectingStatus.style = "height: 10px; width: 10px; display: inline-block; margin-right: 5px; background-color: #ff0; border-radius: 50%; border: 1px solid #000; box-shadow: inset -4px -4px 4px -3px rgb(255,100,0), 2px 2px 3px rgba(0,0,0,0.8);";
       statusContainer.appendChild(this._inspectingStatus);
 
       this._inspectingStatusText = document.createElement("div");
       this._inspectingStatusText.style = "display: inline-block; font-size: 12pt;color: #070; text-shadow: #fff 1px 1px 1px;";
-      //this._inspectingStatusText.innerText = "Capturing 50 Images 10 Buffers";
       statusContainer.appendChild(this._inspectingStatusText);
 
       this._gpuWrapper = new GPUObjectWrapper(this);
@@ -651,6 +654,40 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._captureTextureRequest.set(textureId, object);
     }
 
+    _updateStatusMessage() {
+      let status = "";
+
+      if (this._captureTexturedBuffers.length > 0) {
+        status += `Texture: ${this._captureTexturedBuffers.length}`;
+      }
+
+      if (this._mappedTextureBufferCount > 0) {
+        status += `Pending Texture Reads: ${this._mappedTextureBufferCount}`;
+      }
+
+      if (this._encodingTextureChunkCount > 0) {
+        status += `Pending Texture Encoding: ${this._encodingTextureChunkCount}`;
+      }
+
+      if (this._captureBuffers.length > 0) {
+        status += `Buffers: ${this._captureBuffers.length}`;
+      }
+
+      if (this._mappedBufferCount > 0) {
+        status += `Pending Buffer Reads: ${this._mappedBufferCount}`;
+      }
+
+      if (this._encodingBufferChunkCount > 0) {
+        status += `Pending Buffer Encoding: ${this._encodingBufferChunkCount}`;
+      }
+
+      if (status) {
+        status = `Capturing: ${status}`;
+      }
+
+      this._inspectingStatusText.textContent = status;
+    }
+
     _frameStart(time) {
       if (this._lastFrameTime == 0) {
         this._lastFrameTime = time;
@@ -693,6 +730,8 @@ import { Actions, PanelActions } from "./utils/actions.js";
         this._captureRequest = false;
         this._gpuWrapper.recordStacktraces = false;
       }
+
+      this._updateStatusMessage();
     }
 
     _trackObject(id, object) {
@@ -959,6 +998,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
                 }
 
                 this._captureBuffers.push({ commandId, entryIndex, buffer, offset, size });
+                this._updateStatusMessage();
               }
             }
           }
@@ -1014,7 +1054,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       } else if (method === "end") {
         if (this._captureBuffers.length > 0) {
           this._recordCaptureBuffers(this._captureCommandEncoder);
-          this._captureBuffers.length = 0;
+          this._updateStatusMessage();
         }
         if (this._captureTextureViews.length > 0) {
           for (const captureTextureView of this._captureTextureViews) {
@@ -1051,8 +1091,11 @@ import { Actions, PanelActions } from "./utils/actions.js";
       for (const textureBuffer of this._captureTexturedBuffers) {
         const { id, tempBuffer, passId } = textureBuffer;
 
+        this._mappedTextureBufferCount++;
         const self = this;
         tempBuffer.mapAsync(GPUMapMode.READ).then(() => {
+          self._mappedTextureBufferCount--;
+          self._updateStatusMessage();
           const range = tempBuffer.getMappedRange();
           const data = new Uint8Array(range);
           self._sendTextureData(id, passId, data);
@@ -1060,17 +1103,21 @@ import { Actions, PanelActions } from "./utils/actions.js";
         });
       }
       this._captureTexturedBuffers.length = 0;
+      this._updateStatusMessage();
     }
 
     _sendTextureData(id, passId, data) {
       const size = data.length;
       const numChunks = Math.ceil(size / maxDataChunkSize);
-      
+
+      const self = this;
       for (let i = 0; i < numChunks; ++i) {
         const offset = i * maxDataChunkSize;
         const chunkSize = Math.min(maxDataChunkSize, size - offset);
         const chunk = data.slice(offset, offset + chunkSize);
 
+        this._encodingTextureChunkCount++;
+        this._updateStatusMessage();
         encodeDataUrl(chunk).then((chunkData) => {
           window.postMessage({
             "action": Actions.CaptureTextureData,
@@ -1082,7 +1129,9 @@ import { Actions, PanelActions } from "./utils/actions.js";
             count: numChunks,
             chunk: chunkData
           }, "*");
-        });        
+          self._encodingTextureChunkCount--;
+          self._updateStatusMessage();
+        });
       }
     }
 
@@ -1099,12 +1148,15 @@ import { Actions, PanelActions } from "./utils/actions.js";
     _sendBufferData(commandId, entryIndex, data) {
       const size = data.length;
       const numChunks = Math.ceil(size / maxDataChunkSize);
-      
+      const self = this;
+
       for (let i = 0; i < numChunks; ++i) {
         const offset = i * maxDataChunkSize;
         const chunkSize = Math.min(maxDataChunkSize, size - offset);
         const chunk = data.slice(offset, offset + chunkSize);
 
+        this._encodingBufferChunkCount++;
+        this._updateStatusMessage();
         encodeDataUrl(chunk).then((chunkData) => {
           window.postMessage({
             "action": Actions.CaptureBufferData,
@@ -1116,6 +1168,8 @@ import { Actions, PanelActions } from "./utils/actions.js";
             count: numChunks,
             chunk: chunkData
           }, "*");
+          self._encodingBufferChunkCount--;
+          self._updateStatusMessage();
         });
       }
     }
@@ -1140,7 +1194,11 @@ import { Actions, PanelActions } from "./utils/actions.js";
         const commandId = bufferInfo.commandId;
         const entryIndex = bufferInfo.entryIndex;
         const self = this;
+        this._mappedBufferCount++;
+        this._updateStatusMessage();
         tempBuffer.mapAsync(GPUMapMode.READ).then(() => {
+          self._mappedBufferCount--;
+          self._updateStatusMessage();
           const range = tempBuffer.getMappedRange();
           const data = new Uint8Array(range);
           self._sendBufferData(commandId, entryIndex, data);
@@ -1154,6 +1212,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       const buffers = this._captureBuffers;
       const device = commandEncoder?.__device;
       if (!device) {
+        buffers.length = 0;
         return;
       }
 
@@ -1178,6 +1237,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
         }
         this._skipRecord = false;
       }
+      buffers.length = 0;
     }
 
     _captureTexture(commandEncoder, texture, passId) {
@@ -1250,6 +1310,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
       if (tempBuffer) {
         this._captureTexturedBuffers.push({ id, tempBuffer, width, height, depthOrArrayLayers, format, passId });
+        this._updateStatusMessage();
       }
     }
 

@@ -51,7 +51,7 @@ export class Widget {
     // Latest state of the tracked pointers.
     //this.currentPointers = [];
 
-    this.enableContextMenuEvent();
+    //this.enableContextMenuEvent();
 
     if (parent) {
       if (parent.constructor.isLayout) {
