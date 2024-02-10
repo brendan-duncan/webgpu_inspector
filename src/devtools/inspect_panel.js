@@ -20,6 +20,7 @@ import {
   ComputePipeline,
   ValidationError } from "./gpu_objects/index.js";
 import { getFlagString } from "../utils/flags.js";
+import { PanelActions } from "../utils/actions.js";
 import { Plot } from "./widget/plot.js";
 import { EditorView } from "codemirror";
 
@@ -74,7 +75,7 @@ export class InspectPanel {
     this.inspectButton = new Button(controlBar, { label: "Start", callback: () => { 
       try {
         self._reset();
-        self.port.postMessage({ action: "initialize_inspector" });
+        self.port.postMessage({ action: PanelActions.InitializeInspector });
       } catch (e) {}
     } });
 
@@ -84,7 +85,7 @@ export class InspectPanel {
     this.uiTotalBufferMemory = new Span(stats, { style: "margin-left: 20px;" });
 
     this.plots = new Div(parent, { style: "display: flex; flex-direction: row; margin-bottom: 10px; height: 30px;" });
-    this.frameRatePlot = new Plot(this.plots, { style: "flex-grow: 1; margin-right: 10px;" });
+    this.frameRatePlot = new Plot(this.plots, { style: "flex-grow: 1; margin-right: 10px; max-width: 500px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);" });
     
     this.frameRateData = this.frameRatePlot.addData("Frame Time");
 
@@ -93,7 +94,7 @@ export class InspectPanel {
     this.database.onObjectLabelChanged.addListener(this._objectLabelChanged, this);
     this.database.onAddObject.addListener(this._addObject, this);
     this.database.onDeleteObject.addListener(this._deleteObject, this);
-    this.database.onEndFrame.addListener(this._updateFrameStats, this);
+    this.database.onDeltaFrameTime.addListener(this._updateFrameStats, this);
     this.database.onValidationError.addListener(this._validationError, this);
 
     window.onTextureLoaded.addListener(this._textureLoaded, this);
@@ -191,13 +192,13 @@ export class InspectPanel {
   }
 
   _updateFrameStats() {
-    this.uiFrameTime.text = `Frame Time: ${this.database.frameTime.toFixed(2)}ms`;
+    this.uiFrameTime.text = `Frame Time: ${this.database.deltaFrameTime.toFixed(2)}ms`;
     const totalTextureMemory = this.database.totalTextureMemory.toLocaleString("en-US");
     this.uiTotalTextureMemory.text = `Texture Memory: ${totalTextureMemory} Bytes`;
     const totalBufferMemory = this.database.totalBufferMemory.toLocaleString("en-US");
     this.uiTotalBufferMemory.text = `Buffer Memory: ${totalBufferMemory} Bytes`;
 
-    this.frameRateData.add(this.database.frameTime);
+    this.frameRateData.add(this.database.deltaFrameTime);
     this.frameRatePlot.draw();
   }
 
@@ -542,35 +543,39 @@ export class InspectPanel {
       return;
     }
     this.database.removeErrorsForObject(object.id);
-    this.port.postMessage({ action: "inspect_compile_shader", id: object.id, code });
+    this.port.postMessage({ action: PanelActions.CompileShader, id: object.id, code });
   }
 
   _createTexturePreview(texture, parent, width, height) {
     width ??= texture.width;
     height ??= texture.height;
-    const canvas = new Widget("canvas", parent);
-    canvas.element.width = width;
-    canvas.element.height = height;
-    const context = canvas.element.getContext('webgpu');
-    const format = navigator.gpu.getPreferredCanvasFormat();
-    const device = this.window.device;
-    context.configure({ device, format });
-    const canvasTexture = context.getCurrentTexture();
-    const formatInfo = TextureFormatInfo[texture.descriptor.format];
-    let srcView;
-    if (formatInfo.isDepthStencil) {
-      if (formatInfo.hasDepth) {
-        srcView = texture.gpuTexture.createView({ aspect: "depth-only" });
-      } else {
-        srcView = texture.gpuTexture.createView({ aspect: "depth-only" })
-      }
-      srcView = formatInfo.isDepthStencil
-        ? texture.gpuTexture.createView({ aspect: "depth-only" })
-        : texture.gpuTexture.createView();
-    } else {
-      srcView = texture.gpuTexture.createView();
+
+    const container = new Div(parent);
+    //new Div(container, { text: `Load Time: ${texture.dataLoadTime.toFixed(2)}ms` });
+    
+    const numLayers = texture.depthOrArrayLayers;
+    for (let layer = 0; layer < numLayers; ++layer) {
+      const canvas = new Widget("canvas", new Div(container));
+
+      canvas.element.width = width;
+      canvas.element.height = height;
+      const context = canvas.element.getContext('webgpu');
+      const format = navigator.gpu.getPreferredCanvasFormat();
+      const device = this.window.device;
+      context.configure({ device, format });
+      const canvasTexture = context.getCurrentTexture();
+      const formatInfo = TextureFormatInfo[texture.descriptor.format];
+
+      const viewDesc = {
+        aspect: formatInfo.isDepthStencil ? "depth-only" : "all",
+        dimension: "2d",
+        baseArrayLayer: layer,
+        layerArrayCount: 1 };
+      
+      const srcView = texture.gpuTexture.createView(viewDesc);
+
+      this.textureUtils.blitTexture(srcView, texture.descriptor.format, canvasTexture.createView(), format);
     }
-    this.textureUtils.blitTexture(srcView, texture.descriptor.format, canvasTexture.createView(), format);
   }
 
   _getDescriptorArray(object, array) {

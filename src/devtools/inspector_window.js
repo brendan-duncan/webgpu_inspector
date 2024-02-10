@@ -1,3 +1,4 @@
+import { Actions } from "../utils/actions.js";
 import { ObjectDatabase } from "./object_database.js";
 import { MessagePort } from "../utils/message_port.js";
 import { Div } from "./widget/div.js";
@@ -28,6 +29,7 @@ export class InspectorWindow extends Window {
     this.device = null;
 
     this.onTextureLoaded = new Signal();
+    this.onTextureDataChunkLoaded = new Signal();
 
     this._tabs = new TabWidget(this);
 
@@ -46,7 +48,7 @@ export class InspectorWindow extends Window {
     const self = this;
     this.port.addListener((message) => {
       switch (message.action) {
-        case "inspect_capture_texture_data": {
+        case Actions.CaptureTextureData: {
           const id = message.id;
           const passId = message.passId;
           const offset = message.offset;
@@ -104,9 +106,19 @@ export class InspectorWindow extends Window {
 
     if (!(object.imageData instanceof Uint8Array) || (object.imageData.length != size)) {
       object.imageData = new Uint8Array(size);
+      object.dataLoadTime = 0;
+      object._startTime = [];
     }
 
+    object._startTime[index] = performance.now();
+    const self = this;
     decodeDataUrl(chunk).then((data) => {
+      const t1 = object._startTime[index];
+      const t2 = performance.now();
+      const dt = t2 - t1;
+      object.dataLoadTime += dt;
+      //console.log(`TEXTURE CHUNK ${dt}ms size:${data.length} chunkSize:${chunk.length}`);
+      self.onTextureDataChunkLoaded.emit(id, passId, offset, size, index, count, chunk);
       object.loadedImageDataChunks[index] = 1;
       try {
         object.imageData.set(data, offset);

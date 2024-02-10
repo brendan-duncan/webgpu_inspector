@@ -1,4 +1,5 @@
 import { MessagePort } from "./utils/message_port.js";
+import { Actions, PanelActions } from "./utils/actions.js";
 
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
@@ -10,25 +11,25 @@ const port = new MessagePort("webgpu-inspector-content", 0, (message) => {
     return;
   }
 
-  if (action == "inspector_capture") {
+  if (action === PanelActions.Capture) {
     sessionStorage.setItem(webgpuInspectorCaptureFrameKey, "true");
     if (!inspectorInitialized) {
-      action = "initialize_inspector";
+      action = PanelActions.InitializeInspector;
     }
   }
   
-  if (action === "inspect_request_texture" || action === "inspect_compile_shader") {
+  if (action === PanelActions.RequestTexture || action === PanelActions.CompileShader) {
     window.postMessage(message, "*");
   }
   
-  if (action == "initialize_inspector") {
+  if (action === PanelActions.InitializeInspector) {
     sessionStorage.setItem(webgpuInspectorLoadedKey, "true");
     setTimeout(function () {
       window.location.reload();
     }, 50);
   }
   
-  if (action === "initialize_recorder") {
+  if (action === PanelActions.InitializeRecorder) {
     sessionStorage.setItem(webgpuRecorderLoadedKey, `${message.frames}%${message.filename}`);
     setTimeout(function () {
       window.location.reload();
@@ -47,6 +48,13 @@ window.addEventListener('message', (event) => {
   if (typeof message !== 'object' || message === null) {
     return;
   }
+
+  const action = message.action;
+
+  if (!Actions.values.has(action)) {
+    return;
+  }
+
   try {
     port.postMessage(message);
   } catch (e) {

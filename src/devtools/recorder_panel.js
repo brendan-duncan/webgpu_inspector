@@ -3,6 +3,7 @@ import { Div } from "./widget/div.js";
 import { Input } from "./widget/input.js";
 import { Span } from "./widget/span.js";
 import { Widget } from "./widget/widget.js";
+import { PanelActions } from "../utils/actions.js";
 
 export class RecorderPanel {
   constructor(window, parent) {
@@ -18,7 +19,7 @@ export class RecorderPanel {
       const frames = self.recordFramesInput.value || 1;
       const filename = self.recordNameInput.value;
       self._recordingData.length = 0;
-      port.postMessage({ action: "initialize_recorder", frames, filename });
+      port.postMessage({ action: PanelActions.InitializeRecorder, frames, filename });
     }});
 
     new Span(recorderBar, { text: "Frames:", style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });

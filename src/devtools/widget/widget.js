@@ -801,7 +801,7 @@ export class Widget {
    * @param {*} e
    */
   mouseMoveEvent(e) {
-    this.updatePositionFromEvent(e);
+    //this.updatePositionFromEvent(e);
     return false;
   }
 
@@ -958,7 +958,7 @@ export class Widget {
     this.startMouseY = e.offsetY;
     this.lastMouseX = e.clientX;
     this.lastMouseY = e.clientY;
-    this.updatePositionFromEvent(e);
+    //this.updatePositionFromEvent(e);
     this._isMouseDown = true;
     this.mouseButton = e.button;
     const res = this.mousePressEvent(e);
@@ -976,7 +976,7 @@ export class Widget {
    * @param {Event} e
    */
   _onMouseMove(e) {
-    this.updatePositionFromEvent(e);
+    //this.updatePositionFromEvent(e);
     return this.mouseMoveEvent(e);
   }
 
@@ -985,7 +985,7 @@ export class Widget {
    * @param {Event} e
    */
   _onMouseUp(e) {
-    this.updatePositionFromEvent(e);
+    //this.updatePositionFromEvent(e);
     this.startMouseEvent = null;
     if (!this._isMouseDown) {
       return true;

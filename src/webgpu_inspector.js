@@ -2,9 +2,15 @@ import { encodeDataUrl } from "./utils/base64.js";
 import { GPUObjectTypes, GPUObjectWrapper } from "./utils/gpu_object_wrapper.js";
 import { TextureFormatInfo } from "./utils/texture_format_info.js";
 import { TextureUtils } from "./utils/texture_utils.js";
+import { Actions, PanelActions } from "./utils/actions.js";
 
 (() => {
   const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
+
+  // How much data should we send to the panel via message as a chunk.
+  // Messages can't send that much data .
+  const maxDataChunkSize = (1024 * 1024) / 4;
+  const maxBufferCaptureSize = (1024 * 1024) / 4;
 
   class WebGPUInspector {
     constructor() {
@@ -19,13 +25,11 @@ import { TextureUtils } from "./utils/texture_utils.js";
       this._frameIndex = 0;
       this._initalized = true;
       this._objectID = 1;
-      this._nonTrackingID = 0.5;
-      this._frameStartTime = -1;
-      this._timeSinceLastFrame = 0;
+      this._lastFrameTime = 0;
       this._frameCommandCount = 0;
       this._captureRequest = false;
-      this.__skipRecord = false;
-      this.__errorChecking = true;
+      this._skipRecord = false;
+      this._errorChecking = true;
       this._trackedObjects = new Map();
       this._trackedObjectInfo = new Map();
       this._bindGroupCount = 0;
@@ -39,6 +43,20 @@ import { TextureUtils } from "./utils/texture_utils.js";
         // No WebGPU support
         return;
       }
+
+      const statusContainer = document.createElement("div");
+      statusContainer.style = "z-index: 10000; margin-left: 10px; margin-top: 5px;";
+      window.document.body.appendChild(statusContainer);
+
+      this._inspectingStatus = document.createElement("div");
+      this._inspectingStatus.title = "WebGPU Inspector Running";
+      this._inspectingStatus.style = "height: 10px; width: 10px; display: inline-block; margin-right: 5px; background-color: #fff; border-radius: 50%; border: 1px solid #000; box-shadow: inset -4px -4px 4px -3px rgb(0,100,0), 2px 2px 3px rgba(0,0,0,0.8);";
+      statusContainer.appendChild(this._inspectingStatus);
+
+      this._inspectingStatusText = document.createElement("div");
+      this._inspectingStatusText.style = "display: inline-block; font-size: 12pt;color: #070; text-shadow: #fff 1px 1px 1px;";
+      //this._inspectingStatusText.innerText = "Capturing 50 Images 10 Buffers";
+      statusContainer.appendChild(this._inspectingStatusText);
 
       this._gpuWrapper = new GPUObjectWrapper(this);
 
@@ -71,7 +89,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
           }
 
           if (self._garbageCollectectedObjects.length > 100) {
-            window.postMessage({"action": "inspect_delete_objects", "idList": self._garbageCollectectedObjects}, "*");
+            window.postMessage({"action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects}, "*");
             self._garbageCollectectedObjects.length = 0;
           }
         }
@@ -86,7 +104,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
       const garbageCollectionInterval = 200;
       setInterval(() => {
         if (self._garbageCollectectedObjects.length > 0) {
-          window.postMessage({"action": "inspect_delete_objects", "idList": self._garbageCollectectedObjects}, "*");
+          window.postMessage({"action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects}, "*");
           self._garbageCollectectedObjects.length = 0;
         }
       }, garbageCollectionInterval);
@@ -109,8 +127,9 @@ import { TextureUtils } from "./utils/texture_utils.js";
       const __requestAnimationFrame = window.requestAnimationFrame;
       window.requestAnimationFrame = function (cb) {
         function callback() {
-          self._frameStart();
-          cb(performance.now());
+          const time = performance.now();
+          self._frameStart(time);
+          cb(time);
           self._frameEnd();
         }
         __requestAnimationFrame(callback);
@@ -125,11 +144,11 @@ import { TextureUtils } from "./utils/texture_utils.js";
         if (typeof message !== 'object' || message === null) {
           return;
         }
-        if (message.action === "inspect_request_texture") {
+        if (message.action === PanelActions.RequestTexture) {
           const textureId = message.id;
           self._requestTexture(textureId);
         }
-        if (message.action === "inspect_compile_shader") {
+        if (message.action === PanelActions.CompileShader) {
           const shaderId = message.id;
           const code = message.code;
           self._compileShader(shaderId, code);
@@ -168,19 +187,19 @@ import { TextureUtils } from "./utils/texture_utils.js";
       }
 
       if (method === "createShaderModule"|| method === "createRenderPipeline" || method === "createComputePipeline" || method === "createBindGroup") {
-        if (this.__errorChecking) {
-          this.__skipRecord = true;
+        if (this._errorChecking) {
+          this._skipRecord = true;
           object.pushErrorScope("validation");
-          this.__skipRecord = false;
+          this._skipRecord = false;
         }
       }
 
       this._capturedRenderView = null;
       if (method === "beginRenderPass") {
-        if (this.__errorChecking) {
-          this.__skipRecord = true;
+        if (this._errorChecking) {
+          this._skipRecord = true;
           object.__device.pushErrorScope("validation");
-          this.__skipRecord = false;
+          this._skipRecord = false;
         }
 
         const descriptor = args[0];
@@ -200,18 +219,18 @@ import { TextureUtils } from "./utils/texture_utils.js";
                       if (context.__captureTexture?.width != texture.width ||
                           context.__captureTexture?.height != texture.height ||
                           context.__captureTexture?.format != texture.format) {
-                        this.__skipRecord = true;
+                        this._skipRecord = true;
                         context.__captureTexture.destroy();
                         context.__captureTexture = null;
                         context.__canvas.__captureTexture = null;
-                        this.__skipRecord = false;
+                        this._skipRecord = false;
                       }
                     }
 
                     if (!context.__captureTexture) {
                       const device = context.__device;
                       if (device) {
-                        this.__skipRecord = true;
+                        this._skipRecord = true;
                         const captureTexture = device.createTexture({
                           size: [texture.width, texture.height, 1],
                           format: texture.format,
@@ -224,7 +243,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
                         captureTexture.__canvasTexture = texture;
                         texture.__captureTexture = captureTexture;
                         texture.__canvas.__captureTexture = captureTexture;
-                        this.__skipRecord = false;
+                        this._skipRecord = false;
                       }
                     }
 
@@ -261,7 +280,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
       }       
 
       if (method === "submit") {
-        this.__skipRecord = true;
+        this._skipRecord = true;
         object.onSubmittedWorkDone().then(() => {
           if (this._captureTempBuffers.length) {
             self._sendCapturedBuffers();
@@ -274,7 +293,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
           }
           self._toDestroy.length = 0;
         });
-        this.__skipRecord = false;
+        this._skipRecord = false;
       }
     }
 
@@ -290,30 +309,30 @@ import { TextureUtils } from "./utils/texture_utils.js";
       }
 
       if (method === "createShaderModule" || method === "createRenderPipeline" || method === "createComputePipeline" || method === "createBindGroup") {
-        if (this.__errorChecking) {
-          this.__skipRecord = true;
+        if (this._errorChecking) {
+          this._skipRecord = true;
           object.popErrorScope().then((error) => {
             if (error) {
               const id = result?.__id ?? 0;
-              window.postMessage({ "action": "inspect_validation_error", id, "message": error.message, stacktrace }, "*");
+              window.postMessage({ "action": Actions.ValidationError, id, "message": error.message, stacktrace }, "*");
             }
           });
-          this.__skipRecord = false;
+          this._skipRecord = false;
         }
       }
 
       if (method === "end") {
-        if (this.__errorChecking) {
-          this.__skipRecord = true;
+        if (this._errorChecking) {
+          this._skipRecord = true;
           const device = object.__device;
           if (device) {
             device.popErrorScope().then((error) => {
               if (error) {
-                window.postMessage({ "action": "inspect_validation_error", "message": error.message, stacktrace }, "*");
+                window.postMessage({ "action": Actions.ValidationError, "message": error.message, stacktrace }, "*");
               }
             });
           }
-          this.__skipRecord = false;
+          this._skipRecord = false;
         }
 
         // If the captured canvas texture was rendered to, blit it to the real canvas texture
@@ -322,11 +341,11 @@ import { TextureUtils } from "./utils/texture_utils.js";
           if (texture) {
             const commandEncoder = object.__commandEncoder;
             if (commandEncoder) {
-              this.__skipRecord = true;
+              this._skipRecord = true;
               commandEncoder.copyTextureToTexture({ texture },
                 { texture: texture.__canvasTexture },
                 [texture.width, texture.height, 1]);
-              this.__skipRecord = false;
+              this._skipRecord = false;
             }
           }
         }
@@ -334,7 +353,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
 
       // If __skipRecord is set, don't wrap the result object or record the command.
       // It is set when we're creating utilty objects that aren't from the page.
-      if (this.__skipRecord) {
+      if (this._skipRecord) {
         return result;
       }
 
@@ -401,6 +420,8 @@ import { TextureUtils } from "./utils/texture_utils.js";
         if (device) {
           this._wrapDevice(adapter, device, id, args, stacktrace);
         }
+      } else if (result?.__id) {
+        window.postMessage({ action: Actions.ResolveAsyncObject, id: result.__id });
       }
     }
 
@@ -455,7 +476,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
           object instanceof GPUComputePassEncoder ||
           object instanceof GPURenderPassEncoder ||
           object instanceof GPUCommandBuffer) {
-        return 0;//this._nonTrackingID++;
+        return 0;
       }
       return this._objectID++;
     }
@@ -465,7 +486,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
       const type = object.constructor.name;
       const id = object.__id;
       const message = `WebGPU ${type} ${id} ${label} was garbage collected without being explicitly destroyed. This is a memory leak.`;
-      window.postMessage({"action": "inspect_memory_leak_warning", id, "message": message}, "*");
+      window.postMessage({"action": Actions.MemoryLeakWarning, id, "message": message}, "*");
     }
 
     _isPrimitiveType(obj) {
@@ -544,19 +565,19 @@ import { TextureUtils } from "./utils/texture_utils.js";
       const descriptor = this._duplicateObject(shader.__descriptor);
       descriptor.code = code;
 
-      this.__skipRecord = true;
-      this.__errorChecking = false;
+      this._skipRecord = true;
+      this._errorChecking = false;
       device.pushErrorScope('validation');
       descriptor.__replacement = shaderId;
       const newShaderModule = device.createShaderModule(descriptor);
       device.popErrorScope().then((error) => {
         if (error) {
           const id = shaderId ?? 0;
-          window.postMessage({ "action": "inspect_validation_error", id, "message": error.message }, "*");
+          window.postMessage({ "action": Actions.ValidationError, id, "message": error.message }, "*");
         }
       });
-      this.__errorChecking = true;
-      this.__skipRecord = false;
+      this._errorChecking = true;
+      this._skipRecord = false;
 
       objectMap.replacement = newShaderModule;
 
@@ -589,8 +610,8 @@ import { TextureUtils } from "./utils/texture_utils.js";
           }
 
           if (newDescriptor !== null) {
-            this.__skipRecord = true;
-            this.__errorChecking = false;
+            this._skipRecord = true;
+            this._errorChecking = false;
             newDescriptor.__replacement = objectRef.id;
             device.pushErrorScope('validation');
             const newPipeline = isRenderPipeline ?
@@ -599,11 +620,11 @@ import { TextureUtils } from "./utils/texture_utils.js";
             device.popErrorScope().then((error) => {
               if (error) {
                 const id = objectRef.id ?? 0;
-                window.postMessage({ "action": "inspect_validation_error", id, "message": error.message }, "*");
+                window.postMessage({ "action": Actions.ValidationError, id, "message": error.message }, "*");
               }
             });
-            this.__errorChecking = true;
-            this.__skipRecord = false;
+            this._errorChecking = true;
+            this._skipRecord = false;
 
             objectRef.replacement = newPipeline;
           }
@@ -630,8 +651,14 @@ import { TextureUtils } from "./utils/texture_utils.js";
       this._captureTextureRequest.set(textureId, object);
     }
 
-    _frameStart() {
-      window.postMessage({"action": "inspect_begin_frame"}, "*");
+    _frameStart(time) {
+      if (this._lastFrameTime == 0) {
+        this._lastFrameTime = time;
+      } else {
+        const deltaTime = time - this._lastFrameTime;
+        window.postMessage({"action": Actions.DeltaTime, deltaTime}, "*");
+        this._lastFrameTime = time;
+      }
 
       const captureMode = sessionStorage.getItem(webgpuInspectorCaptureFrameKey);
       if (captureMode) {
@@ -647,17 +674,15 @@ import { TextureUtils } from "./utils/texture_utils.js";
     }
 
     _frameEnd() {
-      window.postMessage({ "action": "inspect_end_frame", "commandCount": this._frameCommandCount }, "*");
-
       if (this._frameCommands.length) {
         const maxFrameCount = 2000;
         const batches = Math.ceil(this._frameCommands.length / maxFrameCount);
-        window.postMessage({"action": "inspect_capture_frame_results", "frame": this._frameIndex, "count": this._frameCommands.length, "batches": batches}, "*");
+        window.postMessage({"action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": this._frameCommands.length, "batches": batches}, "*");
 
         for (let i = 0; i < this._frameCommands.length; i += maxFrameCount) {
           const length = Math.min(maxFrameCount, this._frameCommands.length - i);
           const commands = this._frameCommands.slice(i, i + length);
-          window.postMessage({"action": "inspect_capture_frame_commands",
+          window.postMessage({"action": Actions.CaptureFrameCommands,
               "frame": this._frameIndex,
               "commands": commands,
               "index": i,
@@ -706,18 +731,6 @@ import { TextureUtils } from "./utils/texture_utils.js";
       }
     }
 
-    _objectHasMethods(object) {
-      for (const m in object) {
-        if (
-          typeof object[m] === "function" &&
-          WebGPUInspector._skipMethods.indexOf(m) == -1
-        ) {
-          return true;
-        }
-      }
-      return false;
-    }
-
     _wrapObject(object, id) {
       // The object has already been wrapped
       if (object.__id) {
@@ -743,7 +756,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
             if (label !== this._label) {
               this._label = label;
               const id = this.__id;
-              window.postMessage({ "action": "inspect_object_set_label", id, label }, "*");
+              window.postMessage({ "action": Actions.ObjectSetLabel, id, label }, "*");
             }
           }
         });
@@ -793,7 +806,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
     }
 
     _sendAddObjectMessage(id, parent, type, descriptor, stacktrace, pending) {
-      window.postMessage({ "action": "inspect_add_object", id, parent, type, descriptor, stacktrace, pending }, "*");
+      window.postMessage({ "action": Actions.AddObject, id, parent, type, descriptor, stacktrace, pending }, "*");
     }
 
     _recordCommand(object, method, result, args, stacktrace) {
@@ -809,7 +822,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
         }
         if (id >= 0) {
           this._captureTextureRequest.delete(id);
-          window.postMessage({"action": "inspect_delete_object", id}, "*");
+          window.postMessage({"action": Actions.DeleteObject, id}, "*");
         }
       } else if (method === "createShaderModule") {
         const id = result.__id;
@@ -940,7 +953,6 @@ import { TextureUtils } from "./utils/texture_utils.js";
               let offset = entry.resource.offset ?? 0;
               const size = entry.resource.size ?? buffer.size;
 
-              const maxBufferCaptureSize = 1024*1024;
               if (size < maxBufferCaptureSize) {
                 if (usesDynamicOffset) {
                   offset = dynamicOffsets[dynamicOffsetIndex++];
@@ -1022,38 +1034,46 @@ import { TextureUtils } from "./utils/texture_utils.js";
       for (const textureBuffer of this._captureTexturedBuffers) {
         textures.push(textureBuffer.id);
       }
+
+      let totalChunks = 0;
+      for (const textureBuffer of this._captureTexturedBuffers) {
+        const size = textureBuffer.tempBuffer.size;
+        const numChunks = Math.ceil(size / maxDataChunkSize);
+        totalChunks += numChunks;
+      }
+
       window.postMessage({
-        "action": "inspect_capture_texture_frames", 
+        "action": Actions.CaptureTextureFrames, 
+        "chunkCount": totalChunks,
         "count": this._captureTexturedBuffers.length,
         textures }, "*");
 
       for (const textureBuffer of this._captureTexturedBuffers) {
-        const { id, tempBuffer, width, height, depthOrArrayLayers, format, passId } = textureBuffer;
+        const { id, tempBuffer, passId } = textureBuffer;
 
         const self = this;
         tempBuffer.mapAsync(GPUMapMode.READ).then(() => {
           const range = tempBuffer.getMappedRange();
           const data = new Uint8Array(range);
-          self._sendTextureData(id, width, height, depthOrArrayLayers, format, passId, data);
+          self._sendTextureData(id, passId, data);
           tempBuffer.destroy();
         });
       }
       this._captureTexturedBuffers.length = 0;
     }
 
-    _sendTextureData(id, width, height, depthOrArrayLayers, format, passId, data) {
-      const maxChunkSize = 1024 * 1024;
+    _sendTextureData(id, passId, data) {
       const size = data.length;
-      const numChunks = Math.ceil(size / maxChunkSize);
+      const numChunks = Math.ceil(size / maxDataChunkSize);
       
       for (let i = 0; i < numChunks; ++i) {
-        const offset = i * maxChunkSize;
-        const chunkSize = Math.min(maxChunkSize, size - offset);
+        const offset = i * maxDataChunkSize;
+        const chunkSize = Math.min(maxDataChunkSize, size - offset);
         const chunk = data.slice(offset, offset + chunkSize);
 
         encodeDataUrl(chunk).then((chunkData) => {
           window.postMessage({
-            "action": "inspect_capture_texture_data",
+            "action": Actions.CaptureTextureData,
             id,
             passId,
             offset,
@@ -1077,18 +1097,17 @@ import { TextureUtils } from "./utils/texture_utils.js";
     }
 
     _sendBufferData(commandId, entryIndex, data) {
-      const maxChunkSize = 1024 * 1024;
       const size = data.length;
-      const numChunks = Math.ceil(size / maxChunkSize);
+      const numChunks = Math.ceil(size / maxDataChunkSize);
       
       for (let i = 0; i < numChunks; ++i) {
-        const offset = i * maxChunkSize;
-        const chunkSize = Math.min(maxChunkSize, size - offset);
+        const offset = i * maxDataChunkSize;
+        const chunkSize = Math.min(maxDataChunkSize, size - offset);
         const chunk = data.slice(offset, offset + chunkSize);
 
         encodeDataUrl(chunk).then((chunkData) => {
           window.postMessage({
-            "action": "inspect_capture_buffer_data",
+            "action": Actions.CaptureBufferData,
             commandId,
             entryIndex,
             offset,
@@ -1104,9 +1123,16 @@ import { TextureUtils } from "./utils/texture_utils.js";
     _sendCapturedBuffers() {
       const buffers = this._captureTempBuffers;
       if (buffers.length > 0) {
+        let totalChunks = 0;
+        for (const bufferInfo of buffers) {
+          const size = bufferInfo.tempBuffer.size;
+          const numChunks = Math.ceil(size / maxDataChunkSize);
+          totalChunks += numChunks;
+        }
         window.postMessage({
-          "action": "inspect_capture_buffers", 
-          "count": buffers.length }, "*");
+          "action": Actions.CaptureBuffers,
+          "count": buffers.length,
+          "chunkCount": totalChunks }, "*");
       }
 
       for (const bufferInfo of buffers) {
@@ -1135,7 +1161,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
         const { commandId, entryIndex, buffer, offset, size } = bufferInfo;
 
         let tempBuffer = null;
-        this.__skipRecord = true;
+        this._skipRecord = true;
         try {
           tempBuffer = device.createBuffer({
             size,
@@ -1150,7 +1176,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
         } catch (e) {
           console.log(e);
         }
-        this.__skipRecord = false;
+        this._skipRecord = false;
       }
     }
 
@@ -1173,16 +1199,16 @@ import { TextureUtils } from "./utils/texture_utils.js";
       // depth24plus texture's can't be copied to a buffer,
       // https://github.com/gpuweb/gpuweb/issues/652.
       if (format === "depth24plus" || format === "depth24plus-stencil8") {
-        this.__skipRecord = true;
+        this._skipRecord = true;
         try {
           const textureUtils = this._getTextureUtils(texture.__device);
           texture = textureUtils.copyDepthTexture(texture, format === "depth24plus-stencil8" ? "depth32float" : "depth32float-stencil8");
         } catch (e) {
-          this.__skipRecord = false;
+          this._skipRecord = false;
           console.log(e);
           return;
         }
-        this.__skipRecord = false;
+        this._skipRecord = false;
         format = texture.format;
         formatInfo = format ? TextureFormatInfo[format] : undefined;
         texture.__id = id;
@@ -1203,7 +1229,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
 
       let tempBuffer = null;
       try {
-        this.__skipRecord = true;
+        this._skipRecord = true;
         tempBuffer = device.createBuffer({
           size: bufferSize,
           usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
@@ -1220,7 +1246,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
       } catch (e) {
         console.log(e);
       }
-      this.__skipRecord = false;
+      this._skipRecord = false;
 
       if (tempBuffer) {
         this._captureTexturedBuffers.push({ id, tempBuffer, width, height, depthOrArrayLayers, format, passId });

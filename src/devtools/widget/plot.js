@@ -99,11 +99,11 @@ export class Plot extends Div {
     ctx.fillRect(0, 0, this.width, this.height);
 
     for (const data of this.data.values()) {
-      this._drawDraw(data);
+      this._drawData(data);
     }
   }
 
-  _drawDraw(data) {
+  _drawData(data) {
     const ctx = this.context;
     ctx.strokeStyle = "#999";
     const h = this.height;

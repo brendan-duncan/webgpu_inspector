@@ -10,6 +10,7 @@ import {
   TextureView
 } from "./gpu_objects/index.js";
 import { decodeDataUrl } from "../utils/base64.js";
+import { Actions, PanelActions } from "../utils/actions.js";
 
 export class CapturePanel {
   constructor(window, parent) {
@@ -24,7 +25,7 @@ export class CapturePanel {
 
     new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => { 
       try {
-        self.port.postMessage({ action: "inspector_capture" });
+        self.port.postMessage({ action: PanelActions.Capture });
       } catch (e) {}
     } });
 
@@ -35,22 +36,27 @@ export class CapturePanel {
     this._capturePanel = new Div(parent, { style: "overflow: hidden; white-space: nowrap; height: calc(-100px + 100vh); display: flex;" });
 
     window.onTextureLoaded.addListener(this._textureLoaded, this);
+    window.onTextureDataChunkLoaded.addListener(this._textureDataChunkLoaded, this);
 
     this._loadingImages = 0;
+    this._loadingBuffers = 0;
+    this._loadedDataChunks = 0;
 
     this._captureCommands = [];
     this._catpureFrameIndex = 0;
     this._captureCount = 0;
     this._lastSelectedCommand = null;
+    this._capturedObjects = new Map();
 
     port.addListener((message) => {
       switch (message.action) {
-        case "inspect_capture_texture_frames": {
+        case Actions.CaptureTextureFrames: {
+          self._loadedDataChunks += message.chunkCount;
           self._loadingImages += message.count ?? 0;
           const textures = message.textures;
           if (textures) {
             for (const textureId of textures) {
-              const texture = self.database.getObject(textureId);
+              const texture = self._getObject(textureId);
               if (texture) {
                 texture.imageDataPending = true;
               }
@@ -59,7 +65,7 @@ export class CapturePanel {
           self._updateCaptureStatus();
           break;
         }
-        case "inspect_capture_frame_results": {
+        case Actions.CaptureFrameResults: {
           const frame = message.frame;
           const count = message.count;
           const batches = message.batches;
@@ -68,7 +74,7 @@ export class CapturePanel {
           self._captureCount = batches;
           break;
         }
-        case "inspect_capture_frame_commands": {
+        case Actions.CaptureFrameCommands: {
           const commands = message.commands;
           const index = message.index;
           const count = message.count;
@@ -82,12 +88,13 @@ export class CapturePanel {
           }
           break;
         }
-        case "inspect_capture_buffers": {
+        case Actions.CaptureBuffers: {
           self._loadingBuffers += message.count ?? 0;
+          self._loadedDataChunks += message.chunkCount;
           self._updateCaptureStatus();
           break;
         }
-        case "inspect_capture_buffer_data": {
+        case Actions.CaptureBufferData: {
           const id = message.commandId;
           const entryIndex = message.entryIndex;
           const offset = message.offset;
@@ -100,6 +107,10 @@ export class CapturePanel {
         }
       }
     });
+  }
+
+  _getObject(id) {
+    return this._capturedObjects.get(id) ?? this.database.getObject(id);
   }
 
   _captureBufferData(id, entryIndex, offset, size, index, count, chunk) {
@@ -146,7 +157,9 @@ export class CapturePanel {
       command.isBufferDataLoaded = [];
     }
 
+    const self = this;
     decodeDataUrl(chunk).then((chunkData) => {
+      self._loadedDataChunks--;
       try {
         command.bufferData[entryIndex].set(chunkData, offset);
         command.loadedDataChunks[entryIndex][index] = true;
@@ -165,7 +178,8 @@ export class CapturePanel {
       }
       command.isBufferDataLoaded[entryIndex] = loaded;
 
-      if (command.isBufferDataLoaded[entryIndex]) {       
+      if (command.isBufferDataLoaded[entryIndex]) {     
+        self._loadingBuffers--;
         command.loadedDataChunks[entryIndex].length = 0;
       }
     });
@@ -173,7 +187,7 @@ export class CapturePanel {
 
   _updateCaptureStatus() {
     let text = "";
-    if (this._loadingImages || this._loadingBuffers) {
+    if (this._loadingImages || this._loadingBuffers || this._loadedDataChunks) {
       text = "Loading ";
 
       if (this._loadingImages) {
@@ -181,6 +195,9 @@ export class CapturePanel {
       }
       if (this._loadingBuffers) {
         text += `Buffers: ${this._loadingBuffers} `;
+      }
+      if (this._loadedDataChunks) {
+        text += `Data Chunks: ${this._loadedDataChunks} `;
       }
     }
     this._captureStatus.text = text;
@@ -203,7 +220,7 @@ export class CapturePanel {
       return object;
     }
     if (object.__id !== undefined) {
-      const obj = this.database.getObject(object.__id);
+      const obj = this._getObject(object.__id);
       if (obj) {
         return `${obj.constructor.className} ID:${object.__id}`;
       }
@@ -233,16 +250,17 @@ export class CapturePanel {
     this._captureStats.style.display = "inline-block";
 
     contents.html = "";   
+    this._capturedObjects.clear();
 
     this._frameImages = new Span(contents, { class: "capture_frameImages" });
     const frameContents = new Span(contents, { class: "capture_frame" });
     const commandInfo = new Span(contents, { class: "capture_commandInfo" });
-    
+
     const self = this;
     this._captureStats.callback = () => {
       self._inspectStats(commandInfo);
     };
-    
+
     let renderPassIndex = 0;
 
     const debugGroupStack = [frameContents];
@@ -304,6 +322,23 @@ export class CapturePanel {
         new Span(cmd, { class: "capture_method_args", text: `reference:${args[0]}` });
       } else if (method === "setBindGroup") {
         new Span(cmd, { class: "capture_method_args", text: `index:${args[0]} bindGroup:${args[1].__id}` });
+        const bg = this._getObject(args[1].__id);
+        this._capturedObjects.set(args[1].__id, bg);
+        for (const entry of bg.descriptor.entries) {
+          if (entry.resource?.__id) {
+            const obj = this._getObject(entry.resource.__id);
+            this._capturedObjects.set(entry.resource.__id, obj);
+            if (obj instanceof TextureView) {
+              const tex = this._getObject(obj.texture?.id ?? obj.texture);
+              if (tex) {
+                this._capturedObjects.set(tex.id, tex);
+              }
+            }
+          } else if (entry.resource?.buffer?.__id) {
+            const obj = this._getObject(entry.resource.buffer.__id);
+            this._capturedObjects.set(entry.resource.buffer.__id, obj);
+          }
+        }
       } else if (method === "writeBuffer") {
         const data = args[2];
         if (data.constructor === String) {
@@ -314,10 +349,13 @@ export class CapturePanel {
         }
       } else if (method === "setPipeline") {
         new Span(cmd, { class: "capture_method_args", text: `renderPipeline:${args[0].__id}` });
+        this._capturedObjects.set(args[0].__id, this._getObject(args[0].__id));
       } else if (method === "setVertexBuffer") {
         new Span(cmd, { class: "capture_method_args", text: `slot:${args[0]} buffer:${args[1].__id} offset:${args[2] ?? 0}` });
+        this._capturedObjects.set(args[1].__id, this._getObject(args[1].__id));
       } else if (method === "setIndexBuffer") {
         new Span(cmd, { class: "capture_method_args", text: `buffer:${args[0].__id} indexFormat:${args[1]} offset:${args[2] ?? 0}` });
+        this._capturedObjects.set(args[0].__id, this._getObject(args[0].__id));
       } else if (method === "drawIndexed") {
         new Span(cmd, { class: "capture_method_args", text: `indexCount:${args[0]} instanceCount:${args[1] ?? 1} firstIndex:${args[2] ?? 0} baseVertex:${args[3] ?? 0} firstInstance:${args[4] ?? 0}` });
       } else if (method === "draw") {
@@ -369,7 +407,7 @@ export class CapturePanel {
   }
 
   _getTextureViewFromAttachment(attachment) {
-    return this.database.getObject(attachment?.view?.__id);
+    return this._getObject(attachment?.view?.__id);
   }
 
   _getTextureFromAttachment(attachment) {
@@ -382,23 +420,40 @@ export class CapturePanel {
 
   _createTextureWidget(parent, texture, width, style) {
     if (!texture.gpuTexture) {
+      return null;
+    }
+
+    // Only supportting 2d previews for now
+    if (texture.dimension !== "2d") {
       return;
     }
 
     const viewWidth = width || 256;
     const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
 
-    const canvas = new Widget("canvas", parent, { style });
-    canvas.element.width = viewWidth;
-    canvas.element.height = viewHeight;
+    const container = new Div(parent);
+    //new Div(container, { text: `Load Time: ${texture.dataLoadTime.toFixed(2)}ms` });
+    
+    const numLayers = texture.depthOrArrayLayers;
+    for (let layer = 0; layer < numLayers; ++layer) {
+      const canvas = new Widget("canvas", new Div(container), { style });
+      canvas.element.width = viewWidth;
+      canvas.element.height = viewHeight;
 
-    const context = canvas.element.getContext('webgpu');
-    const dstFormat = navigator.gpu.getPreferredCanvasFormat();
-    context.configure({ "device": this.window.device, "format": navigator.gpu.getPreferredCanvasFormat() });
-    const canvasTexture = context.getCurrentTexture();
-    this.textureUtils.blitTexture(texture.gpuTexture.createView(), texture.format, canvasTexture.createView(), dstFormat);
+      const layerView = texture.gpuTexture.createView({
+        dimension: "2d",
+        baseArrayLayer: layer,
+        layerArrayCount: 1
+      });
 
-    return canvas;
+      const context = canvas.element.getContext('webgpu');
+      const dstFormat = navigator.gpu.getPreferredCanvasFormat();
+      context.configure({ "device": this.window.device, "format": navigator.gpu.getPreferredCanvasFormat() });
+      const canvasTexture = context.getCurrentTexture();
+      this.textureUtils.blitTexture(layerView, texture.format, canvasTexture.createView(), dstFormat);
+    }
+
+    return container;
   }
 
   _showCaptureCommandInfo_beginRenderPass(args, commandInfo) {
@@ -517,7 +572,7 @@ export class CapturePanel {
       if (count == 0) {
         // Runtime length array
         count = (bufferData.length - offset) / (type.stride || 1);
-        console.log(`!!!! RUNTIME LENGTH ARRAY size:${bufferData.length} offset:${offset} remaining:${bufferData.length - offset} stride:${type.stride} runtimeCount:${(bufferData.length - offset) / (type.stride)}`);
+        //console.log(`!!!! RUNTIME LENGTH ARRAY size:${bufferData.length} offset:${offset} remaining:${bufferData.length - offset} stride:${type.stride} runtimeCount:${(bufferData.length - offset) / (type.stride)}`);
       }
       if (count) {
         let elementOffset = offset;
@@ -560,29 +615,29 @@ export class CapturePanel {
     new Div(parentWidget, { text: `Bind Group ${groupIndex} Binding ${entryIndex} size: ${bufferData.length}` });
 
     const id = state.pipeline?.args[0].__id;
-    const pipeline = this.database.getObject(id);
+    const pipeline = this._getObject(id);
     if (pipeline) {
       const desc = pipeline.descriptor;
       const vertexId = desc.vertex?.module?.__id;
       const fragmentId = desc.fragment?.module?.__id;
       const computeId = desc.compute?.module?.__id;
       if (computeId) {
-        const module = this.database.getObject(computeId);
+        const module = this._getObject(computeId);
         if (module) {
           this._showBufferDataInfo(parentWidget, module, groupIndex, entryIndex, bufferData);
         }
       } else if (vertexId !== undefined && vertexId === fragmentId) {
-        const module = this.database.getObject(vertexId);
+        const module = this._getObject(vertexId);
         if (module) {
           this._showBufferDataInfo(parentWidget, module, groupIndex, entryIndex, bufferData);
         }
       } else {
-        const vertexModule = this.database.getObject(vertexId);
+        const vertexModule = this._getObject(vertexId);
         if (vertexModule) {
           this._showBufferDataInfo(parentWidget, vertexModule, groupIndex, entryIndex, bufferData);
         }
 
-        const fragmentModule = this.database.getObject(fragmentId);
+        const fragmentModule = this._getObject(fragmentId);
         if (fragmentModule) {
           this._showBufferDataInfo(parentWidget, fragmentModule, groupIndex, entryIndex, bufferData);
         }
@@ -592,7 +647,7 @@ export class CapturePanel {
 
   _showCaptureCommandInfo_setBindGroup(args, commandInfo, groupIndex, skipInputs, state) {
     const id = args[1].__id;
-    const bindGroup = this.database.getObject(id);
+    const bindGroup = this._getObject(id);
     if (!bindGroup) {
       return;
     }
@@ -607,7 +662,7 @@ export class CapturePanel {
     const self = this;
     function getResourceType(resource) {
       if (resource.__id !== undefined) {
-        const obj = self.database.getObject(resource.__id);
+        const obj = self._getObject(resource.__id);
         if (obj) {
           return obj.constructor.className;
         }
@@ -633,7 +688,7 @@ export class CapturePanel {
 
     function getResourceUsage(resource) {
       if (resource.buffer) {
-        const buffer = self.database.getObject(resource.buffer.__id);
+        const buffer = self._getObject(resource.buffer.__id);
         if (buffer) {
           const usage = buffer.descriptor.usage & GPUBufferUsage.UNIFORM ? "Uniform" :
                 buffer.descriptor.usage & GPUBufferUsage.STORAGE ? "Storage" :
@@ -649,7 +704,7 @@ export class CapturePanel {
       if (bindGroup?.entries) {
         for (const entry of bindGroup.entries) {
           if (entry.resource?.__id) {
-            const resource = this.database.getObject(entry.resource.__id);
+            const resource = this._getObject(entry.resource.__id);
             if (resource instanceof TextureView) {
               const binding = entry.binding;
               inputs.push({textureView: resource, group, binding });
@@ -686,7 +741,7 @@ export class CapturePanel {
       const groupLabel = groupIndex !== undefined ? `Group ${groupIndex} ` : "";
       const resourceGrp = new Collapsable(commandInfo, { collapsed: true, label: `${groupLabel}Binding ${binding}: ${getResourceType(resource)} ID:${getResourceId(resource)} ${getResourceUsage(resource)}` });
       if (resource.__id !== undefined) {
-        const obj = this.database.getObject(resource.__id);
+        const obj = this._getObject(resource.__id);
         if (obj) {
           if (obj instanceof Sampler) {
             new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
@@ -717,7 +772,8 @@ export class CapturePanel {
       } else {
         if (resource.buffer) {
           const bufferId = resource.buffer.__id;
-          const buffer = this.database.getObject(bufferId);
+          const buffer = this._getObject(bufferId);
+          //console.log("!!!! INSPECT BUFFER", bufferId, buffer);
           if (buffer) {
             const bufferDesc = buffer.descriptor;
             const newDesc = this._processCommandArgs(bufferDesc);
@@ -746,7 +802,7 @@ export class CapturePanel {
 
   _showCaptureCommandInfo_setPipeline(args, commandInfo) {
     const id = args[0].__id;
-    const pipeline = this.database.getObject(id);
+    const pipeline = this._getObject(id);
     if (pipeline) {
       const pipelineGrp = new Collapsable(commandInfo, { collapsed: true, label: `Pipeline ID:${id}` });
       const desc = pipeline.descriptor;
@@ -758,7 +814,7 @@ export class CapturePanel {
       const fragmentId = desc.fragment?.module?.__id;
 
       if (vertexId !== undefined && vertexId === fragmentId) {
-        const module = this.database.getObject(vertexId);
+        const module = this._getObject(vertexId);
         if (module) {
           const vertexEntry = desc.vertex?.entryPoint;
           const fragmentEntry = desc.fragment?.entryPoint;
@@ -770,7 +826,7 @@ export class CapturePanel {
         }
       } else {
         if (vertexId !== undefined) {
-          const vertexModule = this.database.getObject(vertexId);
+          const vertexModule = this._getObject(vertexId);
           if (vertexModule) {
             const vertexEntry = desc.vertex?.entryPoint;
 
@@ -783,7 +839,7 @@ export class CapturePanel {
         }
         
         if (fragmentId !== undefined) {
-          const fragmentModule = this.database.getObject(fragmentId);
+          const fragmentModule = this._getObject(fragmentId);
           if (fragmentModule) {
             const fragmentEntry = desc.fragment?.entryPoint;
             const fragmentGrp = new Collapsable(commandInfo, { collapsed: true, label: `Fragment Module ID:${fragmentId} Entry: ${fragmentEntry}` });
@@ -797,7 +853,7 @@ export class CapturePanel {
 
       const computeId = desc.compute?.module?.__id;
       if (computeId !== undefined) {
-        const computeModule = this.database.getObject(computeId);
+        const computeModule = this._getObject(computeId);
         if (computeModule) {
           const computeEntry = desc.compute?.entryPoint;
           const computeGrp = new Collapsable(commandInfo, { collapsed: true, label: `Compute Module ID:${computeId} Entry: ${computeEntry}` });
@@ -812,7 +868,7 @@ export class CapturePanel {
 
   _showCaptureCommandInfo_writeBuffer(args, commandInfo) {
     const id = args[0].__id;
-    const buffer = this.database.getObject(id);
+    const buffer = this._getObject(id);
     if (buffer) {
       const bufferGrp = new Collapsable(commandInfo, { label: `Buffer ID:${id}` });
       const desc = buffer.descriptor;
@@ -826,7 +882,7 @@ export class CapturePanel {
 
   _showCaptureCommandInfo_setIndexBuffer(args, commandInfo, collapsed) {
     const id = args[0].__id;
-    const buffer = this.database.getObject(id);
+    const buffer = this._getObject(id);
     if (buffer) {
       const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Index Buffer ID:${id}` });
       const desc = buffer.descriptor;
@@ -840,7 +896,7 @@ export class CapturePanel {
 
   _showCaptureCommandInfo_setVertexBuffer(args, commandInfo, collapsed) {
     const id = args[1]?.__id;
-    const buffer = this.database.getObject(id);
+    const buffer = this._getObject(id);
     if (buffer) {
       const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Vertex Buffer ID:${id}` });
       const desc = buffer.descriptor;
@@ -1046,11 +1102,11 @@ export class CapturePanel {
     const inputs = [];
     for (const bindGroupCmd of state.bindGroups) {
       const group = bindGroupCmd.args[0];
-      const bindGroup = this.database.getObject(bindGroupCmd.args[1]?.__id);
+      const bindGroup = this._getObject(bindGroupCmd.args[1]?.__id);
       if (bindGroup?.entries) {
         for (const entry of bindGroup.entries) {
           if (entry.resource?.__id) {
-            const resource = this.database.getObject(entry.resource.__id);
+            const resource = this._getObject(entry.resource.__id);
             if (resource instanceof TextureView) {
               const binding = entry.binding;
               inputs.push({textureView: resource, group, binding });
@@ -1207,7 +1263,7 @@ export class CapturePanel {
     } else if (method === "draw" || method === "drawIndexed") {
       const state = this._getPipelineState(commandIndex, commands);
       if (state.pipeline) {
-        const topology = this.database.getObject(state.pipeline.args[0].__id)?.topology ?? "triangle-list";
+        const topology = this._getObject(state.pipeline.args[0].__id)?.topology ?? "triangle-list";
         const vertexCount = args[0] ?? 0;
         if (topology === "triangle-list") {
           const count = (vertexCount / 3).toLocaleString("en-US");
@@ -1279,18 +1335,18 @@ export class CapturePanel {
     }
   }
 
+  _textureDataChunkLoaded(id, passId, offset, size, index, count, chunk) {
+    this._loadedDataChunks--;
+    this._updateCaptureStatus();
+  }
+
   _textureLoaded(texture, passId) {
     if (this._lastSelectedCommand) {
       this._lastSelectedCommand.element.click();
     }
 
     this._loadingImages--;
-    if (this._loadingImages <= 0) {
-      this._captureStatus.text = "";
-      this._loadingImages = 0;
-    } else {
-      this._captureStatus.text = `Loading Images: ${this._loadingImages}`;
-    }
+    this._updateCaptureStatus();
 
     if (passId != -1) {
       const frameImages = this._frameImages;
@@ -1303,17 +1359,19 @@ export class CapturePanel {
 
         const canvas = this._createTextureWidget(passFrame, texture, 256);
 
-        canvas.element.onclick = () => {
-          const element = document.getElementById(`RenderPass_${passId}`);
-          if (element) {
-            element.scrollIntoView();
+        if (canvas) {
+          canvas.element.onclick = () => {
+            const element = document.getElementById(`RenderPass_${passId}`);
+            if (element) {
+              element.scrollIntoView();
 
-            const beginElement = document.getElementById(`RenderPass_${passId}_begin`);
-            if (beginElement) {
-              beginElement.click();
+              const beginElement = document.getElementById(`RenderPass_${passId}_begin`);
+              if (beginElement) {
+                beginElement.click();
+              }
             }
-          }
-        };
+          };
+        }
       }
     }
   }

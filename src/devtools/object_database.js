@@ -1,7 +1,6 @@
+import { Actions } from "../utils/actions.js";
 import { Signal } from "../utils/signal.js";
 import * as GPU from "./gpu_objects/index.js";
-
-
 
 export class ObjectDatabase {
   constructor(port) {
@@ -29,7 +28,7 @@ export class ObjectDatabase {
     this.onDeleteObject = new Signal();
     this.onResolvePendingObject = new Signal();
     this.onAddObject = new Signal();
-    this.onBeginFrame = new Signal();
+    this.onDeltaFrameTime = new Signal();
     this.onEndFrame = new Signal();
     this.onAdapterInfo = new Signal();
     this.onObjectLabelChanged = new Signal();
@@ -38,20 +37,17 @@ export class ObjectDatabase {
     this.totalTextureMemory = 0;
     this.totalBufferMemory = 0;
 
-    this.startFrameTime = -1;
-    this.endFrameTime = -1;
+    this.deltaFrameTime = -1;
 
     const self = this;
    
     port.addListener((message) => {
       switch (message.action) {
-        case "inspect_begin_frame":
-          self._beginFrame();
+        case Actions.DeltaTime:
+          this.deltaFrameTime = message.deltaTime;
+          this.onDeltaFrameTime.emit();
           break;
-        case "inspect_end_frame":
-          self._endFrame(message.commandCount);
-          break;
-        case "inspect_validation_error": {
+        case Actions.ValidationError: {
           const errorMessage = message.message;
           const stacktrace = message.stacktrace;
           const objectId = message.id ?? 0;
@@ -63,23 +59,23 @@ export class ObjectDatabase {
           self.onValidationError.emit(errorObj);
           break;
         }
-        case "inspect_delete_object":
+        case Actions.DeleteObject:
           self._deleteObject(message.id);
           break;
-        case "inspect_delete_objects": {
+        case Actions.DeleteObjects: {
           const objects = message.idList;
           for (const id of objects) {
             self._deleteObject(id);
           }
           break;
         }
-        case "inspect_resolve_async_object":
+        case Actions.ResolveAsyncObject:
           self._resolvePendingObject(message.id);
           break;
-        case "inspect_object_set_label":
+        case Actions.ObjectSetLabel:
           self._setObjectLabel(message.id, message.label);
           break;
-        case "inspect_add_object": {
+        case Actions.AddObject: {
           const pending = !!message.pending;
           const id = message.id;
           const parent = message.parent;
@@ -192,7 +188,7 @@ export class ObjectDatabase {
       return;
     }
     texture.imageDataPending = true;
-    this.port.postMessage({ action: "inspect_request_texture", id: texture.id });
+    this.port.postMessage({ action: Actions.RequestTexture, id: texture.id });
   }
 
   removeErrorsForObject(id) {
@@ -291,26 +287,6 @@ export class ObjectDatabase {
       });
     }
     return dependencies;
-  }
-
-  _beginFrame() {
-    const t = performance.now();
-    if (this.startFrameTime != -1) {
-      this.frameTime = t - this.startFrameTime;
-    }
-    this.startFrameTime = performance.now();
-    this.onBeginFrame.emit();
-  }
-
-  _endFrame(commandCount) {
-    if (commandCount === 0) {
-      return;
-    }
-    this.endFrameTime = performance.now();
-    //this.frameTime = this.endFrameTime - this.startFrameTime;
-    if (this.frameTime != 0) {
-      this.onEndFrame.emit();
-    }
   }
 
   getObject(id) {

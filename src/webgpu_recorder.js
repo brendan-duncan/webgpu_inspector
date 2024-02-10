@@ -269,7 +269,7 @@ class WebGPURecorder {
     if (this.config.messageRecording) {
       const maxMessageSize = 1024 * 1024; // Break message up into chunks
       if (data.length <= maxMessageSize) {
-        window.postMessage({ "action": "webgpu_recording", data, "index": 0, "count": 1 });
+        window.postMessage({ "action": "webgpu_record_recording", data, "index": 0, "count": 1 });
       } else {
         let startIndex = 0;
         const dataLength = data.length;
@@ -279,7 +279,7 @@ class WebGPURecorder {
           const remainder = dataLength - startIndex;
           const size = remainder > maxMessageSize ? maxMessageSize : remainder;
           const dataChunk = data.substr(startIndex, size);
-          window.postMessage({ "action": "webgpu_recording", "data": dataChunk, "index": messageIndex, "count": messageCount });
+          window.postMessage({ "action": "webgpu_record_recording", "data": dataChunk, "index": messageIndex, "count": messageCount });
           messageIndex++;
           startIndex += size;
         }
