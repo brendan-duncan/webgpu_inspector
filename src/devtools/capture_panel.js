@@ -895,10 +895,11 @@ export class CapturePanel {
   }
 
   _showCaptureCommandInfo_setVertexBuffer(args, commandInfo, collapsed) {
+    const index = args[0];
     const id = args[1]?.__id;
     const buffer = this._getObject(id);
     if (buffer) {
-      const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Vertex Buffer ID:${id}` });
+      const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Vertex Buffer ${index} ID:${id}` });
       const desc = buffer.descriptor;
       const newDesc = this._processCommandArgs(desc);
       if (newDesc.usage) {
@@ -910,7 +911,7 @@ export class CapturePanel {
 
   _getPipelineState(commandIndex, commands) {
     let pipeline = null;
-    let vertexBuffer = null;
+    let vertexBuffers = [];
     let indexBuffer = null;
     let bindGroups = [];
     let renderPass = null;
@@ -928,8 +929,11 @@ export class CapturePanel {
       if (cmd.method === "setIndexBuffer" && !indexBuffer) {
         indexBuffer = cmd;
       }
-      if (cmd.method === "setVertexBuffer" && !vertexBuffer) {
-        vertexBuffer = cmd;
+      if (cmd.method === "setVertexBuffer") {
+        const index = cmd.args[0];
+        if (!vertexBuffers[index]) {
+          vertexBuffers[index] = cmd;
+        }
       }
       if (cmd.method === "setPipeline" && !pipeline) {
         pipeline = cmd;
@@ -942,7 +946,7 @@ export class CapturePanel {
       }
     }
 
-    return { renderPass, computePass, pipeline, vertexBuffer, indexBuffer, bindGroups };
+    return { renderPass, computePass, pipeline, vertexBuffers, indexBuffer, bindGroups };
   }
 
   _getTypeName(t) {
@@ -1148,8 +1152,8 @@ export class CapturePanel {
     if (state.pipeline) {
       this._showCaptureCommandInfo_setPipeline(state.pipeline.args, commandInfo, true);
     }
-    if (state.vertexBuffer) {
-      this._showCaptureCommandInfo_setVertexBuffer(state.vertexBuffer.args, commandInfo, true);
+    for (const vertexBuffer of state.vertexBuffers) {
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer.args, commandInfo, true);
     }
     for (const index in state.bindGroups) {
       this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
@@ -1168,8 +1172,8 @@ export class CapturePanel {
     if (state.indexBuffer) {
       this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer.args, commandInfo, true);
     }
-    if (state.vertexBuffer) {
-      this._showCaptureCommandInfo_setVertexBuffer(state.vertexBuffer.args, commandInfo, true);
+    for (const vertexBuffer of state.vertexBuffers) {
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer.args, commandInfo, true);
     }
     for (const index in state.bindGroups) {
       this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
@@ -1185,8 +1189,8 @@ export class CapturePanel {
     if (state.pipeline) {
       this._showCaptureCommandInfo_setPipeline(state.pipeline.args, commandInfo, true);
     }
-    if (state.vertexBuffer) {
-      this._showCaptureCommandInfo_setVertexBuffer(state.vertexBuffer.args, commandInfo, true);
+    for (const vertexBuffer of state.vertexBuffers) {
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer.args, commandInfo, true);
     }
     for (const index in state.bindGroups) {
       this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
@@ -1205,8 +1209,8 @@ export class CapturePanel {
     if (state.indexBuffer) {
       this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer.args, commandInfo, true);
     }
-    if (state.vertexBuffer) {
-      this._showCaptureCommandInfo_setVertexBuffer(state.vertexBuffer.args, commandInfo, true);
+    for (const vertexBuffer of state.vertexBuffers) {
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer.args, commandInfo, true);
     }
     for (const index in state.bindGroups) {
       this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
