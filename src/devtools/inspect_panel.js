@@ -551,11 +551,52 @@ export class InspectPanel {
     height ??= texture.height;
 
     const container = new Div(parent);
-    //new Div(container, { text: `Load Time: ${texture.dataLoadTime.toFixed(2)}ms` });
-    
+
+    if (!this._toolTip) {
+      this._tooltip = document.createElement('pre');
+      document.body.appendChild(this._tooltip);
+      this._tooltip.classList.add('inspector-tooltip');
+      this._tooltip.style.display = 'none';
+    }
+
+    function getPixelString(pixel) {
+      if (!pixel) {
+        return "<unknown pixel value>";
+      }
+      let str = "";
+      if (pixel.r !== undefined) {
+        str += `R: ${pixel.r}\n`;
+      }
+      if (pixel.g !== undefined) {
+        str += `G: ${pixel.g}\n`;
+      }
+      if (pixel.b !== undefined) {
+        str += `B: ${pixel.b}\n`;
+      }
+      if (pixel.a !== undefined) {
+        str += `A: ${pixel.a}\n`;
+      }
+      return str;
+    }
+
     const numLayers = texture.depthOrArrayLayers;
     for (let layer = 0; layer < numLayers; ++layer) {
       const canvas = new Widget("canvas", new Div(container));
+      canvas.element.addEventListener("mouseenter", (event) => {
+        this._tooltip.style.display = 'block';
+      });
+      canvas.element.addEventListener("mouseleave", (event) => {
+        this._tooltip.style.display = 'none';
+      });
+      canvas.element.addEventListener("mousemove", (event) => {
+        const x = event.offsetX;
+        const y = event.offsetY;
+        const pixel = texture.getPixel(x, y, layer);
+        this._tooltip.style.left = `${event.pageX + 10}px`;
+        this._tooltip.style.top = `${event.pageY + 10}px`;
+        const pixelStr = getPixelString(pixel);
+        this._tooltip.innerHTML = `X:${x} Y:${y}\n${pixelStr}`;
+      });
 
       canvas.element.width = width;
       canvas.element.height = height;

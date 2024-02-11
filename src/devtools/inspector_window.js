@@ -169,9 +169,7 @@ export class InspectorWindow extends Window {
     texture.descriptor.usage = usage;
     texture.descriptor.format = format;
     
-    const width = texture.width;
-    const texelByteSize = formatInfo.bytesPerBlock;
-    const bytesPerRow = (width * texelByteSize + 255) & ~0xff;
+    const bytesPerRow = texture.bytesPerRow;
     const rowsPerImage = texture.height;
 
     this.window.device.queue.writeTexture(
