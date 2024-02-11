@@ -147,7 +147,7 @@ export class InspectPanel {
     const pane1 = new Span(this.inspectorGUI);
 
     const objectsTab = new TabWidget(pane1);
-    const objectsPanel = new Div(null, { style: "font-size: 11pt; overflow: auto; height: calc(-115px + 100vh);" });
+    const objectsPanel = new Div(null, { style: "font-size: 11pt; overflow: auto; height: calc(-115px + 100vh); max-width: 340px;" });
     objectsTab.addTab("Objects", objectsPanel);
 
     const pane3 = new Span(this.inspectorGUI, { style: "padding-left: 20px; flex-grow: 1; overflow: hidden;" });
