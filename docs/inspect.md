@@ -62,6 +62,8 @@ The stacktrace for each object is recorded, identifying where in the code the ob
 
 When you inspect a texture, a Load button pulls the texture image from the page for visualizing.
 
+Mousing over the texture image will show the pixel color vlaues, if the Inspector can decode the texture format.
+
 ![Inspect Texture](images/inspect_texture.png)
 
 ## Shaders
