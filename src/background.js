@@ -40,11 +40,12 @@ chrome.runtime.onConnect.addListener((port) => {
     };
 
     // transfer message between panel and contentScripts of the same tab
-    if (port.name === "webgpu-inspector-panel" && portMap.has("webgpu-inspector-content")) {
-      postMessageToPorts(portMap.get("webgpu-inspector-content"), message);
+    if (port.name === "webgpu-inspector-panel" && portMap.has("webgpu-inspector-page")) {
+      console.log("!!!! BACKGROUND", message.action, message);
+      postMessageToPorts(portMap.get("webgpu-inspector-page"), message);
     }
 
-    if (port.name === "webgpu-inspector-content" && portMap.has("webgpu-inspector-panel")) {
+    if (port.name === "webgpu-inspector-page" && portMap.has("webgpu-inspector-panel")) {
       postMessageToPorts(portMap.get("webgpu-inspector-panel"), message);
     }
   });

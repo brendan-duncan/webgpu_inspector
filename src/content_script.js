@@ -5,7 +5,7 @@ const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
 const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 
-const port = new MessagePort("webgpu-inspector-content", 0, (message) => {
+const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
   let action = message.action;
   if (!action) {
     return;

@@ -1,4 +1,4 @@
-import { Actions } from "../utils/actions.js";
+import { Actions, PanelActions } from "../utils/actions.js";
 import { Signal } from "../utils/signal.js";
 import * as GPU from "./gpu_objects/index.js";
 
@@ -188,7 +188,7 @@ export class ObjectDatabase {
       return;
     }
     texture.imageDataPending = true;
-    this.port.postMessage({ action: Actions.RequestTexture, id: texture.id });
+    this.port.postMessage({ action: PanelActions.RequestTexture, id: texture.id });
   }
 
   removeErrorsForObject(id) {

@@ -22,12 +22,13 @@ export class Widget {
     }
 
     this._parent = null;
-    this.hasFocus = false;
+    this.children = [];
+
+    /*this.hasFocus = false;
     this.mouseX = 0;
     this.mouseY = 0;
     this.mousePageX = 0;
     this.mousePageY = 0;
-    this.children = [];
 
     this._mouseDownEnabled = false;
     this._mouseMoveEnabled = false;
@@ -46,7 +47,7 @@ export class Widget {
     // The button that is down during the onMouseDown event.
     // This should be used during mouseMoveEvent, as MouseEvent.button isn't
     // going to work on anything but Chrome.
-    this.mouseButton = -1;
+    this.mouseButton = -1;*/
 
     // Latest state of the tracked pointers.
     //this.currentPointers = [];
