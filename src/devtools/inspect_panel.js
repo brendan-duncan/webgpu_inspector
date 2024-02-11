@@ -559,7 +559,7 @@ export class InspectPanel {
 
       canvas.element.width = width;
       canvas.element.height = height;
-      const context = canvas.element.getContext('webgpu');
+      const context = canvas.element.getContext("webgpu");
       const format = navigator.gpu.getPreferredCanvasFormat();
       const device = this.window.device;
       context.configure({ device, format });

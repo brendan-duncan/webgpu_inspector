@@ -41,7 +41,6 @@ chrome.runtime.onConnect.addListener((port) => {
 
     // transfer message between panel and contentScripts of the same tab
     if (port.name === "webgpu-inspector-panel" && portMap.has("webgpu-inspector-page")) {
-      console.log("!!!! BACKGROUND", message.action, message);
       postMessageToPorts(portMap.get("webgpu-inspector-page"), message);
     }
 
