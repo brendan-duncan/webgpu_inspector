@@ -64,6 +64,8 @@ When you inspect a texture, a Load button pulls the texture image from the page 
 
 Mousing over the texture image will show the pixel color vlaues, if the Inspector can decode the texture format.
 
+An Exposure control lets you adjust the brightness of the texture's display.
+
 ![Inspect Texture](images/inspect_texture.png)
 
 ## Shaders
