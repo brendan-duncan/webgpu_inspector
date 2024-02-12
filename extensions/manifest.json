@@ -7,8 +7,8 @@
   "author": "Brendan Duncan",
   "minimum_chrome_version": "116",
   "icons": {
-    "19": "images/webgpu_inspector_on-19.png",
-    "38": "images/webgpu_inspector_on-38.png"
+    "19": "res/webgpu_inspector_on-19.png",
+    "38": "res/webgpu_inspector_on-38.png"
   },
   "background": {
     "service_worker": "background.js"
