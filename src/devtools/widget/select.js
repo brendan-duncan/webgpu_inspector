@@ -1,7 +1,7 @@
 import { Widget } from './widget.js';
 import { Label } from './label.js';
-import { Signal } from './signal.js';
 import { TextInput } from './text_input.js';
+import { Signal } from '../../utils/signal.js';
 
 export class Select extends Widget {
   constructor(parent, options) {

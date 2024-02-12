@@ -6,6 +6,7 @@ import { TabWidget } from "./widget/tab_widget.js";
 import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import { Widget } from "./widget/widget.js";
 import { NumberInput } from "./widget/number_input.js";
+import { Select } from "./widget/select.js";
 import { Signal } from "../utils/signal.js";
 import { 
   Adapter,
@@ -91,9 +92,21 @@ export class InspectPanel {
     this.frameRatePlot = new Plot(this.plots, { precision: 2, suffix: "ms", style: "flex-grow: 1; margin-right: 10px; max-width: 500px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);" });
     this.frameRateData = this.frameRatePlot.addData("Frame Time");
     
-    new Span(this.plots, { text: "GPU Objects", style: "color: #ccc; padding-top: 5px; margin-right: 10px; font-size: 10pt;"});
+    //new Span(this.plots, { text: "GPU Objects", style: "color: #ccc; padding-top: 5px; margin-right: 10px; font-size: 10pt;"});
+    
+    this._objectCountType = null;
+    this._objectCountObject = null;
+
+    new Select(this.plots, {
+      options: ["GPU Objects", "Buffer", "BindGroup", "TextureView", "Texture", "Sampler", "PipelineLayout", "BindGroupLayout", "ShaderModule", "ComputePipeline", "RenderPipeline"],
+      index: 0,
+      style: "color: #ccc; padding-top: 5px; margin-right: 10px; font-size: 10pt;",
+      onChange: (value) => {
+        self._changeObjectCountPlot(value);        
+      } });
     this.objectCountPlot = new Plot(this.plots, { style: "flex-grow: 1; max-width: 500px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);" });
     this.objectCountData = this.objectCountPlot.addData("Object Count");
+    this._changeObjectCountPlot(0);
 
     this.inspectorGUI = new Div(parent, { style: "overflow: hidden; white-space: nowrap; height: calc(-85px + 100vh); display: flex;" });
 
@@ -140,6 +153,49 @@ export class InspectPanel {
 
   get textureUtils() {
     return this.window.textureUtils;
+  }
+
+  _changeObjectCountPlot(value) {
+    if (value === this._objectCountType) {
+      return;
+    }
+    this._objectCountType = value;
+    switch (value) {
+      case "GPU Objects":
+        this._objectCountObject = this.database.allObjects;
+        break;
+      case "Buffer":
+        this._objectCountObject = this.database.buffers;
+        break;
+      case "BindGroup":
+        this._objectCountObject = this.database.bindGroups;
+        break;
+      case "TextureView":
+        this._objectCountObject = this.database.textureViews;
+        break;
+      case "Texture":
+        this._objectCountObject = this.database.textures;
+        break;
+      case "Sampler":
+        this._objectCountObject = this.database.samplers;
+        break;
+      case "PipelineLayout":
+        this._objectCountObject = this.database.pipelineLayouts;
+        break;
+      case "BindGroupLayout":
+        this._objectCountObject = this.database.bindGroupLayouts;
+        break;
+      case "ShaderModule":
+        this._objectCountObject = this.database.shaderModules;
+        break;
+      case "ComputePipeline":
+        this._objectCountObject = this.database.computePipelines;
+        break;
+      case "RenderPipeline":
+        this._objectCountObject = this.database.renderPipelines;
+        break;
+    }
+    this.objectCountPlot.reset();
   }
 
   _reset() {
@@ -208,7 +264,7 @@ export class InspectPanel {
     this.frameRateData.add(this.database.deltaFrameTime);
     this.frameRatePlot.draw();
 
-    this.objectCountData.add(this.database.allObjects.size);
+    this.objectCountData.add(this._objectCountObject?.size ?? this.database.allObjects.size);
     this.objectCountPlot.draw();
   }
 
@@ -370,6 +426,9 @@ export class InspectPanel {
 
     let widget = this._getRecycledWidget(object);
     if (widget) {
+      const parent = widget.parent;
+      parent.removeChild(widget);
+      parent.appendChild(widget);
       widget.element.style.display = "list-item";
       widget.nameWidget.text = name;
       widget.idWidget.text = `ID: ${idName}`;
