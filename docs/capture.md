@@ -20,6 +20,13 @@ Press the **Capture** button to capture a frame from the page.
 
 The **Max Buffer Size** value specifies the maximum buffer size Capture will record, for Uniform and Storage buffers. Sending buffer data to the DevTools panel can be slow, so limiting the buffer size can help capture performance. Large buffers are typically used for storage buffers.
 
+## Frame Commands
+
+Capture will record all GPU commands issued during a frame, including their arguments, and the stackrace of where it was called.
+
+Selecting a command will display information about the command, including associated GPU objects.
+
+<img src="images/frame_capture_commands.png" style="width:512px">
 
 ## Render Pass Textures
 
