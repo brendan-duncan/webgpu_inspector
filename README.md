@@ -77,7 +77,7 @@ Building the project requires an installation of [Node.js](https://nodejs.org/en
 - Make sure the dependencies are installed: `npm install`
 - Compile the project: `npm run build`.
 - Compile on file changes: `npm run watch`.
-- To use source maps, edit `rollup.config.js` and change `sourcemap: false` to `sourcemap: true`.
+- Sometimes the terser minimizer can make source map debugging problematic. To simplify debugging, edit **rollup.config.js** and comment out the terser entry in plugins.
 
 After the project is built:
 
