@@ -4,7 +4,22 @@
 
 Capture all rendering commands used to render a frame, letting you inspect each command, as well as providing information about the rendering state at each command. It also captures the image results of each render pass.
 
+#### Note
+
+Your rendering loop needs be using requestAnimationFrame for Capture to work, as Capture uses that to identify what commands to capture for a frame.
+
 ![Capture](images/capture.png)
+
+## Capturing Frame Data
+
+Press the **Capture** button to capture a frame from the page.
+
+![Capture Button](images/capture_button.png)
+
+#### Max Buffer Size
+
+The **Max Buffer Size** value specifies the maximum buffer size Capture will record, for Uniform and Storage buffers. Sending buffer data to the DevTools panel can be slow, so limiting the buffer size can help capture performance. Large buffers are typically used for storage buffers.
+
 
 ## Render Pass Textures
 

@@ -697,9 +697,17 @@ import { Actions, PanelActions } from "./utils/actions.js";
         this._lastFrameTime = time;
       }
 
-      const captureMode = sessionStorage.getItem(webgpuInspectorCaptureFrameKey);
-      if (captureMode) {
+      const captureData = sessionStorage.getItem(webgpuInspectorCaptureFrameKey);
+      if (captureData) {
+        let data = null;
+        try {
+          data = JSON.parse(captureData);
+        } catch (e) {
+          data = null;
+        }
         sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
+
+        this._captureMaxBufferSize = data.maxBufferSize || maxBufferCaptureSize;
         this._captureRequest = true;
         this._gpuWrapper.recordStacktraces = true;
       }
@@ -992,7 +1000,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
               let offset = entry.resource.offset ?? 0;
               const size = entry.resource.size ?? buffer.size;
 
-              if (size < maxBufferCaptureSize) {
+              if (size < this._captureMaxBufferSize) {
                 if (usesDynamicOffset) {
                   offset = dynamicOffsets[dynamicOffsetIndex++];
                 }

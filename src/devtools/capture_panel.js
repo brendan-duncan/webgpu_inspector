@@ -5,6 +5,7 @@ import { Span } from "./widget/span.js";
 import { Widget } from "./widget/widget.js";
 import { getFlagString } from "../utils/flags.js";
 import { CaptureStatistics } from "./capture_statistics.js";
+import { NumberInput } from "./widget/number_input.js";
 import {
   Sampler,
   TextureView
@@ -25,9 +26,17 @@ export class CapturePanel {
 
     new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => { 
       try {
-        self.port.postMessage({ action: PanelActions.Capture });
+        self.port.postMessage({ action: PanelActions.Capture, maxBufferSize: self.maxBufferSize });
       } catch (e) {}
     } });
+
+    this.maxBufferSize = (1024 * 1024) / 4;
+    new Span(controlBar, { text: "Max Buffer Size (Bytes):", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });
+    new NumberInput(controlBar, { value: this.maxBufferSize, min: 1, step: 1, precision: 0, style: "display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;", onChange: (value) => {
+      self.maxBufferSize = Math.max(value, 1);
+    } });
+
+    new Span(controlBar, {  style: "" });
 
     this._captureFrame = new Span(controlBar, { style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
     this._captureStats = new Button(controlBar, { label: "Frame Stats", style: "display: none;" });

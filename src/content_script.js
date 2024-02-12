@@ -12,7 +12,8 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
   }
 
   if (action === PanelActions.Capture) {
-    sessionStorage.setItem(webgpuInspectorCaptureFrameKey, "true");
+    const messageString = JSON.stringify(message);
+    sessionStorage.setItem(webgpuInspectorCaptureFrameKey, messageString);
     if (!inspectorInitialized) {
       action = PanelActions.InitializeInspector;
     }
