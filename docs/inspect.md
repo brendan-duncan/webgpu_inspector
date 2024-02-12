@@ -2,9 +2,11 @@
 
 # Inspect
 
-![WebGPU Inspector Panel](images/inspect.png)
-
 The Inspect tool shows you a real-time view of all WebGPU Objects that have been created by the page. As objects are created and destroyed, they are reflected by the Inspect tool.
+
+<a href="images/inspect.png">
+<img src="images/inspect.png" style="width: 512px;">
+</a>
 
 ## Starting the Inspect Tool
 
