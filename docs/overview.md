@@ -6,8 +6,6 @@ The WebGPU Inspector extension is available from the Developer Tools window.
 
 From a page that has WebGPU content, press **F12** to open the Chrome Developer Tools window. When the WebGPU Inspector extension is enabled in the extension manager, there will be a **WebGPU Inspector** tab.
 
-## Tools
-
 ## [Inspect](inspect.md)
 
 [Inspect](inspect.md) reports all GPU objects that have been created and lets you inspect information about them, and in some cases edit them.
