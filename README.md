@@ -33,15 +33,30 @@ Crome and Firefox don't support the same version of extension plug-ins, so you'l
 - Press **Load Unpacked** button
 - Browse to **<webgpu_inspector directory>/extensions/chrome** and press **Select Folder**
 
-#### Firefox
+#### Firefox Nightly
+- [Firefox Nightly](https://www.mozilla.org/en-US/firefox/channel/desktop/) has work-in-progress WebGPU support, which you can enable from **Settings / Nightly Experiments / Web API: WebGPU**
 - Open **about:debugging**
-- Select **This Firefox** or **This Nightly** from the left side of the page, depending on which version of Firefox you're using.
+- Select **This Nightly** from the left side of the page, depending on which version of Firefox you're using.
   - Only **Firefox Nightly** has WebGPU support, currently.
 - Press **Load Temporary Add-On**.
 - Browse to **<webgpu_inspector directory>/extensions/firefox**, select **manifest.json** and press **Open**.
 - **Temporary Add-On's will need to be re-loaded every time you start Firefox.**
 
-
+#### Safari Technology Preview
+- [Safari Technology Preview](https://developer.apple.com/safari/technology-preview/) has WebGPU support, which you can enable from **Develop / Feature Flags... / WebGPU**.
+- Safari Extension development is done through Xcode
+- Open **<webgpu_inspector directory>/extensions/safari/WebGPU_Inspector.xcodeproj** with Xcode
+  - Switch the Scheme to **WebGPU Inspector (macOS)**
+  - Select **Product / Run**
+- From Safari Technology Preview
+  - Select **Develop / Developer Settings...**
+  - Enable **Allow unsigned extensions**
+  - Select the **Extensions** tab in Settings, and make sure WebGPU Inspector is listed as an extension
+  - WebGPU Inspector should be a tab in the Web Inspector window (**Develop / Show Web Inspector** or right-click on page and select **Inspect element**)
+- If you make changes to the WebGPU Inspector source
+  - From Xcode, select **Product / Build** (**cmd-b**)
+- **Note**:
+  - Safari support is still a work-in-progress and has issues
 
 ## [Documentation](docs/overview.md)
 
