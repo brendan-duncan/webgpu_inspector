@@ -5,6 +5,8 @@ import { Span } from "./widget/span.js";
 import { TabWidget } from "./widget/tab_widget.js";
 import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import { Widget } from "./widget/widget.js";
+import { NumberInput } from "./widget/number_input.js";
+import { Signal } from "../utils/signal.js";
 import { 
   Adapter,
   Device,
@@ -550,7 +552,17 @@ export class InspectPanel {
     width ??= texture.width;
     height ??= texture.height;
 
-    const container = new Div(parent);
+    const container = new Div(parent, { style: "margin-bottom: 5px; margin-top: 10px;" });
+
+    const displayChanged = new Signal();
+
+    const controls = new Div(container);
+
+    new Span(controls, { text:  "Exposure", style: "margin-right: 3px; font-size: 9pt; color: #bbb;" });
+    new NumberInput(controls, { value: texture.display.exposure, step: 0.01, onChange: (value) => {
+      texture.display.exposure = value;
+      displayChanged.emit();
+    }, style: "width: 100px; display: inline-block;" });
 
     if (!this._toolTip) {
       this._tooltip = document.createElement('pre');
@@ -615,7 +627,13 @@ export class InspectPanel {
       
       const srcView = texture.gpuTexture.createView(viewDesc);
 
-      this.textureUtils.blitTexture(srcView, texture.descriptor.format, canvasTexture.createView(), format);
+      this.textureUtils.blitTexture(srcView, canvasTexture.createView(), format, texture.display);
+
+      const self = this;
+      displayChanged.addListener(() => {
+        const canvasTexture = context.getCurrentTexture();
+        self.textureUtils.blitTexture(srcView, canvasTexture.createView(), format, texture.display);
+      });
     }
   }
 

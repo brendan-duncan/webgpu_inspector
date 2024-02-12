@@ -26,13 +26,13 @@ export class NumberInput extends Span {
 
     this.value = value;
     this.precision = precision;
-    this.units = options.units || '';
-    this.disabled = options.disabled || false;
-    this.horizontal = options.horizontal || false;
-    this.linear = options.linear || false;
-    this.step = options.step || 1;
-    this.min = options.min !== undefined ? options.min : null;
-    this.max = options.max !== undefined ? options.max : null;
+    this.units = options.units ?? "";
+    this.disabled = !!options.disabled;
+    this.horizontal = !!options.horizontal;
+    this.linear = !!options.linear;
+    this.step = options.step ?? 1;
+    this.min = options.min ?? null;
+    this.max = options.max ?? null;
     const container = new Span(this, { class: 'inputfield' });
 
     if (options.full) {

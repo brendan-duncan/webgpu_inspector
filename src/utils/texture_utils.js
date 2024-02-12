@@ -1,4 +1,4 @@
-import { TextureFormatInfo } from "./texture_format_info.js";
+//import { TextureFormatInfo } from "./texture_format_info.js";
 
 export class TextureUtils {
   constructor(device) {
@@ -13,6 +13,33 @@ export class TextureUtils {
     this.pointSampler = device.createSampler({
         magFilter: 'nearest',
         minFilter: 'nearest',
+    });
+
+    this.displayUniformBuffer = device.createBuffer({
+      size: 4,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    this.displayBingGroupLayout = device.createBindGroupLayout({
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: {
+            type: "uniform"
+          }
+        }
+      ]
+    });
+
+    this.displayBindGroup = device.createBindGroup({
+      layout: this.displayBingGroupLayout,
+      entries: [
+        {
+          binding: 0,
+          resource: { buffer: this.displayUniformBuffer }
+        }
+      ]
     });
   }
 
@@ -84,8 +111,7 @@ export class TextureUtils {
     return dst;
   }
 
-  blitTexture(src, srcFormat, dst, dstFormat) {
-    //const srcFormatInfo = TextureFormatInfo[srcFormat];
+  blitTexture(src, dst, dstFormat, display) {
     const sampleType = "unfilterable-float";
 
     if (!this.bindGroupLayouts.has(sampleType)) {
@@ -110,7 +136,7 @@ export class TextureUtils {
       this.bindGroupLayouts.set(sampleType, bindGroupLayout);
 
       const pipelineLayout = this.device.createPipelineLayout({
-        bindGroupLayouts: [bindGroupLayout]
+        bindGroupLayouts: [bindGroupLayout, this.displayBingGroupLayout]
       });
       this.pipelineLayouts.set(sampleType, pipelineLayout);
     }
@@ -157,9 +183,18 @@ export class TextureUtils {
       }]
     };
 
+    if (display) {
+      this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
+        new Float32Array([display.exposure]));
+    } else {
+      this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
+        new Float32Array([1]));
+    }
+
     const passEncoder = commandEncoder.beginRenderPass(passDesc);
     passEncoder.setPipeline(pipeline);
     passEncoder.setBindGroup(0, bindGroup);
+    passEncoder.setBindGroup(1, this.displayBindGroup);
     passEncoder.draw(3);
     passEncoder.end();
 
@@ -183,11 +218,17 @@ TextureUtils.blitShader = `
     output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
     return output;;
   }
-  @binding(0) @group(0) var texSampler: sampler;
-  @binding(1) @group(0) var texture: texture_2d<f32>;
+  @group(0) @binding(0) var texSampler: sampler;
+  @group(0) @binding(1) var texture: texture_2d<f32>;
+  struct Display {
+    exposure: f32,
+  };
+  @group(1) @binding(0) var<uniform> display: Display; 
   @fragment
   fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
-    return textureSample(texture, texSampler, input.uv);
+    var color = textureSample(texture, texSampler, input.uv);
+    var rgb = color.rgb;
+    return vec4f(rgb * display.exposure, color.a);
   }
 `;
 

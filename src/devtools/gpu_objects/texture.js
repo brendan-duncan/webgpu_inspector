@@ -10,6 +10,10 @@ export class Texture extends GPUObject {
     this.loadedImageDataChunks = [];
     this.imageDataPending = false;
     this.isImageDataLoaded = false;
+
+    this.display = {
+      exposure: 1
+    };
   }
 
   getPixel(x, y, z) {
