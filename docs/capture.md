@@ -26,7 +26,9 @@ Capture will record all GPU commands issued during a frame, including their argu
 
 Selecting a command will display information about the command, including associated GPU objects.
 
+<a href="images/frame_capture_commands.png">
 <img src="images/frame_capture_commands.png" style="width:512px">
+</a>
 
 ## Render Pass Textures
 
@@ -64,4 +66,6 @@ If the page pushes/pops Debug Groups, they will be be used to group commands in 
 
 The Capture tool can provide various statistics about the capture. Press the **Frame Stats** to show the capture statistics. These include how many graphics commands were called; how many draw calls; and so on.
 
-![Frame Stats](images/capture_frame_stats.png)
+<a href="images/capture_frame_stats.png">
+<img src="images/capture_frame_stats.png" style="width:512px">
+</a>
