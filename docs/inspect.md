@@ -38,7 +38,13 @@ The inspector will report basic statistics about what's going on with the page.
 
 **Buffer Memory**: How much memory is currently being used for buffers on the GPU.
 
-**Frame Time Graph**: The graph plots the frame duration over time. This lets you identify spikes in your renders. A common source of spikes is garbage collection. The graph labels show you the minimum frame time and maximum frame time over the plotted frames.
+### Meters
+
+**Frame Time**: Plots the frame duration over time. This lets you identify spikes in your renders. A common source of spikes is garbage collection. The graph labels show you the minimum frame time and maximum frame time over the plotted frames.
+
+**GPU Objects**: Plots the number of GPU Objects that are allocated over time. A plot that has a saw-tooth pattern indicates you
+are allocating GPU objects and garbage collection is destroying them. Some GPU objects are more expensive than others, such as buffers
+and textures. Others are light-weight, such as texture views. But with any garbage collected language, minimizing garbage collection is ideal.
 
 
 ## GPU Objects
