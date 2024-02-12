@@ -87,9 +87,13 @@ export class InspectPanel {
     this.uiTotalBufferMemory = new Span(stats, { style: "margin-left: 20px;" });
 
     this.plots = new Div(parent, { style: "display: flex; flex-direction: row; margin-bottom: 10px; height: 30px;" });
-    this.frameRatePlot = new Plot(this.plots, { style: "flex-grow: 1; margin-right: 10px; max-width: 500px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);" });
-    
+    new Span(this.plots, { text: "Frame Time", style: "color: #ccc; padding-top: 5px; margin-right: 10px; font-size: 10pt;"});
+    this.frameRatePlot = new Plot(this.plots, { precision: 2, suffix: "ms", style: "flex-grow: 1; margin-right: 10px; max-width: 500px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);" });
     this.frameRateData = this.frameRatePlot.addData("Frame Time");
+    
+    new Span(this.plots, { text: "GPU Objects", style: "color: #ccc; padding-top: 5px; margin-right: 10px; font-size: 10pt;"});
+    this.objectCountPlot = new Plot(this.plots, { style: "flex-grow: 1; max-width: 500px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);" });
+    this.objectCountData = this.objectCountPlot.addData("Object Count");
 
     this.inspectorGUI = new Div(parent, { style: "overflow: hidden; white-space: nowrap; height: calc(-85px + 100vh); display: flex;" });
 
@@ -141,6 +145,7 @@ export class InspectPanel {
   _reset() {
     this.database.reset();
     this.frameRatePlot.reset();
+    this.objectCountPlot.reset();
 
     this._selectedObject = null;
     this._selectedGroup = null;
@@ -202,6 +207,9 @@ export class InspectPanel {
 
     this.frameRateData.add(this.database.deltaFrameTime);
     this.frameRatePlot.draw();
+
+    this.objectCountData.add(this.database.allObjects.size);
+    this.objectCountPlot.draw();
   }
 
   _objectLabelChanged(id, object, label) {

@@ -63,6 +63,9 @@ export class Plot extends Div {
 
     this.data = new Map();
 
+    this.suffix = options.suffix ?? "";
+    this.precision = options.precision ?? 0;
+
     this.onResize();
     this.draw();
   }
@@ -125,8 +128,8 @@ export class Plot extends Div {
     }
 
     ctx.fillStyle = "#fff";
-    ctx.fillText(`${max.toFixed(2)}ms`, 2, 10);
-    ctx.fillText(`${min.toFixed(2)}ms`, 2, h - 1);
+    ctx.fillText(`${max.toFixed(this.precision)}${this.suffix}`, 2, 10);
+    ctx.fillText(`${min.toFixed(this.precision)}${this.suffix}`, 2, h - 1);
 
     if (max === min) {
       min -= 1;
