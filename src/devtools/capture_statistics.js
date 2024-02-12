@@ -25,7 +25,7 @@ export class CaptureStatistics {
     this.renderPasses = 0;
     this.colorAttachments = 0;
     this.depthStencilAttachments = 0;
-    this.copyCalls = 0;
+    this.copyCommands = 0;
     this.writeBuffer = 0;
     this.bufferBytesWritten = 0;
     this.writeTexture = 0;
@@ -65,7 +65,7 @@ export class CaptureStatistics {
     this.renderPasses = 0;
     this.colorAttachments = 0;
     this.depthStencilAttachments = 0;
-    this.copyCalls = 0;
+    this.copyCommands = 0;
     this.writeBuffer = 0;
     this.bufferBytesWritten = 0;
     this.writeTexture = 0;
@@ -190,7 +190,7 @@ export class CaptureStatistics {
       this.totalBytesWritten += size;*/
     } else if (method === "copyBufferToBuffer" || method === "copyBufferToTexture" ||
                method === "copyTextureToBuffer" || method === "copyTextureToTexture") {
-      this.copyCalls++;
+      this.copyCommands++;
     }
   }
 }
