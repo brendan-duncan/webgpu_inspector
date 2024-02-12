@@ -7,7 +7,7 @@ export const GPUObjectTypes = new Set([
   GPUBuffer,
   GPUTexture,
   GPUTextureView,
-  GPUExternalTexture,
+  //GPUExternalTexture,
   GPUSampler,
   GPUBindGroupLayout,
   GPUBindGroup,

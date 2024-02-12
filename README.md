@@ -18,13 +18,30 @@ To get the most up to date version of WebGPU Inspector, you can install the exte
 
 - Download project from Github.
   - git clone https://github.com/brendan-duncan/webgpu_inspector
-- In Chrome, open **chrome://extensions**
+
+Crome and Firefox don't support the same version of extension plug-ins, so you'll need to load the correct version.
+
+#### Chrome
+- Open **chrome://extensions**
 - Enable Developer Mode (switch in top-right corner)
 - Press **Load Unpacked** button
-- Browse to **<webgpu_inspector directory>/extensions** and press **Select Folder**
-- Make sure the extension is enabled.
+- Browse to **<webgpu_inspector directory>/extensions/chrome** and press **Select Folder**
 
-![Enable Extension](docs/images/enable_extension.png "Enable Extension")
+#### Edge
+- Open **edge://extensions**
+- Enable Developer Mode (switch on left side of page)
+- Press **Load Unpacked** button
+- Browse to **<webgpu_inspector directory>/extensions/chrome** and press **Select Folder**
+
+#### Firefox
+- Open **about:debugging**
+- Select **This Firefox** or **This Nightly** from the left side of the page, depending on which version of Firefox you're using.
+  - Only **Firefox Nightly** has WebGPU support, currently.
+- Press **Load Temporary Add-On**.
+- Browse to **<webgpu_inspector directory>/extensions/firefox**, select **manifest.json** and press **Open**.
+- **Temporary Add-On's will need to be re-loaded every time you start Firefox.**
+
+
 
 ## [Documentation](docs/overview.md)
 

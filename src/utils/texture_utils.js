@@ -203,7 +203,7 @@ export class TextureUtils {
 }
 
 TextureUtils.blitShader = `
-  var<private> posTex = array<vec4f, 3>(
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
     vec4f(-1.0, 1.0, 0.0, 0.0),
     vec4f(3.0, 1.0, 2.0, 0.0),
     vec4f(-1.0, -3.0, 0.0, 2.0));
@@ -233,7 +233,7 @@ TextureUtils.blitShader = `
 `;
 
 TextureUtils.blitDepthShader = `
-  var<private> posTex = array<vec4f, 3>(
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
     vec4f(-1.0, 1.0, 0.0, 0.0),
     vec4f(3.0, 1.0, 2.0, 0.0),
     vec4f(-1.0, -3.0, 0.0, 2.0));

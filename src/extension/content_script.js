@@ -1,5 +1,5 @@
-import { MessagePort } from "./utils/message_port.js";
-import { Actions, PanelActions } from "./utils/actions.js";
+import { MessagePort } from "../utils/message_port.js";
+import { Actions, PanelActions } from "../utils/actions.js";
 
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
