@@ -49,14 +49,18 @@ Selecting an object will display information about the object in the Inspect tab
 
 Each object category displays how many objects of that type are allocated.
 
-![Inspect Objects](images/inspect_objects.png)
+<a href="images/inspect_objects.png">
+<img src="images/inspect_objects.png" style="width: 512px;">
+</a>
 
 
 ## Object Stacktrace
 
 The stacktrace for each object is recorded, identifying where in the code the object was created.
 
-![Inspect Stacktrace](images/inspect_stacktrace.png)
+<a href="images/inspect_stacktrace.png">
+<img src="images/inspect_stacktrace.png" style="width: 750px;">
+</a>
 
 ## Textures
 
@@ -66,19 +70,31 @@ Mousing over the texture image will show the pixel color vlaues, if the Inspecto
 
 An Exposure control lets you adjust the brightness of the texture's display.
 
-![Inspect Texture](images/inspect_texture.png)
+<a href="images/inspect_texture.png">
+<img src="images/inspect_texture.png" style="width: 750px;">
+</a>
 
 ## Shaders
 
 When you inspect a shader, it provides an editor for the shader's code.
 
+### Reflection Info
+
+WebGPU Inspector will parse the shader's WGSL code and provide reflection information about the shader. This includes the
+entry functions, inputs and outputs, and resource binding information.
+
+<a href="images/inspect_shader_reflection.png">
+<img src="images/inspect_shader_reflection.png" style="width: 512px;">
+</a>
+
 ### Editing Shaders
 
 You can make changes to the shader code and press the Compile button. The modified shader will be sent to the page and replace the original version of the shader, letting you immediately see shader changes live on the page.
 
+#### Note
+
 There are limitations to the types of changes you can make to the shader. The page already has a pipeline and bind groups for the original version of the shader, so making any changes to the bindings used by the modified version of the shader will likely result in WebGPU errors.
 
-![Inspect Shader](images/inspect_shader.png)
 
 ## Profiling Tips
 

@@ -968,24 +968,6 @@ export class CapturePanel {
     return t.name;
   }
 
-  _addStructMembers(l2, members) {
-    new Widget("li", l2, { text: `Members:` });
-    const l3 = new Widget("ul", l2);
-    for (const m in members) {
-      new Widget("li", l3, { text: `${s.type.members[m].name}: ${this._getTypeName(s.type.members[m].type)}` });
-      const l4 = new Widget("ul", l3);
-      new Widget("li", l4, { text: `Offset: ${members[m].offset}` });
-      new Widget("li", l4, { text: `Size: ${members[m].size}` });
-
-      if (m.type.name === "array") {
-        new Widget("li", l4, { text: `Array Count: ${members[m].count}` });
-        if (m.type.format?.members) {
-          this._addStructMembers(l3, f.format.members);
-        }
-      }
-    }
-  }
-
   _addShaderTypeInfo(ui, type) {
     if (!type) {
       return;
@@ -1006,11 +988,53 @@ export class CapturePanel {
     }
   }
 
+  _shaderInfoEntryFunction(ui, entry) {
+    new Widget("li", ui, { text: `Entry: ${entry.name}` });
+    if (entry.inputs.length) {
+      new Widget("li", ui, { text: `Inputs: ${entry.inputs.length}` });
+      const l2 = new Widget("ul", ui);
+      for (const s of entry.inputs) {
+        new Widget("li", l2, { text: `@${s.locationType}(${s.location}) ${s.name}: ${this._getTypeName(s.type)} ${s.interpolation || ""}` });
+      }
+    }
+    if (entry.outputs.length) {
+      new Widget("li", ui, { text: `Outputs: ${entry.outputs.length}` });
+      const l2 = new Widget("ul", ui);
+      for (const s of entry.outputs) {
+        new Widget("li", l2, { text: `@${s.locationType}(${s.location}) ${s.name}: ${this._getTypeName(s.type)}` });
+      }
+    }
+  }
+
   _shaderInfo(type, shader, commandInfo) {
     const reflect = shader.reflection;
     if (reflect) {
       const grp = new Collapsable(commandInfo, { collapsed: true, label: `${type} Shader Info` });
       grp.body.style.maxHeight = "600px";
+
+      if (reflect.entry.vertex.length) {
+        new Div(grp.body, { text: `Vertex Entry Functions: ${reflect.entry.vertex.length}` });
+        const list = new Widget("ul", grp.body);
+        for (const s of reflect.entry.vertex) {
+          this._shaderInfoEntryFunction(list, s);
+        }
+      }
+
+      if (reflect.entry.fragment.length) {
+        new Div(grp.body, { text: `Fragment Entry Functions: ${reflect.entry.fragment.length}` });
+        const list = new Widget("ul", grp.body);
+        for (const s of reflect.entry.fragment) {
+          this._shaderInfoEntryFunction(list, s);
+        }
+      }
+
+      if (reflect.entry.compute.length) {
+        new Div(grp.body, { text: `Compute Entry Functions: ${reflect.entry.compute.length}` });
+        const list = new Widget("ul", grp.body);
+        for (const s of reflect.entry.compute) {
+          this._shaderInfoEntryFunction(list, s);
+        }
+      }
       
       if (reflect.uniforms.length) {
         new Div(grp.body, { text: `Uniform Buffers: ${reflect.uniforms.length}` });

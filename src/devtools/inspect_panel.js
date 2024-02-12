@@ -393,6 +393,54 @@ export class InspectPanel {
     };
   }
 
+  _getTypeName(t) {
+    if (t.format) {
+      if (t.name === "array" && t.count) {
+        return `${t.name}<${t.format.name}, ${t.count}>`
+      }
+      return `${t.name}<${t.format.name}>`
+    }
+    return t.name;
+  }
+
+  _shaderInfoEntryFunction(ui, entry) {
+    new Widget("li", ui, { text: `Entry: ${entry.name}` });
+    if (entry.inputs.length) {
+      new Widget("li", ui, { text: `Inputs: ${entry.inputs.length}` });
+      const l2 = new Widget("ul", ui);
+      for (const s of entry.inputs) {
+        new Widget("li", l2, { text: `@${s.locationType}(${s.location}) ${s.name}: ${this._getTypeName(s.type)} ${s.interpolation || ""}` });
+      }
+    }
+    if (entry.outputs.length) {
+      new Widget("li", ui, { text: `Outputs: ${entry.outputs.length}` });
+      const l2 = new Widget("ul", ui);
+      for (const s of entry.outputs) {
+        new Widget("li", l2, { text: `@${s.locationType}(${s.location}) ${s.name}: ${this._getTypeName(s.type)}` });
+      }
+    }
+  }
+
+  _addShaderTypeInfo(ui, type) {
+    if (!type) {
+      return;
+    }
+    if (type.members) {
+      new Widget("li", ui, { text: `Members:` });
+      const l2 = new Widget("ul", ui);
+      for (const m of type.members) {
+        new Widget("li", l2, { text: `${m.name}: ${this._getTypeName(m.type)}` });
+        const l3 = new Widget("ul", l2);
+        new Widget("li", l3, { text: `Offset: ${m.offset}` });
+        new Widget("li", l3, { text: `Size: ${m.size || "<runtime>"}` });
+
+        this._addShaderTypeInfo(l3, m.type.format);
+      }
+    } else if (type.name === "array") {
+      this._addShaderTypeInfo(type.format);
+    }
+  }
+
   _inspectObject(object) {
     this.inspectPanel.html = "";
 
@@ -439,8 +487,87 @@ export class InspectPanel {
     let compileButton = null;
     let revertButton = null;
     if (object instanceof ShaderModule) {
-      const isModified = object.replacementCode && object.replacementCode !== object.descriptor.code;
+      const reflect = object.reflection;
+      if (reflect) {
+        const grp = new Collapsable(infoBox, { label: "Reflection Info", collapsed: true });
+        grp.body.style.maxHeight = "600px";
 
+        if (reflect.entry.vertex.length) {
+          new Div(grp.body, { text: `Vertex Entry Functions: ${reflect.entry.vertex.length}` });
+          const list = new Widget("ul", grp.body);
+          for (const s of reflect.entry.vertex) {
+            this._shaderInfoEntryFunction(list, s);
+          }
+        }
+  
+        if (reflect.entry.fragment.length) {
+          new Div(grp.body, { text: `Fragment Entry Functions: ${reflect.entry.fragment.length}` });
+          const list = new Widget("ul", grp.body);
+          for (const s of reflect.entry.fragment) {
+            this._shaderInfoEntryFunction(list, s);
+          }
+        }
+  
+        if (reflect.entry.compute.length) {
+          new Div(grp.body, { text: `Compute Entry Functions: ${reflect.entry.compute.length}` });
+          const list = new Widget("ul", grp.body);
+          for (const s of reflect.entry.compute) {
+            this._shaderInfoEntryFunction(list, s);
+          }
+        }
+        
+        if (reflect.uniforms.length) {
+          new Div(grp.body, { text: `Uniform Buffers: ${reflect.uniforms.length}` });
+          const list = new Widget("ul", grp.body);
+          for (const s of reflect.uniforms) {
+            new Widget("li", list, { text: `${s.name}: ${this._getTypeName(s.type)}` });
+            const l2 = new Widget("ul", list);
+            new Widget("li", l2, { text: `Bind Group: ${s.group}` });
+            new Widget("li", l2, { text: `Bind Index: ${s.binding}` });
+            new Widget("li", l2, { text: `Buffer Size: ${s.type.size || "<runtime>"}` });
+            
+            this._addShaderTypeInfo(l2, s.type);
+          }
+        }
+  
+        if (reflect.storage.length) {
+          new Div(grp.body, { text: `Storage Buffers: ${reflect.storage.length}` });
+          const list = new Widget("ul", grp.body);
+          for (const s of reflect.storage) {
+            new Widget("li", list, { text: `${s.name}: ${this._getTypeName(s.type)}` });
+            const l2 = new Widget("ul", list);
+            new Widget("li", l2, { text: `Bind Group: ${s.group}` });
+            new Widget("li", l2, { text: `Bind Index: ${s.binding}` });
+            new Widget("li", l2, { text: `Buffer Size: ${s.type.size || "<runtime>"}` });
+  
+            this._addShaderTypeInfo(l2, s.type);
+          }
+        }
+        
+        if (reflect.textures.length) {
+          new Div(grp.body, { text: `Textures: ${reflect.textures.length}` });
+          const list = new Widget("ul", grp.body);
+          for (const s of reflect.textures) {
+            new Widget("li", list, { text: `${s.name}: ${this._getTypeName(s.type)}` });
+            const l2 = new Widget("ul", list);
+            new Widget("li", l2, { text: `Bind Group: ${s.group}` });
+            new Widget("li", l2, { text: `Bind Index: ${s.binding}` });
+          }
+        }
+  
+        if (reflect.samplers.length) {
+          new Div(grp.body, { text: `Samplers: ${reflect.samplers.length}` });
+          const list = new Widget("ul", grp.body);
+          for (const s of reflect.samplers) {
+            new Widget("li", list, { text: `${s.name}: ${this._getTypeName(s.type)}` });
+            const l2 = new Widget("ul", list);
+            new Widget("li", l2, { text: `Bind Group: ${s.group}` });
+            new Widget("li", l2, { text: `Bind Index: ${s.binding}` });
+          }
+        }
+      }
+
+      const isModified = object.replacementCode && object.replacementCode !== object.descriptor.code;
       const compileRow = new Div(this.inspectPanel);
       compileButton = new Button(compileRow, { label: "Compile", style: "background-color: rgb(200, 150, 51);" });
       revertButton = isModified ? new Button(compileRow, { label: "Revert", style: "background-color: rgb(200, 150, 51);" }) : null;
