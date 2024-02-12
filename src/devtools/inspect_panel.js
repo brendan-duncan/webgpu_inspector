@@ -507,9 +507,14 @@ export class InspectPanel {
       const loadButton = new Button(descriptionBox, { label: "Load", callback: () => {
         self.database.requestTextureData(object);
       }});
-      if (TextureFormatInfo[object.descriptor.format]?.isDepthStencil) {
+      if (object.descriptor.dimension !== "2d") {
         loadButton.disabled = true;
-        loadButton.tooltip = "Previewing depth-stencil textures is currently disabled.";
+        loadButton.style = "background-color: #733; color: #fff;";
+        loadButton.tooltip = "Only 2d textures can currently be previewed.";
+      } else if (TextureFormatInfo[object.descriptor.format]?.isDepthStencil) {
+        loadButton.disabled = true;
+        loadButton.style = "background-color: #733; color: #fff;";
+        loadButton.tooltip = "Previewing depth-stencil textures is not currently supported.";
       }
       if (object.gpuTexture) {
         this._createTexturePreview(object, descriptionBox);
@@ -529,9 +534,14 @@ export class InspectPanel {
         const loadButton = new Button(textureGrp.body, { label: "Load", callback: () => {
           self.database.requestTextureData(texture);
         }});
-        if (TextureFormatInfo[texture.descriptor.format]?.isDepthStencil) {
+        if (texture.descriptor.dimension !== "2d") {
           loadButton.disabled = true;
-          loadButton.tooltip = "Previewing depth-stencil textures is currently disabled.";
+          loadButton.style = "background-color: #733; color: #fff;";
+          loadButton.tooltip = "Only 2d textures can currently be previewed.";
+        } else if (TextureFormatInfo[texture.descriptor.format]?.isDepthStencil) {
+          loadButton.disabled = true;
+          loadButton.style = "background-color: #733; color: #fff;";
+          loadButton.tooltip = "Previewing depth-stencil textures is not currently supported.";
         }
         if (texture.gpuTexture) {
           this._createTexturePreview(texture, textureGrp.body);
@@ -549,6 +559,11 @@ export class InspectPanel {
   }
 
   _createTexturePreview(texture, parent, width, height) {
+    // Can only preview 2d textures for now
+    if (texture.dimension !== "2d") {
+      return;
+    }
+
     width ??= texture.width;
     height ??= texture.height;
 
