@@ -1,0 +1,996 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		90D09B3F2B7A8E8600F09751 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90D09B3E2B7A8E8600F09751 /* AppDelegate.swift */; };
+		90D09B412B7A8E8600F09751 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90D09B402B7A8E8600F09751 /* SceneDelegate.swift */; };
+		90D09B442B7A8E8600F09751 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B422B7A8E8600F09751 /* LaunchScreen.storyboard */; };
+		90D09B472B7A8E8600F09751 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B452B7A8E8600F09751 /* Main.storyboard */; };
+		90D09B502B7A8E8600F09751 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90D09B4F2B7A8E8600F09751 /* AppDelegate.swift */; };
+		90D09B532B7A8E8600F09751 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B512B7A8E8600F09751 /* Main.storyboard */; };
+		90D09B5B2B7A8E8600F09751 /* WebGPU Inspector Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 90D09B5A2B7A8E8600F09751 /* WebGPU Inspector Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		90D09B652B7A8E8600F09751 /* WebGPU Inspector Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 90D09B642B7A8E8600F09751 /* WebGPU Inspector Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		90D09B6B2B7A8E8600F09751 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B2E2B7A8E8500F09751 /* Main.html */; };
+		90D09B6C2B7A8E8600F09751 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B2E2B7A8E8500F09751 /* Main.html */; };
+		90D09B6D2B7A8E8600F09751 /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B302B7A8E8500F09751 /* Icon.png */; };
+		90D09B6E2B7A8E8600F09751 /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B302B7A8E8500F09751 /* Icon.png */; };
+		90D09B6F2B7A8E8600F09751 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B312B7A8E8500F09751 /* Style.css */; };
+		90D09B702B7A8E8600F09751 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B312B7A8E8500F09751 /* Style.css */; };
+		90D09B712B7A8E8600F09751 /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B322B7A8E8500F09751 /* Script.js */; };
+		90D09B722B7A8E8600F09751 /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B322B7A8E8500F09751 /* Script.js */; };
+		90D09B732B7A8E8600F09751 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90D09B332B7A8E8500F09751 /* ViewController.swift */; };
+		90D09B742B7A8E8600F09751 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90D09B332B7A8E8500F09751 /* ViewController.swift */; };
+		90D09B752B7A8E8600F09751 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B342B7A8E8600F09751 /* Assets.xcassets */; };
+		90D09B762B7A8E8600F09751 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B342B7A8E8600F09751 /* Assets.xcassets */; };
+		90D09B772B7A8E8600F09751 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90D09B362B7A8E8600F09751 /* SafariWebExtensionHandler.swift */; };
+		90D09B782B7A8E8600F09751 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90D09B362B7A8E8600F09751 /* SafariWebExtensionHandler.swift */; };
+		90D09B9A2B7A8E8600F09751 /* webgpu_inspector_panel.html in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B8A2B7A8E8600F09751 /* webgpu_inspector_panel.html */; };
+		90D09B9B2B7A8E8600F09751 /* res in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B8C2B7A8E8600F09751 /* res */; };
+		90D09B9C2B7A8E8600F09751 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B8E2B7A8E8600F09751 /* background.js */; };
+		90D09B9D2B7A8E8600F09751 /* webgpu_inspector_window.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B8F2B7A8E8600F09751 /* webgpu_inspector_window.js */; };
+		90D09B9E2B7A8E8600F09751 /* webgpu_inspector_devtools.html in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B902B7A8E8600F09751 /* webgpu_inspector_devtools.html */; };
+		90D09B9F2B7A8E8600F09751 /* content_script.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B912B7A8E8600F09751 /* content_script.js */; };
+		90D09BA02B7A8E8600F09751 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B922B7A8E8600F09751 /* manifest.json */; };
+		90D09BA12B7A8E8600F09751 /* webgpu_inspector_panel.css in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B932B7A8E8600F09751 /* webgpu_inspector_panel.css */; };
+		90D09BA22B7A8E8600F09751 /* webgpu_recorder.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B942B7A8E8600F09751 /* webgpu_recorder.js */; };
+		90D09BA32B7A8E8600F09751 /* webgpu_inspector.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B982B7A8E8600F09751 /* webgpu_inspector.js */; };
+		90D09BA42B7A8E8600F09751 /* webgpu_inspector_devtools.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B992B7A8E8600F09751 /* webgpu_inspector_devtools.js */; };
+		90D09BA52B7A8E8600F09751 /* webgpu_inspector_panel.html in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B8A2B7A8E8600F09751 /* webgpu_inspector_panel.html */; };
+		90D09BA62B7A8E8600F09751 /* res in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B8C2B7A8E8600F09751 /* res */; };
+		90D09BA72B7A8E8600F09751 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B8E2B7A8E8600F09751 /* background.js */; };
+		90D09BA82B7A8E8600F09751 /* webgpu_inspector_window.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B8F2B7A8E8600F09751 /* webgpu_inspector_window.js */; };
+		90D09BA92B7A8E8600F09751 /* webgpu_inspector_devtools.html in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B902B7A8E8600F09751 /* webgpu_inspector_devtools.html */; };
+		90D09BAA2B7A8E8600F09751 /* content_script.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B912B7A8E8600F09751 /* content_script.js */; };
+		90D09BAB2B7A8E8600F09751 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B922B7A8E8600F09751 /* manifest.json */; };
+		90D09BAC2B7A8E8600F09751 /* webgpu_inspector_panel.css in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B932B7A8E8600F09751 /* webgpu_inspector_panel.css */; };
+		90D09BAD2B7A8E8600F09751 /* webgpu_recorder.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B942B7A8E8600F09751 /* webgpu_recorder.js */; };
+		90D09BAE2B7A8E8600F09751 /* webgpu_inspector.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B982B7A8E8600F09751 /* webgpu_inspector.js */; };
+		90D09BAF2B7A8E8600F09751 /* webgpu_inspector_devtools.js in Resources */ = {isa = PBXBuildFile; fileRef = 90D09B992B7A8E8600F09751 /* webgpu_inspector_devtools.js */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		90D09B5C2B7A8E8600F09751 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 90D09B282B7A8E8500F09751 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 90D09B592B7A8E8600F09751;
+			remoteInfo = "WebGPU Inspector Extension (iOS)";
+		};
+		90D09B662B7A8E8600F09751 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 90D09B282B7A8E8500F09751 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 90D09B632B7A8E8600F09751;
+			remoteInfo = "WebGPU Inspector Extension (macOS)";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		90D09B7E2B7A8E8600F09751 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				90D09B5B2B7A8E8600F09751 /* WebGPU Inspector Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		90D09B852B7A8E8600F09751 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				90D09B652B7A8E8600F09751 /* WebGPU Inspector Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		90D09B2F2B7A8E8500F09751 /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = ../Base.lproj/Main.html; sourceTree = "<group>"; };
+		90D09B302B7A8E8500F09751 /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
+		90D09B312B7A8E8500F09751 /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
+		90D09B322B7A8E8500F09751 /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
+		90D09B332B7A8E8500F09751 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		90D09B342B7A8E8600F09751 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		90D09B362B7A8E8600F09751 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		90D09B3B2B7A8E8600F09751 /* WebGPU Inspector.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "WebGPU Inspector.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		90D09B3E2B7A8E8600F09751 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		90D09B402B7A8E8600F09751 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		90D09B432B7A8E8600F09751 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		90D09B462B7A8E8600F09751 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		90D09B482B7A8E8600F09751 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		90D09B4D2B7A8E8600F09751 /* WebGPU Inspector.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "WebGPU Inspector.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		90D09B4F2B7A8E8600F09751 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		90D09B522B7A8E8600F09751 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		90D09B542B7A8E8600F09751 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		90D09B552B7A8E8600F09751 /* WebGPU Inspector.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "WebGPU Inspector.entitlements"; sourceTree = "<group>"; };
+		90D09B5A2B7A8E8600F09751 /* WebGPU Inspector Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "WebGPU Inspector Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		90D09B5F2B7A8E8600F09751 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		90D09B642B7A8E8600F09751 /* WebGPU Inspector Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "WebGPU Inspector Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		90D09B692B7A8E8600F09751 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		90D09B6A2B7A8E8600F09751 /* WebGPU Inspector.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "WebGPU Inspector.entitlements"; sourceTree = "<group>"; };
+		90D09B8A2B7A8E8600F09751 /* webgpu_inspector_panel.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = webgpu_inspector_panel.html; path = ../../chrome/webgpu_inspector_panel.html; sourceTree = "<group>"; };
+		90D09B8B2B7A8E8600F09751 /* content_script.js.map */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; name = content_script.js.map; path = ../../chrome/content_script.js.map; sourceTree = "<group>"; };
+		90D09B8C2B7A8E8600F09751 /* res */ = {isa = PBXFileReference; lastKnownFileType = folder; name = res; path = ../../chrome/res; sourceTree = "<group>"; };
+		90D09B8D2B7A8E8600F09751 /* webgpu_recorder.js.map */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; name = webgpu_recorder.js.map; path = ../../chrome/webgpu_recorder.js.map; sourceTree = "<group>"; };
+		90D09B8E2B7A8E8600F09751 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = background.js; path = ../../chrome/background.js; sourceTree = "<group>"; };
+		90D09B8F2B7A8E8600F09751 /* webgpu_inspector_window.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = webgpu_inspector_window.js; path = ../../chrome/webgpu_inspector_window.js; sourceTree = "<group>"; };
+		90D09B902B7A8E8600F09751 /* webgpu_inspector_devtools.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = webgpu_inspector_devtools.html; path = ../../chrome/webgpu_inspector_devtools.html; sourceTree = "<group>"; };
+		90D09B912B7A8E8600F09751 /* content_script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = content_script.js; path = ../../chrome/content_script.js; sourceTree = "<group>"; };
+		90D09B922B7A8E8600F09751 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = ../../chrome/manifest.json; sourceTree = "<group>"; };
+		90D09B932B7A8E8600F09751 /* webgpu_inspector_panel.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = webgpu_inspector_panel.css; path = ../../chrome/webgpu_inspector_panel.css; sourceTree = "<group>"; };
+		90D09B942B7A8E8600F09751 /* webgpu_recorder.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = webgpu_recorder.js; path = ../../chrome/webgpu_recorder.js; sourceTree = "<group>"; };
+		90D09B952B7A8E8600F09751 /* background.js.map */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; name = background.js.map; path = ../../chrome/background.js.map; sourceTree = "<group>"; };
+		90D09B962B7A8E8600F09751 /* webgpu_inspector_window.js.map */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; name = webgpu_inspector_window.js.map; path = ../../chrome/webgpu_inspector_window.js.map; sourceTree = "<group>"; };
+		90D09B972B7A8E8600F09751 /* webgpu_inspector.js.map */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; name = webgpu_inspector.js.map; path = ../../chrome/webgpu_inspector.js.map; sourceTree = "<group>"; };
+		90D09B982B7A8E8600F09751 /* webgpu_inspector.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = webgpu_inspector.js; path = ../../chrome/webgpu_inspector.js; sourceTree = "<group>"; };
+		90D09B992B7A8E8600F09751 /* webgpu_inspector_devtools.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = webgpu_inspector_devtools.js; path = ../../chrome/webgpu_inspector_devtools.js; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		90D09B382B7A8E8600F09751 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		90D09B4A2B7A8E8600F09751 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		90D09B572B7A8E8600F09751 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		90D09B612B7A8E8600F09751 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		90D09B272B7A8E8500F09751 = {
+			isa = PBXGroup;
+			children = (
+				90D09B2C2B7A8E8500F09751 /* Shared (App) */,
+				90D09B352B7A8E8600F09751 /* Shared (Extension) */,
+				90D09B3D2B7A8E8600F09751 /* iOS (App) */,
+				90D09B4E2B7A8E8600F09751 /* macOS (App) */,
+				90D09B5E2B7A8E8600F09751 /* iOS (Extension) */,
+				90D09B682B7A8E8600F09751 /* macOS (Extension) */,
+				90D09B3C2B7A8E8600F09751 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		90D09B2C2B7A8E8500F09751 /* Shared (App) */ = {
+			isa = PBXGroup;
+			children = (
+				90D09B332B7A8E8500F09751 /* ViewController.swift */,
+				90D09B342B7A8E8600F09751 /* Assets.xcassets */,
+				90D09B2D2B7A8E8500F09751 /* Resources */,
+			);
+			path = "Shared (App)";
+			sourceTree = "<group>";
+		};
+		90D09B2D2B7A8E8500F09751 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				90D09B2E2B7A8E8500F09751 /* Main.html */,
+				90D09B302B7A8E8500F09751 /* Icon.png */,
+				90D09B312B7A8E8500F09751 /* Style.css */,
+				90D09B322B7A8E8500F09751 /* Script.js */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		90D09B352B7A8E8600F09751 /* Shared (Extension) */ = {
+			isa = PBXGroup;
+			children = (
+				90D09B892B7A8E8600F09751 /* Resources */,
+				90D09B362B7A8E8600F09751 /* SafariWebExtensionHandler.swift */,
+			);
+			path = "Shared (Extension)";
+			sourceTree = "<group>";
+		};
+		90D09B3C2B7A8E8600F09751 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				90D09B3B2B7A8E8600F09751 /* WebGPU Inspector.app */,
+				90D09B4D2B7A8E8600F09751 /* WebGPU Inspector.app */,
+				90D09B5A2B7A8E8600F09751 /* WebGPU Inspector Extension.appex */,
+				90D09B642B7A8E8600F09751 /* WebGPU Inspector Extension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		90D09B3D2B7A8E8600F09751 /* iOS (App) */ = {
+			isa = PBXGroup;
+			children = (
+				90D09B3E2B7A8E8600F09751 /* AppDelegate.swift */,
+				90D09B402B7A8E8600F09751 /* SceneDelegate.swift */,
+				90D09B422B7A8E8600F09751 /* LaunchScreen.storyboard */,
+				90D09B452B7A8E8600F09751 /* Main.storyboard */,
+				90D09B482B7A8E8600F09751 /* Info.plist */,
+			);
+			path = "iOS (App)";
+			sourceTree = "<group>";
+		};
+		90D09B4E2B7A8E8600F09751 /* macOS (App) */ = {
+			isa = PBXGroup;
+			children = (
+				90D09B4F2B7A8E8600F09751 /* AppDelegate.swift */,
+				90D09B512B7A8E8600F09751 /* Main.storyboard */,
+				90D09B542B7A8E8600F09751 /* Info.plist */,
+				90D09B552B7A8E8600F09751 /* WebGPU Inspector.entitlements */,
+			);
+			path = "macOS (App)";
+			sourceTree = "<group>";
+		};
+		90D09B5E2B7A8E8600F09751 /* iOS (Extension) */ = {
+			isa = PBXGroup;
+			children = (
+				90D09B5F2B7A8E8600F09751 /* Info.plist */,
+			);
+			path = "iOS (Extension)";
+			sourceTree = "<group>";
+		};
+		90D09B682B7A8E8600F09751 /* macOS (Extension) */ = {
+			isa = PBXGroup;
+			children = (
+				90D09B692B7A8E8600F09751 /* Info.plist */,
+				90D09B6A2B7A8E8600F09751 /* WebGPU Inspector.entitlements */,
+			);
+			path = "macOS (Extension)";
+			sourceTree = "<group>";
+		};
+		90D09B892B7A8E8600F09751 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				90D09B8A2B7A8E8600F09751 /* webgpu_inspector_panel.html */,
+				90D09B8B2B7A8E8600F09751 /* content_script.js.map */,
+				90D09B8C2B7A8E8600F09751 /* res */,
+				90D09B8D2B7A8E8600F09751 /* webgpu_recorder.js.map */,
+				90D09B8E2B7A8E8600F09751 /* background.js */,
+				90D09B8F2B7A8E8600F09751 /* webgpu_inspector_window.js */,
+				90D09B902B7A8E8600F09751 /* webgpu_inspector_devtools.html */,
+				90D09B912B7A8E8600F09751 /* content_script.js */,
+				90D09B922B7A8E8600F09751 /* manifest.json */,
+				90D09B932B7A8E8600F09751 /* webgpu_inspector_panel.css */,
+				90D09B942B7A8E8600F09751 /* webgpu_recorder.js */,
+				90D09B952B7A8E8600F09751 /* background.js.map */,
+				90D09B962B7A8E8600F09751 /* webgpu_inspector_window.js.map */,
+				90D09B972B7A8E8600F09751 /* webgpu_inspector.js.map */,
+				90D09B982B7A8E8600F09751 /* webgpu_inspector.js */,
+				90D09B992B7A8E8600F09751 /* webgpu_inspector_devtools.js */,
+			);
+			name = Resources;
+			path = "Shared (Extension)";
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		90D09B3A2B7A8E8600F09751 /* WebGPU Inspector (iOS) */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 90D09B7F2B7A8E8600F09751 /* Build configuration list for PBXNativeTarget "WebGPU Inspector (iOS)" */;
+			buildPhases = (
+				90D09B372B7A8E8600F09751 /* Sources */,
+				90D09B382B7A8E8600F09751 /* Frameworks */,
+				90D09B392B7A8E8600F09751 /* Resources */,
+				90D09B7E2B7A8E8600F09751 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				90D09B5D2B7A8E8600F09751 /* PBXTargetDependency */,
+			);
+			name = "WebGPU Inspector (iOS)";
+			productName = "WebGPU Inspector (iOS)";
+			productReference = 90D09B3B2B7A8E8600F09751 /* WebGPU Inspector.app */;
+			productType = "com.apple.product-type.application";
+		};
+		90D09B4C2B7A8E8600F09751 /* WebGPU Inspector (macOS) */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 90D09B862B7A8E8600F09751 /* Build configuration list for PBXNativeTarget "WebGPU Inspector (macOS)" */;
+			buildPhases = (
+				90D09B492B7A8E8600F09751 /* Sources */,
+				90D09B4A2B7A8E8600F09751 /* Frameworks */,
+				90D09B4B2B7A8E8600F09751 /* Resources */,
+				90D09B852B7A8E8600F09751 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				90D09B672B7A8E8600F09751 /* PBXTargetDependency */,
+			);
+			name = "WebGPU Inspector (macOS)";
+			productName = "WebGPU Inspector (macOS)";
+			productReference = 90D09B4D2B7A8E8600F09751 /* WebGPU Inspector.app */;
+			productType = "com.apple.product-type.application";
+		};
+		90D09B592B7A8E8600F09751 /* WebGPU Inspector Extension (iOS) */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 90D09B7B2B7A8E8600F09751 /* Build configuration list for PBXNativeTarget "WebGPU Inspector Extension (iOS)" */;
+			buildPhases = (
+				90D09B562B7A8E8600F09751 /* Sources */,
+				90D09B572B7A8E8600F09751 /* Frameworks */,
+				90D09B582B7A8E8600F09751 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "WebGPU Inspector Extension (iOS)";
+			productName = "WebGPU Inspector Extension (iOS)";
+			productReference = 90D09B5A2B7A8E8600F09751 /* WebGPU Inspector Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		90D09B632B7A8E8600F09751 /* WebGPU Inspector Extension (macOS) */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 90D09B822B7A8E8600F09751 /* Build configuration list for PBXNativeTarget "WebGPU Inspector Extension (macOS)" */;
+			buildPhases = (
+				90D09B602B7A8E8600F09751 /* Sources */,
+				90D09B612B7A8E8600F09751 /* Frameworks */,
+				90D09B622B7A8E8600F09751 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "WebGPU Inspector Extension (macOS)";
+			productName = "WebGPU Inspector Extension (macOS)";
+			productReference = 90D09B642B7A8E8600F09751 /* WebGPU Inspector Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		90D09B282B7A8E8500F09751 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1520;
+				LastUpgradeCheck = 1520;
+				TargetAttributes = {
+					90D09B3A2B7A8E8600F09751 = {
+						CreatedOnToolsVersion = 15.2;
+					};
+					90D09B4C2B7A8E8600F09751 = {
+						CreatedOnToolsVersion = 15.2;
+					};
+					90D09B592B7A8E8600F09751 = {
+						CreatedOnToolsVersion = 15.2;
+					};
+					90D09B632B7A8E8600F09751 = {
+						CreatedOnToolsVersion = 15.2;
+					};
+				};
+			};
+			buildConfigurationList = 90D09B2B2B7A8E8500F09751 /* Build configuration list for PBXProject "WebGPU Inspector" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 90D09B272B7A8E8500F09751;
+			productRefGroup = 90D09B3C2B7A8E8600F09751 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				90D09B3A2B7A8E8600F09751 /* WebGPU Inspector (iOS) */,
+				90D09B4C2B7A8E8600F09751 /* WebGPU Inspector (macOS) */,
+				90D09B592B7A8E8600F09751 /* WebGPU Inspector Extension (iOS) */,
+				90D09B632B7A8E8600F09751 /* WebGPU Inspector Extension (macOS) */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		90D09B392B7A8E8600F09751 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				90D09B6D2B7A8E8600F09751 /* Icon.png in Resources */,
+				90D09B442B7A8E8600F09751 /* LaunchScreen.storyboard in Resources */,
+				90D09B6B2B7A8E8600F09751 /* Main.html in Resources */,
+				90D09B712B7A8E8600F09751 /* Script.js in Resources */,
+				90D09B752B7A8E8600F09751 /* Assets.xcassets in Resources */,
+				90D09B472B7A8E8600F09751 /* Main.storyboard in Resources */,
+				90D09B6F2B7A8E8600F09751 /* Style.css in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		90D09B4B2B7A8E8600F09751 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				90D09B6E2B7A8E8600F09751 /* Icon.png in Resources */,
+				90D09B702B7A8E8600F09751 /* Style.css in Resources */,
+				90D09B532B7A8E8600F09751 /* Main.storyboard in Resources */,
+				90D09B722B7A8E8600F09751 /* Script.js in Resources */,
+				90D09B762B7A8E8600F09751 /* Assets.xcassets in Resources */,
+				90D09B6C2B7A8E8600F09751 /* Main.html in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		90D09B582B7A8E8600F09751 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				90D09BAC2B7A8E8600F09751 /* webgpu_inspector_panel.css in Resources */,
+				90D09BA82B7A8E8600F09751 /* webgpu_inspector_window.js in Resources */,
+				90D09BAD2B7A8E8600F09751 /* webgpu_recorder.js in Resources */,
+				90D09BAB2B7A8E8600F09751 /* manifest.json in Resources */,
+				90D09BA52B7A8E8600F09751 /* webgpu_inspector_panel.html in Resources */,
+				90D09BAF2B7A8E8600F09751 /* webgpu_inspector_devtools.js in Resources */,
+				90D09BA72B7A8E8600F09751 /* background.js in Resources */,
+				90D09BAE2B7A8E8600F09751 /* webgpu_inspector.js in Resources */,
+				90D09BA92B7A8E8600F09751 /* webgpu_inspector_devtools.html in Resources */,
+				90D09BA62B7A8E8600F09751 /* res in Resources */,
+				90D09BAA2B7A8E8600F09751 /* content_script.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		90D09B622B7A8E8600F09751 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				90D09BA12B7A8E8600F09751 /* webgpu_inspector_panel.css in Resources */,
+				90D09B9D2B7A8E8600F09751 /* webgpu_inspector_window.js in Resources */,
+				90D09BA22B7A8E8600F09751 /* webgpu_recorder.js in Resources */,
+				90D09BA02B7A8E8600F09751 /* manifest.json in Resources */,
+				90D09B9A2B7A8E8600F09751 /* webgpu_inspector_panel.html in Resources */,
+				90D09BA42B7A8E8600F09751 /* webgpu_inspector_devtools.js in Resources */,
+				90D09B9C2B7A8E8600F09751 /* background.js in Resources */,
+				90D09BA32B7A8E8600F09751 /* webgpu_inspector.js in Resources */,
+				90D09B9E2B7A8E8600F09751 /* webgpu_inspector_devtools.html in Resources */,
+				90D09B9B2B7A8E8600F09751 /* res in Resources */,
+				90D09B9F2B7A8E8600F09751 /* content_script.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		90D09B372B7A8E8600F09751 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				90D09B732B7A8E8600F09751 /* ViewController.swift in Sources */,
+				90D09B3F2B7A8E8600F09751 /* AppDelegate.swift in Sources */,
+				90D09B412B7A8E8600F09751 /* SceneDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		90D09B492B7A8E8600F09751 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				90D09B742B7A8E8600F09751 /* ViewController.swift in Sources */,
+				90D09B502B7A8E8600F09751 /* AppDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		90D09B562B7A8E8600F09751 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				90D09B772B7A8E8600F09751 /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		90D09B602B7A8E8600F09751 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				90D09B782B7A8E8600F09751 /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		90D09B5D2B7A8E8600F09751 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 90D09B592B7A8E8600F09751 /* WebGPU Inspector Extension (iOS) */;
+			targetProxy = 90D09B5C2B7A8E8600F09751 /* PBXContainerItemProxy */;
+		};
+		90D09B672B7A8E8600F09751 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 90D09B632B7A8E8600F09751 /* WebGPU Inspector Extension (macOS) */;
+			targetProxy = 90D09B662B7A8E8600F09751 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		90D09B2E2B7A8E8500F09751 /* Main.html */ = {
+			isa = PBXVariantGroup;
+			children = (
+				90D09B2F2B7A8E8500F09751 /* Base */,
+			);
+			name = Main.html;
+			sourceTree = "<group>";
+		};
+		90D09B422B7A8E8600F09751 /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				90D09B432B7A8E8600F09751 /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+		90D09B452B7A8E8600F09751 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				90D09B462B7A8E8600F09751 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+		90D09B512B7A8E8600F09751 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				90D09B522B7A8E8600F09751 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		90D09B792B7A8E8600F09751 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		90D09B7A2B7A8E8600F09751 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		90D09B7C2B7A8E8600F09751 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "WebGPU Inspector Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.yourCompany.WebGPU-Inspector.Extension";
+				PRODUCT_NAME = "WebGPU Inspector Extension";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		90D09B7D2B7A8E8600F09751 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "WebGPU Inspector Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.yourCompany.WebGPU-Inspector.Extension";
+				PRODUCT_NAME = "WebGPU Inspector Extension";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		90D09B802B7A8E8600F09751 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iOS (App)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "WebGPU Inspector";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.yourCompany.WebGPU-Inspector";
+				PRODUCT_NAME = "WebGPU Inspector";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		90D09B812B7A8E8600F09751 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iOS (App)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "WebGPU Inspector";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.yourCompany.WebGPU-Inspector";
+				PRODUCT_NAME = "WebGPU Inspector";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		90D09B832B7A8E8600F09751 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "macOS (Extension)/WebGPU Inspector.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "macOS (Extension)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "WebGPU Inspector Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.yourCompany.WebGPU-Inspector.Extension";
+				PRODUCT_NAME = "WebGPU Inspector Extension";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		90D09B842B7A8E8600F09751 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "macOS (Extension)/WebGPU Inspector.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "macOS (Extension)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "WebGPU Inspector Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.yourCompany.WebGPU-Inspector.Extension";
+				PRODUCT_NAME = "WebGPU Inspector Extension";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		90D09B872B7A8E8600F09751 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "macOS (App)/WebGPU Inspector.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "macOS (App)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "WebGPU Inspector";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.yourCompany.WebGPU-Inspector";
+				PRODUCT_NAME = "WebGPU Inspector";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		90D09B882B7A8E8600F09751 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "macOS (App)/WebGPU Inspector.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "macOS (App)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "WebGPU Inspector";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.yourCompany.WebGPU-Inspector";
+				PRODUCT_NAME = "WebGPU Inspector";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		90D09B2B2B7A8E8500F09751 /* Build configuration list for PBXProject "WebGPU Inspector" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				90D09B792B7A8E8600F09751 /* Debug */,
+				90D09B7A2B7A8E8600F09751 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		90D09B7B2B7A8E8600F09751 /* Build configuration list for PBXNativeTarget "WebGPU Inspector Extension (iOS)" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				90D09B7C2B7A8E8600F09751 /* Debug */,
+				90D09B7D2B7A8E8600F09751 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		90D09B7F2B7A8E8600F09751 /* Build configuration list for PBXNativeTarget "WebGPU Inspector (iOS)" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				90D09B802B7A8E8600F09751 /* Debug */,
+				90D09B812B7A8E8600F09751 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		90D09B822B7A8E8600F09751 /* Build configuration list for PBXNativeTarget "WebGPU Inspector Extension (macOS)" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				90D09B832B7A8E8600F09751 /* Debug */,
+				90D09B842B7A8E8600F09751 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		90D09B862B7A8E8600F09751 /* Build configuration list for PBXNativeTarget "WebGPU Inspector (macOS)" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				90D09B872B7A8E8600F09751 /* Debug */,
+				90D09B882B7A8E8600F09751 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 90D09B282B7A8E8500F09751 /* Project object */;
+}
