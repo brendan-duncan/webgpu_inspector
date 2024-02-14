@@ -66,9 +66,12 @@ export class InspectorWindow extends Window {
   }
 
   async initialize() {
+    this.port.postMessage({action: "PanelLoaded"});
+
     if (!navigator.gpu) {
       return;
     }
+
     this.adapter = await navigator.gpu.requestAdapter();
     if (!this.adapter) {
       return;
@@ -88,9 +91,7 @@ export class InspectorWindow extends Window {
 
     this.device = await this.adapter.requestDevice({requiredFeatures: features, requiredLimits: limits});
 
-    this.textureUtils = new TextureUtils(this.device);
-
-    this.port.postMessage({action: "PanelLoaded"});
+    this.textureUtils = new TextureUtils(this.device);   
   }
 
   _captureTextureData(id, passId, offset, size, index, count, chunk) {
@@ -146,6 +147,10 @@ export class InspectorWindow extends Window {
   }
 
   _createTexture(texture, passId) {
+    if (!this.device) {
+      return;
+    }
+
     const usage = texture.descriptor.usage;
     const format = texture.descriptor.format;
     const formatInfo = TextureFormatInfo[format] ?? TextureFormatInfo["rgba8unorm"];
@@ -165,14 +170,14 @@ export class InspectorWindow extends Window {
     const gpuFormat = formatInfo.depthOnlyFormat ?? format;
     texture.descriptor.format = gpuFormat;
     texture.descriptor.usage = (usage ?? GPUTextureUsage.RENDER_ATTACHMENT) | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST;
-    texture.gpuTexture = this.window.device.createTexture(texture.descriptor);
+    texture.gpuTexture = this.device.createTexture(texture.descriptor);
     texture.descriptor.usage = usage;
     texture.descriptor.format = format;
     
     const bytesPerRow = texture.bytesPerRow;
     const rowsPerImage = texture.height;
 
-    this.window.device.queue.writeTexture(
+    this.device.queue.writeTexture(
       {
         texture: texture.gpuTexture
       },
