@@ -358,11 +358,11 @@ export class ObjectDatabase {
     if (object instanceof GPU.RenderPipeline) {
       this.pendingRenderPipelines.delete(id);
       this.renderPipelines.set(id, object);
-
       this.onResolvePendingObject.emit(id, object);
     } else if (object instanceof GPU.ComputePipeline) {
       this.pendingComputePipelines.delete(id);
       this.computePipelines.set(id, object);
+      this.onResolvePendingObject.emit(id, object);
     }
   }
 

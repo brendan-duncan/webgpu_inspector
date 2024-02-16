@@ -64,6 +64,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._gpuWrapper = new GPUObjectWrapper(this);
 
       const self = this;
+      this._gpuWrapper.onPromise.addListener(this._onAsyncPromise, this);
       this._gpuWrapper.onPromiseResolve.addListener(this._onAsyncResolve, this);
       this._gpuWrapper.onPreCall.addListener(this._preMethodCall, this);
       this._gpuWrapper.onPostCall.addListener(this._onMethodCall, this);
@@ -410,6 +411,18 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._recordCommand(object, method, result, args, stacktrace);
     }
 
+    // Called when an async GPU method promise is created, allowing the inspector to wrap the result.
+    _onAsyncPromise(object, method, args, id, stacktrace) {
+      switch (method) {
+        case "createRenderPipelineAsync":
+          this._sendAddObjectMessage(id, object.__id, "RenderPipeline", this._stringifyDescriptor(args[0]), stacktrace, true);
+          break;
+        case "createComputePipelineAsync":
+          this._sendAddObjectMessage(id, object.__id, "ComputePipeline", this._stringifyDescriptor(args[0]), stacktrace, true);
+          break;
+      }
+    }
+
     // Called when an async GPU method promise resolves, allowing the inspector to wrap the result.
     _onAsyncResolve(object, method, args, id, result, stacktrace) {
       if (method === "requestAdapter") {
@@ -423,7 +436,8 @@ import { Actions, PanelActions } from "./utils/actions.js";
         if (device) {
           this._wrapDevice(adapter, device, id, args, stacktrace);
         }
-      } else if (result?.__id) {
+      } else {
+        this._wrapObject(result, id);
         window.postMessage({ action: Actions.ResolveAsyncObject, id: result.__id });
       }
     }

@@ -115,6 +115,7 @@ export class InspectPanel {
     this.database.onDeleteObject.addListener(this._deleteObject, this);
     this.database.onDeltaFrameTime.addListener(this._updateFrameStats, this);
     this.database.onValidationError.addListener(this._validationError, this);
+    this.database.onResolvePendingObject.addListener(this._resolvePendingObject, this);
 
     window.onTextureLoaded.addListener(this._textureLoaded, this);
 
@@ -288,6 +289,16 @@ export class InspectPanel {
       this._recycledWidgets[objectType] = [];
     }
     this._recycledWidgets[objectType].push(widget);
+  }
+
+  _resolvePendingObject(id, object) {
+    const widget = object?.widget;
+    if (widget) {
+      widget.element.remove();
+      object.widget = null;
+
+      this._addObject(object, false);
+    }
   }
 
   _deleteObject(id, object) {
