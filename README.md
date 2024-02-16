@@ -1,6 +1,6 @@
 # WebGPU Inspector Debugging Tool
 
-**Version: 0.0.3**
+**Version: 0.0.4**
 
 Inspection and graphics debugging browser extension tool for WebGPU.
 
