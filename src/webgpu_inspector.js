@@ -436,7 +436,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
         if (device) {
           this._wrapDevice(adapter, device, id, args, stacktrace);
         }
-      } else {
+      } else if (result) {
         this._wrapObject(result, id);
         window.postMessage({ action: Actions.ResolveAsyncObject, id: result.__id });
       }
@@ -793,6 +793,9 @@ import { Actions, PanelActions } from "./utils/actions.js";
     }
 
     _wrapObject(object, id) {
+      if (!object) {
+        return;
+      }
       // The object has already been wrapped
       if (object.__id) {
         return;
