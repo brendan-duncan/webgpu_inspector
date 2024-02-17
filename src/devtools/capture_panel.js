@@ -420,10 +420,15 @@ export class CapturePanel {
   }
 
   _getTextureFromAttachment(attachment) {
+    if (attachment?.view?.__texture?.__id) {
+      return this._getObject(attachment.view.__texture.__id);
+    }
+
     const view = this._getTextureViewFromAttachment(attachment);
     if (!view) {
       return null;
     }
+
     return this.database.getTextureFromView(view);
   }
 
@@ -730,7 +735,7 @@ export class CapturePanel {
           if (texture) {
             if (texture.gpuTexture) {
               const canvasDiv = new Div(inputGrp.body);
-              new Div(canvasDiv, { text: `Group: ${resource.group} Binding: ${resource.binding} Texture: ${texture.id} ${texture.format} ${texture.width}x${texture.height}` });
+              new Div(canvasDiv, { text: `Group: ${resource.group} Binding: ${resource.binding} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
               this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
             } else {
               this.database.requestTextureData(texture);
@@ -763,7 +768,7 @@ export class CapturePanel {
               new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
               new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
               if (texture) {
-                new Div(resourceGrp.body, { text: `GPUTexture ID:${texture.id}` });
+                new Div(resourceGrp.body, { text: `GPUTexture ID:${texture.idName}` });
                 const newDesc = this._processCommandArgs(texture.descriptor);
                 if (newDesc.usage) {
                   newDesc.usage = getFlagString(newDesc.usage, GPUTextureUsage);
@@ -782,7 +787,6 @@ export class CapturePanel {
         if (resource.buffer) {
           const bufferId = resource.buffer.__id;
           const buffer = this._getObject(bufferId);
-          //console.log("!!!! INSPECT BUFFER", bufferId, buffer);
           if (buffer) {
             const bufferDesc = buffer.descriptor;
             const newDesc = this._processCommandArgs(bufferDesc);
@@ -1094,13 +1098,13 @@ export class CapturePanel {
       const renderPass = state.renderPass.args[0];
       if (renderPass?.colorAttachments) {
         for (const attachment of renderPass.colorAttachments) {
-          const textureView = this._getTextureViewFromAttachment(attachment);
-          outputs.color.push(textureView);
+          const texture = this._getTextureFromAttachment(attachment);
+          outputs.color.push(texture);
         }
       }
       if (renderPass?.depthStencilAttachment) {
-        const textureView = this._getTextureViewFromAttachment(renderPass.depthStencilAttachment);
-        outputs.depthStencil = textureView;
+        const texture = this._getTextureFromAttachment(renderPass.depthStencilAttachment);
+        outputs.depthStencil = texture;
       }
     }
 
@@ -1108,12 +1112,11 @@ export class CapturePanel {
       const outputGrp = new Collapsable(parent, { collapsed: true, label: "Output Textures" });
       outputGrp.body.style.maxHeight = "unset";
       for (const index in outputs.color) {
-        const textureView = outputs.color[index];
-        const texture = this.database.getTextureFromView(textureView);
+        const texture = outputs.color[index];
         if (texture) {
           if (texture.gpuTexture) {
             const canvasDiv = new Div(outputGrp.body);
-            new Div(canvasDiv, { text: `Color: ${index} Texture: ${texture.id} ${texture.format} ${texture.width}x${texture.height}` });
+            new Div(canvasDiv, { text: `Color: ${index} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
             this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
           } else {
             this.database.requestTextureData(texture);
@@ -1121,11 +1124,11 @@ export class CapturePanel {
         }
       }
       if (outputs.depthStencil) {
-        const texture = this.database.getTextureFromView(outputs.depthStencil);
+        const texture = outputs.depthStencil;
         if (texture) {
           if (texture.gpuTexture) {
             const canvasDiv = new Div(outputGrp.body);
-            new Div(canvasDiv, { text: `DepthStencil Texture: ${texture.id} ${texture.format} ${texture.width}x${texture.height}` });
+            new Div(canvasDiv, { text: `DepthStencil Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
             this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
           } else {
             this.database.requestTextureData(texture);
@@ -1161,7 +1164,7 @@ export class CapturePanel {
         if (texture) {
           if (texture.gpuTexture) {
             const canvasDiv = new Div(inputGrp.body);
-            new Div(canvasDiv, { text: `Group: ${resource.group} Binding: ${resource.binding} Texture: ${texture.id} ${texture.format} ${texture.width}x${texture.height}` });
+            new Div(canvasDiv, { text: `Group: ${resource.group} Binding: ${resource.binding} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
             this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
           } else {
             this.database.requestTextureData(texture);
