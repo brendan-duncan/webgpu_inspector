@@ -155,6 +155,16 @@ export class InspectPanel {
     return this.database.inspectedObject;
   }
 
+  inspectObject(object) {
+    if (!object) {
+      return;
+    }
+    if (object.widget) {
+      object.widget.group.expand();
+      object.widget.element.click();
+    }
+  }
+
   _changeObjectCountPlot(value) {
     if (value === this._objectCountType) {
       return;

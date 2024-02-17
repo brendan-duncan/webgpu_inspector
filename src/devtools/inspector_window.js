@@ -94,6 +94,14 @@ export class InspectorWindow extends Window {
     this.textureUtils = new TextureUtils(this.device);   
   }
 
+  inspectObject(object) {
+    if (!object) {
+      return;
+    }
+    this._tabs.activeTab = 0;
+    this._inspectPanel.inspectObject(object);
+  }
+
   _captureTextureData(id, passId, offset, size, index, count, chunk) {
     const object = this.database.getObject(id);
     if (!object || !(object instanceof Texture)) {

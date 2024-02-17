@@ -38,6 +38,10 @@ export class Collapsable extends Widget {
     };
   }
 
+  expand() {
+    this.collapsed = false;
+  }
+
   get collapsed() {
     return this.collapseButton.text == "+";
   }

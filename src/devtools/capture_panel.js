@@ -471,18 +471,24 @@ export class CapturePanel {
   }
 
   _showCaptureCommandInfo_beginRenderPass(args, commandInfo) {
+    const self = this;
     const colorAttachments = args[0].colorAttachments;
     for (const i in colorAttachments) {
       const attachment = colorAttachments[i];
       const texture = this._getTextureFromAttachment(attachment);
-
       if (texture) {
         const format = texture.descriptor.format;
         if (texture.gpuTexture) {
-          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format} ${texture.width}x${texture.height}` });
+          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: Texture:${texture.idName} ${format} ${texture.width}x${texture.height}` });
+          new Button(colorAttachmentGrp.body, { label: "Inspect", callback: () => {
+            self.window.inspectObject(texture);
+          } });
           this._createTextureWidget(colorAttachmentGrp.body, texture, 256, "margin-left: 20px; margin-top: 10px;");
         } else {
           const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format} ${texture.width}x${texture.height}` });
+          new Button(colorAttachmentGrp.body, { label: "Inspect", callback: () => {
+            self.window.inspectObject(texture);
+          } });
           new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(attachment.view.descriptor, undefined, 4) });
           const texDesc = this._processCommandArgs(texture.descriptor);
           if (texDesc.usage) {
@@ -499,10 +505,15 @@ export class CapturePanel {
         if (texture.gpuTexture) {
           const format = texture.descriptor.format;
           const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment ${format} ${texture.width}x${texture.height}` });
-          
+          new Button(depthStencilAttachmentGrp.body, { label: "Inspect", callback: () => {
+            self.window.inspectObject(texture);
+          } });
           this._createTextureWidget(depthStencilAttachmentGrp.body, texture, 256, "margin-left: 20px; margin-top: 10px;");
         } else {
           const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.descriptor?.format ?? "<unknown format>"} ${texture.width}x${texture.height}` });
+          new Button(depthStencilAttachmentGrp.body, { label: "Inspect", callback: () => {
+            self.window.inspectObject(texture);
+          } });
           new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
           const texDesc = this._processCommandArgs(texture.descriptor);
           if (texDesc.usage) {
@@ -666,14 +677,19 @@ export class CapturePanel {
       return;
     }
 
+    const self = this;
+
     const group = args[0];
     const bindGroupGrp = new Collapsable(commandInfo, { collapsed: true, label: `BindGroup ${groupIndex ?? ""} ID:${id}` });
+    new Button(bindGroupGrp.body, { label: "Inspect", callback: () => {
+      self.window.inspectObject(bindGroup);
+    } });
+
     const bindGroupDesc = bindGroup.descriptor;
     const newDesc = this._processCommandArgs(bindGroupDesc);
     const descStr = JSON.stringify(newDesc, undefined, 4);
     new Widget("pre", bindGroupGrp.body, { text: descStr });
 
-    const self = this;
     function getResourceType(resource) {
       if (resource.__id !== undefined) {
         const obj = self._getObject(resource.__id);
@@ -733,6 +749,9 @@ export class CapturePanel {
         for (const resource of inputs) {
           const texture = this.database.getTextureFromView(resource.textureView);
           if (texture) {
+            new Button(inputGrp.body, { label: "Inspect", callback: () => {
+              self.window.inspectObject(texture);
+            } });
             if (texture.gpuTexture) {
               const canvasDiv = new Div(inputGrp.body);
               new Div(canvasDiv, { text: `Group: ${resource.group} Binding: ${resource.binding} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
@@ -757,6 +776,9 @@ export class CapturePanel {
       if (resource.__id !== undefined) {
         const obj = this._getObject(resource.__id);
         if (obj) {
+          new Button(resourceGrp.body, { label: "Inspect", callback: () => {
+            self.window.inspectObject(obj);
+          } });
           if (obj instanceof Sampler) {
             new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
             new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
@@ -788,6 +810,9 @@ export class CapturePanel {
           const bufferId = resource.buffer.__id;
           const buffer = this._getObject(bufferId);
           if (buffer) {
+            new Button(resourceGrp.body, { label: "Inspect", callback: () => {
+              self.window.inspectObject(buffer);
+            } });
             const bufferDesc = buffer.descriptor;
             const newDesc = this._processCommandArgs(bufferDesc);
             if (newDesc.usage) {
@@ -814,10 +839,14 @@ export class CapturePanel {
   }
 
   _showCaptureCommandInfo_setPipeline(args, commandInfo) {
+    const self = this;
     const id = args[0].__id;
     const pipeline = this._getObject(id);
     if (pipeline) {
       const pipelineGrp = new Collapsable(commandInfo, { collapsed: true, label: `Pipeline ID:${id}` });
+      new Button(pipelineGrp.body, { label: "Inspect", callback: () => {
+        self.window.inspectObject(pipeline);
+      } });
       const desc = pipeline.descriptor;
       const newDesc = this._processCommandArgs(desc);
       const descStr = JSON.stringify(newDesc, undefined, 4);
@@ -832,6 +861,9 @@ export class CapturePanel {
           const vertexEntry = desc.vertex?.entryPoint;
           const fragmentEntry = desc.fragment?.entryPoint;
           const grp = new Collapsable(commandInfo, { collapsed: true, label: `Module ID:${vertexId} Vertex: ${vertexEntry} Fragment: ${fragmentEntry}` });
+          new Button(grp.body, { label: "Inspect", callback: () => {
+            self.window.inspectObject(module);
+          } });
           const code = module.descriptor.code;
           new Widget("pre", grp.body, { text: code });
 
@@ -842,8 +874,10 @@ export class CapturePanel {
           const vertexModule = this._getObject(vertexId);
           if (vertexModule) {
             const vertexEntry = desc.vertex?.entryPoint;
-
             const vertexGrp = new Collapsable(commandInfo, { collapsed: true, label: `Vertex Module ID:${vertexId} Entry: ${vertexEntry}` });
+            new Button(vertexGrp.body, { label: "Inspect", callback: () => {
+              self.window.inspectObject(vertexModule);
+            } });
             const code = vertexModule.descriptor.code;
             new Widget("pre", vertexGrp.body, { text: code });
 
@@ -856,6 +890,9 @@ export class CapturePanel {
           if (fragmentModule) {
             const fragmentEntry = desc.fragment?.entryPoint;
             const fragmentGrp = new Collapsable(commandInfo, { collapsed: true, label: `Fragment Module ID:${fragmentId} Entry: ${fragmentEntry}` });
+            new Button(fragmentGrp.body, { label: "Inspect", callback: () => {
+              self.window.inspectObject(fragmentModule);
+            } });
             const code = fragmentModule.descriptor.code;
             new Widget("pre", fragmentGrp.body, { text: code });
 
@@ -870,6 +907,9 @@ export class CapturePanel {
         if (computeModule) {
           const computeEntry = desc.compute?.entryPoint;
           const computeGrp = new Collapsable(commandInfo, { collapsed: true, label: `Compute Module ID:${computeId} Entry: ${computeEntry}` });
+          new Button(computeGrp.body, { label: "Inspect", callback: () => {
+            self.window.inspectObject(computeModule);
+          } });
           const code = computeModule.descriptor.code;
           new Widget("pre", computeGrp.body, { text: code });
 
@@ -894,10 +934,14 @@ export class CapturePanel {
   }
 
   _showCaptureCommandInfo_setIndexBuffer(args, commandInfo, collapsed) {
+    const self = this;
     const id = args[0].__id;
     const buffer = this._getObject(id);
     if (buffer) {
       const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Index Buffer ID:${id}` });
+      new Button(bufferGrp.body, { label: "Inspect", callback: () => {
+        self.window.inspectObject(buffer);
+      } });
       const desc = buffer.descriptor;
       const newDesc = this._processCommandArgs(desc);
       if (newDesc.usage) {
@@ -908,11 +952,15 @@ export class CapturePanel {
   }
 
   _showCaptureCommandInfo_setVertexBuffer(args, commandInfo, collapsed) {
+    const self = this;
     const index = args[0];
     const id = args[1]?.__id;
     const buffer = this._getObject(id);
     if (buffer) {
       const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Vertex Buffer ${index} ID:${id}` });
+      new Button(bufferGrp.body, { label: "Inspect", callback: () => {
+        self.window.inspectObject(buffer);
+      } });
       const desc = buffer.descriptor;
       const newDesc = this._processCommandArgs(desc);
       if (newDesc.usage) {
@@ -1109,16 +1157,21 @@ export class CapturePanel {
     }
 
     if (outputs.color.length || outputs.depthStencil) {
+      const self = this;
       const outputGrp = new Collapsable(parent, { collapsed: true, label: "Output Textures" });
       outputGrp.body.style.maxHeight = "unset";
       for (const index in outputs.color) {
         const texture = outputs.color[index];
         if (texture) {
+          new Button(outputGrp.body, { label: "Inspect", callback: () => {
+            self.window.inspectObject(texture);
+          } });
           if (texture.gpuTexture) {
             const canvasDiv = new Div(outputGrp.body);
             new Div(canvasDiv, { text: `Color: ${index} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
             this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
           } else {
+            new Div(outputGrp.body, { text: `Color: ${index} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
             this.database.requestTextureData(texture);
           }
         }
@@ -1126,11 +1179,15 @@ export class CapturePanel {
       if (outputs.depthStencil) {
         const texture = outputs.depthStencil;
         if (texture) {
+          new Button(outputGrp.body, { label: "Inspect", callback: () => {
+            self.window.inspectObject(texture);
+          } });
           if (texture.gpuTexture) {
             const canvasDiv = new Div(outputGrp.body);
             new Div(canvasDiv, { text: `DepthStencil Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
             this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
           } else {
+            new Div(outputGrp.body, { text: `DepthStencil Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
             this.database.requestTextureData(texture);
           }
         }
@@ -1157,11 +1214,15 @@ export class CapturePanel {
     }
 
     if (inputs.length) {
+      const self = this;
       const inputGrp = new Collapsable(parent, { collapsed: true, label: "Input Textures" });
       inputGrp.body.style.maxHeight = "unset";
       for (const resource of inputs) {
         const texture = this.database.getTextureFromView(resource.textureView);
         if (texture) {
+          new Button(inputGrp.body, { label: "Inspect", callback: () => {
+            self.window.inspectObject(texture);
+          } });
           if (texture.gpuTexture) {
             const canvasDiv = new Div(inputGrp.body);
             new Div(canvasDiv, { text: `Group: ${resource.group} Binding: ${resource.binding} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
