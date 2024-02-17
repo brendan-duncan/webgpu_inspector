@@ -118,6 +118,10 @@ export class CapturePanel {
     });
   }
 
+  _clampedTextureWidth(texture) {
+    return Math.max(Math.min(texture.width, texture.height, 256), 64);
+  }
+
   _getObject(id) {
     return this._capturedObjects.get(id) ?? this.database.getObject(id);
   }
@@ -332,20 +336,22 @@ export class CapturePanel {
       } else if (method === "setBindGroup") {
         new Span(cmd, { class: "capture_method_args", text: `index:${args[0]} bindGroup:${args[1].__id}` });
         const bg = this._getObject(args[1].__id);
-        this._capturedObjects.set(args[1].__id, bg);
-        for (const entry of bg.descriptor.entries) {
-          if (entry.resource?.__id) {
-            const obj = this._getObject(entry.resource.__id);
-            this._capturedObjects.set(entry.resource.__id, obj);
-            if (obj instanceof TextureView) {
-              const tex = this._getObject(obj.texture?.id ?? obj.texture);
-              if (tex) {
-                this._capturedObjects.set(tex.id, tex);
+        if (bg) {
+          this._capturedObjects.set(args[1].__id, bg);
+          for (const entry of bg.descriptor.entries) {
+            if (entry.resource?.__id) {
+              const obj = this._getObject(entry.resource.__id);
+              this._capturedObjects.set(entry.resource.__id, obj);
+              if (obj instanceof TextureView) {
+                const tex = this._getObject(obj.texture?.id ?? obj.texture);
+                if (tex) {
+                  this._capturedObjects.set(tex.id, tex);
+                }
               }
+            } else if (entry.resource?.buffer?.__id) {
+              const obj = this._getObject(entry.resource.buffer.__id);
+              this._capturedObjects.set(entry.resource.buffer.__id, obj);
             }
-          } else if (entry.resource?.buffer?.__id) {
-            const obj = this._getObject(entry.resource.buffer.__id);
-            this._capturedObjects.set(entry.resource.buffer.__id, obj);
           }
         }
       } else if (method === "writeBuffer") {
@@ -432,7 +438,7 @@ export class CapturePanel {
     return this.database.getTextureFromView(view);
   }
 
-  _createTextureWidget(parent, texture, width, style) {
+  _createTextureWidget(parent, texture, viewWidth, style) {
     if (!texture.gpuTexture) {
       return null;
     }
@@ -442,7 +448,6 @@ export class CapturePanel {
       return;
     }
 
-    const viewWidth = width || 256;
     const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
 
     const container = new Div(parent);
@@ -451,8 +456,13 @@ export class CapturePanel {
     const numLayers = texture.depthOrArrayLayers;
     for (let layer = 0; layer < numLayers; ++layer) {
       const canvas = new Widget("canvas", new Div(container), { style });
-      canvas.element.width = viewWidth;
-      canvas.element.height = viewHeight;
+      canvas.element.width = texture.width;
+      canvas.element.height = texture.height;
+
+      if (viewWidth) {
+        canvas.element.style.width = `${viewWidth}px`;
+        canvas.element.style.height = `${viewHeight}px`;
+      }
 
       const layerView = texture.gpuTexture.createView({
         dimension: "2d",
@@ -464,7 +474,7 @@ export class CapturePanel {
       const dstFormat = navigator.gpu.getPreferredCanvasFormat();
       context.configure({ "device": this.window.device, "format": navigator.gpu.getPreferredCanvasFormat() });
       const canvasTexture = context.getCurrentTexture();
-      this.textureUtils.blitTexture(layerView, texture.gpuTexture.sampleCount, canvasTexture.createView(), dstFormat);
+      this.textureUtils.blitTexture(layerView, 1, canvasTexture.createView(), dstFormat);
     }
 
     return container;
@@ -483,7 +493,7 @@ export class CapturePanel {
           new Button(colorAttachmentGrp.body, { label: "Inspect", callback: () => {
             self.window.inspectObject(texture);
           } });
-          this._createTextureWidget(colorAttachmentGrp.body, texture, 256, "margin-left: 20px; margin-top: 10px;");
+          this._createTextureWidget(colorAttachmentGrp.body, texture, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
         } else {
           const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format} ${texture.width}x${texture.height}` });
           new Button(colorAttachmentGrp.body, { label: "Inspect", callback: () => {
@@ -508,7 +518,7 @@ export class CapturePanel {
           new Button(depthStencilAttachmentGrp.body, { label: "Inspect", callback: () => {
             self.window.inspectObject(texture);
           } });
-          this._createTextureWidget(depthStencilAttachmentGrp.body, texture, 256, "margin-left: 20px; margin-top: 10px;");
+          this._createTextureWidget(depthStencilAttachmentGrp.body, texture, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
         } else {
           const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.descriptor?.format ?? "<unknown format>"} ${texture.width}x${texture.height}` });
           new Button(depthStencilAttachmentGrp.body, { label: "Inspect", callback: () => {
@@ -755,7 +765,7 @@ export class CapturePanel {
             if (texture.gpuTexture) {
               const canvasDiv = new Div(inputGrp.body);
               new Div(canvasDiv, { text: `Group: ${resource.group} Binding: ${resource.binding} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
-              this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
+              this._createTextureWidget(canvasDiv, texture, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
             } else {
               this.database.requestTextureData(texture);
             }
@@ -783,19 +793,21 @@ export class CapturePanel {
             new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
             new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
           } else if (obj instanceof TextureView) {
-            const texture = obj.parent;
-            if (texture && texture.gpuTexture) {
-              this._createTextureWidget(resourceGrp.body, texture, 256, "margin-left: 20px; margin-top: 10px;");
-            } else {
-              new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
-              new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
-              if (texture) {
-                new Div(resourceGrp.body, { text: `GPUTexture ID:${texture.idName}` });
-                const newDesc = this._processCommandArgs(texture.descriptor);
-                if (newDesc.usage) {
-                  newDesc.usage = getFlagString(newDesc.usage, GPUTextureUsage);
-                }
-                new Widget("pre", resourceGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+            const texture = this._getObject(obj.texture);
+
+            new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
+            new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
+            if (texture) {
+              new Div(resourceGrp.body, { text: `GPUTexture ID:${texture.idName}` });
+              const newDesc = this._processCommandArgs(texture.descriptor);
+              if (newDesc.usage) {
+                newDesc.usage = getFlagString(newDesc.usage, GPUTextureUsage);
+              }
+              new Widget("pre", resourceGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+            
+              if (texture.gpuTexture) {
+                const w = Math.max(Math.min(texture.width, texture.height, 256), 64);
+                this._createTextureWidget(resourceGrp.body, texture, w, "margin-left: 20px; margin-top: 10px; margin-bottom: 10px;");
               }
             }
           } else {
@@ -1169,7 +1181,7 @@ export class CapturePanel {
           if (texture.gpuTexture) {
             const canvasDiv = new Div(outputGrp.body);
             new Div(canvasDiv, { text: `Color: ${index} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
-            this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
+            this._createTextureWidget(canvasDiv, texture, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
           } else {
             new Div(outputGrp.body, { text: `Color: ${index} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
             this.database.requestTextureData(texture);
@@ -1185,7 +1197,7 @@ export class CapturePanel {
           if (texture.gpuTexture) {
             const canvasDiv = new Div(outputGrp.body);
             new Div(canvasDiv, { text: `DepthStencil Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
-            this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
+            this._createTextureWidget(canvasDiv, texture, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
           } else {
             new Div(outputGrp.body, { text: `DepthStencil Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
             this.database.requestTextureData(texture);
@@ -1226,7 +1238,7 @@ export class CapturePanel {
           if (texture.gpuTexture) {
             const canvasDiv = new Div(inputGrp.body);
             new Div(canvasDiv, { text: `Group: ${resource.group} Binding: ${resource.binding} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
-            this._createTextureWidget(canvasDiv, texture, 256, "margin-left: 20px; margin-top: 10px;");
+            this._createTextureWidget(canvasDiv, texture, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
           } else {
             this.database.requestTextureData(texture);
           }

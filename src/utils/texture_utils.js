@@ -215,7 +215,6 @@ export class TextureUtils {
     passEncoder.setBindGroup(1, this.displayBindGroup);
     passEncoder.draw(3);
     passEncoder.end();
-
     this.device.queue.submit([commandEncoder.finish()]);
   }
 }
@@ -248,25 +247,25 @@ TextureUtils.blitShader = `
     var color = textureSample(texture, texSampler, input.uv);
     if (display.channels == 1.0) { // R
       var rgb = color.rgb * display.exposure;
-      return vec4f(rgb.r, 0.0, 0.0, color.a);
+      return vec4f(rgb.r, 0.0, 0.0, 1);
     } else if (display.channels == 2.0) { // G
       var rgb = color.rgb * display.exposure;
-      return vec4f(0.0, rgb.g, 0.0, color.a);
+      return vec4f(0.0, rgb.g, 0.0, 1);
     } else if (display.channels == 3.0) { // B
       var rgb = color.rgb * display.exposure;
-      return vec4f(0.0, 0.0, rgb.b, color.a);
+      return vec4f(0.0, 0.0, rgb.b, 1);
     } else if (display.channels == 4.0) { // A
       var a = color.a * display.exposure;
-      return vec4f(a, a, a, color.a);
+      return vec4f(a, a, a, 1);
     } else if (display.channels == 5.0) { // Luminance
       var luminance = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));
       var rgb = vec3f(luminance) * display.exposure;
-      return vec4f(rgb, color.a);
+      return vec4f(rgb, 1);
     }
 
     // RGB
     var rgb = color.rgb * display.exposure;
-    return vec4f(rgb, color.a);
+    return vec4f(rgb, 1);
   }
 `;
 
