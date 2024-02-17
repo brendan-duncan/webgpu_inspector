@@ -780,6 +780,9 @@ export class InspectPanel {
         }
         if (texture.gpuTexture) {
           this._createTexturePreview(texture, textureGrp.body);
+        } else if (!loadButton.disabled) {
+          // Auto-load the texture if it's not a depth-stencil texture
+          this.database.requestTextureData(texture);
         }
       }
     }
