@@ -12,7 +12,8 @@ export class Texture extends GPUObject {
     this.isImageDataLoaded = false;
 
     this.display = {
-      exposure: 1
+      exposure: 1,
+      channels: 0
     };
   }
 

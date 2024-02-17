@@ -16,7 +16,7 @@ export class TextureUtils {
     });
 
     this.displayUniformBuffer = device.createBuffer({
-      size: 4,
+      size: 8,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -184,11 +184,12 @@ export class TextureUtils {
     };
 
     if (display) {
+      console.log("display", display.exposure, display.channels);
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
-        new Float32Array([display.exposure]));
+        new Float32Array([display.exposure, display.channels]));
     } else {
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
-        new Float32Array([1]));
+        new Float32Array([1, 0]));
     }
 
     const passEncoder = commandEncoder.beginRenderPass(passDesc);
@@ -222,13 +223,29 @@ TextureUtils.blitShader = `
   @group(0) @binding(1) var texture: texture_2d<f32>;
   struct Display {
     exposure: f32,
+    channels: f32
   };
   @group(1) @binding(0) var<uniform> display: Display; 
   @fragment
   fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     var color = textureSample(texture, texSampler, input.uv);
-    var rgb = color.rgb;
-    return vec4f(rgb * display.exposure, color.a);
+    if (display.channels == 1.0) { // R
+      var rgb = color.rgb * display.exposure;
+      return vec4f(rgb.r, 0.0, 0.0, color.a);
+    } else if (display.channels == 2.0) { // G
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, rgb.g, 0.0, color.a);
+    } else if (display.channels == 3.0) { // B
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, 0.0, rgb.b, color.a);
+    } else if (display.channels == 4.0) { // A
+      var a = color.a * display.exposure;
+      return vec4f(a, a, a, color.a);
+    }
+
+    // RGB
+    var rgb = color.rgb * display.exposure;
+    return vec4f(rgb, color.a);
   }
 `;
 

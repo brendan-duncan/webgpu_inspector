@@ -727,6 +727,9 @@ export class InspectPanel {
       }
       if (object.gpuTexture) {
         this._createTexturePreview(object, descriptionBox);
+      } else if (!loadButton.disabled) {
+        // Auto-load the texture if it's not a depth-stencil texture
+        this.database.requestTextureData(object);
       }
     } else if (object instanceof TextureView) {
       const texture = this.database.getTextureFromView(object);
@@ -787,6 +790,19 @@ export class InspectPanel {
       texture.display.exposure = value;
       displayChanged.emit();
     }, style: "width: 100px; display: inline-block;" });
+
+
+    const channels = ["RGB", "Red", "Green", "Blue", "Alpha"];
+    new Select(controls, {
+      options: channels,
+      index: 0,
+      style: "color: #fff; margin-left: 10px; font-size: 10pt; width: 100px;",
+      onChange: (value) => {
+        const index = channels.indexOf(value);
+        texture.display.channels = index;
+        displayChanged.emit();
+        //self._changeObjectCountPlot(value);        
+      } });
 
     if (!this._toolTip) {
       this._tooltip = document.createElement('pre');
