@@ -153,6 +153,7 @@ export class InspectorWindow extends Window {
 
     const usage = texture.descriptor.usage;
     const format = texture.descriptor.format;
+    const sampleCount = texture.descriptor.sampleCount;
     const formatInfo = TextureFormatInfo[format] ?? TextureFormatInfo["rgba8unorm"];
 
     // For depth textures we can't currently use writeTexture.
@@ -170,9 +171,11 @@ export class InspectorWindow extends Window {
     const gpuFormat = formatInfo.depthOnlyFormat ?? format;
     texture.descriptor.format = gpuFormat;
     texture.descriptor.usage = (usage ?? GPUTextureUsage.RENDER_ATTACHMENT) | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST;
+    texture.descriptor.sampleCount = 1;
     texture.gpuTexture = this.device.createTexture(texture.descriptor);
     texture.descriptor.usage = usage;
     texture.descriptor.format = format;
+    texture.descriptor.sampleCount = sampleCount;
     
     const bytesPerRow = texture.bytesPerRow;
     const rowsPerImage = texture.height;

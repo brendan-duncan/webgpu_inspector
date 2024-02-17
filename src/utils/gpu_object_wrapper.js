@@ -52,6 +52,7 @@ export class GPUObjectWrapper {
     this.onPromise = new Signal();
     this.onPromiseResolve = new Signal();
     this.recordStacktraces = false;
+    this._skipRecord = 0;
     this._wrapGPUTypes();
   }
 
@@ -147,12 +148,31 @@ export class GPUObjectWrapper {
     GPUCanvasContext.prototype.getCurrentTexture = this._wrapMethod("getCurrentTexture", GPUCanvasContext.prototype.getCurrentTexture);
   }
 
+  disableRecording() {
+    this._skipRecord++;
+  }
+
+  enableRecording() {
+    this._skipRecord--;
+    if (this._skipRecord < 0) {
+      this._skipRecord = 0; // If this happened, we did something wrong and disable/enable calls are unbalanced.
+    }
+  }
+
+  get isRecordingEnabled() {
+    return this._skipRecord === 0;
+  }
+
   _wrapMethod(method, origMethod) {
     const self = this;
     return function () {
       const object = this;
 
       const args = [...arguments];
+
+      if (self._skipRecord > 0) {
+        return origMethod.call(object, ...args);
+      }
 
       // Allow the arguments to be modified before the method is called.
       self.onPreCall.emit(object, method, args);

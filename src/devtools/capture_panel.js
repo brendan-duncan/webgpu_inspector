@@ -459,7 +459,7 @@ export class CapturePanel {
       const dstFormat = navigator.gpu.getPreferredCanvasFormat();
       context.configure({ "device": this.window.device, "format": navigator.gpu.getPreferredCanvasFormat() });
       const canvasTexture = context.getCurrentTexture();
-      this.textureUtils.blitTexture(layerView, canvasTexture.createView(), dstFormat);
+      this.textureUtils.blitTexture(layerView, texture.gpuTexture.sampleCount, canvasTexture.createView(), dstFormat);
     }
 
     return container;

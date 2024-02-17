@@ -25,6 +25,8 @@ export class ObjectDatabase {
     this.frameTime = 0;
     this.errorCount = 0;
 
+    this.inspectedObject = null;
+
     this.onDeleteObject = new Signal();
     this.onResolvePendingObject = new Signal();
     this.onAddObject = new Signal();
@@ -293,6 +295,9 @@ export class ObjectDatabase {
     if (id === undefined || id === null) {
       return null;
     }
+    if (this.inspectedObject?.id === id) {
+      return this.inspectedObject;
+    }
     return this.allObjects.get(id);
   }
 
@@ -372,6 +377,8 @@ export class ObjectDatabase {
       return;
     }
 
+    object._deletionTime = performance.now();
+
     this.allObjects.delete(id);
 
     if (object instanceof GPU.Adapter) {
@@ -388,14 +395,12 @@ export class ObjectDatabase {
       }
     } else if (object instanceof GPU.TextureView) {
       this.textureViews.delete(id, object);
-      object._deletionTime = performance.now();
     } else if (object instanceof GPU.Buffer) {
       this.buffers.delete(id, object);
       const size = object.size;
       this.totalBufferMemory -= size ?? 0;
     } else if (object instanceof GPU.BindGroup) {
       this.bindGroups.delete(id, object);
-      object._deletionTime = performance.now();
     } else if (object instanceof GPU.BindGroupLayout) {
       this.bindGroupLayouts.delete(id, object);
     } else if (object instanceof GPU.PipelineLayout) {

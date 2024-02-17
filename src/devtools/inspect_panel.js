@@ -119,11 +119,6 @@ export class InspectPanel {
 
     window.onTextureLoaded.addListener(this._textureLoaded, this);
 
-    // Recycle DOM elements as objects are created and destroyed.
-    // The DevTools panel will crash after a while if there is too much thrashing
-    // of DOM elements.
-    this._recycledWidgets = {};
-
     // Periodically clean up old recycled widgets.
     const cleanupInterval = 2000;
     setInterval(() => {
@@ -154,6 +149,10 @@ export class InspectPanel {
 
   get textureUtils() {
     return this.window.textureUtils;
+  }
+
+  get inspectedObject() {
+    return this.database.inspectedObject;
   }
 
   _changeObjectCountPlot(value) {
@@ -204,6 +203,12 @@ export class InspectPanel {
     this.frameRatePlot.reset();
     this.objectCountPlot.reset();
 
+    // Recycle DOM elements as objects are created and destroyed.
+    // The DevTools panel will crash after a while if there is too much thrashing
+    // of DOM elements.
+    this._recycledWidgets = {};
+    this._inspectedInfoBox = null;
+
     this._selectedObject = null;
     this._selectedGroup = null;
     this.inspectorGUI.html = "";
@@ -239,18 +244,18 @@ export class InspectPanel {
 
   _validationError(error) {
     this._addObject(error, false);
-    if (error.object === this._inspectedObject?.id) {
-      this._inspectObject(this._inspectedObject);
+    if (error.object === this.inspectedObject?.id) {
+      this._inspectObject(this.inspectedObject);
     }
   }
 
   _textureLoaded(texture) {
-    if (this._inspectedObject === texture) {
+    if (this.inspectedObject === texture) {
       this._inspectObject(texture);
-    } else if (this._inspectedObject instanceof TextureView) {
-      const inspectedTexture = this.database.getTextureFromView(this._inspectedObject);
+    } else if (this.inspectedObject instanceof TextureView) {
+      const inspectedTexture = this.database.getTextureFromView(this.inspectedObject);
       if (inspectedTexture === texture) {
-        this._inspectObject(this._inspectedObject);
+        this._inspectObject(this.inspectedObject);
       }
     }
   }
@@ -313,6 +318,12 @@ export class InspectPanel {
       object.widget = null;
     }
     this._updateObjectStat(object);
+
+    if (object === this.inspectedObject) {
+      if (this._inspectedInfoBox) {
+        this._inspectedInfoBox.style.backgroundColor = "#533";
+      }
+    }
   }
 
   _updateObjectStat(object) {
@@ -466,7 +477,7 @@ export class InspectPanel {
 
     const self = this;
     object.widget.element.onclick = () => {
-      if (self._selectedObject) {
+      if (self._selectedObject && self._selectedObject.widget) {
         self._selectedObject.widget.element.classList.remove("selected");
       }
       object.widget.element.classList.add("selected");
@@ -526,11 +537,14 @@ export class InspectPanel {
   _inspectObject(object) {
     this.inspectPanel.html = "";
 
-    this._inspectedObject = object;
+    this.database.inspectedObject = object;
 
-    const infoBox = new Div(this.inspectPanel, { style: "background-color: #353; padding: 10px;" });
+    const infoStyle = object.isDeleted ? "background-color: #533;" : "background-color: #353;";
+
+    const infoBox = new Div(this.inspectPanel, { style: `${infoStyle} padding: 10px;` });
     const idName = object.id < 0 ? "CANVAS" : object.id;
-    new Div(infoBox, { text: `${object.name} ID: ${idName}` });
+    new Div(infoBox, { text: `${object.name} ID: ${idName} ${object.isDeleted ? "<deleted>" : ""}` });
+    this._inspectedInfoBox = infoBox;
 
     if (object instanceof Texture) {
       const gpuSize = object.getGpuSize();
@@ -833,7 +847,7 @@ export class InspectPanel {
 
     const numLayers = texture.depthOrArrayLayers;
     for (let layer = 0; layer < numLayers; ++layer) {
-      const canvas = new Widget("canvas", new Div(container));
+      const canvas = new Widget("canvas", new Div(container), { style: "box-shadow: 5px 5px 5px rgba(0,0,0,0.5);" });
       canvas.element.addEventListener("mouseenter", (event) => {
         this._tooltip.style.display = 'block';
       });
@@ -867,12 +881,12 @@ export class InspectPanel {
       
       const srcView = texture.gpuTexture.createView(viewDesc);
 
-      this.textureUtils.blitTexture(srcView, canvasTexture.createView(), format, texture.display);
+      this.textureUtils.blitTexture(srcView, 1, canvasTexture.createView(), format, texture.display);
 
       const self = this;
       displayChanged.addListener(() => {
         const canvasTexture = context.getCurrentTexture();
-        self.textureUtils.blitTexture(srcView, canvasTexture.createView(), format, texture.display);
+        self.textureUtils.blitTexture(srcView, 1, canvasTexture.createView(), format, texture.display);
       });
     }
   }

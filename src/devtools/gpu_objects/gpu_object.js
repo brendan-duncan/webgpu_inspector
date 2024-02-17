@@ -15,4 +15,8 @@ export class GPUObject {
   get stacktrace() {
     return StacktraceCache.getStacktrace(this._stacktrace);
   }
+
+  get isDeleted() {
+    return this._deletionTime > 0;
+  }
 }

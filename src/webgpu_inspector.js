@@ -28,7 +28,6 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._lastFrameTime = 0;
       this._frameCommandCount = 0;
       this._captureRequest = false;
-      this._skipRecord = false;
       this._errorChecking = true;
       this._trackedObjects = new Map();
       this._trackedObjectInfo = new Map();
@@ -67,7 +66,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._gpuWrapper.onPromise.addListener(this._onAsyncPromise, this);
       this._gpuWrapper.onPromiseResolve.addListener(this._onAsyncResolve, this);
       this._gpuWrapper.onPreCall.addListener(this._preMethodCall, this);
-      this._gpuWrapper.onPostCall.addListener(this._onMethodCall, this);
+      this._gpuWrapper.onPostCall.addListener(this._postMethodCall, this);
 
       this._garbageCollectectedObjects = [];
      
@@ -160,6 +159,14 @@ import { Actions, PanelActions } from "./utils/actions.js";
       });
     }
 
+    disableRecording() {
+      this._gpuWrapper.disableRecording();
+    }
+
+    enableRecording() {
+      this._gpuWrapper.enableRecording();
+    }
+
     // Called before a GPU method is called, allowing the inspector to modify
     // the arguments or the object before the method is called.
     _preMethodCall(object, method, args) {
@@ -192,18 +199,20 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
       if (method === "createShaderModule"|| method === "createRenderPipeline" || method === "createComputePipeline" || method === "createBindGroup") {
         if (this._errorChecking) {
-          this._skipRecord = true;
+          this._gpuWrapper.disableRecording();
           object.pushErrorScope("validation");
-          this._skipRecord = false;
+          this._gpuWrapper.enableRecording();
         }
       }
 
       this._capturedRenderView = null;
       if (method === "beginRenderPass") {
         if (this._errorChecking) {
-          this._skipRecord = true;
-          object.__device.pushErrorScope("validation");
-          this._skipRecord = false;
+          this.disableRecording();
+          if (object.__device) {
+            object.__device.pushErrorScope("validation");
+          }
+          this.enableRecording();
         }
 
         const descriptor = args[0];
@@ -223,18 +232,18 @@ import { Actions, PanelActions } from "./utils/actions.js";
                       if (context.__captureTexture?.width != texture.width ||
                           context.__captureTexture?.height != texture.height ||
                           context.__captureTexture?.format != texture.format) {
-                        this._skipRecord = true;
+                        this.disableRecording();
                         context.__captureTexture.destroy();
                         context.__captureTexture = null;
                         context.__canvas.__captureTexture = null;
-                        this._skipRecord = false;
+                        this.enableRecording();
                       }
                     }
 
                     if (!context.__captureTexture) {
                       const device = context.__device;
                       if (device) {
-                        this._skipRecord = true;
+                        this.disableRecording();
                         const captureTexture = device.createTexture({
                           size: [texture.width, texture.height, 1],
                           format: texture.format,
@@ -247,7 +256,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
                         captureTexture.__canvasTexture = texture;
                         texture.__captureTexture = captureTexture;
                         texture.__canvas.__captureTexture = captureTexture;
-                        this._skipRecord = false;
+                        this.enableRecording();
                       }
                     }
 
@@ -284,7 +293,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       }       
 
       if (method === "submit") {
-        this._skipRecord = true;
+        this.disableRecording();
         object.onSubmittedWorkDone().then(() => {
           if (this._captureTempBuffers.length) {
             self._sendCapturedBuffers();
@@ -297,12 +306,12 @@ import { Actions, PanelActions } from "./utils/actions.js";
           }
           self._toDestroy.length = 0;
         });
-        this._skipRecord = false;
+        this.enableRecording();
       }
     }
 
     // Called after a GPU method is called, allowing the inspector to wrap the result.
-    _onMethodCall(object, method, args, result, stacktrace) {
+    _postMethodCall(object, method, args, result, stacktrace) {
       this._frameCommandCount++;
 
       if (method === "beginRenderPass") {
@@ -314,20 +323,20 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
       if (method === "createShaderModule" || method === "createRenderPipeline" || method === "createComputePipeline" || method === "createBindGroup") {
         if (this._errorChecking) {
-          this._skipRecord = true;
+          this.disableRecording();
           object.popErrorScope().then((error) => {
             if (error) {
               const id = result?.__id ?? 0;
               window.postMessage({ "action": Actions.ValidationError, id, "message": error.message, stacktrace }, "*");
             }
           });
-          this._skipRecord = false;
+          this.enableRecording();
         }
       }
 
       if (method === "end") {
         if (this._errorChecking) {
-          this._skipRecord = true;
+          this.disableRecording();
           const device = object.__device;
           if (device) {
             device.popErrorScope().then((error) => {
@@ -336,7 +345,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
               }
             });
           }
-          this._skipRecord = false;
+          this.enableRecording();
         }
 
         // If the captured canvas texture was rendered to, blit it to the real canvas texture
@@ -345,20 +354,14 @@ import { Actions, PanelActions } from "./utils/actions.js";
           if (texture) {
             const commandEncoder = object.__commandEncoder;
             if (commandEncoder) {
-              this._skipRecord = true;
+              this.disableRecording();
               commandEncoder.copyTextureToTexture({ texture },
                 { texture: texture.__canvasTexture },
                 [texture.width, texture.height, 1]);
-              this._skipRecord = false;
+              this.enableRecording();
             }
           }
         }
-      }
-
-      // If __skipRecord is set, don't wrap the result object or record the command.
-      // It is set when we're creating utilty objects that aren't from the page.
-      if (this._skipRecord) {
-        return result;
       }
 
       let id = undefined;
@@ -582,7 +585,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       const descriptor = this._duplicateObject(shader.__descriptor);
       descriptor.code = code;
 
-      this._skipRecord = true;
+      this.disableRecording();
       this._errorChecking = false;
       device.pushErrorScope('validation');
       descriptor.__replacement = shaderId;
@@ -594,7 +597,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
         }
       });
       this._errorChecking = true;
-      this._skipRecord = false;
+      this.enableRecording();
 
       objectMap.replacement = newShaderModule;
 
@@ -627,7 +630,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
           }
 
           if (newDescriptor !== null) {
-            this._skipRecord = true;
+            this.disableRecording();
             this._errorChecking = false;
             newDescriptor.__replacement = objectRef.id;
             device.pushErrorScope('validation');
@@ -641,7 +644,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
               }
             });
             this._errorChecking = true;
-            this._skipRecord = false;
+            this.enableRecording();
 
             objectRef.replacement = newPipeline;
           }
@@ -1245,7 +1248,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
         const { commandId, entryIndex, buffer, offset, size } = bufferInfo;
 
         let tempBuffer = null;
-        this._skipRecord = true;
+        this.disableRecording();
         try {
           tempBuffer = device.createBuffer({
             size,
@@ -1260,7 +1263,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
         } catch (e) {
           console.log(e);
         }
-        this._skipRecord = false;
+        this.enableRecording();
       }
       buffers.length = 0;
     }
@@ -1284,20 +1287,33 @@ import { Actions, PanelActions } from "./utils/actions.js";
       // depth24plus texture's can't be copied to a buffer,
       // https://github.com/gpuweb/gpuweb/issues/652.
       if (format === "depth24plus" || format === "depth24plus-stencil8") {
-        this._skipRecord = true;
+        this.disableRecording();
         try {
           const textureUtils = this._getTextureUtils(texture.__device);
           texture = textureUtils.copyDepthTexture(texture, format === "depth24plus-stencil8" ? "depth32float" : "depth32float-stencil8");
         } catch (e) {
-          this._skipRecord = false;
+          this.enableRecording();
           console.log(e);
           return;
         }
-        this._skipRecord = false;
+        this.enableRecording();
         format = texture.format;
         formatInfo = format ? TextureFormatInfo[format] : undefined;
         texture.__id = id;
         this._toDestroy.push(texture); // Destroy the temp texture at the end of the frame
+      } else if (texture.sampleCount > 1) {
+        this.disableRecording();
+        try {
+          const textureUtils = this._getTextureUtils(texture.__device);
+          texture = textureUtils.copyMultisampledTexture(texture);
+          texture.__id = id;
+          this._toDestroy.push(texture); // Destroy the temp texture at the end of the frame
+        } catch (e) {
+          this.enableRecording();
+          console.log(e);
+          return;
+        }
+        this.enableRecording();
       }
 
       const width = texture.width;
@@ -1314,7 +1330,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
       let tempBuffer = null;
       try {
-        this._skipRecord = true;
+        this.disableRecording();
         tempBuffer = device.createBuffer({
           size: bufferSize,
           usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
@@ -1331,7 +1347,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       } catch (e) {
         console.log(e);
       }
-      this._skipRecord = false;
+      this.enableRecording();
 
       if (tempBuffer) {
         this._captureTexturedBuffers.push({ id, tempBuffer, width, height, depthOrArrayLayers, format, passId });
@@ -1391,26 +1407,6 @@ import { Actions, PanelActions } from "./utils/actions.js";
       return object;
     }
   }
-
-  WebGPUInspector._asyncMethods = [
-    "requestAdapter",
-    "requestDevice",
-    "createComputePipelineAsync",
-    "createRenderPipelineAsync",
-  ];
-
-  WebGPUInspector._skipMethods = [
-    "toString",
-    "entries",
-    "getContext",
-    "forEach",
-    "has",
-    "keys",
-    "values",
-    "getPreferredFormat",
-    "pushErrorScope",
-    "popErrorScope",
-  ];
 
   new WebGPUInspector();
 })();
