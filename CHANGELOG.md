@@ -1,6 +1,7 @@
 ## v0.0.5
 * 02/17/2024
     * Expand Inspector Descriptor display size
+    * Capture buffers when BindGroup doesn't have an explicit BindGroupLayout
 
 ## v0.0.4
 * Fix multisampled texture preview
