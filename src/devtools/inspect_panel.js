@@ -454,6 +454,9 @@ export class InspectPanel {
       if (access & GPUBufferUsage.VERTEX) {
         type += " VERTEX";
       }
+      if (access & GPUBufferUsage.UNIFORM) {
+        type += " UNIFORM";
+      }
       if (access & GPUBufferUsage.STORAGE) {
         type += " STORAGE";
       }
@@ -463,7 +466,6 @@ export class InspectPanel {
       if (access & GPUBufferUsage.QUERY_RESOLVE) {
         type += " QUERY_RESOLVE";
       }
-
     }
 
     const idName = object.idName;
@@ -480,18 +482,12 @@ export class InspectPanel {
       widget.element.style.display = "list-item";
       widget.nameWidget.text = name;
       widget.idWidget.text = `ID:${idName}`;
-      if (type) {
-        widget.typeWidget.text = type;
-      }
+      widget.typeWidget.text = type;
     } else {
       widget = new Widget("li", ui.objectList);
-
       widget.nameWidget = new Span(widget, { text: name });
-      
       widget.idWidget = new Span(widget, { text: `ID:${idName}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
-      if (type) {
-        widget.typeWidget = new Span(widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
-      }
+      widget.typeWidget = new Span(widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
     }
 
     object.widget = widget;

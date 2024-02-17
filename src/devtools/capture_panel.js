@@ -827,7 +827,7 @@ export class CapturePanel {
             if (bindGroupCmd.isBufferDataLoaded[entryIndex]) {
               const bufferData = bindGroupCmd.bufferData[entryIndex];
               if (bufferData) {
-                this._showBufferData(resourceGrp.body, groupIndex, entryIndex, bindGroup, state, bufferData);
+                this._showBufferData(resourceGrp.body, groupIndex, binding, bindGroup, state, bufferData);
               }
             }
           }

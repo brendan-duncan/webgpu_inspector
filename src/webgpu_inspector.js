@@ -1010,13 +1010,13 @@ import { Actions, PanelActions } from "./utils/actions.js";
         let dynamicOffsetIndex = 0;
         const bindGroupDesc = bindGroup.__descriptor;
         const bindGroupLayoutDesc = bindGroupDesc.layout?.__descriptor;
-        if (bindGroupDesc && bindGroupLayoutDesc) {
+        if (bindGroupDesc) {
           for (const entryIndex in bindGroupDesc.entries) {
             const entry = bindGroupDesc.entries[entryIndex];
-            const layoutEntry = bindGroupLayoutDesc.entries[entryIndex];
+            const layoutEntry = bindGroupLayoutDesc?.entries[entryIndex];
             const buffer = entry?.resource?.buffer;
             const usesDynamicOffset = layoutEntry?.buffer?.hasDynamicOffset ?? false;
-            if (buffer && layoutEntry) {
+            if (buffer) {
               let offset = entry.resource.offset ?? 0;
               const size = entry.resource.size ?? buffer.size;
 
@@ -1076,10 +1076,13 @@ import { Actions, PanelActions } from "./utils/actions.js";
             this._captureTextureViews.push(captureTextureView);
           }
         }
+        this._inComputePass = false;
         this._captureCommandEncoder = object;
       } else if (method === "beginComputePass") {
         this._captureCommandEncoder = object;
+        this._inComputePass = true;
       } else if (method === "end") {
+        this._inComputePass = false;
         if (this._captureBuffers.length > 0) {
           this._recordCaptureBuffers(this._captureCommandEncoder);
           this._updateStatusMessage();
