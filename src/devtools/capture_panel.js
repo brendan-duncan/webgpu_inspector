@@ -755,7 +755,6 @@ export class CapturePanel {
 
       if (inputs.length) {
         const inputGrp = new Collapsable(commandInfo, { collapsed: true, label: "Input Textures" });
-        inputGrp.body.style.maxHeight = "unset";
         for (const resource of inputs) {
           const texture = this.database.getTextureFromView(resource.textureView);
           if (texture) {
@@ -1074,7 +1073,6 @@ export class CapturePanel {
     const reflect = shader.reflection;
     if (reflect) {
       const grp = new Collapsable(commandInfo, { collapsed: true, label: `${type} Shader Info` });
-      grp.body.style.maxHeight = "600px";
 
       if (reflect.entry.vertex.length) {
         new Div(grp.body, { text: `Vertex Entry Functions: ${reflect.entry.vertex.length}` });
@@ -1171,7 +1169,6 @@ export class CapturePanel {
     if (outputs.color.length || outputs.depthStencil) {
       const self = this;
       const outputGrp = new Collapsable(parent, { collapsed: true, label: "Output Textures" });
-      outputGrp.body.style.maxHeight = "unset";
       for (const index in outputs.color) {
         const texture = outputs.color[index];
         if (texture) {
@@ -1228,7 +1225,6 @@ export class CapturePanel {
     if (inputs.length) {
       const self = this;
       const inputGrp = new Collapsable(parent, { collapsed: true, label: "Input Textures" });
-      inputGrp.body.style.maxHeight = "unset";
       for (const resource of inputs) {
         const texture = this.database.getTextureFromView(resource.textureView);
         if (texture) {
@@ -1340,7 +1336,6 @@ export class CapturePanel {
     commandInfo.html = "";
 
     const group = new Collapsable(commandInfo, { label: "Frame Statistics" });
-    group.body.style.maxHeight = "unset";
 
     const ol = new Widget("ul", group.body);
     const stats = this.statistics;
