@@ -430,6 +430,11 @@ export class InspectPanel {
     } else if (object instanceof Texture) {
       const depth = object.depthOrArrayLayers > 1 ? `x${object.depthOrArrayLayers}` : "";
       type += ` ${object.width}x${object.height}${depth} ${object.descriptor.format}`;
+    } else if (object instanceof TextureView) {
+      const texture = this.database.getTextureFromView(object);
+      if (texture) {
+        type += ` Texture:${texture.idName} ${texture.width}x${texture.height} ${texture.descriptor.format}`;
+      }
     } else if (object instanceof Buffer) {
       const access = object.descriptor.usage;
 
@@ -449,10 +454,9 @@ export class InspectPanel {
         type += " QUERY_RESOLVE";
       }
 
-      type += ` ${object.descriptor.size.toLocaleString("en-US")} Bytes`;
     }
 
-    const idName = object.id < 0 ? "CANVAS" : object.id;
+    const idName = object.idName;
 
     let widget = this._getRecycledWidget(object);
     if (widget) {
@@ -465,7 +469,7 @@ export class InspectPanel {
       parent.appendChild(widget);
       widget.element.style.display = "list-item";
       widget.nameWidget.text = name;
-      widget.idWidget.text = `ID: ${idName}`;
+      widget.idWidget.text = `ID:${idName}`;
       if (type) {
         widget.typeWidget.text = type;
       }
@@ -474,7 +478,7 @@ export class InspectPanel {
 
       widget.nameWidget = new Span(widget, { text: name });
       
-      widget.idWidget = new Span(widget, { text: `ID: ${idName}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+      widget.idWidget = new Span(widget, { text: `ID:${idName}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
       if (type) {
         widget.typeWidget = new Span(widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
       }
@@ -550,7 +554,7 @@ export class InspectPanel {
     const infoStyle = object.isDeleted ? "background-color: #533;" : "background-color: #353;";
 
     const infoBox = new Div(this.inspectPanel, { style: `${infoStyle} padding: 10px;` });
-    const idName = object.id < 0 ? "CANVAS" : object.id;
+    const idName = object.idName;
     new Div(infoBox, { text: `${object.name} ID: ${idName} ${object.isDeleted ? "<deleted>" : ""}` });
     this._inspectedInfoBox = infoBox;
 
@@ -564,7 +568,7 @@ export class InspectPanel {
     new Div(infoBox, { text: `Used By: ${dependencies.length} Objects`, style: "font-size: 10pt; color: #aaa;"});
     const depGrp = new Div(infoBox, { style: "font-size: 10pt; color: #aaa; padding-left: 20px; max-height: 50px; overflow: auto;" })
     for (const dep of dependencies) {
-      new Div(depGrp, { text: `${dep.name} ${dep.id}` });
+      new Div(depGrp, { text: `${dep.name} ${dep.idName}` });
     }
     if (object.stacktrace) {
       const stacktraceGrp = new Collapsable(infoBox, { collapsed: true, label: "Stacktrace", collapsed: true });
@@ -713,7 +717,7 @@ export class InspectPanel {
         const obj = this.database.getObject(objectId);
         if (obj) {
           const self = this;
-          new Button(infoBox, { label: `${obj.name}.${obj.id}`, style: "background-color: #733; color: #fff;" , callback: () => {
+          new Button(infoBox, { label: `${obj.name}.${obj.idName}`, style: "background-color: #733; color: #fff;" , callback: () => {
             if (obj.widget) {
               if (obj.widget.group) {
                 obj.widget.group.collapsed = false;
@@ -757,7 +761,7 @@ export class InspectPanel {
     } else if (object instanceof TextureView) {
       const texture = this.database.getTextureFromView(object);
       if (texture) {
-        const textureGrp = new Collapsable(descriptionBox, { label: `Texture ${texture.dimension} ${texture.format} ${texture.width}x${texture.height}` });
+        const textureGrp = new Collapsable(descriptionBox, { label: `Texture ${texture.idName} ${texture.dimension} ${texture.format} ${texture.width}x${texture.height}` });
         textureGrp.body.style.maxHeight = "unset";
 
         const desc = this._getDescriptorInfo(texture, texture.descriptor);

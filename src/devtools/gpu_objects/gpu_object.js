@@ -19,4 +19,8 @@ export class GPUObject {
   get isDeleted() {
     return this._deletionTime > 0;
   }
+
+  get idName() {
+    return this.id < 0 ? "CANVAS" : this.id;
+  }
 }
