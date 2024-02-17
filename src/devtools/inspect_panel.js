@@ -706,9 +706,10 @@ export class InspectPanel {
       const text = object.message;
       new Widget("pre", descriptionBox, { text });
     } else {
+      const grp = new Collapsable(descriptionBox, { label: "Descriptor", collapsed: false });
       const desc = this._getDescriptorInfo(object, object.descriptor);
       const text = JSON.stringify(desc, undefined, 4);
-      new Widget("pre", descriptionBox, { text });
+      new Widget("pre", grp.body, { text });
     }
 
     if (object instanceof Texture) {
@@ -792,7 +793,7 @@ export class InspectPanel {
     }, style: "width: 100px; display: inline-block;" });
 
 
-    const channels = ["RGB", "Red", "Green", "Blue", "Alpha"];
+    const channels = ["RGB", "Red", "Green", "Blue", "Alpha", "Luminance"];
     new Select(controls, {
       options: channels,
       index: 0,
@@ -801,7 +802,6 @@ export class InspectPanel {
         const index = channels.indexOf(value);
         texture.display.channels = index;
         displayChanged.emit();
-        //self._changeObjectCountPlot(value);        
       } });
 
     if (!this._toolTip) {

@@ -240,6 +240,10 @@ TextureUtils.blitShader = `
     } else if (display.channels == 4.0) { // A
       var a = color.a * display.exposure;
       return vec4f(a, a, a, color.a);
+    } else if (display.channels == 5.0) { // Luminance
+      var luminance = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));
+      var rgb = vec3f(luminance) * display.exposure;
+      return vec4f(rgb, color.a);
     }
 
     // RGB

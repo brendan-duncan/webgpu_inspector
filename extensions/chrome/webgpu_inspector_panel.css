@@ -745,8 +745,9 @@ ol::-webkit-scrollbar-thumb:hover {
 
 /* select */
 .select {
-  color: #aaa;
+  color: #eee;
   background-color: #222;
+  border: 1px solid #999;
 }
 
 /* tab_widget */
