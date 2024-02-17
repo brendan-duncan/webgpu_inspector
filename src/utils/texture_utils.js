@@ -184,7 +184,6 @@ export class TextureUtils {
     };
 
     if (display) {
-      console.log("display", display.exposure, display.channels);
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
         new Float32Array([display.exposure, display.channels]));
     } else {
