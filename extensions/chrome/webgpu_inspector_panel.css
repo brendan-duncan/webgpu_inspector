@@ -191,6 +191,10 @@ li:hover {
   -moz-user-select: text;
 }
 
+.error {
+  color: #f55;
+}
+
 /* ---------------------------------------- */
 
 .inspector-window {

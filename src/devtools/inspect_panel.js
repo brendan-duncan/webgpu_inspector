@@ -247,6 +247,14 @@ export class InspectPanel {
     if (error.object === this.inspectedObject?.id) {
       this._inspectObject(this.inspectedObject);
     }
+    const object = this.database.getObject(error.object);
+    if (object?.widget) {
+      object.widget.element.classList.add("error");
+      object.widget.tooltip = error.message;
+      for (const child of object.widget.children) {
+        child.tooltip = error.message;
+      }
+    }
   }
 
   _textureLoaded(texture) {
@@ -780,6 +788,13 @@ export class InspectPanel {
   _compileShader(object, code) {
     if (code === object.code) {
       return;
+    }
+    if (object.widget) {
+      object.widget.element.classList.remove("error");
+      object.widget.tooltip = "";
+      for (const child of object.widget.children) {
+        child.tooltip = "";
+      }
     }
     this.database.removeErrorsForObject(object.id);
     this.port.postMessage({ action: PanelActions.CompileShader, id: object.id, code });

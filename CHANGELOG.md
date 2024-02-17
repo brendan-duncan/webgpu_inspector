@@ -1,5 +1,6 @@
 * 02/17/2024
     * Fix multisampled texture preview
+    * Mark objects with errors as red in Object List
 
 * 02/16/2024
     * Fix inspecting async render and compute pipelines
