@@ -54,7 +54,9 @@ Selecting a command will display information about the command, including its ar
 
 If you select a Draw or Dispatch command, it will inspect the BindGroups and Pipeline active for the command. It will inspect the Buffer objects associated with the BindGroups, and parse their data based on the shaders associated the the Pipeline. This lets you inspect buffer data as the shader will see it during the Draw or Dispatch command.
 
-![Buffer Data Inspection](images/buffer_data_inspection.png)
+<a href="images/buffer_data_inspection.png">
+<img src="images/buffer_data_inspection.png" style="width:512px">
+</a>
 
 ## Debug Groups
 

@@ -77,6 +77,7 @@ When you inspect a texture, a Load button pulls the texture image from the page 
 Mousing over the texture image will show the pixel color vlaues, if the Inspector can decode the texture format.
 
 An Exposure control lets you adjust the brightness of the texture's display.
+A Channel control lets you inspect specific color channels of the image.
 
 <a href="images/inspect_texture.png">
 <img src="images/inspect_texture.png" style="width: 750px;">
