@@ -743,6 +743,7 @@ export class InspectPanel {
       new Widget("pre", descriptionBox, { text });
     } else {
       const grp = new Collapsable(descriptionBox, { label: "Descriptor", collapsed: false });
+      grp.body.style.maxHeight = undefined;
       const desc = this._getDescriptorInfo(object, object.descriptor);
       const text = JSON.stringify(desc, undefined, 4);
       new Widget("pre", grp.body, { text });
