@@ -1,3 +1,8 @@
+v0.0.5
+* 02/17/2024
+    * Expand Inspector Descriptor display size
+
+v0.0.4
 * 02/17/2024
     * Fix multisampled texture preview
     * Mark objects with errors as red in Object List
