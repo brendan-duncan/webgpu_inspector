@@ -1458,21 +1458,19 @@ export class CapturePanel {
         const textureId = texture.id < 0 ? "CANVAS" : texture.id;
         new Div(passFrame, { text: `${texture.name} ID:${textureId}`, style: "color: #ddd; margin-bottom: 10px;" });
 
-        const canvas = this._createTextureWidget(passFrame, texture, 256);
+        this._createTextureWidget(passFrame, texture, 256);
 
-        if (canvas) {
-          canvas.element.onclick = () => {
-            const element = document.getElementById(`RenderPass_${passId}`);
-            if (element) {
-              element.scrollIntoView();
+        passFrame.element.onclick = () => {
+          const element = document.getElementById(`RenderPass_${passId}`);
+          if (element) {
+            element.scrollIntoView();
 
-              const beginElement = document.getElementById(`RenderPass_${passId}_begin`);
-              if (beginElement) {
-                beginElement.click();
-              }
+            const beginElement = document.getElementById(`RenderPass_${passId}_begin`);
+            if (beginElement) {
+              beginElement.click();
             }
-          };
-        }
+          }
+        };
       }
     }
   }

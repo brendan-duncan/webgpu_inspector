@@ -384,7 +384,6 @@ span {
   overflow: hidden;
   text-overflow: ellipsis;
   border-radius: 5px 5px 5px 5px;
-  -webkit-box-shadow: inset -4px -4px 4px -3px #000;
   box-shadow: inset -4px -4px 4px -3px #000;
   padding: 5px;
   line-height: 16px;
@@ -768,7 +767,6 @@ ol::-webkit-scrollbar-thumb:hover {
   -webkit-user-select: none;
   -moz-user-select: none;
   cursor: default;
-  -webkit-box-shadow: inset 0px -10px 10px -8px #111;
   box-shadow: inset 0px -10px 10px -8px #111;
 }
 
@@ -1036,8 +1034,12 @@ ol::-webkit-scrollbar-thumb:hover {
   overflow: auto;
 }
 
-.capture_frameImages canvas:hover {
+/*.capture_frameImages canvas:hover {
   border: 2px solid #ff0;
+}*/
+
+.capture_pass_texture:hover {
+  box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.8) inset;
 }
 
 .rightArrow { color: #ff00ff; }
@@ -1059,7 +1061,6 @@ ol::-webkit-scrollbar-thumb:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   border-radius: 5px 5px 5px 5px;
-  -webkit-box-shadow: inset -4px -4px 4px -3px #000;
   box-shadow: inset -4px -4px 4px -3px #000;
   padding: 5px;
   line-height: 16px;
