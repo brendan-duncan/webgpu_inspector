@@ -56,7 +56,7 @@ export class ObjectDatabase {
           if (self.validationErrors.has(errorMessage)) {
             return;
           }
-          const errorObj = new ValidationError(++self.errorCount, objectId, errorMessage, stacktrace);
+          const errorObj = new GPU.ValidationError(++self.errorCount, objectId, errorMessage, stacktrace);
           self.validationErrors.set(errorMessage, errorObj);
           self.onValidationError.emit(errorObj);
           break;

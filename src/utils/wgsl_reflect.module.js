@@ -1777,7 +1777,7 @@ class WgslParser {
         this._current = 0;
     }
     _error(token, message) {
-        console.error(token, message);
+        //console.error(token, message);
         return {
             token,
             message,
