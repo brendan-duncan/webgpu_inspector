@@ -277,6 +277,7 @@ export class CapturePanel {
     };
 
     let renderPassIndex = 0;
+    let computePassIndex = 0;
 
     const debugGroupStack = [frameContents];
     const debugGroupLabelStack = [];
@@ -306,10 +307,36 @@ export class CapturePanel {
 
       if (method === "beginRenderPass") {
         currentBlock = new Div(debugGroup, { class: "capture_renderpass" });
-        new Div(currentBlock, { text: `Render Pass ${renderPassIndex}`, id: `RenderPass_${renderPassIndex}`, style: "padding-left: 20px; font-size: 12pt; color: #ddd; margin-bottom: 5px; background-color: #553; line-height: 30px;" });
+        const header = new Div(currentBlock, { id: `RenderPass_${renderPassIndex}`, class: "capture_renderpass_header" });
+        new Span(header, { text: `Render Pass ${renderPassIndex}` });
+        const extra = new Span(header, { style: "margin-left: 10px;" });
+        const block = new Div(currentBlock)
+        header.element.onclick = () => {
+          block.element.classList.toggle("collapsed");
+          if (block.element.classList.contains("collapsed")) {
+            extra.text = "...";
+          } else {
+            extra.text = "";
+          }
+        };
+        currentBlock = block;
         renderPassIndex++;
       } else if (method === "beginComputePass") {
         currentBlock = new Div(debugGroup, { class: "capture_computepass" });
+        const header = new Div(currentBlock, { id: `ComputePass_${computePassIndex}`, class: "capture_computepass_header" });
+        new Span(header, { text: `Compute Pass ${computePassIndex}` });
+        const extra = new Span(header, { style: "margin-left: 10px;" });
+        const block = new Div(currentBlock);
+        header.element.onclick = () => {
+          block.element.classList.toggle("collapsed");
+          if (block.element.classList.contains("collapsed")) {
+            extra.text = "...";
+          } else {
+            extra.text = "";
+          }
+        };
+        currentBlock = block;
+        computePassIndex++;
       } else if (method === "popDebugGroup") {
         debugGroupStack.pop();
         debugGroup = debugGroupStack[debugGroupStack.length - 1];
