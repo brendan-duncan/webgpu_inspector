@@ -289,7 +289,6 @@ import { Actions, PanelActions } from "./utils/actions.js";
         } else {
           descriptor.usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC;
         }
-        object.__device = descriptor.device;
       }       
 
       if (method === "submit") {
@@ -1292,7 +1291,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       if (format === "depth24plus" || format === "depth24plus-stencil8") {
         this.disableRecording();
         try {
-          const textureUtils = this._getTextureUtils(texture.__device);
+          const textureUtils = this._getTextureUtils(device);
           texture = textureUtils.copyDepthTexture(texture, format === "depth24plus-stencil8" ? "depth32float" : "depth32float-stencil8");
         } catch (e) {
           this.enableRecording();
@@ -1307,7 +1306,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       } else if (texture.sampleCount > 1) {
         this.disableRecording();
         try {
-          const textureUtils = this._getTextureUtils(texture.__device);
+          const textureUtils = this._getTextureUtils(device);
           texture = textureUtils.copyMultisampledTexture(texture);
           texture.__id = id;
           this._toDestroy.push(texture); // Destroy the temp texture at the end of the frame
