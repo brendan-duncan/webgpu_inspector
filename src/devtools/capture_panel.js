@@ -56,6 +56,7 @@ export class CapturePanel {
     this._captureCount = 0;
     this._lastSelectedCommand = null;
     this._capturedObjects = new Map();
+    this._frameImageList = [];
 
     port.addListener((message) => {
       switch (message.action) {
@@ -119,7 +120,7 @@ export class CapturePanel {
   }
 
   _clampedTextureWidth(texture) {
-    return Math.max(Math.min(texture.width, texture.height, 256), 64);
+    return Math.max(Math.min(Math.max(texture.width, texture.height), 256), 64);
   }
 
   _getObject(id) {
@@ -264,6 +265,7 @@ export class CapturePanel {
 
     contents.html = "";   
     this._capturedObjects.clear();
+    this._frameImageList.length = 0;
 
     this._frameImages = new Span(contents, { class: "capture_frameImages" });
     const frameContents = new Span(contents, { class: "capture_frame" });
@@ -438,7 +440,7 @@ export class CapturePanel {
     return this.database.getTextureFromView(view);
   }
 
-  _createTextureWidget(parent, texture, viewWidth, style) {
+  _createTextureWidget(parent, texture, size, style) {
     if (!texture.gpuTexture) {
       return null;
     }
@@ -448,10 +450,19 @@ export class CapturePanel {
       return;
     }
 
-    const viewHeight = Math.round(viewWidth * (texture.height / texture.width));
+    let viewWidth = 0;
+    let viewHeight = 0;
+    if (size) {
+      if (texture.width > texture.height) {
+        viewWidth = size;
+        viewHeight = Math.round(viewWidth * (texture.height / texture.width));
+      } else {
+        viewHeight = size;
+        viewWidth = Math.round(viewHeight * (texture.width / texture.height));
+      }
+    }
 
     const container = new Div(parent);
-    //new Div(container, { text: `Load Time: ${texture.dataLoadTime.toFixed(2)}ms` });
     
     const numLayers = texture.depthOrArrayLayers;
     for (let layer = 0; layer < numLayers; ++layer) {
@@ -470,7 +481,7 @@ export class CapturePanel {
         layerArrayCount: 1
       });
 
-      const context = canvas.element.getContext('webgpu');
+      const context = canvas.element.getContext("webgpu");
       const dstFormat = navigator.gpu.getPreferredCanvasFormat();
       context.configure({ "device": this.window.device, "format": navigator.gpu.getPreferredCanvasFormat() });
       const canvasTexture = context.getCurrentTexture();
@@ -607,7 +618,6 @@ export class CapturePanel {
       if (count == 0) {
         // Runtime length array
         count = (bufferData.length - offset) / (type.stride || 1);
-        //console.log(`!!!! RUNTIME LENGTH ARRAY size:${bufferData.length} offset:${offset} remaining:${bufferData.length - offset} stride:${type.stride} runtimeCount:${(bufferData.length - offset) / (type.stride)}`);
       }
       if (count) {
         let elementOffset = offset;
@@ -620,7 +630,6 @@ export class CapturePanel {
           elementOffset += stride;
         }
       }
-      //this._showBufferDataType(type.format);
     }
   }
 
@@ -1459,7 +1468,25 @@ export class CapturePanel {
     if (passId != -1) {
       const frameImages = this._frameImages;
       if (frameImages) {
-        const passFrame = new Div(frameImages, { class: "capture_pass_texture" });
+        let passFrame = null;
+        if (passId >= this._frameImageList.length) {
+          passFrame = new Div(frameImages, { class: "capture_pass_texture" });
+          this._frameImageList[passId] = passFrame;
+        } else {
+          passFrame = new Div(null, { class: "capture_pass_texture" });
+          let found = false;
+          for (let i = passId - 1; i >= 0; --i) {
+            if (this._frameImageList[i]) {
+              frameImages.insertBefore(passFrame, this._frameImageList[i]);
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            frameImages.insertBefore(passFrame, frameImages.children[0]);
+          }
+          this._frameImageList[passId] = passFrame;
+        }
 
         new Div(passFrame, { text: `Render Pass ${passId}`, style: "color: #ddd; margin-bottom: 5px;" });
         const textureId = texture.id < 0 ? "CANVAS" : texture.id;

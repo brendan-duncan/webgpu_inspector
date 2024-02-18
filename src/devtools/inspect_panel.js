@@ -752,7 +752,7 @@ export class InspectPanel {
       const loadButton = new Button(descriptionBox, { label: "Load", callback: () => {
         self.database.requestTextureData(object);
       }});
-      if (object.descriptor.dimension !== "2d") {
+      if (object.dimension !== "2d") {
         loadButton.disabled = true;
         loadButton.style = "background-color: #733; color: #fff;";
         loadButton.tooltip = "Only 2d textures can currently be previewed.";
@@ -782,7 +782,7 @@ export class InspectPanel {
         const loadButton = new Button(textureGrp.body, { label: "Load", callback: () => {
           self.database.requestTextureData(texture);
         }});
-        if (texture.descriptor.dimension !== "2d") {
+        if (texture.dimension !== "2d") {
           loadButton.disabled = true;
           loadButton.style = "background-color: #733; color: #fff;";
           loadButton.tooltip = "Only 2d textures can currently be previewed.";
