@@ -13,14 +13,14 @@ export class Collapsable extends Widget {
     const collapsed = options.collapsed ?? false;
 
     this.titleBar = new Div(this, { class: "title_bar" });
-    this.collapseButton = new Span(this.titleBar, { class: "object_list_collapse", text: collapsed ? "+" : "-", style: "margin-right: 10px;" })
+    this.collapseButton = new Span(this.titleBar, { class: "collapsable_button", text: collapsed ? "+" : "-", style: "margin-right: 10px;" })
     this.label = new Span(this.titleBar, { class: "object_type", text: options?.label ?? "" });
     this.onExpanded = new Signal();
     this.onCollapsed = new Signal();
 
-    this.body = new Div(this, { class: ["object_list"] });
+    this.body = new Div(this, { class: ["collapsable_body"] });
     if (collapsed) {
-      this.body.element.className = "object_list collapsed";
+      this.body.element.className = "collapsable_body collapsed";
     }
 
     const self = this;
@@ -28,11 +28,11 @@ export class Collapsable extends Widget {
     this.titleBar.element.onclick = function() {
       if (self.collapseButton.text == "-") {
         self.collapseButton.text = "+";
-        self.body.element.className = "object_list collapsed";
+        self.body.element.className = "collapsable_body collapsed";
         self.onCollapsed.emit();
       } else {
         self.collapseButton.text = "-";
-        self.body.element.className = "object_list";
+        self.body.element.className = "collapsable_body";
         self.onExpanded.emit();
       }
     };
@@ -52,11 +52,11 @@ export class Collapsable extends Widget {
     }
     if (value) {
       this.collapseButton.text = "+";
-      this.body.element.className = "object_list collapsed";
+      this.body.element.className = "collapsable_body collapsed";
       this.onCollapsed.emit();
     } else {
       this.collapseButton.text = "-";
-      this.body.element.className = "object_list";
+      this.body.element.className = "collapsable_body";
       this.onExpanded.emit();
     }
   }

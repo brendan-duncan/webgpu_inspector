@@ -110,14 +110,14 @@ body {
   color: #000;
 }
 
-.collapse_body {
+.collapsable_body {
   background-color: #555;
   text-align: left;
   overflow: auto;
   margin: 0px;
 }
 
-.collapse_button {
+.collapsable_button {
   font-family: monospace;
   font-size: 14pt;
   color: #ddd;

@@ -408,7 +408,9 @@ export class InspectPanel {
   }
 
   _createObjectListUI(parent, name) {
-    const panel = new Collapsable(parent, { collapsed: true, label: `${name} 0`, style: "max-height: 300px; overflow: auto;" });
+    const panel = new Collapsable(parent, { collapsed: true, label: `${name} 0` });
+    panel.body.style.maxHeight = "300px";
+    panel.body.style.overflow = "auto";
 
     const self = this;
     panel.onExpanded.addListener(() => {
