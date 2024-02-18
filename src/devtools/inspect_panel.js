@@ -475,11 +475,7 @@ export class InspectPanel {
     let widget = this._getRecycledWidget(object);
     if (widget) {
       const parent = ui.objectList;
-      try {
-        parent.removeChild(widget);
-      } catch (e) {
-        console.log(e);
-      }
+      parent.removeChild(widget);
       parent.appendChild(widget);
       widget.element.style.display = "list-item";
       widget.nameWidget.text = name;
