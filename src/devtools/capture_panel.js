@@ -451,14 +451,28 @@ export class CapturePanel {
   }
 
   _getTextureViewFromAttachment(attachment) {
-    return this._getObject(attachment?.view?.__id);
+    if (!attachment) {
+      return null;
+    }
+    if (attachment.resolveTarget) {
+      return this._getObject(attachment.resolveTarget.__id);
+    }
+    return this._getObject(attachment.view?.__id);
   }
 
   _getTextureFromAttachment(attachment) {
-    if (attachment?.view?.__texture?.__id) {
-      return this._getObject(attachment.view.__texture.__id);
+    if (!attachment) {
+      return null;
     }
-
+    if (attachment.resolveTarget) {
+      if (attachment.resolveTarget?.__texture?.__id) {
+        return this._getObject(attachment.resolveTarget.__texture.__id);
+      }
+    } else {
+      if (attachment.view?.__texture?.__id) {
+        return this._getObject(attachment.view.__texture.__id);
+      }
+    }
     const view = this._getTextureViewFromAttachment(attachment);
     if (!view) {
       return null;

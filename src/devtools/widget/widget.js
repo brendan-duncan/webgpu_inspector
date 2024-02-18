@@ -230,6 +230,7 @@ export class Widget {
     if (index != -1) {
       this.children.splice(index, 1);
     }
+    child._parent = null;
     this._element.removeChild(child._element);
   }
 
@@ -237,6 +238,9 @@ export class Widget {
    * Remove all children from this widget.
    */
   removeAllChildren() {
+    for (const child in this.children) {
+      child._parent = null;
+    }
     this.children.length = 0;
     while (this._element.firstChild) {
       this._element.removeChild(this._element.lastChild);
