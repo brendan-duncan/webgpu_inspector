@@ -196,6 +196,7 @@ export class CapturePanel {
         self._loadingBuffers--;
         command.loadedDataChunks[entryIndex].length = 0;
       }
+      self._updateCaptureStatus();
     });
   }
 
@@ -321,6 +322,28 @@ export class CapturePanel {
         };
         currentBlock = block;
         renderPassIndex++;
+
+        for (const attachment of args[0].colorAttachments) {
+          const textureView = this._getTextureViewFromAttachment(attachment);
+          if (textureView) {
+            this._capturedObjects.set(textureView.id, textureView);
+            const texture = this.database.getTextureFromView(textureView);
+            if (texture) {
+              this._capturedObjects.set(texture.id, texture);
+            }
+          }
+        }
+
+        if (args[0].depthStencilAttachment) {
+          const textureView = this._getTextureViewFromAttachment(args[0].depthStencilAttachment);
+          if (textureView) {
+            this._capturedObjects.set(textureView.id, textureView);
+            const texture = this.database.getTextureFromView(textureView);
+            if (texture) {
+              this._capturedObjects.set(texture.id, texture);
+            }
+          }
+        }
       } else if (method === "beginComputePass") {
         currentBlock = new Div(debugGroup, { class: "capture_computepass" });
         const header = new Div(currentBlock, { id: `ComputePass_${computePassIndex}`, class: "capture_computepass_header" });
@@ -1507,12 +1530,17 @@ export class CapturePanel {
     this._updateCaptureStatus();
 
     if (passId != -1) {
+      const passIdValue = passId / 10;
+      const passIndex = Math.floor(passIdValue);
+      const attachment = passId - (passIndex * 10);
+
       const frameImages = this._frameImages;
       if (frameImages) {
         let passFrame = null;
+
         if (passId >= this._frameImageList.length) {
           passFrame = new Div(frameImages, { class: "capture_pass_texture" });
-          this._frameImageList[passId] = passFrame;
+          this._frameImageList[passIndex] = passFrame;
         } else {
           passFrame = new Div(null, { class: "capture_pass_texture" });
           let found = false;
@@ -1529,18 +1557,18 @@ export class CapturePanel {
           this._frameImageList[passId] = passFrame;
         }
 
-        new Div(passFrame, { text: `Render Pass ${passId}`, style: "color: #ddd; margin-bottom: 5px;" });
+        new Div(passFrame, { text: `Render Pass ${passIndex} ${`Attachment ${attachment}`}`, style: "color: #ddd; margin-bottom: 5px;" });
         const textureId = texture.id < 0 ? "CANVAS" : texture.id;
         new Div(passFrame, { text: `${texture.name} ID:${textureId}`, style: "color: #ddd; margin-bottom: 10px;" });
 
         this._createTextureWidget(passFrame, texture, 256);
 
         passFrame.element.onclick = () => {
-          const element = document.getElementById(`RenderPass_${passId}`);
+          const element = document.getElementById(`RenderPass_${passIndex}`);
           if (element) {
             element.scrollIntoView();
 
-            const beginElement = document.getElementById(`RenderPass_${passId}_begin`);
+            const beginElement = document.getElementById(`RenderPass_${passIndex}_begin`);
             if (beginElement) {
               beginElement.click();
             }

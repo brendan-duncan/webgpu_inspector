@@ -9,16 +9,16 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
   // How much data should we send to the panel via message as a chunk.
   // Messages can't send that much data .
-  const maxDataChunkSize = (1024 * 1024) / 4;
-  const maxBufferCaptureSize = (1024 * 1024) / 4;
+  const maxDataChunkSize = (1024 * 1024) / 4; // 256KB
+  const maxBufferCaptureSize = (1024 * 1024) / 4; // 256KB
+  const maxColorAttachments = 10;
 
   class WebGPUInspector {
     constructor() {
       this._frameCommands = [];
       this._frameData = [];
       this._frameRenderPassCount = 0;
-      this._captureTextureViews = [];
-      this._lastCommandEncoder = null;
+      this._captureTextureViews = new Set();
       this._captureCommandEncoder = null;
       this._captureTexturedBuffers = [];
       this._currentFrame = null;
@@ -27,14 +27,15 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._objectID = 1;
       this._lastFrameTime = 0;
       this._frameCommandCount = 0;
-      this._captureRequest = false;
+      this._captureFrameRequest = false;
       this._errorChecking = true;
       this._trackedObjects = new Map();
       this._trackedObjectInfo = new Map();
       this._bindGroupCount = 0;
       this._captureTextureRequest = new Map();
+      this._captureCanvasTextureRequest = new Map();
       this._toDestroy = [];
-      this._objectMap = new Map();
+      this._objectMap = new Map(); // Map objects to their replacements
       this._captureBuffers = [];
       this._captureTempBuffers = [];
       this._mappedTextureBufferCount = 0;
@@ -92,28 +93,34 @@ import { Actions, PanelActions } from "./utils/actions.js";
           }
 
           if (self._garbageCollectectedObjects.length > 100) {
-            window.postMessage({"action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects}, "*");
+            window.postMessage({ "action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects }, "*");
             self._garbageCollectectedObjects.length = 0;
           }
         }
 
-        self._trackedObjects.delete(id);
-        self._trackedObjectInfo.delete(id);
-        self._captureTextureRequest.delete(id);
-        self._objectMap.delete(id);
+        if (id > 0) {
+          self._trackedObjects.delete(id);
+          self._trackedObjectInfo.delete(id);
+          self._captureTextureRequest.delete(id);
+          self._captureCanvasTextureRequest.delete(id);
+          self._objectMap.delete(id);
+        }
       });
 
       // Clean out the garbage collected objects every so often.
       const garbageCollectionInterval = 200;
       setInterval(() => {
         if (self._garbageCollectectedObjects.length > 0) {
-          window.postMessage({"action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects}, "*");
+          window.postMessage({ "action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects }, "*");
           self._garbageCollectectedObjects.length = 0;
         }
       }, garbageCollectionInterval);
 
       // Wrap the canvas elements so we can capture when their context is created.
-      this._wrapCanvases();
+      const canvases = document.getElementsByTagName("canvas");
+      for (const canvas of canvases) {
+        this._wrapCanvas(canvas);
+      }
 
       // Capture any dynamically created canvases.
       const __createElement = document.createElement;
@@ -139,19 +146,18 @@ import { Actions, PanelActions } from "./utils/actions.js";
       };
 
       // Listen for messages from the content-script.
-      window.addEventListener('message', (event) => {
+      window.addEventListener("message", (event) => {
         if (event.source !== window) {
           return;
         }
         const message = event.data;
-        if (typeof message !== 'object' || message === null) {
+        if (typeof message !== "object" || message === null) {
           return;
         }
         if (message.action === PanelActions.RequestTexture) {
           const textureId = message.id;
           self._requestTexture(textureId);
-        }
-        if (message.action === PanelActions.CompileShader) {
+        } else if (message.action === PanelActions.CompileShader) {
           const shaderId = message.id;
           const code = message.code;
           self._compileShader(shaderId, code);
@@ -165,6 +171,66 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
     enableRecording() {
       this._gpuWrapper.enableRecording();
+    }
+
+    _updateCanvasAttachment(attachment) {
+      let textureView = null;
+      if (attachment.resolveTarget) {
+        textureView = attachment.resolveTarget;
+      } else if (attachment.view) {
+        textureView = attachment.view;
+      }
+
+      const texture = textureView?.__texture;
+      const context = texture?.__context;
+
+      // If the texture has a context, it's a canvas texture.
+      if (!context) {
+        return;
+      }
+
+      if (context.__captureTexture) {
+        if (context.__captureTexture.width != texture.width ||
+            context.__captureTexture.height != texture.height ||
+            context.__captureTexture.format != texture.format) {
+          this.disableRecording();
+          context.__captureTexture.destroy();
+          context.__captureTexture = null;
+          this.enableRecording();
+        }
+      }
+
+      const device = context.__device;
+      if (device) {
+        this.disableRecording();
+
+        const captureTexture = device.createTexture({
+          size: [texture.width, texture.height, 1],
+          format: texture.format,
+          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+        });
+
+        context.__captureTexture = captureTexture;
+        if (captureTexture) {
+          captureTexture.__id = texture.__id;
+          captureTexture.__canvasTexture = texture;
+          captureTexture.__context = context;
+
+          const captureView = captureTexture.createView();
+          captureView.__texture = captureTexture;
+          captureView.__canvasView = textureView;
+          captureTexture.__view = captureView;
+          captureView.__context = context;
+
+          if (attachment.resolveTarget) {
+            attachment.resolveTarget = captureView;
+          } else {
+            attachment.view = captureView;
+          }
+        }
+
+        this.enableRecording();
+      }
     }
 
     // Called before a GPU method is called, allowing the inspector to modify
@@ -197,7 +263,10 @@ import { Actions, PanelActions } from "./utils/actions.js";
         }
       }
 
-      if (method === "createShaderModule"|| method === "createRenderPipeline" || method === "createComputePipeline" || method === "createBindGroup") {
+      if (method === "createShaderModule" ||
+          method === "createRenderPipeline" ||
+          method === "createComputePipeline" ||
+          method === "createBindGroup") {
         if (this._errorChecking) {
           this._gpuWrapper.disableRecording();
           object.pushErrorScope("validation");
@@ -205,7 +274,6 @@ import { Actions, PanelActions } from "./utils/actions.js";
         }
       }
 
-      this._capturedRenderView = null;
       if (method === "beginRenderPass") {
         if (this._errorChecking) {
           this.disableRecording();
@@ -214,69 +282,25 @@ import { Actions, PanelActions } from "./utils/actions.js";
           }
           this.enableRecording();
         }
-
-        const descriptor = args[0];
-        const colorAttachments = descriptor.colorAttachments;
-        if (colorAttachments) {
-          for (let i = 0; i < colorAttachments.length; ++i) {
-            const attachment = colorAttachments[i];
-            if (attachment.view) {
-              // If there's a resolveTarget, get that instead of the regular view, which will
-              // have MSAA and can't be read directly.
-              const texture = attachment.view.__texture;
-              if (texture) {
-                if (texture.__isCanvasTexture) {
-                  const context = texture.__context;
-                  if (context) {
-                    if (context.__captureTexture) {
-                      if (context.__captureTexture?.width != texture.width ||
-                          context.__captureTexture?.height != texture.height ||
-                          context.__captureTexture?.format != texture.format) {
-                        this.disableRecording();
-                        context.__captureTexture.destroy();
-                        context.__captureTexture = null;
-                        context.__canvas.__captureTexture = null;
-                        this.enableRecording();
-                      }
-                    }
-
-                    if (!context.__captureTexture) {
-                      const device = context.__device;
-                      if (device) {
-                        this.disableRecording();
-                        const captureTexture = device.createTexture({
-                          size: [texture.width, texture.height, 1],
-                          format: texture.format,
-                          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
-                        });
-                        context.__captureTexture = captureTexture;
-                        captureTexture.__id = texture.__id;
-                        captureTexture.__view = context.__captureTexture.createView();
-                        captureTexture.__view.__texture = captureTexture;
-                        captureTexture.__canvasTexture = texture;
-                        texture.__captureTexture = captureTexture;
-                        texture.__canvas.__captureTexture = captureTexture;
-                        this.enableRecording();
-                      }
-                    }
-
-                    if (context.__captureTexture) {
-                      context.__captureTexture.__canvasTexture = texture;
-                      attachment.view = context.__captureTexture.__view;
-                      this._capturedRenderView = attachment.view;
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
       }
 
       // Before we finish the command encoder, inject any pending texture captures
-      if ((object === this._lastCommandEncoder) && method === "finish") {
+      if (method === "finish") {
+        if (object.__rendersToCanvas && self._captureCanvasTextureRequest.size) {
+          self.disableRecording();
+
+          self._captureCanvasTextureRequest.forEach((texture, id) => {
+            texture = self._trackedObjects.get(id)?.deref();
+            self._captureTextureBuffer(object, texture);
+          });
+
+          self._captureCanvasTextureRequest.clear();
+
+          self.enableRecording();
+        }
+
         if (this._captureTextureRequest.size > 0) {
-          this._captureTextureBuffers();
+          this._captureTextureBuffers(object);
         }
       }
 
@@ -289,23 +313,28 @@ import { Actions, PanelActions } from "./utils/actions.js";
         } else {
           descriptor.usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC;
         }
-      }       
+        // Keep tabs on the device that the context was initialized with.
+        object.__device = descriptor.device;
+      }
 
       if (method === "submit") {
-        this.disableRecording();
         object.onSubmittedWorkDone().then(() => {
-          if (this._captureTempBuffers.length) {
+          self.disableRecording();
+          if (self._captureTempBuffers.length) {
             self._sendCapturedBuffers();
           }
-          if (this._captureTexturedBuffers.length > 0) {
+
+          if (self._captureTexturedBuffers.length) {
             self._sendCaptureTextureBuffers();
           }
-          for (const obj of this._toDestroy) {
+
+          for (const obj of self._toDestroy) {
             obj.destroy();
           }
           self._toDestroy.length = 0;
+
+          self.enableRecording();
         });
-        this.enableRecording();
       }
     }
 
@@ -314,13 +343,25 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._frameCommandCount++;
 
       if (method === "beginRenderPass") {
+        // object is a GPUCommandEncoder
+        // result is a GPURenderPassEncoder
         result.__commandEncoder = object;
-        if (this._capturedRenderView) {
-          result.__capturedRenderView = this._capturedRenderView;
+
+        for (const colorAttachment of args[0].colorAttachments) {
+          const view = colorAttachment.resolveTarget ?? colorAttachment.view;
+          if (view) {
+            if (view.__id < 0) {
+              object.__rendersToCanvas = true;
+              break;
+            }
+          }
         }
       }
 
-      if (method === "createShaderModule" || method === "createRenderPipeline" || method === "createComputePipeline" || method === "createBindGroup") {
+      if (method === "createShaderModule" ||
+          method === "createRenderPipeline" ||
+          method === "createComputePipeline" ||
+          method === "createBindGroup") {
         if (this._errorChecking) {
           this.disableRecording();
           object.popErrorScope().then((error) => {
@@ -346,37 +387,42 @@ import { Actions, PanelActions } from "./utils/actions.js";
           }
           this.enableRecording();
         }
-
-        // If the captured canvas texture was rendered to, blit it to the real canvas texture
-        if (object.__capturedRenderView) {
-          const texture = object.__capturedRenderView.__texture;
-          if (texture) {
-            const commandEncoder = object.__commandEncoder;
-            if (commandEncoder) {
-              this.disableRecording();
-              commandEncoder.copyTextureToTexture({ texture },
-                { texture: texture.__canvasTexture },
-                [texture.width, texture.height, 1]);
-              this.enableRecording();
-            }
-          }
-        }
       }
 
       let id = undefined;
-      if (method === "getCurrentTexture" && result) {
-        id = -(object.__canvas?.__id ?? 1);
+
+      // Canvas textures will have a negative id, which is the negative of the context's id.
+      if (method === "getCurrentTexture") {
+        // object is a GPUCanvasContext
+        if (!object.__id) {
+          // If the context hasn't been captured yet, do it now.
+          this._wrapObject(object);
+          this._trackObject(object.__id, object);
+        }
+
+        id = -object.__id;
+        object.__canvasTexture = new WeakRef(result);
       } else if (method === "createView") {
-        if (object.__isCanvasTexture) {
+        if (object.__id < 0) {
           id = object.__id - 0.5;
         }
       }
 
       if (object instanceof GPUDevice && object?.__id === undefined) {
-        // We haven't wrapped the object yet, so do it now.
+        // If we haven't wrapped the object yet, so do it now.
         // Probably the GPUDevice where requestDevice happened
         // before we started recording.
         this._wrapDevice(null, object);
+
+        // This probably means we haven't wrapped the adapter yet, either.
+        if (!object.__adapter) {
+          // The wrapper will pick up and register the resulting adapter.
+          // We don't need the adapter to be a true owner of the device,
+          // we're just using it for inspection purposes.
+          navigator.gpu.requestAdapter().then((adapter) => {
+            object.__adapter = adapter;
+          });
+        }
       }
       
       if (result) {
@@ -385,26 +431,21 @@ import { Actions, PanelActions } from "./utils/actions.js";
           this._wrapObject(result, id);
         }
 
-        if (method === "createShaderModule" || method === "createRenderPipeline") {
+        if (method === "createShaderModule" ||
+            method === "createRenderPipeline") {
           result.__descriptor = args[0];
           result.__device = object;
           this._objectMap.set(result.__id, { id: result.__id, object: new WeakRef(result), replacement: null });
-        }
-
-        if (method === "createTexture") {
+        } else if (method === "getCurrentTexture") {
+          result.__context = object;
+          this._trackObject(result.__id, result);
+        } else if (method === "createTexture") {
           this._trackObject(result.__id, result);
         } else if (method === "createView" && !id) {
           this._trackObject(result.__id, result);
           result.__texture = object;
         } else if (method === "createBuffer") {
           this._trackObject(result.__id, result);
-        } else if (method === "getCurrentTexture") {
-          result.__isCanvasTexture = true;
-          result.__context = object;
-          this._trackObject(result.__id, result);
-          if (object.__canvas) {
-            result.__canvas = object.__canvas;
-          }
         } else if (method === "createBindGroup") {
           this._trackObject(result.__id, result);
         }
@@ -469,6 +510,8 @@ import { Actions, PanelActions } from "./utils/actions.js";
       }
 
       if (device && device.__id === undefined) {
+        device.queue.__device = device;
+
         args ??= [];
         this._wrapObject(device, id);
         const descriptor = args[0] ?? {};
@@ -653,21 +696,14 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
     _requestTexture(textureId) {
       if (textureId < 0) {
-        // canvas texture
-        const canvasId = -textureId;
-        const canvas = this._trackedObjects.get(canvasId).deref();
-        if (canvas) {
-          if (canvas.__captureTexture) {
-            this._captureTextureRequest.set(textureId, canvas.__captureTexture);
-            return;
-          }
+        this._captureCanvasTextureRequest.set(textureId, null);
+      } else {
+        const ref = this._trackedObjects.get(textureId);
+        const texture = ref?.deref();
+        if (texture instanceof GPUTexture) {
+          this._captureTextureRequest.set(textureId, texture);
         }
       }
-      const object = this._trackedObjects.get(textureId).deref();
-      if (!object || !(object instanceof GPUTexture)) {
-        return;
-      }
-      this._captureTextureRequest.set(textureId, object);
     }
 
     _updateStatusMessage() {
@@ -709,7 +745,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
         this._lastFrameTime = time;
       } else {
         const deltaTime = time - this._lastFrameTime;
-        window.postMessage({"action": Actions.DeltaTime, deltaTime}, "*");
+        window.postMessage({ "action": Actions.DeltaTime, deltaTime }, "*");
         this._lastFrameTime = time;
       }
 
@@ -724,7 +760,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
         sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
 
         this._captureMaxBufferSize = data.maxBufferSize || maxBufferCaptureSize;
-        this._captureRequest = true;
+        this._captureFrameRequest = true;
         this._gpuWrapper.recordStacktraces = true;
       }
       this._frameData.length = 0;
@@ -738,12 +774,13 @@ import { Actions, PanelActions } from "./utils/actions.js";
       if (this._frameCommands.length) {
         const maxFrameCount = 2000;
         const batches = Math.ceil(this._frameCommands.length / maxFrameCount);
-        window.postMessage({"action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": this._frameCommands.length, "batches": batches}, "*");
+        window.postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": this._frameCommands.length, "batches": batches }, "*");
 
         for (let i = 0; i < this._frameCommands.length; i += maxFrameCount) {
           const length = Math.min(maxFrameCount, this._frameCommands.length - i);
           const commands = this._frameCommands.slice(i, i + length);
-          window.postMessage({"action": Actions.CaptureFrameCommands,
+          window.postMessage({
+              "action": Actions.CaptureFrameCommands,
               "frame": this._frameIndex,
               "commands": commands,
               "index": i,
@@ -751,7 +788,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
             }, "*");
         }
         this._frameCommands.length = 0;
-        this._captureRequest = false;
+        this._captureFrameRequest = false;
         this._gpuWrapper.recordStacktraces = false;
       }
 
@@ -763,46 +800,33 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._trackedObjectInfo.set(id, object.constructor);
     }
 
-    _wrapCanvas(c) {
-      if (c.__id) {
+    _wrapCanvas(canvas) {
+      if (canvas.__id) {
         return;
       }
-      c.__id = this.getNextId(c);
 
-      this._trackObject(c.__id, c);
+      canvas.__id = this.getNextId(canvas);
+      this._trackObject(canvas.__id, canvas);
 
       const self = this;
-      const __getContext = c.getContext;
+      const __getContext = canvas.getContext;
 
-      c.getContext = function (a1, a2) {
-        const ret = __getContext.call(c, a1, a2);
-        if (a1 === "webgpu") {
-          if (ret) {
-            self._wrapObject(ret);
-            ret.__canvas = c;
-          }
+      canvas.getContext = function (a1, a2) {
+        const result = __getContext.call(canvas, a1, a2);
+        if (result instanceof GPUCanvasContext) {
+          self._wrapObject(result);
+          self._trackObject(result.__id, result);
         }
-        return ret;
+        return result;
       };
     }
 
-    _wrapCanvases() {
-      const canvases = document.getElementsByTagName("canvas");
-      for (let i = 0; i < canvases.length; ++i) {
-        const c = canvases[i];
-        this._wrapCanvas(c);
-      }
-    }
-
     _wrapObject(object, id) {
-      if (!object) {
-        return;
-      }
       // The object has already been wrapped
-      if (object.__id) {
+      if (!object || object.__id !== undefined) {
         return;
       }
-
+      
       object.__id = id ?? this.getNextId(object);
 
       // Track garbage collected objects
@@ -836,10 +860,10 @@ import { Actions, PanelActions } from "./utils/actions.js";
       }
     }
 
-    _captureTextureBuffers() {
+    _captureTextureBuffers(commandEncoder) {
       const self = this;
       this._captureTextureRequest.forEach((texture) => {
-        self._captureTexture(self._lastCommandEncoder, texture);
+        self._captureTextureBuffer(commandEncoder, texture);
       });
       this._captureTextureRequest.clear();
     }
@@ -880,9 +904,13 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
       if (method === "destroy") {
         const id = object.__id;
-        this._trackedObjects.delete(id);
-        this._trackedObjectInfo.delete(id);
-        this._objectMap.delete(id);
+        // Don't remove canvas textures from the tracked objects, which have negative id's.
+        // These are frequently created and destroyed via getCurrentTexture.
+        if (id > 0) {
+          this._trackedObjects.delete(id);
+          this._trackedObjectInfo.delete(id);
+          this._objectMap.delete(id);
+        }
         if (object instanceof GPUBindGroup) {
           this._bindGroupCount--;
         }
@@ -959,16 +987,11 @@ import { Actions, PanelActions } from "./utils/actions.js";
       } else if (method === "createCommandEncoder") {
         // We'll need the CommandEncoder's device for capturing textures
         result.__device = object;
-        this._lastCommandEncoder = result;
-      } else if (method === "finish") {
-        if (object == this._lastCommandEncoder) {
-          this._lastCommandEncoder = null;
-        }
       } else if (method === "beginRenderPass") {
         this._frameRenderPassCount++;
       }
 
-      if (this._captureRequest) {
+      if (this._captureFrameRequest) {
         this._captureCommand(object, method, args, stacktrace);
       }
     }
@@ -1072,7 +1095,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
         if (args[0]?.colorAttachments?.length > 0) {
           for (const attachment of args[0].colorAttachments) {
             const captureTextureView = attachment.resolveTarget ?? attachment.view;
-            this._captureTextureViews.push(captureTextureView);
+            this._captureTextureViews.add(captureTextureView);
           }
         }
         this._inComputePass = false;
@@ -1086,14 +1109,15 @@ import { Actions, PanelActions } from "./utils/actions.js";
           this._recordCaptureBuffers(this._captureCommandEncoder);
           this._updateStatusMessage();
         }
-        if (this._captureTextureViews.length > 0) {
+        if (this._captureTextureViews.size > 0) {
+          let passId = (this._frameRenderPassCount - 1) * maxColorAttachments;
           for (const captureTextureView of this._captureTextureViews) {
             const texture = captureTextureView.__texture;
             if (texture) {
-              this._captureTexture(this._captureCommandEncoder, texture, this._frameRenderPassCount - 1);
+              this._captureTextureBuffer(this._captureCommandEncoder, texture, passId++);
             }
           }
-          this._captureTextureViews.length = 0;
+          this._captureTextureViews.clear();
         }
         this._captureCommandEncoder = null;
       }
@@ -1111,6 +1135,8 @@ import { Actions, PanelActions } from "./utils/actions.js";
         const numChunks = Math.ceil(size / maxDataChunkSize);
         totalChunks += numChunks;
       }
+
+      console.log("_sendCaptureTextureBuffers", totalChunks, this._captureTexturedBuffers.length)
 
       window.postMessage({
         "action": Actions.CaptureTextureFrames, 
@@ -1175,6 +1201,9 @@ import { Actions, PanelActions } from "./utils/actions.js";
       return device.__textureUtils;
     }
 
+    // Send buffer data associated with a command to the inspector server.
+    // The data is sent in chunks since the message pipe can't handle very
+    // much data at a time.
     _sendBufferData(commandId, entryIndex, data) {
       const size = data.length;
       const numChunks = Math.ceil(size / maxDataChunkSize);
@@ -1204,6 +1233,8 @@ import { Actions, PanelActions } from "./utils/actions.js";
       }
     }
 
+    // Buffers associated with a command are recorded and then sent to the inspector server.
+    // The data is sent in chunks since the message pipe can't handle very much data at a time.
     _sendCapturedBuffers() {
       const buffers = this._captureTempBuffers;
       if (buffers.length > 0) {
@@ -1238,6 +1269,9 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._captureTempBuffers.length = 0;
     }
 
+    // Buffers associated with a command are recorded and then sent to the inspector server.
+    // The data is copied to a temp buffer so that the original buffer can continue to be used
+    // by the page.
     _recordCaptureBuffers(commandEncoder) {
       const buffers = this._captureBuffers;
       const device = commandEncoder?.__device;
@@ -1251,6 +1285,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
         let tempBuffer = null;
         this.disableRecording();
+
         try {
           tempBuffer = device.createBuffer({
             size,
@@ -1265,12 +1300,17 @@ import { Actions, PanelActions } from "./utils/actions.js";
         } catch (e) {
           console.log(e);
         }
+
         this.enableRecording();
       }
+
       buffers.length = 0;
     }
 
-    _captureTexture(commandEncoder, texture, passId) {
+    // Copy the texture to a buffer so we can send it to the inspector server.
+    // The texture data is copied to a buffer now, then after the frame has finished
+    // the buffer data is sent to the inspector server.
+    _captureTextureBuffer(commandEncoder, texture, passId) {
       const device = commandEncoder?.__device;
       // can't capture canvas texture
       if (!device) {
@@ -1333,6 +1373,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       let tempBuffer = null;
       try {
         this.disableRecording();
+
         tempBuffer = device.createBuffer({
           size: bufferSize,
           usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
@@ -1358,7 +1399,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
     }
 
     _addCommandData(data) {
-      if (this._captureRequest) {
+      if (this._captureFrameRequest) {
         const id = this._frameData.length;
         this._frameData.push(data);
         return id;
