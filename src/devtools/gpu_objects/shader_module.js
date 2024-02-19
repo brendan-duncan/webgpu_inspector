@@ -10,6 +10,9 @@ export class ShaderModule extends GPUObject {
     this.hasFragmentEntries = descriptor?.code ? descriptor.code.indexOf("@fragment") != -1 : false;
     this.hasComputeEntries = descriptor?.code ? descriptor.code.indexOf("@compute") != -1 : false;
     this.replacementCode = null;
+
+    this.isDestroyed = false;
+    this.pipelineCount = 0;
   }
 
   get code() {
