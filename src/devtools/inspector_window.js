@@ -176,6 +176,10 @@ export class InspectorWindow extends Window {
       return;
     }
 
+    if (texture.gpuTexture) {
+      texture.gpuTexture.destroy();
+    }
+
     const gpuFormat = formatInfo.depthOnlyFormat ?? format;
     texture.descriptor.format = gpuFormat;
     texture.descriptor.usage = (usage ?? GPUTextureUsage.RENDER_ATTACHMENT) | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST;
