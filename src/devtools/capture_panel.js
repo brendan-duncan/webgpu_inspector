@@ -699,6 +699,10 @@ export class CapturePanel {
 
   _showBufferDataInfo(parentWidget, module, groupIndex, bindingIndex, bufferData) {
     const reflection = module.reflection;
+    if (!reflection) {
+      return;
+    }
+
     for (const uniform of reflection.uniforms) {
       if (uniform.group != groupIndex || uniform.binding != bindingIndex) {
         continue;
@@ -708,6 +712,7 @@ export class CapturePanel {
       this._showBufferDataType(parentWidget, uniform.type, bufferData);
       return;
     }
+
     for (const storage of reflection.storage) {
       if (storage.group != groupIndex || storage.binding != bindingIndex) {
         continue;
