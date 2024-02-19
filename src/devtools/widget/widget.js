@@ -191,6 +191,27 @@ export class Widget {
   }
 
   /**
+   * Insert a child widget after the given child widget.
+   * @param {Widget} newChild 
+   * @param {Widget} refChild 
+   */
+  insertAfter(newChild, refChild) {
+    let index = this.children.indexOf(refChild);
+    if (index === -1) {
+      this.appendChild(newChild);
+      return;
+    }
+    index++;
+    if (index >= this.children.length) {
+      this.appendChild(newChild);
+      return;
+    }
+    const refWidget = this.children[index];
+    this.children.splice(index, 0, newChild);
+    this._element.insertBefore(newChild._element, refWidget._element);
+  }
+
+  /**
    * Add a child widget to this widget.
    * @param {Widget} child
    */

@@ -1534,52 +1534,50 @@ export class CapturePanel {
     this._loadingImages--;
     this._updateCaptureStatus();
 
-    if (passId != -1) {
+    const frameImages = this._frameImages;
+    if (passId != -1 && frameImages) {
       const passIdValue = passId / 10;
       const passIndex = Math.floor(passIdValue);
       const attachment = passId - (passIndex * 10);
 
-      const frameImages = this._frameImages;
-      if (frameImages) {
-        let passFrame = null;
+      let passFrame = null;
 
-        if (passId >= this._frameImageList.length) {
-          passFrame = new Div(frameImages, { class: "capture_pass_texture" });
-          this._frameImageList[passIndex] = passFrame;
-        } else {
-          passFrame = new Div(null, { class: "capture_pass_texture" });
-          let found = false;
-          for (let i = passId - 1; i >= 0; --i) {
-            if (this._frameImageList[i]) {
-              frameImages.insertBefore(passFrame, this._frameImageList[i]);
-              found = true;
-              break;
-            }
+      if (passId >= this._frameImageList.length) {
+        passFrame = new Div(frameImages, { class: "capture_pass_texture" });
+        this._frameImageList[passId] = passFrame;
+      } else {
+        passFrame = new Div(null, { class: "capture_pass_texture" });
+        let found = false;
+        for (let i = passId - 1; i >= 0; --i) {
+          if (this._frameImageList[i]) {
+            frameImages.insertAfter(passFrame, this._frameImageList[i]); // This needs to be an insertAfter
+            found = true;
+            break;
           }
-          if (!found) {
-            frameImages.insertBefore(passFrame, frameImages.children[0]);
-          }
-          this._frameImageList[passId] = passFrame;
         }
-
-        new Div(passFrame, { text: `Render Pass ${passIndex} ${`Attachment ${attachment}`}`, style: "color: #ddd; margin-bottom: 5px;" });
-        const textureId = texture.id < 0 ? "CANVAS" : texture.id;
-        new Div(passFrame, { text: `${texture.name} ID:${textureId}`, style: "color: #ddd; margin-bottom: 10px;" });
-
-        this._createTextureWidget(passFrame, texture, 256);
-
-        passFrame.element.onclick = () => {
-          const element = document.getElementById(`RenderPass_${passIndex}`);
-          if (element) {
-            element.scrollIntoView();
-
-            const beginElement = document.getElementById(`RenderPass_${passIndex}_begin`);
-            if (beginElement) {
-              beginElement.click();
-            }
-          }
-        };
+        if (!found) {
+          frameImages.insertBefore(passFrame, frameImages.children[0]);
+        }
+        this._frameImageList[passId] = passFrame;
       }
+
+      new Div(passFrame, { text: `Render Pass ${passIndex} ${`Attachment ${attachment}`}`, style: "color: #ddd; margin-bottom: 5px;" });
+      const textureId = texture.id < 0 ? "CANVAS" : texture.id;
+      new Div(passFrame, { text: `${texture.name} ID:${textureId}`, style: "color: #ddd; margin-bottom: 10px;" });
+
+      this._createTextureWidget(passFrame, texture, 256);
+
+      passFrame.element.onclick = () => {
+        const element = document.getElementById(`RenderPass_${passIndex}`);
+        if (element) {
+          element.scrollIntoView();
+
+          const beginElement = document.getElementById(`RenderPass_${passIndex}_begin`);
+          if (beginElement) {
+            beginElement.click();
+          }
+        }
+      };
     }
   }
 }
