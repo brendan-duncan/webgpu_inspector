@@ -10,6 +10,7 @@ export class Texture extends GPUObject {
     this.loadedImageDataChunks = [];
     this.imageDataPending = false;
     this.isImageDataLoaded = false;
+    this.gpuTexture = null;
 
     this.display = {
       exposure: 1,

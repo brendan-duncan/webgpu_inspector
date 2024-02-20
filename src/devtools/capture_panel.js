@@ -57,6 +57,7 @@ export class CapturePanel {
     this._lastSelectedCommand = null;
     this._capturedObjects = new Map();
     this._frameImageList = [];
+    this._gpuTextureMap = new Map();
 
     port.addListener((message) => {
       switch (message.action) {
@@ -268,6 +269,11 @@ export class CapturePanel {
     this._capturedObjects.clear();
     this._frameImageList.length = 0;
 
+    this._gpuTextureMap.forEach((value) => {
+      value.removeReference();
+    });
+    this._gpuTextureMap.clear();
+
     this._frameImages = new Span(contents, { class: "capture_frameImages" });
     const frameContents = new Span(contents, { class: "capture_frame" });
     const commandInfo = new Span(contents, { class: "capture_commandInfo" });
@@ -277,7 +283,6 @@ export class CapturePanel {
       self._inspectStats(commandInfo);
     };
 
-    let renderPassIndex = 0;
     let computePassIndex = 0;
 
     const debugGroupStack = [frameContents];
@@ -291,6 +296,7 @@ export class CapturePanel {
     const stats = this.statistics;
     stats.reset();
 
+    let renderPassIndex = 0;
     let first = true;
     for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
       const command = commands[commandIndex];
@@ -307,6 +313,7 @@ export class CapturePanel {
       let debugGroup = debugGroupStack[debugGroupStack.length - 1];
 
       if (method === "beginRenderPass") {
+        command._renderPassIndex = renderPassIndex;
         currentBlock = new Div(debugGroup, { class: "capture_renderpass" });
         const header = new Div(currentBlock, { id: `RenderPass_${renderPassIndex}`, class: "capture_renderpass_header" });
         new Span(header, { text: `Render Pass ${renderPassIndex}` });
@@ -504,10 +511,8 @@ export class CapturePanel {
     return this.database.getTextureFromView(view);
   }
 
-  _createTextureWidget(parent, texture, size, style) {
-    if (!texture.gpuTexture) {
-      return null;
-    }
+  _createTextureWidget(parent, texture, passId, size, style) {
+    const gpuTexture = this._gpuTextureMap.get(passId) ?? texture.gpuTexture;
 
     // Only supportting 2d previews for now
     if (texture.dimension !== "2d") {
@@ -539,7 +544,7 @@ export class CapturePanel {
         canvas.element.style.height = `${viewHeight}px`;
       }
 
-      const layerView = texture.gpuTexture.createView({
+      const layerView = gpuTexture.object.createView({
         dimension: "2d",
         baseArrayLayer: layer,
         layerArrayCount: 1
@@ -555,10 +560,10 @@ export class CapturePanel {
     return container;
   }
 
-  _showCaptureCommandInfo_beginRenderPass(args, commandInfo) {
+  _showCaptureCommandInfo_beginRenderPass(args, commandInfo, renderPassIndex) {
     const self = this;
     const colorAttachments = args[0].colorAttachments;
-    for (const i in colorAttachments) {
+    for (let i = 0, l = colorAttachments.length; i < l; ++i) {
       const attachment = colorAttachments[i];
       const texture = this._getTextureFromAttachment(attachment);
       if (texture) {
@@ -568,7 +573,8 @@ export class CapturePanel {
           new Button(colorAttachmentGrp.body, { label: "Inspect", callback: () => {
             self.window.inspectObject(texture);
           } });
-          this._createTextureWidget(colorAttachmentGrp.body, texture, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
+          const passId = this._getPassId(renderPassIndex, i);
+          this._createTextureWidget(colorAttachmentGrp.body, texture, passId, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
         } else {
           const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format} ${texture.width}x${texture.height}` });
           new Button(colorAttachmentGrp.body, { label: "Inspect", callback: () => {
@@ -593,7 +599,7 @@ export class CapturePanel {
           new Button(depthStencilAttachmentGrp.body, { label: "Inspect", callback: () => {
             self.window.inspectObject(texture);
           } });
-          this._createTextureWidget(depthStencilAttachmentGrp.body, texture, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
+          this._createTextureWidget(depthStencilAttachmentGrp.body, texture, -1, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
         } else {
           const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.descriptor?.format ?? "<unknown format>"} ${texture.width}x${texture.height}` });
           new Button(depthStencilAttachmentGrp.body, { label: "Inspect", callback: () => {
@@ -842,7 +848,7 @@ export class CapturePanel {
             if (texture.gpuTexture) {
               const canvasDiv = new Div(inputGrp.body);
               new Div(canvasDiv, { text: `Group: ${resource.group} Binding: ${resource.binding} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
-              this._createTextureWidget(canvasDiv, texture, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
+              this._createTextureWidget(canvasDiv, texture, -1, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
             } else {
               this.database.requestTextureData(texture);
             }
@@ -884,7 +890,7 @@ export class CapturePanel {
             
               if (texture.gpuTexture) {
                 const w = Math.max(Math.min(texture.width, texture.height, 256), 64);
-                this._createTextureWidget(resourceGrp.body, texture, w, "margin-left: 20px; margin-top: 10px; margin-bottom: 10px;");
+                this._createTextureWidget(resourceGrp.body, texture, -1, w, "margin-left: 20px; margin-top: 10px; margin-bottom: 10px;");
               }
             }
           } else {
@@ -1229,8 +1235,10 @@ export class CapturePanel {
   }
 
   _showTextureOutputs(state, parent) {
+    let renderPassIndex = 0;
     const outputs = { color: [], depthStencil: null };
     if (state.renderPass) {
+      renderPassIndex = state.renderPass._renderPassIndex;
       const renderPass = state.renderPass.args[0];
       if (renderPass?.colorAttachments) {
         for (const attachment of renderPass.colorAttachments) {
@@ -1247,8 +1255,9 @@ export class CapturePanel {
     if (outputs.color.length || outputs.depthStencil) {
       const self = this;
       const outputGrp = new Collapsable(parent, { collapsed: true, label: "Output Textures" });
-      for (const index in outputs.color) {
+      for (let index = 0, l = outputs.color.length; index < l; ++index) {
         const texture = outputs.color[index];
+        const passId = this._getPassId(renderPassIndex, index);
         if (texture) {
           new Button(outputGrp.body, { label: "Inspect", callback: () => {
             self.window.inspectObject(texture);
@@ -1256,7 +1265,7 @@ export class CapturePanel {
           if (texture.gpuTexture) {
             const canvasDiv = new Div(outputGrp.body);
             new Div(canvasDiv, { text: `Color: ${index} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
-            this._createTextureWidget(canvasDiv, texture, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
+            this._createTextureWidget(canvasDiv, texture, passId, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
           } else {
             new Div(outputGrp.body, { text: `Color: ${index} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
             this.database.requestTextureData(texture);
@@ -1272,7 +1281,7 @@ export class CapturePanel {
           if (texture.gpuTexture) {
             const canvasDiv = new Div(outputGrp.body);
             new Div(canvasDiv, { text: `DepthStencil Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
-            this._createTextureWidget(canvasDiv, texture, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
+            this._createTextureWidget(canvasDiv, texture, -1, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
           } else {
             new Div(outputGrp.body, { text: `DepthStencil Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
             this.database.requestTextureData(texture);
@@ -1312,7 +1321,7 @@ export class CapturePanel {
           if (texture.gpuTexture) {
             const canvasDiv = new Div(inputGrp.body);
             new Div(canvasDiv, { text: `Group: ${resource.group} Binding: ${resource.binding} Texture: ${texture.idName} ${texture.format} ${texture.width}x${texture.height}` });
-            this._createTextureWidget(canvasDiv, texture, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
+            this._createTextureWidget(canvasDiv, texture, -1, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
           } else {
             this.database.requestTextureData(texture);
           }
@@ -1495,7 +1504,7 @@ export class CapturePanel {
     }
 
     if (method == "beginRenderPass") {
-      this._showCaptureCommandInfo_beginRenderPass(args, commandInfo);
+      this._showCaptureCommandInfo_beginRenderPass(args, commandInfo, cmd._renderPassIndex);
     } else if (method === "setBindGroup") {
       this._showCaptureCommandInfo_setBindGroup(args, commandInfo, 0, false);
     } else if (method === "setPipeline") {
@@ -1521,9 +1530,34 @@ export class CapturePanel {
     }
   }
 
-  _textureDataChunkLoaded(id, passId, offset, size, index, count, chunk) {
+  _textureDataChunkLoaded() {
     this._loadedDataChunks--;
     this._updateCaptureStatus();
+  }
+
+  _findCanvas(widget) {
+    if (widget.element.tagName === "CANVAS") {
+      return widget;
+    }
+    for (const child of widget.children) {
+      const canvas = this._findCanvas(child);
+      if (canvas) {
+        return canvas;
+      }
+    }
+    return null;
+  }
+
+  _getPassId(renderPass, attachment) {
+    return renderPass * 10 + attachment;
+  }
+
+  _getPassIdCanvas(passId) {
+    const passFrame = this._frameImageList[passId];
+    if (!passFrame) {
+      return null;
+    }
+    return this._findCanvas(passFrame);
   }
 
   _textureLoaded(texture, passId) {
@@ -1565,7 +1599,10 @@ export class CapturePanel {
       const textureId = texture.id < 0 ? "CANVAS" : texture.id;
       new Div(passFrame, { text: `${texture.name} ID:${textureId}`, style: "color: #ddd; margin-bottom: 10px;" });
 
-      this._createTextureWidget(passFrame, texture, 256);
+      this._createTextureWidget(passFrame, texture, passId, 256);
+
+      this._gpuTextureMap.set(passId, texture.gpuTexture)
+      texture.gpuTexture.addReference();
 
       passFrame.element.onclick = () => {
         const element = document.getElementById(`RenderPass_${passIndex}`);

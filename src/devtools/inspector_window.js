@@ -12,6 +12,7 @@ import { Signal } from "../utils/signal.js";
 import { decodeDataUrl } from "../utils/base64.js";
 import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import { Texture } from "./gpu_objects/texture.js";
+import { GPUObjectRef } from "./gpu_objects/gpu_object_ref.js";
 
 export class InspectorWindow extends Window {
   constructor() {
@@ -177,14 +178,15 @@ export class InspectorWindow extends Window {
     }
 
     if (texture.gpuTexture) {
-      texture.gpuTexture.destroy();
+      texture.gpuTexture.removeReference();
     }
 
     const gpuFormat = formatInfo.depthOnlyFormat ?? format;
     texture.descriptor.format = gpuFormat;
     texture.descriptor.usage = (usage ?? GPUTextureUsage.RENDER_ATTACHMENT) | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST;
     texture.descriptor.sampleCount = 1;
-    texture.gpuTexture = this.device.createTexture(texture.descriptor);
+
+    texture.gpuTexture = new GPUObjectRef(this.device.createTexture(texture.descriptor));
     texture.descriptor.usage = usage;
     texture.descriptor.format = format;
     texture.descriptor.sampleCount = sampleCount;
@@ -194,7 +196,7 @@ export class InspectorWindow extends Window {
 
     this.device.queue.writeTexture(
       {
-        texture: texture.gpuTexture
+        texture: texture.gpuTexture.object
       },
       texture.imageData,
       {

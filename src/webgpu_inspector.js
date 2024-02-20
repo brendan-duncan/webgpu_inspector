@@ -1136,8 +1136,6 @@ import { Actions, PanelActions } from "./utils/actions.js";
         totalChunks += numChunks;
       }
 
-      console.log("_sendCaptureTextureBuffers", totalChunks, this._captureTexturedBuffers.length)
-
       window.postMessage({
         "action": Actions.CaptureTextureFrames, 
         "chunkCount": totalChunks,
