@@ -19,7 +19,6 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._frameData = [];
       this._frameRenderPassCount = 0;
       this._captureTextureViews = new Set();
-      this._captureCommandEncoder = null;
       this._captureTexturedBuffers = [];
       this._currentFrame = null;
       this._frameIndex = 0;
@@ -992,11 +991,11 @@ import { Actions, PanelActions } from "./utils/actions.js";
       }
 
       if (this._captureFrameRequest) {
-        this._captureCommand(object, method, args, stacktrace);
+        this._captureCommand(object, method, args, stacktrace, result);
       }
     }
 
-    _captureCommand(object, method, args, stacktrace) {
+    _captureCommand(object, method, args, stacktrace, result) {
       const commandId = this._frameCommands.length;
 
       const a = args;
@@ -1099,14 +1098,15 @@ import { Actions, PanelActions } from "./utils/actions.js";
           }
         }
         this._inComputePass = false;
-        this._captureCommandEncoder = object;
+        result.__commandEncoder = object;
       } else if (method === "beginComputePass") {
-        this._captureCommandEncoder = object;
+        result.__commandEncoder = object;
         this._inComputePass = true;
       } else if (method === "end") {
         this._inComputePass = false;
+        const commandEncoder = object.__commandEncoder;
         if (this._captureBuffers.length > 0) {
-          this._recordCaptureBuffers(this._captureCommandEncoder);
+          this._recordCaptureBuffers(commandEncoder);
           this._updateStatusMessage();
         }
         if (this._captureTextureViews.size > 0) {
@@ -1114,12 +1114,12 @@ import { Actions, PanelActions } from "./utils/actions.js";
           for (const captureTextureView of this._captureTextureViews) {
             const texture = captureTextureView.__texture;
             if (texture) {
-              this._captureTextureBuffer(this._captureCommandEncoder, texture, passId++);
+              this._captureTextureBuffer(commandEncoder, texture, passId++);
             }
           }
           this._captureTextureViews.clear();
         }
-        this._captureCommandEncoder = null;
+        object.__commandEncoder = null;
       }
     }
 
