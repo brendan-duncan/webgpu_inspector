@@ -906,7 +906,7 @@ export class InspectPanel {
         baseArrayLayer: layer,
         layerArrayCount: 1 };
       
-      const srcView = texture.gpuTexture.createView(viewDesc);
+      const srcView = texture.gpuTexture.object.createView(viewDesc);
 
       this.textureUtils.blitTexture(srcView, 1, canvasTexture.createView(), format, texture.display);
 
