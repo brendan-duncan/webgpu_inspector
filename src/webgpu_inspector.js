@@ -15,7 +15,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
   class WebGPUInspector {
     constructor() {
-      this._frameCommands = [];
+      this._captureFrameCommands = [];
       this._frameData = [];
       this._frameRenderPassCount = 0;
       this._captureTextureViews = new Set();
@@ -285,10 +285,12 @@ import { Actions, PanelActions } from "./utils/actions.js";
       if (method === "finish") {
         if (this._captureTextureRequest.size > 0) {
           this._captureTextureRequest.forEach((texture, id) => {
-            texture = texture || self._trackedObjects.get(id)?.deref();
-            self._captureTextureBuffer(object, texture);
+            if (id > 0 || object.__rendersToCanvas) {
+              texture = texture || self._trackedObjects.get(id)?.deref();
+              self._captureTextureBuffer(object, texture);
+              self._captureTextureRequest.delete(id);
+            }
           });
-          this._captureTextureRequest.clear();
         }
       }
 
@@ -514,7 +516,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
     }
 
     clear() {
-      this._frameCommands.length = 0;
+      this._captureFrameCommands.length = 0;
       this._currentFrame = null;
     }
 
@@ -752,21 +754,21 @@ import { Actions, PanelActions } from "./utils/actions.js";
         this._gpuWrapper.recordStacktraces = true;
       }
       this._frameData.length = 0;
-      this._frameCommands.length = 0;
+      this._captureFrameCommands.length = 0;
       this._frameRenderPassCount = 0;
       this._frameIndex++;
       this._frameCommandCount = 0;
     }
 
     _frameEnd() {
-      if (this._frameCommands.length) {
+      if (this._captureFrameCommands.length) {
         const maxFrameCount = 2000;
-        const batches = Math.ceil(this._frameCommands.length / maxFrameCount);
-        window.postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": this._frameCommands.length, "batches": batches }, "*");
+        const batches = Math.ceil(this._captureFrameCommands.length / maxFrameCount);
+        window.postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": this._captureFrameCommands.length, "batches": batches }, "*");
 
-        for (let i = 0; i < this._frameCommands.length; i += maxFrameCount) {
-          const length = Math.min(maxFrameCount, this._frameCommands.length - i);
-          const commands = this._frameCommands.slice(i, i + length);
+        for (let i = 0; i < this._captureFrameCommands.length; i += maxFrameCount) {
+          const length = Math.min(maxFrameCount, this._captureFrameCommands.length - i);
+          const commands = this._captureFrameCommands.slice(i, i + length);
           window.postMessage({
               "action": Actions.CaptureFrameCommands,
               "frame": this._frameIndex,
@@ -775,7 +777,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
               "count": length
             }, "*");
         }
-        this._frameCommands.length = 0;
+        this._captureFrameCommands.length = 0;
         this._captureFrameRequest = false;
         this._gpuWrapper.recordStacktraces = false;
       }
@@ -977,7 +979,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
     }
 
     _captureCommand(object, method, args, stacktrace, result) {
-      const commandId = this._frameCommands.length;
+      const commandId = this._captureFrameCommands.length;
 
       const a = args;
       if (a.length === 1 && a[0] === undefined) {
@@ -1062,7 +1064,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
       newArgs = this._processCommandArgs(newArgs);
 
-      this._frameCommands.push({
+      this._captureFrameCommands.push({
         "class": object.constructor.name,
         "id": object.__id,
         commandId,
