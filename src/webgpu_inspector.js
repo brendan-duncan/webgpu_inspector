@@ -32,9 +32,8 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._trackedObjectInfo = new Map();
       this._bindGroupCount = 0;
       this._captureTextureRequest = new Map();
-      this._captureCanvasTextureRequest = new Map();
-      this._toDestroy = [];
-      this._objectMap = new Map(); // Map objects to their replacements
+      this._toDestroy = []; // Defer deleting temp objects until after finish
+      this._objectReplacementMap = new Map(); // Map objects to their replacements
       this._captureBuffers = [];
       this._captureTempBuffers = [];
       this._mappedTextureBufferCount = 0;
@@ -101,8 +100,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
           self._trackedObjects.delete(id);
           self._trackedObjectInfo.delete(id);
           self._captureTextureRequest.delete(id);
-          self._captureCanvasTextureRequest.delete(id);
-          self._objectMap.delete(id);
+          self._objectReplacementMap.delete(id);
         }
       });
 
@@ -242,7 +240,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
         // used that shader were also re-created. Patch in the replacement
         // pipeline so the new version of the shader is used.
         let pipeline = args[0];
-        const objectRef = this._objectMap.get(pipeline.__id);
+        const objectRef = this._objectReplacementMap.get(pipeline.__id);
         if (objectRef) {
           if (objectRef.replacement) {
             args[0] = objectRef.replacement;
@@ -285,21 +283,12 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
       // Before we finish the command encoder, inject any pending texture captures
       if (method === "finish") {
-        if (object.__rendersToCanvas && self._captureCanvasTextureRequest.size) {
-          self.disableRecording();
-
-          self._captureCanvasTextureRequest.forEach((texture, id) => {
-            texture = self._trackedObjects.get(id)?.deref();
+        if (this._captureTextureRequest.size > 0) {
+          this._captureTextureRequest.forEach((texture, id) => {
+            texture = texture || self._trackedObjects.get(id)?.deref();
             self._captureTextureBuffer(object, texture);
           });
-
-          self._captureCanvasTextureRequest.clear();
-
-          self.enableRecording();
-        }
-
-        if (this._captureTextureRequest.size > 0) {
-          this._captureTextureBuffers(object);
+          this._captureTextureRequest.clear();
         }
       }
 
@@ -434,7 +423,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
             method === "createRenderPipeline") {
           result.__descriptor = args[0];
           result.__device = object;
-          this._objectMap.set(result.__id, { id: result.__id, object: new WeakRef(result), replacement: null });
+          this._objectReplacementMap.set(result.__id, { id: result.__id, object: new WeakRef(result), replacement: null });
         } else if (method === "getCurrentTexture") {
           result.__context = object;
           this._trackObject(result.__id, result);
@@ -613,7 +602,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
     }
 
     _compileShader(shaderId, code) {
-      const objectMap = this._objectMap.get(shaderId);
+      const objectMap = this._objectReplacementMap.get(shaderId);
       if (!objectMap) {
         return;
       }
@@ -643,7 +632,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       objectMap.replacement = newShaderModule;
 
       // Create replacements for any RenderPipeline that uses shaderId
-      for (const objectRef of this._objectMap.values()) {
+      for (const objectRef of this._objectReplacementMap.values()) {
         const object = objectRef.object.deref();
         const isRenderPipeline = object instanceof GPURenderPipeline;
         const isComputePipeline = object instanceof GPUComputePipeline;
@@ -695,7 +684,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
     _requestTexture(textureId) {
       if (textureId < 0) {
-        this._captureCanvasTextureRequest.set(textureId, null);
+        this._captureTextureRequest.set(textureId, null);
       } else {
         const ref = this._trackedObjects.get(textureId);
         const texture = ref?.deref();
@@ -859,14 +848,6 @@ import { Actions, PanelActions } from "./utils/actions.js";
       }
     }
 
-    _captureTextureBuffers(commandEncoder) {
-      const self = this;
-      this._captureTextureRequest.forEach((texture) => {
-        self._captureTextureBuffer(commandEncoder, texture);
-      });
-      this._captureTextureRequest.clear();
-    }
-
     _gpuToArray(gpu) {
       const array = [];
       if (gpu) {
@@ -908,7 +889,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
         if (id > 0) {
           this._trackedObjects.delete(id);
           this._trackedObjectInfo.delete(id);
-          this._objectMap.delete(id);
+          this._objectReplacementMap.delete(id);
         }
         if (object instanceof GPUBindGroup) {
           this._bindGroupCount--;
