@@ -517,7 +517,7 @@ export class CapturePanel {
         new Span(cmd, { class: "capture_method_args", text: `renderPipeline:${getName(args[0].__id)}` });
         this._capturedObjects.set(args[0].__id, this._getObject(args[0].__id));
       } else if (method === "setVertexBuffer") {
-        new Span(cmd, { class: "capture_method_args", text: `slot:${args[0]} buffer:${args[1].__id} offset:${args[2] ?? 0}` });
+        new Span(cmd, { class: "capture_method_args", text: `slot:${args[0]} buffer:${getName(args[1].__id)} offset:${args[2] ?? 0}` });
         this._capturedObjects.set(args[1].__id, this._getObject(args[1].__id));
       } else if (method === "setIndexBuffer") {
         new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0].__id)} indexFormat:${args[1]} offset:${args[2] ?? 0}` });
