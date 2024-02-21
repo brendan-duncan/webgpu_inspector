@@ -4,6 +4,8 @@
 
 Inspection and graphics debugging browser extension tool for WebGPU.
 
+## [Documentation](docs/overview.md)
+
 ## Installation
 
 ### Chrome Web Store
@@ -57,8 +59,6 @@ Crome and Firefox don't support the same version of extension plug-ins, so you'l
   - From Xcode, select **Product / Build** (**cmd-b**)
 - **Note**:
   - Safari support is still a work-in-progress and has issues
-
-## [Documentation](docs/overview.md)
 
 ## Usage
 
