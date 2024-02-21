@@ -1097,7 +1097,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       } else if (method === "end") {
         this._inComputePass = false;
         const commandEncoder = object.__commandEncoder;
-        if (object.__captureBuffers.length > 0) {
+        if (object.__captureBuffers?.length > 0) {
           this._recordCaptureBuffers(commandEncoder, object.__captureBuffers);
           this._updateStatusMessage();
         }
