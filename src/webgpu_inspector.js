@@ -18,7 +18,6 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._captureFrameCommands = [];
       this._frameData = [];
       this._frameRenderPassCount = 0;
-      this._captureTextureViews = new Set();
       this._captureTexturedBuffers = [];
       this._currentFrame = null;
       this._frameIndex = 0;
@@ -969,8 +968,6 @@ import { Actions, PanelActions } from "./utils/actions.js";
       } else if (method === "createCommandEncoder") {
         // We'll need the CommandEncoder's device for capturing textures
         result.__device = object;
-      } else if (method === "beginRenderPass") {
-        this._frameRenderPassCount++;
       }
 
       if (this._captureFrameRequest) {
@@ -984,6 +981,12 @@ import { Actions, PanelActions } from "./utils/actions.js";
       const a = args;
       if (a.length === 1 && a[0] === undefined) {
         a.length = 0;
+      }
+
+      if (method === "beginRenderPass") {
+        result.__id = `_${commandId}`;
+      } else if (method === "beginComputePass") {
+        result.__id = `_${commandId}`;
       }
 
       let newArgs = null;
@@ -1066,7 +1069,8 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
       this._captureFrameCommands.push({
         "class": object.constructor.name,
-        "id": object.__id,
+        "object": object.__id,
+        "result": result?.__id ?? 0,
         commandId,
         method,
         args: newArgs,
@@ -1075,9 +1079,10 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
       if (method === "beginRenderPass") {
         if (args[0]?.colorAttachments?.length > 0) {
+          result.__captureTextureViews = new Set();
           for (const attachment of args[0].colorAttachments) {
             const captureTextureView = attachment.resolveTarget ?? attachment.view;
-            this._captureTextureViews.add(captureTextureView);
+            result.__captureTextureViews.add(captureTextureView);
           }
         }
         this._inComputePass = false;
@@ -1092,17 +1097,21 @@ import { Actions, PanelActions } from "./utils/actions.js";
           this._recordCaptureBuffers(commandEncoder);
           this._updateStatusMessage();
         }
-        if (this._captureTextureViews.size > 0) {
-          let passId = (this._frameRenderPassCount - 1) * maxColorAttachments;
-          for (const captureTextureView of this._captureTextureViews) {
+        if (object.__captureTextureViews?.size > 0) {
+          let passId = this._frameRenderPassCount * maxColorAttachments;
+          //console.log("!!!! _captureTextureBuffer", this._frameRenderPassCount, passId);
+          for (const captureTextureView of object.__captureTextureViews) {
             const texture = captureTextureView.__texture;
             if (texture) {
               this._captureTextureBuffer(commandEncoder, texture, passId++);
             }
           }
-          this._captureTextureViews.clear();
+          object.__captureTextureViews.clear();
         }
         object.__commandEncoder = null;
+        if (object instanceof GPURenderPassEncoder) {
+          this._frameRenderPassCount++;
+        }
       }
     }
 

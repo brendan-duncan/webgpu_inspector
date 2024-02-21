@@ -58,6 +58,7 @@ export class CapturePanel {
     this._capturedObjects = new Map();
     this._frameImageList = [];
     this._gpuTextureMap = new Map();
+    this._passEncoderCommands = new Map();
 
     port.addListener((message) => {
       switch (message.action) {
@@ -265,9 +266,11 @@ export class CapturePanel {
     this._captureFrame.text = `Frame ${frame}`;
     this._captureStats.style.display = "inline-block";
 
-    contents.html = "";   
+    contents.html = "";
+
     this._capturedObjects.clear();
     this._frameImageList.length = 0;
+    this._passEncoderCommands.clear();
 
     this._gpuTextureMap.forEach((value) => {
       value.removeReference();
@@ -283,8 +286,6 @@ export class CapturePanel {
       self._inspectStats(commandInfo);
     };
 
-    let computePassIndex = 0;
-
     const debugGroupStack = [frameContents];
     const debugGroupLabelStack = [];
     let debugGroupIndex = 0;
@@ -296,7 +297,28 @@ export class CapturePanel {
     const stats = this.statistics;
     stats.reset();
 
+    const passEncoderMap = new Map();
+
+    // Pass index is based on end, not begin, so we need to prepare the pass index map first.
     let renderPassIndex = 0;
+    let computePassIndex = 0;
+    for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
+      const command = commands[commandIndex];
+      const method = command.method;
+      if (method === "beginRenderPass") {
+        passEncoderMap.set(command.result, -1);
+      } else if (method === "beginComputePass") {
+        passEncoderMap.set(command.result, -2);
+      } else if (method === "end") {
+        const type = passEncoderMap.get(command.object);
+        if (type === -1) {
+          passEncoderMap.set(command.object, renderPassIndex++);
+        } else if (type === -2) {
+          passEncoderMap.set(command.object, computePassIndex++);
+        }
+      }
+    }
+
     let first = true;
     for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
       const command = commands[commandIndex];
@@ -313,10 +335,14 @@ export class CapturePanel {
       let debugGroup = debugGroupStack[debugGroupStack.length - 1];
 
       if (method === "beginRenderPass") {
-        command._renderPassIndex = renderPassIndex;
+        const passIndex = passEncoderMap.get(command.result);
+
+        this._passEncoderCommands.set(command.result, [command]);
+
+        command._passIndex = passIndex;
         currentBlock = new Div(debugGroup, { class: "capture_renderpass" });
-        const header = new Div(currentBlock, { id: `RenderPass_${renderPassIndex}`, class: "capture_renderpass_header" });
-        new Span(header, { text: `Render Pass ${renderPassIndex}` });
+        const header = new Div(currentBlock, { id: `RenderPass_${passIndex}`, class: "capture_renderpass_header" });
+        new Span(header, { text: `Render Pass ${passIndex}` });
         const extra = new Span(header, { style: "margin-left: 10px;" });
         const block = new Div(currentBlock)
         header.element.onclick = () => {
@@ -328,7 +354,7 @@ export class CapturePanel {
           }
         };
         currentBlock = block;
-        renderPassIndex++;
+        currentBlock._passIndex = passIndex;
 
         for (const attachment of args[0].colorAttachments) {
           const textureView = this._getTextureViewFromAttachment(attachment);
@@ -352,9 +378,14 @@ export class CapturePanel {
           }
         }
       } else if (method === "beginComputePass") {
+        const passIndex = passEncoderMap.get(command.result);
+
+        this._passEncoderCommands.set(command.result, [command]);
+
+        command._passIndex = passIndex;
         currentBlock = new Div(debugGroup, { class: "capture_computepass" });
-        const header = new Div(currentBlock, { id: `ComputePass_${computePassIndex}`, class: "capture_computepass_header" });
-        new Span(header, { text: `Compute Pass ${computePassIndex}` });
+        const header = new Div(currentBlock, { id: `ComputePass_${passIndex}`, class: "capture_computepass_header" });
+        new Span(header, { text: `Compute Pass ${passIndex}` });
         const extra = new Span(header, { style: "margin-left: 10px;" });
         const block = new Div(currentBlock);
         header.element.onclick = () => {
@@ -366,11 +397,38 @@ export class CapturePanel {
           }
         };
         currentBlock = block;
-        computePassIndex++;
+        currentBlock._passIndex = passIndex;
       } else if (method === "popDebugGroup") {
         debugGroupStack.pop();
         debugGroup = debugGroupStack[debugGroupStack.length - 1];
         currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
+      } else {
+        const object = command.object;
+        const commandArray = this._passEncoderCommands.get(object);
+        if (commandArray) {
+          commandArray.push(command);
+        }
+
+        if (passEncoderMap.has(object)) {
+          const passIndex = passEncoderMap.get(object);
+          if (currentBlock._passIndex !== passIndex) {
+            currentBlock = new Div(debugGroup, { class: "capture_renderpass" });
+            const header = new Div(currentBlock, { id: `RenderPass_${passIndex}`, class: "capture_renderpass_header" });
+            new Span(header, { text: `Render Pass ${passIndex}` });
+            const extra = new Span(header, { style: "margin-left: 10px;" });
+            const block = new Div(currentBlock)
+            header.element.onclick = () => {
+              block.element.classList.toggle("collapsed");
+              if (block.element.classList.contains("collapsed")) {
+                extra.text = "...";
+              } else {
+                extra.text = "";
+              }
+            };
+            currentBlock = block;
+            currentBlock._passIndex = passIndex;
+          }
+        }
       }
 
       const cmdType = ["capture_command"];
@@ -380,8 +438,8 @@ export class CapturePanel {
       }
 
       const cmd = new Div(currentBlock, { class: cmdType });
-      if (method == "beginRenderPass") {
-        cmd.element.id = `RenderPass_${renderPassIndex - 1}_begin`;
+      if (method == "end") {
+        cmd.element.id = `RenderPass_${currentBlock._passIndex}_end`;
       }
       new Span(cmd, { class: "capture_callnum", text: `${commandIndex}.` });
       new Span(cmd, { class: "capture_methodName", text: `${method}` });
@@ -456,7 +514,7 @@ export class CapturePanel {
           self._lastSelectedCommand = cmd;
         }
         
-        self._showCaptureCommandInfo(name, method, args, commandInfo, commandIndex, commands);
+        self._showCaptureCommandInfo(command, name, commandInfo);
       };
 
       if (first) {
@@ -560,7 +618,9 @@ export class CapturePanel {
     return container;
   }
 
-  _showCaptureCommandInfo_beginRenderPass(args, commandInfo, renderPassIndex) {
+  _showCaptureCommandInfo_beginRenderPass(command, commandInfo) {
+    const renderPassIndex = command._passIndex;
+    const args = command.args;
     const self = this;
     const colorAttachments = args[0].colorAttachments;
     for (let i = 0, l = colorAttachments.length; i < l; ++i) {
@@ -589,6 +649,7 @@ export class CapturePanel {
         }
       }
     }
+
     const depthStencilAttachment = args[0].depthStencilAttachment;
     if (depthStencilAttachment) {
       const texture = this._getTextureFromAttachment(depthStencilAttachment);
@@ -764,7 +825,8 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_setBindGroup(args, commandInfo, groupIndex, skipInputs, state) {
+  _showCaptureCommandInfo_setBindGroup(command, commandInfo, groupIndex, skipInputs, state) {
+    const args = command.args;
     const id = args[1].__id;
     const bindGroup = this._getObject(id);
     if (!bindGroup) {
@@ -933,10 +995,12 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_setPipeline(args, commandInfo) {
+  _showCaptureCommandInfo_setPipeline(command, commandInfo) {
+    const args = command.args;
     const self = this;
     const id = args[0].__id;
     const pipeline = this._getObject(id);
+
     if (pipeline) {
       const pipelineGrp = new Collapsable(commandInfo, { collapsed: true, label: `Pipeline ID:${id}` });
       new Button(pipelineGrp.body, { label: "Inspect", callback: () => {
@@ -1014,9 +1078,11 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_writeBuffer(args, commandInfo) {
+  _showCaptureCommandInfo_writeBuffer(command, commandInfo) {
+    const args = command.args;
     const id = args[0].__id;
     const buffer = this._getObject(id);
+
     if (buffer) {
       const bufferGrp = new Collapsable(commandInfo, { label: `Buffer ID:${id}` });
       const desc = buffer.descriptor;
@@ -1028,7 +1094,8 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_setIndexBuffer(args, commandInfo, collapsed) {
+  _showCaptureCommandInfo_setIndexBuffer(command, commandInfo, collapsed) {
+    const args = command.args;
     const self = this;
     const id = args[0].__id;
     const buffer = this._getObject(id);
@@ -1046,7 +1113,8 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_setVertexBuffer(args, commandInfo, collapsed) {
+  _showCaptureCommandInfo_setVertexBuffer(command, commandInfo, collapsed) {
+    const args = command.args;
     const self = this;
     const index = args[0];
     const id = args[1]?.__id;
@@ -1065,7 +1133,13 @@ export class CapturePanel {
     }
   }
 
-  _getPipelineState(commandIndex, commands) {
+  _getPipelineState(command) {
+    const commands = this._passEncoderCommands.get(command.object);
+    const commandIndex = commands.indexOf(command);
+    if (commandIndex === -1) {
+      return null;
+    }
+    
     let pipeline = null;
     let vertexBuffers = [];
     let indexBuffer = null;
@@ -1238,7 +1312,7 @@ export class CapturePanel {
     let renderPassIndex = 0;
     const outputs = { color: [], depthStencil: null };
     if (state.renderPass) {
-      renderPassIndex = state.renderPass._renderPassIndex;
+      renderPassIndex = state.renderPass._passIndex;
       const renderPass = state.renderPass.args[0];
       if (renderPass?.colorAttachments) {
         for (const attachment of renderPass.colorAttachments) {
@@ -1272,6 +1346,7 @@ export class CapturePanel {
           }
         }
       }
+
       if (outputs.depthStencil) {
         const texture = outputs.depthStencil;
         if (texture) {
@@ -1330,92 +1405,92 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_end(args, commandInfo, commandIndex, commands) {
-    const state = this._getPipelineState(commandIndex, commands);
+  _showCaptureCommandInfo_end(command, commandInfo) {
+    const state = this._getPipelineState(command);
     this._showTextureOutputs(state, commandInfo);
   }
 
-    _showCaptureCommandInfo_draw(args, commandInfo, commandIndex, commands) {
-    const state = this._getPipelineState(commandIndex, commands);
+  _showCaptureCommandInfo_draw(command, commandInfo) {
+    const state = this._getPipelineState(command);
 
     this._showTextureOutputs(state, commandInfo);
     this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
-      this._showCaptureCommandInfo_setPipeline(state.pipeline.args, commandInfo, true);
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
     }
     for (const vertexBuffer of state.vertexBuffers) {
-      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer.args, commandInfo, true);
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true);
     }
     for (const index in state.bindGroups) {
-      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
+      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index], commandInfo, index, true, state);
     }
   }
 
-  _showCaptureCommandInfo_drawIndexed(args, commandInfo, commandIndex, commands) {
-    const state = this._getPipelineState(commandIndex, commands);
+  _showCaptureCommandInfo_drawIndexed(command, commandInfo) {
+    const state = this._getPipelineState(command);
 
     this._showTextureOutputs(state, commandInfo);
     this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
-      this._showCaptureCommandInfo_setPipeline(state.pipeline.args, commandInfo, true);
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
     }
     if (state.indexBuffer) {
-      this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer.args, commandInfo, true);
+      this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer, commandInfo, true);
     }
     for (const vertexBuffer of state.vertexBuffers) {
-      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer.args, commandInfo, true);
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true);
     }
     for (const index in state.bindGroups) {
-      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
+      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index], commandInfo, index, true, state);
     }
   }
 
-  _showCaptureCommandInfo_drawIndirect(args, commandInfo, commandIndex, commands) {
-    const state = this._getPipelineState(commandIndex, commands);
+  _showCaptureCommandInfo_drawIndirect(command, commandInfo) {
+    const state = this._getPipelineState(command);
 
     this._showTextureOutputs(state, commandInfo);
     this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
-      this._showCaptureCommandInfo_setPipeline(state.pipeline.args, commandInfo, true);
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
     }
     for (const vertexBuffer of state.vertexBuffers) {
-      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer.args, commandInfo, true);
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true);
     }
     for (const index in state.bindGroups) {
-      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
+      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index], commandInfo, index, true, state);
     }
   }
 
-  _showCaptureCommandInfo_drawIndexedIndirect(args, commandInfo, commandIndex, commands) {
-    const state = this._getPipelineState(commandIndex, commands);
+  _showCaptureCommandInfo_drawIndexedIndirect(command, commandInfo) {
+    const state = this._getPipelineState(command);
 
     this._showTextureOutputs(state, commandInfo);
     this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
-      this._showCaptureCommandInfo_setPipeline(state.pipeline.args, commandInfo, true);
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
     }
     if (state.indexBuffer) {
-      this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer.args, commandInfo, true);
+      this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer, commandInfo, true);
     }
     for (const vertexBuffer of state.vertexBuffers) {
-      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer.args, commandInfo, true);
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true);
     }
     for (const index in state.bindGroups) {
-      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
+      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index], commandInfo, index, true, state);
     }
   }
 
-  _showCaptureCommandInfo_dispatchWorkgroups(args, commandInfo, commandIndex, commands) {
-    const state = this._getPipelineState(commandIndex, commands);
+  _showCaptureCommandInfo_dispatchWorkgroups(command, commandInfo) {
+    const state = this._getPipelineState(command);
     if (state.pipeline) {
-      this._showCaptureCommandInfo_setPipeline(state.pipeline.args, commandInfo, true);
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
     }
     for (const index in state.bindGroups) {
-      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index].args, commandInfo, index, true, state);
+      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index], commandInfo, index, true, state);
     }
   }
 
@@ -1431,8 +1506,11 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo(name, method, args, commandInfo, commandIndex, commands) {
+  _showCaptureCommandInfo(command, name, commandInfo) {
     commandInfo.html = "";
+
+    const method = command.method;
+    const args = command.args;
 
     new Div(commandInfo, { text: `${name} ${method}`, style: "background-color: #575; padding-left: 20px; line-height: 40px;" });
 
@@ -1456,7 +1534,7 @@ export class CapturePanel {
         }
       }
     } else if (method === "draw" || method === "drawIndexed") {
-      const state = this._getPipelineState(commandIndex, commands);
+      const state = this._getPipelineState(command);
       if (state.pipeline) {
         const topology = this._getObject(state.pipeline.args[0].__id)?.topology ?? "triangle-list";
         const vertexCount = args[0] ?? 0;
@@ -1479,10 +1557,9 @@ export class CapturePanel {
       }
     }
 
-    const cmd = commands[commandIndex];
-    if (cmd.stacktrace) {
+    if (command.stacktrace) {
       const stacktrace = new Collapsable(commandInfo, { collapsed: true, label: "Stacktrace" });
-      new Div(stacktrace.body, { text: cmd.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" })
+      new Div(stacktrace.body, { text: command.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" })
     }
 
     const argsGroup = new Collapsable(commandInfo, { label: "Arguments" });
@@ -1504,29 +1581,29 @@ export class CapturePanel {
     }
 
     if (method == "beginRenderPass") {
-      this._showCaptureCommandInfo_beginRenderPass(args, commandInfo, cmd._renderPassIndex);
+      this._showCaptureCommandInfo_beginRenderPass(command, commandInfo);
     } else if (method === "setBindGroup") {
-      this._showCaptureCommandInfo_setBindGroup(args, commandInfo, 0, false);
+      this._showCaptureCommandInfo_setBindGroup(command, commandInfo, 0, false);
     } else if (method === "setPipeline") {
-      this._showCaptureCommandInfo_setPipeline(args, commandInfo);
+      this._showCaptureCommandInfo_setPipeline(command, commandInfo);
     } else if (method === "writeBuffer") {
-      this._showCaptureCommandInfo_writeBuffer(args, commandInfo);
+      this._showCaptureCommandInfo_writeBuffer(command, commandInfo);
     } else if (method === "setIndexBuffer") {
-      this._showCaptureCommandInfo_setIndexBuffer(args, commandInfo);
+      this._showCaptureCommandInfo_setIndexBuffer(command, commandInfo);
     } else if (method === "setVertexBuffer") {
-      this._showCaptureCommandInfo_setVertexBuffer(args, commandInfo);
+      this._showCaptureCommandInfo_setVertexBuffer(command, commandInfo);
     } else if (method === "drawIndexed") {
-      this._showCaptureCommandInfo_drawIndexed(args, commandInfo, commandIndex, commands);
+      this._showCaptureCommandInfo_drawIndexed(command, commandInfo);
     } else if (method === "draw") {
-      this._showCaptureCommandInfo_draw(args, commandInfo, commandIndex, commands);
+      this._showCaptureCommandInfo_draw(command, commandInfo);
     } else if (method === "drawIndirect") {
-      this._showCaptureCommandInfo_drawIndirect(args, commandInfo, commandIndex, commands);
+      this._showCaptureCommandInfo_drawIndirect(command, commandInfo);
     } else if (method === "drawIndexedIndirect") {
-      this._showCaptureCommandInfo_drawIndexedIndirect(args, commandInfo, commandIndex, commands);
+      this._showCaptureCommandInfo_drawIndexedIndirect(command, commandInfo);
     } else if (method === "dispatchWorkgroups") {
-      this._showCaptureCommandInfo_dispatchWorkgroups(args, commandInfo, commandIndex, commands);
+      this._showCaptureCommandInfo_dispatchWorkgroups(command, commandInfo);
     } else if (method === "end") {
-      this._showCaptureCommandInfo_end(args, commandInfo, commandIndex, commands);
+      this._showCaptureCommandInfo_end(command, commandInfo);
     }
   }
 
@@ -1609,7 +1686,7 @@ export class CapturePanel {
         if (element) {
           element.scrollIntoView();
 
-          const beginElement = document.getElementById(`RenderPass_${passIndex}_begin`);
+          const beginElement = document.getElementById(`RenderPass_${passIndex}_end`);
           if (beginElement) {
             beginElement.click();
           }

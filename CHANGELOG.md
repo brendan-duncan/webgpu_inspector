@@ -1,7 +1,9 @@
+## v0.0.6
+* Improve Capture render and compute pass organization when passes use different command encoders.
+
 ## v0.0.5
-* 02/17/2024
-    * Expand Inspector Descriptor display size
-    * Capture buffers when BindGroup doesn't have an explicit BindGroupLayout
+* Expand Inspector Descriptor display size
+* Capture buffers when BindGroup doesn't have an explicit BindGroupLayout
 
 ## v0.0.4
 * Fix multisampled texture preview
