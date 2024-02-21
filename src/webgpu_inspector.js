@@ -33,7 +33,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._captureTextureRequest = new Map();
       this._toDestroy = []; // Defer deleting temp objects until after finish
       this._objectReplacementMap = new Map(); // Map objects to their replacements
-      this._captureBuffers = [];
+      this._captureBuffersCount = 0;
       this._captureTempBuffers = [];
       this._mappedTextureBufferCount = 0;
       this._encodingTextureChunkCount = 0;
@@ -710,8 +710,8 @@ import { Actions, PanelActions } from "./utils/actions.js";
         status += `Pending Texture Encoding: ${this._encodingTextureChunkCount}`;
       }
 
-      if (this._captureBuffers.length > 0) {
-        status += `Buffers: ${this._captureBuffers.length}`;
+      if (this._captureBuffersCount) {
+        status += `Buffers: ${this._captureBuffersCount}`;
       }
 
       if (this._mappedBufferCount > 0) {
@@ -1032,7 +1032,11 @@ import { Actions, PanelActions } from "./utils/actions.js";
                   offset = dynamicOffsets[dynamicOffsetIndex++];
                 }
 
-                this._captureBuffers.push({ commandId, entryIndex, buffer, offset, size });
+                if (!object.__captureBuffers) {
+                  object.__captureBuffers = [];
+                }
+                object.__captureBuffers.push({ commandId, entryIndex, buffer, offset, size });
+                this._captureBuffersCount++;
                 this._updateStatusMessage();
               }
             }
@@ -1093,13 +1097,12 @@ import { Actions, PanelActions } from "./utils/actions.js";
       } else if (method === "end") {
         this._inComputePass = false;
         const commandEncoder = object.__commandEncoder;
-        if (this._captureBuffers.length > 0) {
-          this._recordCaptureBuffers(commandEncoder);
+        if (object.__captureBuffers.length > 0) {
+          this._recordCaptureBuffers(commandEncoder, object.__captureBuffers);
           this._updateStatusMessage();
         }
         if (object.__captureTextureViews?.size > 0) {
           let passId = this._frameRenderPassCount * maxColorAttachments;
-          //console.log("!!!! _captureTextureBuffer", this._frameRenderPassCount, passId);
           for (const captureTextureView of object.__captureTextureViews) {
             const texture = captureTextureView.__texture;
             if (texture) {
@@ -1262,10 +1265,10 @@ import { Actions, PanelActions } from "./utils/actions.js";
     // Buffers associated with a command are recorded and then sent to the inspector server.
     // The data is copied to a temp buffer so that the original buffer can continue to be used
     // by the page.
-    _recordCaptureBuffers(commandEncoder) {
-      const buffers = this._captureBuffers;
+    _recordCaptureBuffers(commandEncoder, buffers) {
       const device = commandEncoder?.__device;
       if (!device) {
+        this._captureBuffersCount -= buffers.length;
         buffers.length = 0;
         return;
       }
@@ -1294,6 +1297,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
         this.enableRecording();
       }
 
+      this._captureBuffersCount -= buffers.length;
       buffers.length = 0;
     }
 
