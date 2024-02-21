@@ -1,6 +1,6 @@
 import { GPUObject } from "./gpu_object.js";
 import { TextureFormatInfo } from "../../utils/texture_format_info.js";
-import { float16ToFloat } from "../../utils/float16.js";
+import { float10ToFloat32, float11ToFloat32, float16ToFloat32 } from "../../utils/float.js";
 
 export class Texture extends GPUObject {
   constructor(id, descriptor, stacktrace) {
@@ -48,7 +48,7 @@ export class Texture extends GPUObject {
             offset += 2;
             break;
           case "16float":
-            value[i] = float16ToFloat(imageData[offset] | (imageData[offset + 1] << 8));
+            value[i] = float16ToFloat32(imageData[offset] | (imageData[offset + 1] << 8));
             offset += 2;
             break;
           case "32uint":
@@ -205,6 +205,17 @@ export class Texture extends GPUObject {
         case "rgba32float": {
           const value = pixelValue(imageData, offset, "32float", 4);
           return { r: value[0], g: value[1], b: value[2], a: value[3] };
+        }
+
+        case "rg11b10ufloat": {
+          const uintValue = new Uint32Array(imageData.buffer, offset, 1)[0];
+          const ri = uintValue & 0x7FF;
+          const gi = (uintValue & 0x3FF800) >> 11;
+          const bi = (uintValue & 0xFFC00000) >> 22;
+          const rf = float11ToFloat32(ri);
+          const gf = float11ToFloat32(gi);
+          const bf = float10ToFloat32(bi);
+          return { r: rf, g: gf, b: bf, a: 1.0 };
         }
       }
     }
