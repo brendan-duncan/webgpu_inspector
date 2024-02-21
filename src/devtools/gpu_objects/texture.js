@@ -4,7 +4,7 @@ import { float16ToFloat } from "../../utils/float16.js";
 
 export class Texture extends GPUObject {
   constructor(id, descriptor, stacktrace) {
-    super(id, stacktrace);
+    super(id, descriptor, stacktrace);
     this.descriptor = descriptor;
     this.imageData = null;
     this.loadedImageDataChunks = [];

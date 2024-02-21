@@ -1,9 +1,9 @@
 import { StacktraceCache } from "../../utils/stacktrace.js";
 
 export class GPUObject {
-  constructor(id, stacktrace) {
+  constructor(id, descriptor, stacktrace) {
     this.id = id;
-    this.label = "";
+    this.label = descriptor?.label ?? "";
     this._stacktrace = StacktraceCache.setStacktrace(stacktrace ?? "");
     this._deletionTime = 0;
   }

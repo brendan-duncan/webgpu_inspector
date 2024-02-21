@@ -3,7 +3,7 @@ import { WgslReflect } from "../../utils/wgsl_reflect.module.js";
 
 export class ShaderModule extends GPUObject {
   constructor(id, descriptor, stacktrace) {
-    super(id, stacktrace);
+    super(id, descriptor, stacktrace);
     this._reflection = null;
     this.descriptor = descriptor;
     this.hasVertexEntries = descriptor?.code ? descriptor.code.indexOf("@vertex") != -1 : false;
