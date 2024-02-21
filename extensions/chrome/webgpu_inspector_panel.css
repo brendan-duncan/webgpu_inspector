@@ -968,6 +968,10 @@ ol::-webkit-scrollbar-thumb:hover {
   margin-right: 5px;
 }
 
+.capture_object {
+  margin-right: 10px;
+}
+
 .capture_methodName {
   font-weight: bold;
 }

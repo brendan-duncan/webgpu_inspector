@@ -987,6 +987,8 @@ import { Actions, PanelActions } from "./utils/actions.js";
         result.__id = `_${commandId}`;
       } else if (method === "beginComputePass") {
         result.__id = `_${commandId}`;
+      } else if (method === "createCommandEncoder") {
+        result.__id = `_${commandId}`;
       }
 
       let newArgs = null;
