@@ -341,6 +341,7 @@ export class CapturePanel {
 
         command._passIndex = passIndex;
         currentBlock = new Div(debugGroup, { class: "capture_renderpass" });
+
         const header = new Div(currentBlock, { id: `RenderPass_${passIndex}`, class: "capture_renderpass_header" });
         new Span(header, { text: `Render Pass ${passIndex}` });
         const extra = new Span(header, { style: "margin-left: 10px;" });
@@ -438,8 +439,10 @@ export class CapturePanel {
       }
 
       const cmd = new Div(currentBlock, { class: cmdType });
-      if (method == "end") {
-        cmd.element.id = `RenderPass_${currentBlock._passIndex}_end`;
+      if (method === "end") {
+        cmd.element.id = `Pass_${currentBlock._passIndex}_end`;
+      } else if (method === "beginRenderPass") {
+        cmd.element.id = `RenderPass_${currentBlock._passIndex}_begin`;
       }
 
       new Span(cmd, { class: "capture_callnum", text: `${commandIndex}.` });
@@ -1734,8 +1737,7 @@ export class CapturePanel {
         const element = document.getElementById(`RenderPass_${passIndex}`);
         if (element) {
           element.scrollIntoView();
-
-          const beginElement = document.getElementById(`RenderPass_${passIndex}_end`);
+          const beginElement = document.getElementById(`RenderPass_${passIndex}_begin`);
           if (beginElement) {
             beginElement.click();
           }
