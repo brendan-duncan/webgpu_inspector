@@ -554,7 +554,7 @@ export class CapturePanel {
       } else if (method === "destroy") {
         new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)}` });
       } else if (method === "getCurrentTexture") {
-        new Span(cmd, { class: "capture_method_args", text: `${getName(command.result, "GPUTexture")}` });
+        new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUTexture")}` });
       }
 
       cmd.element.onclick = () => {
