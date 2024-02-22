@@ -661,7 +661,7 @@ export class CapturePanel {
       const dstFormat = navigator.gpu.getPreferredCanvasFormat();
       context.configure({ "device": this.window.device, "format": navigator.gpu.getPreferredCanvasFormat() });
       const canvasTexture = context.getCurrentTexture();
-      this.textureUtils.blitTexture(layerView, 1, canvasTexture.createView(), dstFormat);
+      this.textureUtils.blitTexture(layerView, texture.format, 1, canvasTexture.createView(), dstFormat);
     }
 
     return container;
@@ -1357,7 +1357,7 @@ export class CapturePanel {
     }
   }
 
-  _showTextureOutputs(state, parent) {
+  _showTextureOutputs(state, parent, collapsed) {
     let renderPassIndex = 0;
     const outputs = { color: [], depthStencil: null };
     if (state.renderPass) {
@@ -1377,7 +1377,7 @@ export class CapturePanel {
 
     if (outputs.color.length || outputs.depthStencil) {
       const self = this;
-      const outputGrp = new Collapsable(parent, { collapsed: true, label: "Output Textures" });
+      const outputGrp = new Collapsable(parent, { collapsed, label: "Output Textures" });
       for (let index = 0, l = outputs.color.length; index < l; ++index) {
         const texture = outputs.color[index];
         const passId = this._getPassId(renderPassIndex, index);
@@ -1456,13 +1456,13 @@ export class CapturePanel {
 
   _showCaptureCommandInfo_end(command, commandInfo) {
     const state = this._getPipelineState(command);
-    this._showTextureOutputs(state, commandInfo);
+    this._showTextureOutputs(state, commandInfo, false);
   }
 
   _showCaptureCommandInfo_draw(command, commandInfo) {
     const state = this._getPipelineState(command);
 
-    this._showTextureOutputs(state, commandInfo);
+    this._showTextureOutputs(state, commandInfo, true);
     this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
@@ -1479,7 +1479,7 @@ export class CapturePanel {
   _showCaptureCommandInfo_drawIndexed(command, commandInfo) {
     const state = this._getPipelineState(command);
 
-    this._showTextureOutputs(state, commandInfo);
+    this._showTextureOutputs(state, commandInfo, true);
     this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
@@ -1499,7 +1499,7 @@ export class CapturePanel {
   _showCaptureCommandInfo_drawIndirect(command, commandInfo) {
     const state = this._getPipelineState(command);
 
-    this._showTextureOutputs(state, commandInfo);
+    this._showTextureOutputs(state, commandInfo, true);
     this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
@@ -1516,7 +1516,7 @@ export class CapturePanel {
   _showCaptureCommandInfo_drawIndexedIndirect(command, commandInfo) {
     const state = this._getPipelineState(command);
 
-    this._showTextureOutputs(state, commandInfo);
+    this._showTextureOutputs(state, commandInfo, true);
     this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {

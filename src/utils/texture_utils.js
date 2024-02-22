@@ -1,17 +1,18 @@
-//import { TextureFormatInfo } from "./texture_format_info.js";
+import { TextureFormatInfo } from "./texture_format_info.js";
 
 export class TextureUtils {
   constructor(device) {
     this.device = device;
     this.blitShaderModule = device.createShaderModule({ code: TextureUtils.blitShader });
     this.multisampleBlitShaderModule = device.createShaderModule({ code: TextureUtils.multisampleBlitShader });
-    this.blitDepthShaderModule = device.createShaderModule({ code: TextureUtils.blitDepthShader });
     this.depthToFloatShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatShader });
+    this.depthToFloatMultisampleShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatMultisampleShader });
     this.blitPipelines = {};
     this.blitDepthPipelines = {};
     this.bindGroupLayouts = new Map();
     this.pipelineLayouts = new Map();
     this.depthToFloatPipeline = null;
+    this.depthToFloatMSPipeline = null;
 
     this.pointSampler = device.createSampler({
         magFilter: 'nearest',
@@ -19,7 +20,7 @@ export class TextureUtils {
     });
 
     this.displayUniformBuffer = device.createBuffer({
-      size: 8,
+      size: 16,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -56,7 +57,7 @@ export class TextureUtils {
     const dst = this.device.createTexture({ format, size, usage });
     const srcView = src.createView({ aspect: "depth-only" });
     const dstView = dst.createView();
-    this.convertDepthToFloat(srcView, dstView, format, commandEncoder);
+    this.convertDepthToFloat(srcView, src.sampleCount, dstView, format, commandEncoder);
     
     return dst;
   }
@@ -69,12 +70,12 @@ export class TextureUtils {
     const size = [width, height, 1]
     const dst = this.device.createTexture({ format, size, usage });
 
-    this.blitTexture(src.createView(), src.sampleCount, dst.createView(), format);
+    this.blitTexture(src.createView(), src.format, src.sampleCount, dst.createView(), format);
 
     return dst;
   }
 
-  blitTexture(src, sampleCount, dst, dstFormat, display) {
+  blitTexture(srcView, srcFormat, sampleCount, dstView, dstFormat, display) {
     const sampleType = "unfilterable-float";
 
     const bgLayoutKey = `${sampleType}#${sampleCount}`;
@@ -107,6 +108,9 @@ export class TextureUtils {
       this.pipelineLayouts.set(bgLayoutKey, pipelineLayout);
     }
 
+    const formatInfo = TextureFormatInfo[srcFormat];
+    const numChannels = formatInfo?.channels ?? 4;
+
     const bindGroupLayout = this.bindGroupLayouts.get(bgLayoutKey);
     const pipelineLayout = this.pipelineLayouts.get(bgLayoutKey);
 
@@ -136,7 +140,7 @@ export class TextureUtils {
       layout: bindGroupLayout,
       entries: [
         { binding: 0, resource: this.pointSampler },
-        { binding: 1, resource: src }
+        { binding: 1, resource: srcView }
       ],
     });
     
@@ -144,7 +148,7 @@ export class TextureUtils {
 
     const passDesc = {
       colorAttachments: [{
-        view: dst,
+        view: dstView,
         loadOp: 'clear',
         storeOp: 'store'
       }]
@@ -152,10 +156,10 @@ export class TextureUtils {
 
     if (display) {
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
-        new Float32Array([display.exposure, display.channels]));
+        new Float32Array([display.exposure, display.channels, numChannels, 0]));
     } else {
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
-        new Float32Array([1, 0]));
+        new Float32Array([1, 0, numChannels, 0]));
     }
 
     const passEncoder = commandEncoder.beginRenderPass(passDesc);
@@ -167,8 +171,49 @@ export class TextureUtils {
     this.device.queue.submit([commandEncoder.finish()]);
   }
 
-  convertDepthToFloat(fromTextureView, toTextureView, dstFormat, commandEncoder) {
-    if (!this.depthToFloatPipeline) {
+  convertDepthToFloat(fromTextureView, sampleCount, toTextureView, dstFormat, commandEncoder) {
+    if (sampleCount > 1) {
+      if (!this.depthToFloatMSPipeline) {
+        this.device.pushErrorScope('validation');
+  
+        this.depthToFloatBindGroupMSLayout = this.device.createBindGroupLayout({
+          entries: [
+            {
+              binding: 0,
+              visibility: GPUShaderStage.FRAGMENT,
+              texture: { sampleType: "depth", multisampled: true },
+            }
+          ]
+        });
+  
+        const pipelineLayout = this.device.createPipelineLayout({
+          bindGroupLayouts: [this.depthToFloatBindGroupMSLayout]
+        });
+  
+        const module = this.depthToFloatMultisampleShaderModule;
+        this.depthToFloatMSPipeline = this.device.createRenderPipeline({
+          layout: pipelineLayout,
+          vertex: {
+            module,
+            entryPoint: 'vertexMain',
+          },
+          fragment: {
+            module: module,
+            entryPoint: 'fragmentMain',
+            targets: [ { format: dstFormat } ],
+          },
+          primitive: {
+            topology: 'triangle-list',
+          },
+        });
+  
+        this.device.popErrorScope().then((result) => {
+          if (result) {
+            console.error(result.message);
+          }
+        });
+      }
+    } else if (!this.depthToFloatPipeline) {
       this.device.pushErrorScope('validation');
 
       this.depthToFloatBindGroupLayout = this.device.createBindGroupLayout({
@@ -176,7 +221,7 @@ export class TextureUtils {
           {
             binding: 0,
             visibility: GPUShaderStage.FRAGMENT,
-            texture: { sampleType: "depth" }
+            texture: { sampleType: "depth" },
           }
         ]
       });
@@ -204,7 +249,7 @@ export class TextureUtils {
 
       this.device.popErrorScope().then((result) => {
         if (result) {
-          console.error(result);
+          console.error(result.message);
         }
       });
     }
@@ -212,7 +257,7 @@ export class TextureUtils {
     this.device.pushErrorScope('validation');
 
     const bindGroup = this.device.createBindGroup({
-      layout: this.depthToFloatBindGroupLayout,
+      layout: sampleCount > 1 ? this.depthToFloatBindGroupMSLayout : this.depthToFloatBindGroupLayout,
       entries: [ { binding: 0, resource: fromTextureView } ],
     });
 
@@ -228,7 +273,7 @@ export class TextureUtils {
       }]
     });
 
-    passEncoder.setPipeline(this.depthToFloatPipeline);
+    passEncoder.setPipeline(sampleCount > 1 ? this.depthToFloatMSPipeline : this.depthToFloatPipeline);
     passEncoder.setBindGroup(0, bindGroup);
     passEncoder.draw(3);
     passEncoder.end();
@@ -239,7 +284,7 @@ export class TextureUtils {
 
     this.device.popErrorScope().then((result) => {
       if (result) {
-        console.error(result);
+        console.error(result.message);
       }
     });
   }
@@ -265,12 +310,21 @@ TextureUtils.blitShader = `
   @group(0) @binding(1) var texture: texture_2d<f32>;
   struct Display {
     exposure: f32,
-    channels: f32
+    channels: f32,
+    numChannels: f32,
+    _pad: f32
   };
   @group(1) @binding(0) var<uniform> display: Display; 
   @fragment
   fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     var color = textureSample(texture, texSampler, input.uv);
+
+    if (display.numChannels == 1.0) {
+      color = vec4f(color.r, color.r, color.r, 1.0);
+    } else if (display.numChannels == 2.0) {
+      color = vec4f(color.r, color.g, 0.0, 1.0);
+    }
+
     if (display.channels == 1.0) { // R
       var rgb = color.rgb * display.exposure;
       return vec4f(rgb.r, 0.0, 0.0, 1);
@@ -345,29 +399,6 @@ TextureUtils.multisampleBlitShader = `
     return vec4f(rgb, color.a);
   }`;
 
-TextureUtils.blitDepthShader = `
-  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
-    vec4f(-1.0, 1.0, 0.0, 0.0),
-    vec4f(3.0, 1.0, 2.0, 0.0),
-    vec4f(-1.0, -3.0, 0.0, 2.0));
-  struct VertexOutput {
-    @builtin(position) position: vec4f,
-    @location(0) uv: vec2f
-  };
-  @vertex
-  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-    var output: VertexOutput;
-    output.uv = posTex[vertexIndex].zw;
-    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
-    return output;;
-  }
-  @binding(0) @group(0) var texSampler: sampler;
-  @binding(1) @group(0) var texture: texture_depth_2d;
-  @fragment
-  fn fragmentMain(input: VertexOutput) -> @builtin(frag_depth) f32 {
-    return textureSample(texture, texSampler, input.uv);
-  }`;
-
 TextureUtils.depthToFloatShader = `
   var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
     vec4f(-1.0, 1.0, 0.0, 0.0),
@@ -388,7 +419,34 @@ TextureUtils.depthToFloatShader = `
   @binding(0) @group(0) var depth: texture_depth_2d;
   @fragment
   fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
-    var depthSize = textureDimensions(depth, 0);
+    var depthSize = textureDimensions(depth);
+    var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),
+                           i32(f32(depthSize.y) * input.uv.y));
+    var d = textureLoad(depth, coords, 0);
+    return vec4<f32>(d, 0.0, 0.0, 1.0);
+  }`;
+
+TextureUtils.depthToFloatMultisampleShader = `
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
+    vec4f(-1.0, 1.0, 0.0, 0.0),
+    vec4f(3.0, 1.0, 2.0, 0.0),
+    vec4f(-1.0, -3.0, 0.0, 2.0));
+  struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv : vec2<f32>
+  };
+  @vertex
+  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.uv = posTex[vertexIndex].zw;
+    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
+    return output;;
+  }
+  
+  @binding(0) @group(0) var depth: texture_depth_multisampled_2d;
+  @fragment
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
+    var depthSize = textureDimensions(depth);
     var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),
                            i32(f32(depthSize.y) * input.uv.y));
     var d = textureLoad(depth, coords, 0);

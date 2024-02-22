@@ -1086,6 +1086,14 @@ import { Actions, PanelActions } from "./utils/actions.js";
             result.__captureTextureViews.add(captureTextureView);
           }
         }
+        if (args[0]?.depthStencilAttachment) {
+          if (!result.__captureTextureViews) {
+            result.__captureTextureViews = new Set();
+          }
+          const attachment = args[0].depthStencilAttachment;
+          const captureTextureView = attachment.resolveTarget ?? attachment.view;
+          result.__captureTextureViews.add(captureTextureView);
+        }
         this._inComputePass = false;
         result.__commandEncoder = object;
       } else if (method === "beginComputePass") {
@@ -1144,7 +1152,6 @@ import { Actions, PanelActions } from "./utils/actions.js";
           self._updateStatusMessage();
           const range = tempBuffer.getMappedRange();
           const data = new Uint8Array(range);
-          console.log(data);
           self._sendTextureData(id, passId, data);
           tempBuffer.destroy();
         });

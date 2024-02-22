@@ -901,12 +901,12 @@ export class InspectPanel {
       
       const srcView = texture.gpuTexture.object.createView(viewDesc);
 
-      this.textureUtils.blitTexture(srcView, 1, canvasTexture.createView(), format, texture.display);
+      this.textureUtils.blitTexture(srcView, texture.format, 1, canvasTexture.createView(), format, texture.display);
 
       const self = this;
       displayChanged.addListener(() => {
         const canvasTexture = context.getCurrentTexture();
-        self.textureUtils.blitTexture(srcView, 1, canvasTexture.createView(), format, texture.display);
+        self.textureUtils.blitTexture(srcView, texture.format, 1, canvasTexture.createView(), format, texture.display);
       });
     }
   }
