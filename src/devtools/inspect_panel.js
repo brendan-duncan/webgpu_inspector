@@ -440,12 +440,11 @@ export class InspectPanel {
         type += " COMPUTE";
       }
     } else if (object instanceof Texture) {
-      const depth = object.depthOrArrayLayers > 1 ? `x${object.depthOrArrayLayers}` : "";
-      type += ` ${object.width}x${object.height}${depth} ${object.descriptor.format}`;
+      type += ` ${object.descriptor.format} ${object.resolutionString}`;
     } else if (object instanceof TextureView) {
       const texture = this.database.getTextureFromView(object);
       if (texture) {
-        type += ` Texture:${texture.idName} ${texture.width}x${texture.height} ${texture.descriptor.format}`;
+        type += ` Texture:${texture.idName} ${texture.descriptor.format} ${texture.resolutionString}`;
       }
     } else if (object instanceof Buffer) {
       const access = object.descriptor.usage;
@@ -762,7 +761,7 @@ export class InspectPanel {
     } else if (object instanceof TextureView) {
       const texture = this.database.getTextureFromView(object);
       if (texture) {
-        const textureGrp = new Collapsable(descriptionBox, { label: `Texture ${texture.idName} ${texture.dimension} ${texture.format} ${texture.width}x${texture.height}` });
+        const textureGrp = new Collapsable(descriptionBox, { label: `Texture ${texture.idName} ${texture.dimension} ${texture.format} ${texture.resolutionString}` });
         textureGrp.body.style.maxHeight = "unset";
 
         const desc = this._getDescriptorInfo(texture, texture.descriptor);

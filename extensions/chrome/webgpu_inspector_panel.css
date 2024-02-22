@@ -115,6 +115,7 @@ body {
   text-align: left;
   overflow: auto;
   margin: 0px;
+  padding-bottom: 10px;
 }
 
 .collapsable_button {

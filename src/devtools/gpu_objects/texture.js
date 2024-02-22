@@ -265,6 +265,23 @@ export class Texture extends GPUObject {
     return 0;
   }
 
+  get resolutionString() {
+    const width = this.width;
+    const height = this.height;
+    const depthOrArrayLayers = this.depthOrArrayLayers;
+    const dimension = this.dimension;
+    if (dimension === "1d") {
+      if (depthOrArrayLayers > 1) {
+        return `${width}x${depthOrArrayLayers}`;
+      }
+      return `${width}`;
+    }    
+    if (depthOrArrayLayers > 1) {
+      return `${width}x${height}x${depthOrArrayLayers}`;
+    }
+    return `${width}x${height}`;
+  }
+
   get texelByteSize() {
     const format = this.descriptor?.format;
     const formatInfo = TextureFormatInfo[format];
