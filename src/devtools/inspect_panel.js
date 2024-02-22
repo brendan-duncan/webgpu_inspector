@@ -753,7 +753,7 @@ export class InspectPanel {
       revertButton = isModified ? new Button(compileRow, { label: "Revert", style: "background-color: rgb(200, 150, 51);" }) : null;
     }
 
-    const descriptionBox = new Div(this.inspectPanel, { style: "overflow: auto;" });
+    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-300px + 100vh); overflow: auto;" });
 
     if (object instanceof ShaderModule) {
       const self = this;
@@ -805,8 +805,6 @@ export class InspectPanel {
       new Widget("pre", descriptionBox, { text });
     } else {
       const grp = new Collapsable(descriptionBox, { label: "Descriptor", collapsed: false });
-      grp.body.style.overflow = "auto";
-      grp.body.style.height = "calc(-300px + 100vh)";
       const desc = this._getDescriptorInfo(object, object.descriptor);
       const text = JSON.stringify(desc, undefined, 4);
       new Widget("pre", grp.body, { text });
