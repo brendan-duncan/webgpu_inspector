@@ -163,37 +163,27 @@ export class InspectorWindow extends Window {
     const usage = texture.descriptor.usage;
     const format = texture.descriptor.format;
     const sampleCount = texture.descriptor.sampleCount;
-    const formatInfo = TextureFormatInfo[format] ?? TextureFormatInfo["rgba8unorm"];
-
-    // For depth textures we can't currently use writeTexture.
-    // To load data into a depth texture, put the imageData into a storage buffer
-    // then do a blit where the shader reads from the storage buffer and writes
-    // to frag_depth. On the webgpu_inspector side, we should translate imageData
-    // from depth24plus to depth32 so we can deal with floats and not weird depth24
-    // data.
-
-    // For now, we can't preview depth-stencil textures.
-    if (formatInfo.isDepthStencil) {
-      return;
-    }
+    const formatInfo = TextureFormatInfo[format];
 
     if (texture.gpuTexture) {
       texture.gpuTexture.removeReference();
     }
 
-    const gpuFormat = formatInfo.depthOnlyFormat ?? format;
+    const gpuFormat = formatInfo.isDepthStencil ? "r32float" : format;
     texture.descriptor.format = gpuFormat;
     texture.descriptor.usage = (usage ?? GPUTextureUsage.RENDER_ATTACHMENT) | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST;
     texture.descriptor.sampleCount = 1;
 
-    texture.gpuTexture = new GPUObjectRef(this.device.createTexture(texture.descriptor));
-    texture.descriptor.usage = usage;
-    texture.descriptor.format = format;
-    texture.descriptor.sampleCount = sampleCount;
-    
     const bytesPerRow = texture.bytesPerRow;
     const rowsPerImage = texture.height;
 
+    const gpuTexture = this.device.createTexture(texture.descriptor);
+
+    texture.gpuTexture = new GPUObjectRef(gpuTexture);
+    texture.descriptor.usage = usage;
+    texture.descriptor.format = format;
+    texture.descriptor.sampleCount = sampleCount;
+   
     this.device.queue.writeTexture(
       {
         texture: texture.gpuTexture.object

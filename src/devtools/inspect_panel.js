@@ -752,10 +752,6 @@ export class InspectPanel {
         loadButton.disabled = true;
         loadButton.style = "background-color: #733; color: #fff;";
         loadButton.tooltip = "Only 2d textures can currently be previewed.";
-      } else if (TextureFormatInfo[object.descriptor.format]?.isDepthStencil) {
-        loadButton.disabled = true;
-        loadButton.style = "background-color: #733; color: #fff;";
-        loadButton.tooltip = "Previewing depth-stencil textures is not currently supported.";
       }
       if (object.gpuTexture) {
         this._createTexturePreview(object, descriptionBox);
@@ -778,15 +774,13 @@ export class InspectPanel {
         const loadButton = new Button(textureGrp.body, { label: "Load", callback: () => {
           self.database.requestTextureData(texture);
         }});
+
         if (texture.dimension !== "2d") {
           loadButton.disabled = true;
           loadButton.style = "background-color: #733; color: #fff;";
           loadButton.tooltip = "Only 2d textures can currently be previewed.";
-        } else if (TextureFormatInfo[texture.descriptor.format]?.isDepthStencil) {
-          loadButton.disabled = true;
-          loadButton.style = "background-color: #733; color: #fff;";
-          loadButton.tooltip = "Previewing depth-stencil textures is not currently supported.";
         }
+
         if (texture.gpuTexture) {
           this._createTexturePreview(texture, textureGrp.body);
         } else if (!loadButton.disabled) {
@@ -898,10 +892,9 @@ export class InspectPanel {
       const device = this.window.device;
       context.configure({ device, format });
       const canvasTexture = context.getCurrentTexture();
-      const formatInfo = TextureFormatInfo[texture.descriptor.format];
 
       const viewDesc = {
-        aspect: formatInfo.isDepthStencil ? "depth-only" : "all",
+        aspect: "all",
         dimension: "2d",
         baseArrayLayer: layer,
         layerArrayCount: 1 };

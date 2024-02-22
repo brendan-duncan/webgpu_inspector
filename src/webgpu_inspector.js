@@ -1322,13 +1322,15 @@ import { Actions, PanelActions } from "./utils/actions.js";
         return;
       }
 
-      // depth24plus texture's can't be copied to a buffer,
-      // https://github.com/gpuweb/gpuweb/issues/652.
-      if (format === "depth24plus" || format === "depth24plus-stencil8") {
+      if (format === "depth16unorm" || format === "depth24plus" || format === "depth24plus-stencil8" ||
+          format === "depth32float" || format === "depth32float-stencil8") {
         this.disableRecording();
         try {
           const textureUtils = this._getTextureUtils(device);
-          texture = textureUtils.copyDepthTexture(texture, format === "depth24plus-stencil8" ? "depth32float" : "depth32float-stencil8");
+          // depth24plus texture's can't be copied to a buffer,
+          // https://github.com/gpuweb/gpuweb/issues/652,
+          // convert it to a float texture.
+          texture = textureUtils.copyDepthTexture(texture, "r32float");
         } catch (e) {
           this.enableRecording();
           console.log(e);
@@ -1375,7 +1377,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
           usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
         });
 
-        const aspect = format === 'depth24plus-stencil8' || format === 'depth32float-stencil8' ? 'depth-only' : 'all';
+        const aspect = "all";
 
         commandEncoder.copyTextureToBuffer(
           { texture, aspect },

@@ -200,10 +200,6 @@ export class ObjectDatabase {
   }
 
   requestTextureData(texture) {
-    // TODO implement depth-stencil texture loading
-    if (texture.isDepthStencil) {
-      return;
-    }
     if (texture.imageDataPending) {
       return;
     }

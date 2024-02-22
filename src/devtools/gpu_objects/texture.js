@@ -178,6 +178,11 @@ export class Texture extends GPUObject {
           const value = pixelValue(imageData, offset, "32sint", 1);
           return { r: value[0] };
         }
+        case "depth16unorm": // depth formats get conerted to r32float
+        case "depth24plus":
+        case "depth24plus-stencil8":
+        case "depth32float":
+        case "depth32float-stencil8":
         case "r32float": {
           const value = pixelValue(imageData, offset, "32float", 1);
           return { r: value[0] };
@@ -266,6 +271,9 @@ export class Texture extends GPUObject {
     if (!formatInfo) {
       return 0;
     }
+    if (formatInfo.isDepthStencil) {
+      return 4; // depth textures have r32float imageData
+    }
     return formatInfo.bytesPerBlock;
   }
 
@@ -293,18 +301,13 @@ export class Texture extends GPUObject {
     }
 
     const height = this.height;
+    const depthOrArrayLayers = this.depthOrArrayLayers;
     const dimension = this.dimension;
     const blockWidth = width / formatInfo.blockWidth;
-    const blockHeight = height / formatInfo.blockHeight;
+    const blockHeight = dimension === "1d" ? 1 : height / formatInfo.blockHeight;
     const bytesPerBlock = formatInfo.bytesPerBlock;
 
-    if (dimension === "2d") {
-      return blockWidth * blockHeight * bytesPerBlock;
-    }
-
-    // TODO other dimensions
-
-    return -1;
+    return blockWidth * blockHeight * bytesPerBlock * depthOrArrayLayers;
   }
 }
 Texture.className = "Texture";

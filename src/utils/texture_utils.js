@@ -3,13 +3,15 @@
 export class TextureUtils {
   constructor(device) {
     this.device = device;
-    this.blitShaderModule = device.createShaderModule({code: TextureUtils.blitShader});
-    this.multisampleBlitShaderModule = device.createShaderModule({code: TextureUtils.multisampleBlitShader});
-    this.blitDepthShaderModule = device.createShaderModule({code: TextureUtils.blitDepthShader});
+    this.blitShaderModule = device.createShaderModule({ code: TextureUtils.blitShader });
+    this.multisampleBlitShaderModule = device.createShaderModule({ code: TextureUtils.multisampleBlitShader });
+    this.blitDepthShaderModule = device.createShaderModule({ code: TextureUtils.blitDepthShader });
+    this.depthToFloatShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatFragmentShader });
     this.blitPipelines = {};
     this.blitDepthPipelines = {};
     this.bindGroupLayouts = new Map();
     this.pipelineLayouts = new Map();
+    this.depthToFloatPipeline = null;
 
     this.pointSampler = device.createSampler({
         magFilter: 'nearest',
@@ -49,65 +51,10 @@ export class TextureUtils {
     const height = src.height;
     const usage = src.usage | GPUTextureUsage.RENDER_TARGET | GPUTextureUsage.COPY_SRC;
     const size = [width, height, 1]
+    format = format || "r32float";
     const dst = this.device.createTexture({ format, size, usage });
 
-    let pipeline = this.blitDepthPipelines[format];
-    if (!pipeline) {
-      pipeline = this.device.createRenderPipeline({
-        layout: 'auto',
-        vertex: {
-          module: this.blitDepthShaderModule,
-          entryPoint: 'vertexMain',
-        },
-        fragment: {
-          module: this.blitDepthShaderModule,
-          entryPoint: 'fragmentMain',
-          targets: [],
-        },
-        depthStencil: {
-          format,
-          depthWriteEnabled: true,
-          depthCompare: "always"
-        },
-        primitive: {
-          topology: 'triangle-list',
-        },
-      });
-      this.blitDepthPipelines[format] = pipeline;
-    }
-
-    const srcView = src.createView({ aspect: "depth-only" });
-
-    const bindGroupLayout = pipeline.getBindGroupLayout(0);
-    const bindGroup = this.device.createBindGroup({
-      layout: bindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.pointSampler },
-        { binding: 1, resource: srcView }
-      ],
-    });
-
-    const commandEncoder = this.device.createCommandEncoder();
-
-    const dstView = dst.createView();
-
-    const passDesc = {
-      colorAttachments: [],
-      depthStencilAttachment: {
-        view: dstView,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store',
-        depthClearValue: 0,
-        depthReadOnly: false
-      }
-    };
-
-    const passEncoder = commandEncoder.beginRenderPass(passDesc);
-    passEncoder.setPipeline(pipeline);
-    passEncoder.setBindGroup(0, bindGroup);
-    passEncoder.draw(3);
-    passEncoder.end();
-    this.device.queue.submit([commandEncoder.finish()]);
+    this.convertDepthToFloat(src.createView({ aspect: "depth-only" }), dst.createView(), format);
     
     return dst;
   }
@@ -217,6 +164,60 @@ export class TextureUtils {
     passEncoder.end();
     this.device.queue.submit([commandEncoder.finish()]);
   }
+
+  convertDepthToFloat(fromTextureView, toTextureView, dstFormat) {
+    if (!this.depthToFloatPipeline) {
+      this.depthToFloatBindGroupLayout = this.device.createBindGroupLayout({
+        entries: [
+          {
+            binding: 0,
+            visibility: GPUShaderStage.FRAGMENT,
+            texture: { sampleType: "unfilterable-float" }
+          }
+        ]
+      });
+
+      const pipelineLayout = this.device.createPipelineLayout({
+        bindGroupLayouts: [this.depthToFloatBindGroupLayout]
+      });
+
+      const module = this.depthToFloatShaderModule;
+      this.depthToFloatPipeline = this.device.createRenderPipeline({
+        layout: pipelineLayout,
+        vertex: {
+          module,
+          entryPoint: 'vertexMain',
+        },
+        fragment: {
+          module: module,
+          entryPoint: 'fragmentMain',
+          targets: [ { format: dstFormat } ],
+        },
+        primitive: {
+          topology: 'triangle-list',
+        },
+      });
+    }
+
+    const bindGroup = this.device.createBindGroup({
+      layout: this.depthToFloatBindGroupLayout,
+      entries: [ { binding: 0, resource: fromTextureView } ],
+    });
+
+    const commandEncoder = this.device.createCommandEncoder();
+    const passEncoder = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: toTextureView,
+        loadOp: 'clear',
+        storeOp: 'store'
+      }]
+    });
+    passEncoder.setPipeline(this.depthToFloatPipeline);
+    passEncoder.setBindGroup(0, bindGroup);
+    passEncoder.draw(3);
+    passEncoder.end();
+    this.device.queue.submit([commandEncoder.finish()]);
+  }
 }
 
 TextureUtils.blitShader = `
@@ -317,8 +318,7 @@ TextureUtils.multisampleBlitShader = `
     // RGB
     var rgb = color.rgb * display.exposure;
     return vec4f(rgb, color.a);
-  }
-`;
+  }`;
 
 TextureUtils.blitDepthShader = `
   var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
@@ -341,5 +341,31 @@ TextureUtils.blitDepthShader = `
   @fragment
   fn fragmentMain(input: VertexOutput) -> @builtin(frag_depth) f32 {
     return textureSample(texture, texSampler, input.uv);
+  }`;
+
+TextureUtils.depthToFloatFragmentShader = `
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
+    vec4f(-1.0, 1.0, 0.0, 0.0),
+    vec4f(3.0, 1.0, 2.0, 0.0),
+    vec4f(-1.0, -3.0, 0.0, 2.0));
+  struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv : vec2<f32>
+  };
+  @vertex
+  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.uv = posTex[vertexIndex].zw;
+    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
+    return output;;
   }
-`;
+  
+  @binding(0) @group(0) var depth: texture_depth_2d;
+  @fragment
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
+    var depthSize = textureDimensions(depth, 0);
+    var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),
+                           i32(f32(depthSize.y) * input.uv.y));
+    var d = textureLoad(depth, coords, 0);
+    return vec4<f32>(d, 0.0, 0.0, 1.0);
+  }`;
