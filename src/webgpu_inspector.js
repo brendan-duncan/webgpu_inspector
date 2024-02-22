@@ -249,7 +249,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
       if (method === "createTexture") {
         // Add COPY_SRC usage to all textures so we can capture them
-        args[0].usage |= GPUTextureUsage.COPY_SRC;
+        args[0].usage |= GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING;
       }
 
       if (method === "createBuffer") {

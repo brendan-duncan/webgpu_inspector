@@ -50,14 +50,18 @@ export class TextureUtils {
   copyDepthTexture(src, format, commandEncoder) {
     const width = src.width;
     const height = src.height;
+    const depthOrArrayLayers = src.depthOrArrayLayers;
     const usage = src.usage | GPUTextureUsage.RENDER_TARGET | GPUTextureUsage.COPY_SRC;
-    const size = [width, height, 1]
+    const size = [width, height, depthOrArrayLayers];
     format = format || "r32float";
 
     const dst = this.device.createTexture({ format, size, usage });
-    const srcView = src.createView({ aspect: "depth-only" });
-    const dstView = dst.createView();
-    this.convertDepthToFloat(srcView, src.sampleCount, dstView, format, commandEncoder);
+
+    for (let i = 0; i < depthOrArrayLayers; ++i) {
+      const srcView = src.createView({ dimension: "2d", aspect: "depth-only", baseArrayLayer: i, arrayLayerCount: 1 });
+      const dstView = dst.createView({ dimension: "2d", baseArrayLayer: i, arrayLayerCount: 1 });
+      this.convertDepthToFloat(srcView, src.sampleCount, dstView, format, commandEncoder);
+    }
     
     return dst;
   }
