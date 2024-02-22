@@ -3,7 +3,6 @@ import { Collapsable } from "./widget/collapsable.js";
 import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
 import { TabWidget } from "./widget/tab_widget.js";
-import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import { Widget } from "./widget/widget.js";
 import { NumberInput } from "./widget/number_input.js";
 import { Select } from "./widget/select.js";
@@ -91,9 +90,7 @@ export class InspectPanel {
     new Span(this.plots, { text: "Frame Time", style: "color: #ccc; padding-top: 5px; margin-right: 10px; font-size: 10pt;"});
     this.frameRatePlot = new Plot(this.plots, { precision: 2, suffix: "ms", style: "flex-grow: 1; margin-right: 10px; max-width: 500px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);" });
     this.frameRateData = this.frameRatePlot.addData("Frame Time");
-    
-    //new Span(this.plots, { text: "GPU Objects", style: "color: #ccc; padding-top: 5px; margin-right: 10px; font-size: 10pt;"});
-    
+       
     this._objectCountType = null;
     this._objectCountObject = null;
 
@@ -595,8 +592,80 @@ export class InspectPanel {
       }
     }
 
+    function createDependencyLink(obj, label, parent) {
+      const link = new Widget("li", parent, { text: label, class: "dependency_link" });
+      link.element.onclick = () => {
+        obj.widget.group.expand();
+        obj.widget.element.click();
+      };
+    }
+
     let compileButton = null;
     let revertButton = null;
+    if (object instanceof RenderPipeline || object instanceof ComputePipeline) {
+      const grp = new Collapsable(infoBox, { label: "Dependencies", collapsed: true });
+      const ul = new Widget("ul", grp.body);
+      const descriptor = object.descriptor;
+      if (descriptor.layout) {
+        const obj = this.database.getObject(descriptor.layout.__id);
+        if (obj) {
+          createDependencyLink(obj, `Layout: ${obj.name}(${obj.idName})`, ul);
+        }
+      }
+      if (descriptor.vertex) {
+        const obj = this.database.getObject(descriptor.vertex.module.__id);
+        if (obj) {
+          createDependencyLink(obj, `Vertex Module: ${obj.name}(${obj.idName})`, ul);
+        }
+      }
+      if (descriptor.fragment) {
+        const obj = this.database.getObject(descriptor.fragment.module.__id);
+        if (obj) {
+          createDependencyLink(obj, `Fragment Module: ${obj.name}(${obj.idName})`, ul);
+        }
+      }
+    }
+
+    if (object instanceof PipelineLayout) {
+      const grp = new Collapsable(infoBox, { label: "Dependencies", collapsed: true });
+      const ul = new Widget("ul", grp.body);
+      const descriptor = object.descriptor;
+      const bindGroupLayouts = descriptor.bindGroupLayouts;
+      for (let i = 0; i < bindGroupLayouts.length; ++i) {
+        const obj = this.database.getObject(bindGroupLayouts[i].__id);
+        if (obj) {
+          createDependencyLink(obj, `Bind Group Layout ${i}: ${obj.name}(${obj.idName})`, ul);
+        }
+      }
+    }
+
+    if (object instanceof BindGroup) {
+      const grp = new Collapsable(infoBox, { label: "Dependencies", collapsed: true });
+      const ul = new Widget("ul", grp.body);
+      const descriptor = object.descriptor;
+      const layout = this.database.getObject(descriptor.layout?.__id);
+      if (layout) {
+        createDependencyLink(layout, `Layout: ${layout.name}(${layout.idName})`, ul);
+      }
+
+      if (descriptor.entries) {
+        for (let i = 0; i < descriptor.entries.length; ++i) {
+          const entry = descriptor.entries[i];
+          if (entry.resource.buffer?.__id) {
+            const obj = this.database.getObject(entry.resource.buffer.__id);
+            createDependencyLink(obj, `Buffer ${entry.binding}: ${obj.name}(${obj.idName})`, ul);
+          } else if (entry.resource.__id) {
+            const obj = this.database.getObject(entry.resource.__id);
+            if (obj instanceof Sampler) {
+              createDependencyLink(obj, `Sampler ${entry.binding}: ${obj.name}(${obj.idName})`, ul);
+            } else {
+              createDependencyLink(obj, `Texture View ${entry.binding}: ${obj.name}(${obj.idName})`, ul);
+            }
+          }
+        }
+      }
+    }
+
     if (object instanceof ShaderModule) {
       const reflect = object.reflection;
       if (reflect) {
@@ -684,7 +753,7 @@ export class InspectPanel {
       revertButton = isModified ? new Button(compileRow, { label: "Revert", style: "background-color: rgb(200, 150, 51);" }) : null;
     }
 
-    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-270px + 100vh); overflow: auto;" });
+    const descriptionBox = new Div(this.inspectPanel, { style: "overflow: auto;" });
 
     if (object instanceof ShaderModule) {
       const self = this;
@@ -736,7 +805,8 @@ export class InspectPanel {
       new Widget("pre", descriptionBox, { text });
     } else {
       const grp = new Collapsable(descriptionBox, { label: "Descriptor", collapsed: false });
-      grp.body.style.maxHeight = undefined;
+      grp.body.style.overflow = "auto";
+      grp.body.style.height = "calc(-300px + 100vh)";
       const desc = this._getDescriptorInfo(object, object.descriptor);
       const text = JSON.stringify(desc, undefined, 4);
       new Widget("pre", grp.body, { text });

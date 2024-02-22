@@ -87,6 +87,16 @@ body {
   user-select: none;
 }
 
+.dependency_link {
+  color: #5dd;
+  font-size: 12pt;
+  cursor: pointer;
+}
+
+.dependency_link:hover {
+  color: #5ee;
+}
+
 .collapse {
   float: left;
   color: #fff;
@@ -116,6 +126,7 @@ body {
   overflow: auto;
   margin: 0px;
   padding-bottom: 10px;
+  padding-left: 10px;
 }
 
 .collapsable_button {
