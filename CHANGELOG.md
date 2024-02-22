@@ -1,5 +1,7 @@
 ## v0.0.6
 * Improve Capture render and compute pass organization when passes use different command encoders.
+* Inspect RG11B10 texture pixel values
+* Preview depth textures
 
 ## v0.0.5
 * Expand Inspector Descriptor display size

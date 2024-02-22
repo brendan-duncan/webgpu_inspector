@@ -6,7 +6,7 @@ export class TextureUtils {
     this.blitShaderModule = device.createShaderModule({ code: TextureUtils.blitShader });
     this.multisampleBlitShaderModule = device.createShaderModule({ code: TextureUtils.multisampleBlitShader });
     this.blitDepthShaderModule = device.createShaderModule({ code: TextureUtils.blitDepthShader });
-    this.depthToFloatShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatFragmentShader });
+    this.depthToFloatShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatShader });
     this.blitPipelines = {};
     this.blitDepthPipelines = {};
     this.bindGroupLayouts = new Map();
@@ -46,15 +46,17 @@ export class TextureUtils {
     });
   }
 
-  copyDepthTexture(src, format) {
+  copyDepthTexture(src, format, commandEncoder) {
     const width = src.width;
     const height = src.height;
     const usage = src.usage | GPUTextureUsage.RENDER_TARGET | GPUTextureUsage.COPY_SRC;
     const size = [width, height, 1]
     format = format || "r32float";
-    const dst = this.device.createTexture({ format, size, usage });
 
-    this.convertDepthToFloat(src.createView({ aspect: "depth-only" }), dst.createView(), format);
+    const dst = this.device.createTexture({ format, size, usage });
+    const srcView = src.createView({ aspect: "depth-only" });
+    const dstView = dst.createView();
+    this.convertDepthToFloat(srcView, dstView, format, commandEncoder);
     
     return dst;
   }
@@ -165,14 +167,16 @@ export class TextureUtils {
     this.device.queue.submit([commandEncoder.finish()]);
   }
 
-  convertDepthToFloat(fromTextureView, toTextureView, dstFormat) {
+  convertDepthToFloat(fromTextureView, toTextureView, dstFormat, commandEncoder) {
     if (!this.depthToFloatPipeline) {
+      this.device.pushErrorScope('validation');
+
       this.depthToFloatBindGroupLayout = this.device.createBindGroupLayout({
         entries: [
           {
             binding: 0,
             visibility: GPUShaderStage.FRAGMENT,
-            texture: { sampleType: "unfilterable-float" }
+            texture: { sampleType: "depth" }
           }
         ]
       });
@@ -197,26 +201,47 @@ export class TextureUtils {
           topology: 'triangle-list',
         },
       });
+
+      this.device.popErrorScope().then((result) => {
+        if (result) {
+          console.error(result);
+        }
+      });
     }
+
+    this.device.pushErrorScope('validation');
 
     const bindGroup = this.device.createBindGroup({
       layout: this.depthToFloatBindGroupLayout,
       entries: [ { binding: 0, resource: fromTextureView } ],
     });
 
-    const commandEncoder = this.device.createCommandEncoder();
+    const doSubmit = !commandEncoder;
+
+    commandEncoder ??= this.device.createCommandEncoder();
     const passEncoder = commandEncoder.beginRenderPass({
       colorAttachments: [{
         view: toTextureView,
         loadOp: 'clear',
-        storeOp: 'store'
+        storeOp: 'store',
+        clearColor: { r: 0, g: 0, b: 0, a: 0 }
       }]
     });
+
     passEncoder.setPipeline(this.depthToFloatPipeline);
     passEncoder.setBindGroup(0, bindGroup);
     passEncoder.draw(3);
     passEncoder.end();
-    this.device.queue.submit([commandEncoder.finish()]);
+
+    if (doSubmit) {
+      this.device.queue.submit([commandEncoder.finish()]);
+    }
+
+    this.device.popErrorScope().then((result) => {
+      if (result) {
+        console.error(result);
+      }
+    });
   }
 }
 
@@ -343,7 +368,7 @@ TextureUtils.blitDepthShader = `
     return textureSample(texture, texSampler, input.uv);
   }`;
 
-TextureUtils.depthToFloatFragmentShader = `
+TextureUtils.depthToFloatShader = `
   var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
     vec4f(-1.0, 1.0, 0.0, 0.0),
     vec4f(3.0, 1.0, 2.0, 0.0),

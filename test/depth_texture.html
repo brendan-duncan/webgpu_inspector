@@ -1,0 +1,200 @@
+<html>
+    <body>
+        <canvas id="webgpu_canvas" width="960" height="600"></canvas>
+        <script>
+async function main() {
+  if (!navigator.gpu) {
+    console.log("WebGPU is not supported on this browser.");
+    return;
+  }
+
+  const canvas = document.getElementById("webgpu_canvas");
+  
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) {
+    console.log("WebGPU is not supported on this browser.");
+    return;
+  }
+  const device = await adapter.requestDevice();
+
+  const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+
+  const context = canvas.getContext("webgpu");
+
+  context.configure({ device: device, format: presentationFormat });
+
+  const depthTexture = device.createTexture({
+    size: [canvas.width, canvas.height],
+    sampleCount: 1,
+    format: "depth24plus-stencil8",
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
+
+  const depthTextureView = depthTexture.createView();
+
+  const depthToFloatShader = `
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
+    vec4f(-1.0, 1.0, 0.0, 0.0),
+    vec4f(3.0, 1.0, 2.0, 0.0),
+    vec4f(-1.0, -3.0, 0.0, 2.0));
+  struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv : vec2<f32>
+  };
+  @vertex
+  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.uv = posTex[vertexIndex].zw;
+    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
+    return output;;
+  }
+  
+  @binding(0) @group(0) var depth: texture_depth_2d;
+  @fragment
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
+    var depthSize = textureDimensions(depth, 0);
+    var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),
+                           i32(f32(depthSize.y) * input.uv.y));
+    var d = textureLoad(depth, coords, 0);
+    return vec4<f32>(d, 0.0, 0.0, 1.0);
+  }`;
+
+  let depthToFloatPipeline = null;
+  let depthToFloatBindGroupLayout = null;
+  const depthToFloatShaderModule = device.createShaderModule({
+    code: depthToFloatShader
+  });
+
+  function convertDepthToFloat(fromTextureView, toTextureView, dstFormat, commandEncoder) {
+    if (!depthToFloatPipeline) {
+      depthToFloatBindGroupLayout = device.createBindGroupLayout({
+        entries: [
+          {
+            binding: 0,
+            visibility: GPUShaderStage.FRAGMENT,
+            texture: { sampleType: "depth" }
+          }
+        ]
+      });
+
+      const pipelineLayout = device.createPipelineLayout({
+        bindGroupLayouts: [depthToFloatBindGroupLayout]
+      });
+
+      const module = depthToFloatShaderModule;
+      depthToFloatPipeline = device.createRenderPipeline({
+        layout: pipelineLayout,
+        vertex: {
+          module,
+          entryPoint: 'vertexMain',
+        },
+        fragment: {
+          module: module,
+          entryPoint: 'fragmentMain',
+          targets: [ { format: dstFormat } ],
+        },
+        primitive: {
+          topology: 'triangle-list',
+        },
+      });
+    }
+
+    const bindGroup = device.createBindGroup({
+      layout: depthToFloatBindGroupLayout,
+      entries: [ { binding: 0, resource: fromTextureView } ],
+    });
+
+    const doSubmit = !commandEncoder;
+
+    commandEncoder ??= device.createCommandEncoder();
+    const passEncoder = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: toTextureView,
+        loadOp: 'clear',
+        storeOp: 'store',
+        clearColor: { r: 0, g: 0, b: 0, a: 0 }
+      }]
+    });
+
+    passEncoder.setPipeline(depthToFloatPipeline);
+    passEncoder.setBindGroup(0, bindGroup);
+    passEncoder.draw(3);
+    passEncoder.end();
+
+    if (doSubmit) {
+      device.queue.submit([commandEncoder.finish()]);
+    }
+  }
+
+  function frame() {
+    const commandEncoder = device.createCommandEncoder();
+
+    const canvasTextureView = context.getCurrentTexture().createView();
+
+    const passEncoder = commandEncoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: canvasTextureView,
+          clearValue: { r: 0.0, g: 0.0, b: 1.0, a: 1.0 },
+          loadOp: "clear",
+          storeOp: "store",
+        },
+      ],
+      depthStencilAttachment: {
+        view: depthTextureView,
+        depthClearValue: 1.0,
+        depthLoadOp: "clear",
+        depthStoreOp: "store",
+        stencilLoadValue: 2,
+        stencilLoadOp: "clear",
+        stencilStoreOp: "store",
+      },
+    });
+    passEncoder.end();
+
+    device.queue.submit([commandEncoder.finish()]);
+
+    const dst = device.createTexture({
+      format: "r32float",
+      size: [depthTexture.width, depthTexture.height, 1],
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+    });
+    const srcView = depthTexture.createView({ aspect: "depth-only" });
+    const dstView = dst.createView();
+    const commandEncoder2 = device.createCommandEncoder();
+    convertDepthToFloat(srcView, dstView, "r32float", commandEncoder2);
+
+    const bytesPerRow = (depthTexture.width * 4 + 255) & ~0xff;
+    const bufferSize = 4 * depthTexture.width * depthTexture.height;
+
+    const tempBuffer = device.createBuffer({
+      size: bufferSize,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+    });
+
+    commandEncoder2.copyTextureToBuffer(
+      { texture: dst, mipLevel: 0, origin: { x: 0, y: 0, z: 0 } },
+      { buffer: tempBuffer, bytesPerRow },
+      { width: depthTexture.width, height: depthTexture.height, depthOrArrayLayers: 1 }
+    );
+
+    device.queue.submit([commandEncoder2.finish()]);
+
+    dst.destroy();
+
+    tempBuffer.mapAsync(GPUMapMode.READ).then( () => {
+      const range = tempBuffer.getMappedRange();
+      const float32Array = new Float32Array(range);
+      tempBuffer.destroy();
+    });
+
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(frame);
+};
+
+main();
+        </script>
+    </body>
+</html>

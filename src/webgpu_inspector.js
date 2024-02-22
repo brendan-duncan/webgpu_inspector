@@ -280,19 +280,6 @@ import { Actions, PanelActions } from "./utils/actions.js";
         }
       }
 
-      // Before we finish the command encoder, inject any pending texture captures
-      if (method === "finish") {
-        if (this._captureTextureRequest.size > 0) {
-          this._captureTextureRequest.forEach((texture, id) => {
-            if (id > 0 || object.__rendersToCanvas) {
-              texture = texture || self._trackedObjects.get(id)?.deref();
-              self._captureTextureBuffer(object, texture);
-              self._captureTextureRequest.delete(id);
-            }
-          });
-        }
-      }
-
       // We want to be able to capture canvas textures, so we need to add COPY_SRC to
       // the usage flags of any textures created from canvases.
       if ((object instanceof GPUCanvasContext) && method === "configure") {
@@ -304,26 +291,6 @@ import { Actions, PanelActions } from "./utils/actions.js";
         }
         // Keep tabs on the device that the context was initialized with.
         object.__device = descriptor.device;
-      }
-
-      if (method === "submit") {
-        object.onSubmittedWorkDone().then(() => {
-          self.disableRecording();
-          if (self._captureTempBuffers.length) {
-            self._sendCapturedBuffers();
-          }
-
-          if (self._captureTexturedBuffers.length) {
-            self._sendCaptureTextureBuffers();
-          }
-
-          for (const obj of self._toDestroy) {
-            obj.destroy();
-          }
-          self._toDestroy.length = 0;
-
-          self.enableRecording();
-        });
       }
     }
 
@@ -345,6 +312,34 @@ import { Actions, PanelActions } from "./utils/actions.js";
             }
           }
         }
+      }
+
+      if (method === "submit") {
+        this.disableRecording();
+
+        if (this._captureTextureRequest.size > 0) {
+          const self = this;
+          this._captureTextureRequest.forEach((texture, id) => {
+            texture = texture || self._trackedObjects.get(id)?.deref();
+            self._captureTextureBuffer(object.__device, null, texture);
+            self._captureTextureRequest.delete(id);
+          });
+        }
+
+        if (this._captureTempBuffers.length) {
+          this._sendCapturedBuffers();
+        }
+
+        if (this._captureTexturedBuffers.length) {
+          this._sendCaptureTextureBuffers();
+        }
+
+        for (const obj of this._toDestroy) {
+          obj.destroy();
+        }
+        this._toDestroy.length = 0;
+
+        this.enableRecording();
       }
 
       if (method === "createShaderModule" ||
@@ -1108,7 +1103,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
           for (const captureTextureView of object.__captureTextureViews) {
             const texture = captureTextureView.__texture;
             if (texture) {
-              this._captureTextureBuffer(commandEncoder, texture, passId++);
+              this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, passId++);
             }
           }
           object.__captureTextureViews.clear();
@@ -1149,6 +1144,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
           self._updateStatusMessage();
           const range = tempBuffer.getMappedRange();
           const data = new Uint8Array(range);
+          console.log(data);
           self._sendTextureData(id, passId, data);
           tempBuffer.destroy();
         });
@@ -1306,12 +1302,14 @@ import { Actions, PanelActions } from "./utils/actions.js";
     // Copy the texture to a buffer so we can send it to the inspector server.
     // The texture data is copied to a buffer now, then after the frame has finished
     // the buffer data is sent to the inspector server.
-    _captureTextureBuffer(commandEncoder, texture, passId) {
-      const device = commandEncoder?.__device;
+    _captureTextureBuffer(device, commandEncoder, texture, passId) {
       // can't capture canvas texture
       if (!device) {
         return;
       }
+
+      const doSubmit = !commandEncoder;
+      commandEncoder ??= device.createCommandEncoder();
 
       passId ??= -1;
 
@@ -1322,15 +1320,14 @@ import { Actions, PanelActions } from "./utils/actions.js";
         return;
       }
 
-      if (format === "depth16unorm" || format === "depth24plus" || format === "depth24plus-stencil8" ||
-          format === "depth32float" || format === "depth32float-stencil8") {
+      if (formatInfo.isDepthStencil) {
         this.disableRecording();
         try {
           const textureUtils = this._getTextureUtils(device);
           // depth24plus texture's can't be copied to a buffer,
           // https://github.com/gpuweb/gpuweb/issues/652,
           // convert it to a float texture.
-          texture = textureUtils.copyDepthTexture(texture, "r32float");
+          texture = textureUtils.copyDepthTexture(texture, "r32float", commandEncoder);
         } catch (e) {
           this.enableRecording();
           console.log(e);
@@ -1388,6 +1385,11 @@ import { Actions, PanelActions } from "./utils/actions.js";
       } catch (e) {
         console.log(e);
       }
+
+      if (doSubmit) {
+        device.queue.submit([commandEncoder.finish()]);
+      }
+
       this.enableRecording();
 
       if (tempBuffer) {
