@@ -303,6 +303,9 @@ import { Actions, PanelActions } from "./utils/actions.js";
         // result is a GPURenderPassEncoder
         result.__commandEncoder = object;
 
+        // Check to see if any of the color attachments are canvas textures.
+        // We need to know this so we can capture the canvas texture after the
+        // render pass is finished.
         for (const colorAttachment of args[0].colorAttachments) {
           const view = colorAttachment.resolveTarget ?? colorAttachment.view;
           if (view) {
@@ -314,15 +317,30 @@ import { Actions, PanelActions } from "./utils/actions.js";
         }
       }
 
+      if (method === "finish") {
+        // Renders to canvas tracks whether the render pass encoder renders to a canvas.
+        // We only want to capture canvas textures if it's been immediatley rendered to,
+        // otherwise it will be black. Store the value in the command buffer so we can
+        // see it from the submit function.
+        result.__rendersToCanvas = object.__rendersToCanvas;
+      }
+
       if (method === "submit") {
         this.disableRecording();
 
         if (this._captureTextureRequest.size > 0) {
           const self = this;
+          const commandBuffers = args[0];
+          let rendersToCanvas = false;
+          for (const commandBuffer of commandBuffers) {
+            rendersToCanvas |= !!commandBuffer.__rendersToCanvas;
+          }
           this._captureTextureRequest.forEach((texture, id) => {
-            texture = texture || self._trackedObjects.get(id)?.deref();
-            self._captureTextureBuffer(object.__device, null, texture);
-            self._captureTextureRequest.delete(id);
+            if (id > 0 || rendersToCanvas) {
+              texture = texture || self._trackedObjects.get(id)?.deref();
+              self._captureTextureBuffer(object.__device, null, texture);
+              self._captureTextureRequest.delete(id);
+            }
           });
         }
 
