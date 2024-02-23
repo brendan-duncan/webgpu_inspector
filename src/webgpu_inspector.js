@@ -1040,7 +1040,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
             const usesDynamicOffset = layoutEntry?.buffer?.hasDynamicOffset ?? false;
             if (buffer) {
               let offset = entry.resource.offset ?? 0;
-              const size = entry.resource.size ?? buffer.size;
+              const size = entry.resource.size ?? (buffer.size - offset);
 
               if (size < this._captureMaxBufferSize) {
                 if (usesDynamicOffset) {

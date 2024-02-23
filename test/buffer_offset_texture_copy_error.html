@@ -1,0 +1,206 @@
+<html>
+    <body>
+        <div id="console"></div>
+        <canvas id="webgpu_canvas" width="960" height="600"></canvas>
+        <script>
+async function main() {
+  if (!navigator.gpu) {
+    return;
+  }
+
+  const statusDiv = document.getElementById("console");
+
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) {
+    return;
+  }
+  const device = await adapter.requestDevice();
+
+  const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+
+  const canvas = document.getElementById("webgpu_canvas");
+  const context = canvas.getContext("webgpu");
+
+  context.configure({
+    device: device,
+    format: presentationFormat,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC // Make sure canvas texture has COPY_SRC so we can copy from it
+  });
+
+  const redTriangleShader = device.createShaderModule({
+    code: `
+      @group(0) @binding(0) var<storage, read> matrix : array<mat4x4f>;
+      @vertex
+      fn vertexMain(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4f {
+        let pos = array<vec2f, 3>(
+          vec2(0.0, 0.5),
+          vec2(-0.5, -0.5),
+          vec2(0.5, -0.5));
+        return matrix[0] * vec4f(pos[VertexIndex], 0.0, 1.0);
+      }
+
+      @fragment
+      fn fragmentMain() -> @location(0) vec4<f32> {
+        return vec4(1.0, 0.0, 0.0, 1.0);
+      }`,
+  });
+
+  const storageBuffer = device.createBuffer({
+    size: 256 * 2,
+    usage: GPUBufferUsage.STORAGE,
+    mappedAtCreation: true,
+  });
+  const bufferData = new Float32Array(storageBuffer.getMappedRange());
+  for (let i = 0, j = 0; i < 512; i += 64, j += 16) {
+    bufferData.set([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], j);
+  } 
+  storageBuffer.unmap();
+
+  const bindGroupLayout = device.createBindGroupLayout({
+    entries: [
+      {
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX,
+        buffer: { type: "read-only-storage" }
+      },
+    ],
+  });
+
+  const pipelineLayout = device.createPipelineLayout({
+    bindGroupLayouts: [bindGroupLayout],
+  });
+
+  const bindGroup = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      {
+        binding: 0,
+        resource: { buffer: storageBuffer }
+      },
+    ],
+  });
+
+  const offsetBindGroup = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      {
+        binding: 0,
+        resource: { buffer: storageBuffer, offset: 256 }
+      },
+    ],
+  });
+
+  const pipeline = device.createRenderPipeline({
+    layout: pipelineLayout,
+    vertex: {
+      module: redTriangleShader,
+      entryPoint: "vertexMain",
+    },
+    fragment: {
+      module: redTriangleShader,
+      entryPoint: "fragmentMain",
+      targets: [{ format: presentationFormat } ]
+    },
+    primitive: { topology: "triangle-list" }
+  });
+
+
+  function frame() {
+    // No buffer offset, capture after submit(), should work
+    //drawTriangleAndCapture(context.getCurrentTexture(), bindGroup, false);
+    // No buffer offset, capture after end(), should work
+    drawTriangleAndCapture(context.getCurrentTexture(), bindGroup, true);
+    // Buffer offset, capture after submit(), should work
+    //drawTriangleAndCapture(context.getCurrentTexture(), offsetBindGroup, false);
+    // Buffer offset, capture after end(), will fail
+    drawTriangleAndCapture(context.getCurrentTexture(), offsetBindGroup, true);
+    requestAnimationFrame(frame);
+  }
+
+  function drawTriangleAndCapture(texture, bindGroup, captureAfterEnd) {
+    device.pushErrorScope('validation');
+
+    const commandEncoder = device.createCommandEncoder();
+    const textureView = texture.createView();
+    const passEncoder = commandEncoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: textureView,
+          clearValue: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
+          loadOp: "clear",
+          storeOp: "store",
+        },
+      ],
+    });
+    passEncoder.setPipeline(pipeline);
+    passEncoder.setBindGroup(0, bindGroup);
+    passEncoder.draw(3);
+    passEncoder.end();
+
+    let buffer = null;
+    if (captureAfterEnd) {
+      //buffer = captureTexture(texture, commandEncoder);
+    }
+
+    device.queue.submit([commandEncoder.finish()]);
+
+    if (!captureAfterEnd) {
+      //buffer = captureTexture(texture, null);
+    }
+
+    
+    if (buffer) {
+      buffer.mapAsync(GPUMapMode.READ).then(() => {
+        const arrayBuffer = buffer.getMappedRange();
+        const data = new Uint8Array(arrayBuffer);
+        if (data[0] !== 255) {
+          statusDiv.textContent = "Error: The first byte of the captured texture is 0.";
+        }
+        buffer.destroy();
+      });
+    }
+    
+    device.popErrorScope().then((error) => {
+      if (error) {
+        console.log(error.message);
+        //statusDiv.textContent = "Error: " + error.message;
+      }
+    });
+  }
+
+  function captureTexture(texture, commandEncoder) {
+    const needsSubmit = !commandEncoder;
+    commandEncoder ??= device.createCommandEncoder();
+
+    const width = texture.width;
+    const height = texture.height;
+    const bytesPerRow = (width * 4 + 255) & ~0xff;
+    const rowsPerImage = height;
+    const bufferSize = bytesPerRow * rowsPerImage;
+    const aspect = "all";
+
+    const buffer = device.createBuffer({
+      size: bufferSize,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+    });
+
+    commandEncoder.copyTextureToBuffer(
+      { texture, aspect },
+      { buffer, bytesPerRow, rowsPerImage },
+      [ width, height, 1 ]
+    );
+
+    if (needsSubmit) {
+      device.queue.submit([commandEncoder.finish()]);
+    }
+
+    return buffer;
+  }
+
+  requestAnimationFrame(frame);
+};
+
+main();
+        </script>
+    </body>
+</html>
