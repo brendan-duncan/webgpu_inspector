@@ -441,11 +441,15 @@ import { Actions, PanelActions } from "./utils/actions.js";
         } else if (method === "getCurrentTexture") {
           result.__context = object;
           this._trackObject(result.__id, result);
+          result.label = "CanvasTexture";
         } else if (method === "createTexture") {
           this._trackObject(result.__id, result);
         } else if (method === "createView" && !id) {
           this._trackObject(result.__id, result);
           result.__texture = object;
+          if (result.__id < 0) {
+            result.label = "CanvasTextureView";
+          }
         } else if (method === "createBuffer") {
           this._trackObject(result.__id, result);
         } else if (method === "createBindGroup") {
