@@ -1,3 +1,6 @@
+## v0.0.7
+* Fix error when capturing frames when a BindGroup buffer uses a static offset.
+
 ## v0.0.6
 * Improve Capture render and compute pass organization when passes use different command encoders.
 * Inspect RG11B10 texture pixel values
