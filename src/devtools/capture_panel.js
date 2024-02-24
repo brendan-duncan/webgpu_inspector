@@ -540,7 +540,7 @@ export class CapturePanel {
         const label = debugGroupLabelStack.pop();
         new Span(cmd, { class: "capture_method_args", text: label });
       } else if (method === "createView") {
-        new Span(cmd, { class: "capture_method_args", text: `${getName(command.object)}` });
+        new Span(cmd, { class: "capture_method_args", text: `${getName(command.object)} => ${getName(command.result, "GPUTextureView")}` });
       } else if (method === "beginRenderPass") {
         new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)} => ${getName(command.result, "GPURenderPassEncoder")}` });
       } else if (method === "beginComputePass") {
@@ -555,6 +555,13 @@ export class CapturePanel {
         new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)}` });
       } else if (method === "getCurrentTexture") {
         new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUTexture")}` });
+      } else if (method === "submit") {
+        let buffers = "[";
+        for (const buffer of args[0]) {
+          buffers += `${getName(buffer.__id)}, `;
+        }
+        buffers += "]";
+        new Span(cmd, { class: "capture_method_args", text: `=> ${buffers}` });
       }
 
       cmd.element.onclick = () => {
