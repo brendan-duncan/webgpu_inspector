@@ -1,3 +1,6 @@
+## v0.0.8
+* Report an error if a canvas texture is used after it has expired.
+
 ## v0.0.7
 * Fix error when capturing frames when a BindGroup buffer uses a static offset.
 
