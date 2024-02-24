@@ -45,6 +45,8 @@ Crome and Firefox don't support the same version of extension plug-ins, so you'l
 - **Temporary Add-On's will need to be re-loaded every time you start Firefox.**
 
 #### Safari Technology Preview
+- **Note**:
+  - Safari support is still a work-in-progress and has issues
 - [Safari Technology Preview](https://developer.apple.com/safari/technology-preview/) has WebGPU support, which you can enable from **Develop / Feature Flags... / WebGPU**.
 - Safari Extension development is done through Xcode
 - Open **<webgpu_inspector directory>/extensions/safari/WebGPU_Inspector.xcodeproj** with Xcode
@@ -57,8 +59,6 @@ Crome and Firefox don't support the same version of extension plug-ins, so you'l
   - WebGPU Inspector should be a tab in the Web Inspector window (**Develop / Show Web Inspector** or right-click on page and select **Inspect element**)
 - If you make changes to the WebGPU Inspector source
   - From Xcode, select **Product / Build** (**cmd-b**)
-- **Note**:
-  - Safari support is still a work-in-progress and has issues
 
 ## Usage
 

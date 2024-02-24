@@ -311,6 +311,11 @@ import { Actions, PanelActions } from "./utils/actions.js";
           if (view) {
             if (view.__id < 0) {
               object.__rendersToCanvas = true;
+              const texture = view.__texture;
+              if (texture.__frameIndex < this._frameIndex) {
+                const message = "An expired canvas texture is being used as an attachment for a RenderPass.";
+                window.postMessage({ "action": Actions.ValidationError, id: 0, message, stacktrace }, "*");
+              }
               break;
             }
           }
@@ -404,6 +409,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
         id = -object.__id;
         object.__canvasTexture = new WeakRef(result);
+        result.__frameIndex = this._frameIndex;
       } else if (method === "createView") {
         if (object.__id < 0) {
           id = object.__id - 0.5;
@@ -454,6 +460,21 @@ import { Actions, PanelActions } from "./utils/actions.js";
           this._trackObject(result.__id, result);
         } else if (method === "createBindGroup") {
           this._trackObject(result.__id, result);
+          result.__descriptor = args[0];
+        } else if (method === "setBindGroup") {
+          const descriptor = args[1].__descriptor;
+          if (descriptor) {
+            for (const entry of descriptor.entries) {
+              if (entry.resource instanceof GPUTextureView && entry.resource.__id < 0) {
+                // This is a canvas texture view
+                const texture = entry.resource.__texture;
+                if (texture.__frameIndex < this._frameIndex) {
+                  const message = `A BindGroup(${object.__id}) with an expired canvs texture is being used.`;
+                  window.postMessage({ "action": Actions.ValidationError, id: 0, message, stacktrace }, "*");
+                }
+              }
+            }
+          }
         }
       }
 

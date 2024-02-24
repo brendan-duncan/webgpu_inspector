@@ -1,0 +1,91 @@
+<html>
+    <body>
+        <canvas id="webgpu_canvas" width="960" height="600"></canvas>
+        <script>
+async function main() {
+  if (!navigator.gpu) {
+    return;
+  }
+
+  const canvas = document.getElementById("webgpu_canvas");
+  
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) {
+    return;
+  }
+  const device = await adapter.requestDevice();
+
+  const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+
+  const context = canvas.getContext("webgpu");
+
+  context.configure({ device: device, format: presentationFormat });
+
+  const redTriangleShader = device.createShaderModule({
+    code: `
+      @vertex
+      fn vertexMain(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
+        var pos = array<vec2<f32>, 3>(
+          vec2(0.0, 0.5),
+          vec2(-0.5, -0.5),
+          vec2(0.5, -0.5));
+        return vec4<f32>(pos[VertexIndex], 0.0, 1.0);
+      }
+
+      @fragment
+      fn fragmentMain() -> @location(0) vec4<f32> {
+        return vec4(1.0, 0.0, 0.0, 1.0);
+      }`,
+  });
+
+  const pipeline = device.createRenderPipeline({
+    layout: "auto",
+    vertex: {
+      module: redTriangleShader,
+      entryPoint: "vertexMain",
+    },
+    fragment: {
+      module: redTriangleShader,
+      entryPoint: "fragmentMain",
+      targets: [{ format: presentationFormat } ]
+    },
+    primitive: { topology: "triangle-list" }
+  });
+
+  let canvasTextureView = context.getCurrentTexture().createView();
+
+  function frame() {
+    const commandEncoder = device.createCommandEncoder();
+
+    if (!canvasTextureView) {
+      //canvasTextureView = context.getCurrentTexture().createView();
+    }
+
+    const passEncoder = commandEncoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: canvasTextureView,
+          clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+          loadOp: "clear",
+          storeOp: "store",
+        },
+      ],
+    });
+    passEncoder.setPipeline(pipeline);
+    passEncoder.draw(3);
+    passEncoder.end();
+
+    device.queue.submit([commandEncoder.finish()]);
+
+    //canvasTextureView = null;
+
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(frame);
+};
+
+main();
+        </script>
+    </body>
+</html>

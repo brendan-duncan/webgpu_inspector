@@ -41,7 +41,10 @@ export const GPUCreateMethods = new Set([
   "createCommandEncoder",
   "createRenderBundleEncoder",
   "createQuerySet",
-  "createView"
+  "createView",
+
+  "beginRenderPass",
+  "setBindGroup",
 ]);
 
 export class GPUObjectWrapper {
