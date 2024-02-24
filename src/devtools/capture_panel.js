@@ -837,7 +837,7 @@ export class CapturePanel {
         continue;
       }
       const typeName = this._getTypeName(storage.type);
-      new Div(parentWidget, { text: `STORAGE: ${storage.name}: ${typeName}` });
+      new Div(parentWidget, { text: `STORAGE ${storage.access}: ${storage.name}: ${typeName}` });
       this._showBufferDataType(parentWidget, storage.type, bufferData);
       return;
     }
@@ -848,6 +848,7 @@ export class CapturePanel {
 
     const id = state.pipeline?.args[0].__id;
     const pipeline = this._getObject(id);
+
     if (pipeline) {
       const desc = pipeline.descriptor;
       const vertexId = desc.vertex?.module?.__id;
@@ -979,13 +980,80 @@ export class CapturePanel {
       const binding = entry.binding;
       const resource = entry.resource;
       const groupLabel = groupIndex !== undefined ? `Group ${groupIndex} ` : "";
-      const resourceGrp = new Collapsable(commandInfo, { collapsed: true, label: `${groupLabel}Binding ${binding}: ${getResourceType(resource)} ID:${getResourceId(resource)} ${getResourceUsage(resource)}` });
+
+      let access = "";
+      if (state) {
+        const pipelineId = state.pipeline?.args[0].__id;
+        const pipeline = this._getObject(pipelineId);
+        if (pipeline) {
+          const desc = pipeline.descriptor;
+          const vertexId = desc.vertex?.module?.__id;
+          const fragmentId = desc.fragment?.module?.__id;
+          const computeId = desc.compute?.module?.__id;
+          if (computeId) {
+            const module = this._getObject(computeId);
+            if (module) {
+              const reflection = module.reflection;
+              if (reflection) {
+                for (const storage of reflection.storage) {
+                  if (storage.group == groupIndex && storage.binding == binding) {
+                    access = storage.access;
+                    break;
+                  }
+                }
+              }
+            }
+          } else if (vertexId !== undefined && vertexId === fragmentId) {
+            const module = this._getObject(vertexId);
+            if (module) {
+              const reflection = module.reflection;
+              if (reflection) {
+                for (const storage of reflection.storage) {
+                  if (storage.group == groupIndex && storage.binding == binding) {
+                    access = storage.access;
+                    break;
+                  }
+                }
+              }
+            }
+          } else {
+            const vertexModule = this._getObject(vertexId);
+            if (vertexModule) {
+              const reflection = vertexModule.reflection;
+              if (reflection) {
+                for (const storage of reflection.storage) {
+                  if (storage.group == groupIndex && storage.binding == binding) {
+                    access = storage.access;
+                    break;
+                  }
+                }
+              }
+            }
+
+            const fragmentModule = this._getObject(fragmentId);
+            if (fragmentModule) {
+              const reflection = fragmentModule.reflection;
+              if (reflection) {
+                for (const storage of reflection.storage) {
+                  if (storage.group == groupIndex && storage.binding == binding) {
+                    access = storage.access;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      const resourceGrp = new Collapsable(commandInfo, { collapsed: true, label: `${groupLabel}Binding ${binding}: ${getResourceType(resource)} ID:${getResourceId(resource)} ${getResourceUsage(resource)} ${access}` });
       if (resource.__id !== undefined) {
         const obj = this._getObject(resource.__id);
         if (obj) {
           new Button(resourceGrp.body, { label: "Inspect", callback: () => {
             self.window.inspectObject(obj);
           } });
+
           if (obj instanceof Sampler) {
             new Div(resourceGrp.body, { text: `${resource.__class} ID:${resource.__id}` });
             new Widget("pre", resourceGrp.body, { text: JSON.stringify(obj.descriptor, undefined, 4) });
@@ -1316,7 +1384,7 @@ export class CapturePanel {
           const l2 = new Widget("ul", list);
           new Widget("li", l2, { text: `Bind Group: ${s.group}` });
           new Widget("li", l2, { text: `Bind Index: ${s.binding}` });
-          new Widget("li", l2, { text: `Buffer Size: ${s.type.size || "<runtime>"}` });
+          new Widget("li", l2, { text: `Size: ${s.type.size || "<runtime>"}` });
           
           this._addShaderTypeInfo(l2, s.type);
         }
@@ -1330,7 +1398,8 @@ export class CapturePanel {
           const l2 = new Widget("ul", list);
           new Widget("li", l2, { text: `Bind Group: ${s.group}` });
           new Widget("li", l2, { text: `Bind Index: ${s.binding}` });
-          new Widget("li", l2, { text: `Buffer Size: ${s.type.size || "<runtime>"}` });
+          new Widget("li", l2, { text: `Access: ${s.access}` });
+          new Widget("li", l2, { text: `Size: ${s.type.size || "<runtime>"}` });
 
           this._addShaderTypeInfo(l2, s.type);
         }
