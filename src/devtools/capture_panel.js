@@ -813,10 +813,31 @@ export class CapturePanel {
         let elementOffset = offset;
         let stride = type.stride;
         let format = type.format;
-        for (let i = 0; i < count; ++i) { 
-          new Widget("li", ul, { text: `[${i}]: ${this._getTypeName(format)}` });
-          const ul2 = new Widget("ul", ul);
-          this._showBufferDataType(ul2,format, bufferData, elementOffset);
+        const formatName = this._getTypeName(format);
+        for (let i = 0; i < count; ++i) {
+          let value = null;
+          if (formatName === "f32") {
+            const data = new Float32Array(bufferData.buffer, elementOffset, 1);
+            value = data[0];
+          } else if (formatName === "i32") {
+            const data = new Int32Array(bufferData.buffer, elementOffset, 1);
+            value = data[0];
+          } else if (formatName === "u32") {
+            const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
+            value = data[0];
+          } else if (formatName === "bool") {
+            const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
+            value = data[0] ? "true" : "false";
+          }
+
+          if (value !== null) {
+            new Widget("li", ul, { text: `[${i}]: ${value}` });
+          } else {
+            new Widget("li", ul, { text: `[${i}]: ${formatName}` });
+            const ul2 = new Widget("ul", ul);
+            this._showBufferDataType(ul2, format, bufferData, elementOffset);
+          }
+
           elementOffset += stride;
         }
       }
