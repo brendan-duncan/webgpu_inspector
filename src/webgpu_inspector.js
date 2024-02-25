@@ -3,6 +3,7 @@ import { GPUObjectTypes, GPUObjectWrapper } from "./utils/gpu_object_wrapper.js"
 import { TextureFormatInfo } from "./utils/texture_format_info.js";
 import { TextureUtils } from "./utils/texture_utils.js";
 import { Actions, PanelActions } from "./utils/actions.js";
+import { RollingAverage } from "./utils/rolling_average.js";
 
 (() => {
   const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
@@ -40,6 +41,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._mappedBufferCount = 0;
       this._encodingBufferChunkCount = 0;
       this._captureData = null;
+      this._frameRate = new RollingAverage(60);
 
       if (!window.navigator.gpu) {
         // No WebGPU support
@@ -47,7 +49,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       }
 
       const statusContainer = document.createElement("div");
-      statusContainer.style = "position: absolute; z-index: 1000000; margin-left: 10px; margin-top: 5px;";
+      statusContainer.style = "position: absolute; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt;";
       document.body.insertBefore(statusContainer, document.body.firstChild);
 
       this._inspectingStatus = document.createElement("div");
@@ -55,8 +57,13 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._inspectingStatus.style = "height: 10px; width: 10px; display: inline-block; margin-right: 5px; background-color: #ff0; border-radius: 50%; border: 1px solid #000; box-shadow: inset -4px -4px 4px -3px rgb(255,100,0), 2px 2px 3px rgba(0,0,0,0.8);";
       statusContainer.appendChild(this._inspectingStatus);
 
+      this._inspectingStatusFrame = document.createElement("div");
+      this._inspectingStatusFrame.style = "display: inline-block;";
+      this._inspectingStatusFrame.textContent = "Frame: 0";
+      statusContainer.appendChild(this._inspectingStatusFrame);
+
       this._inspectingStatusText = document.createElement("div");
-      this._inspectingStatusText.style = "display: inline-block; font-size: 12pt;color: #070; text-shadow: #fff 1px 1px 1px;";
+      this._inspectingStatusText.style = "display: inline-block; margin-left: 10px;";
       statusContainer.appendChild(this._inspectingStatusText);
 
       this._gpuWrapper = new GPUObjectWrapper(this);
@@ -463,7 +470,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
           this._trackObject(result.__id, result);
           result.__descriptor = args[0];
         } else if (method === "setBindGroup") {
-          const descriptor = args[1].__descriptor;
+          /*const descriptor = args[1].__descriptor;
           if (descriptor) {
             for (const entry of descriptor.entries) {
               if (entry.resource instanceof GPUTextureView && entry.resource.__id < 0) {
@@ -475,7 +482,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
                 }
               }
             }
-          }
+          }*/
         }
       }
 
@@ -738,43 +745,46 @@ import { Actions, PanelActions } from "./utils/actions.js";
       let status = "";
 
       if (this._captureTexturedBuffers.length > 0) {
-        status += `Texture: ${this._captureTexturedBuffers.length}`;
+        status += `Texture: ${this._captureTexturedBuffers.length} `;
       }
 
       if (this._mappedTextureBufferCount > 0) {
-        status += `Pending Texture Reads: ${this._mappedTextureBufferCount}`;
+        status += `Pending Texture Reads: ${this._mappedTextureBufferCount} `;
       }
 
       if (this._encodingTextureChunkCount > 0) {
-        status += `Pending Texture Encoding: ${this._encodingTextureChunkCount}`;
+        status += `Pending Texture Encoding: ${this._encodingTextureChunkCount} `;
       }
 
       if (this._captureBuffersCount) {
-        status += `Buffers: ${this._captureBuffersCount}`;
+        status += `Buffers: ${this._captureBuffersCount} `;
       }
 
       if (this._mappedBufferCount > 0) {
-        status += `Pending Buffer Reads: ${this._mappedBufferCount}`;
+        status += `Pending Buffer Reads: ${this._mappedBufferCount} `;
       }
 
       if (this._encodingBufferChunkCount > 0) {
-        status += `Pending Buffer Encoding: ${this._encodingBufferChunkCount}`;
+        status += `Pending Buffer Encoding: ${this._encodingBufferChunkCount} `;
       }
 
       if (status) {
-        status = `Capturing: ${status}`;
+        status = `Capturing: ${status} `;
       }
 
       this._inspectingStatusText.textContent = status;
     }
 
     _frameStart(time) {
+      let deltaTime = 0;
       if (this._lastFrameTime == 0) {
         this._lastFrameTime = time;
       } else {
-        const deltaTime = time - this._lastFrameTime;
+        deltaTime = time - this._lastFrameTime;
         window.postMessage({ "action": Actions.DeltaTime, deltaTime }, "*");
         this._lastFrameTime = time;
+
+        this._frameRate.add(deltaTime);
       }
 
       const captureData = sessionStorage.getItem(webgpuInspectorCaptureFrameKey);
@@ -788,7 +798,6 @@ import { Actions, PanelActions } from "./utils/actions.js";
       }
 
       if (this._captureData) {
-        console.log(this._captureData.frame, this._frameIndex);
         if (this._captureData.frame < 0 || this._frameIndex >= this._captureData.frame) {
           this._captureMaxBufferSize = this._captureData.maxBufferSize || maxBufferCaptureSize;
           this._captureFrameRequest = true;
@@ -796,11 +805,14 @@ import { Actions, PanelActions } from "./utils/actions.js";
           this._captureData = null;
         }
       }
+
       this._frameData.length = 0;
       this._captureFrameCommands.length = 0;
       this._frameRenderPassCount = 0;
       this._frameIndex++;
       this._frameCommandCount = 0;
+
+      this._inspectingStatusFrame.textContent = `Frame: ${this._frameIndex} : ${this._frameRate.average.toFixed(2)}ms`;
     }
 
     _frameEnd() {
