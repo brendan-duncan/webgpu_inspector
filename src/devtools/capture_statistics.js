@@ -81,38 +81,54 @@ export class CaptureStatistics {
     this._lastPipeline = 0;
   }
 
-  updateStats(database, className, method, args) {
+  updateStats(database, command) {
     this.apiCalls++;
+
+    const method = command.method;
+    const args = command.args;
 
     if (method === "dispatchWorkgroups" || method === "dispatchWorkgroupsIndirect") {
       this.dispatch++;
-    } else if (method === "draw" || method === "drawIndexed") {
+    } else if (method === "draw" || method === "drawIndexed" || method === "drawIndirect" || method === "drawIndexedIndirect") {
       this.draw++;
-      const numVertices = parseInt(args[0] ?? 0);
-      this.totalInstances += parseInt(args[1] ?? 1);
-      this.totalVertices += numVertices;
+      let vertexCount = 0;
+
+      if (method === "drawIndirect" || method === "drawIndexedIndirect") {
+        this.drawIndirect++;
+        // TODO the buffer data has not finished loading by the time these stats are collected
+        if (command.isBufferDataLoaded && command.bufferData) {
+          const bufferData = command.bufferData[0];
+          if (bufferData) {
+            const u32Array = new Uint32Array(bufferData.buffer);
+            vertexCount = u32Array[0];
+          }
+        }
+      } else {
+        vertexCount = parseInt(args[0] ?? 0) ?? 0;
+        this.totalInstances += parseInt(args[1] ?? 1);
+      }
+
+      this.totalVertices += vertexCount;
 
       if (this._lastPipeline) {
         const pipeline = database.getObject(this._lastPipeline.__id);
         if (pipeline?.descriptor) {
           const topology = pipeline.descriptor.primitive?.topology ?? "triangle-list";
           if (topology === "triangle-list") {
-            const numTriangles = numVertices / 3;
+            const numTriangles = vertexCount / 3;
             this.totalTriangles += numTriangles;
           } else if (topology === "triangle-strip") {
-            const numTriangles = numVertices - 2;
+            const numTriangles = vertexCount - 2;
             this.totalTriangles += numTriangles;
           } else if (topology === "point-list") {
-            this.totalPoints += numVertices;
+            this.totalPoints += vertexCount;
           } else if (topology === "line-list") {
-            this.totalLines += numVertices / 2;
+            this.totalLines += vertexCount / 2;
           } else if (topology === "line-strip") {
-            this.totalLines += numVertices - 1;
+            this.totalLines += vertexCount - 1;
           }
         }
       }
-    } else if (method === "drawIndirect" || method === "drawIndexedIndirect") {
-      this.drawIndirect++;
     } else if (method === "setIndexBuffer") {
       this.setIndexBuffer++;
     } else if (method === "setVertexBuffer") {

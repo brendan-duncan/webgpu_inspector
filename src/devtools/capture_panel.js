@@ -364,7 +364,7 @@ export class CapturePanel {
       const args = command.args;
       const name = `${className ?? "__"}`;
 
-      stats.updateStats(this.database, className, method, args);
+      stats.updateStats(this.database, command);
 
       let debugGroup = debugGroupStack[debugGroupStack.length - 1];
 
@@ -1821,11 +1821,24 @@ export class CapturePanel {
           new Div(commandInfo, { text: `Depth-Stencil: ${format} ${texture.resolutionString}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
         }
       }
-    } else if (method === "draw" || method === "drawIndexed") {
+    } else if (method === "draw" || method === "drawIndexed" || method === "drawIndirect" || method === "drawIndexedIndirect") {
       const state = this._getPipelineState(command);
       if (state.pipeline) {
         const topology = this._getObject(state.pipeline.args[0].__id)?.topology ?? "triangle-list";
-        const vertexCount = args[0] ?? 0;
+
+        let vertexCount = 0;
+        if (method === "drawIndirect" || method === "drawIndexedIndirect") {
+          if (command.isBufferDataLoaded && command.bufferData) {
+            const bufferData = command.bufferData[0];
+            if (bufferData) {
+              const u32Array = new Uint32Array(bufferData.buffer);
+              vertexCount = u32Array[0];
+            }
+          }
+        } else {
+          vertexCount = args[0] ?? 0;
+        }
+
         if (topology === "triangle-list") {
           const count = (vertexCount / 3).toLocaleString("en-US");
           new Div(commandInfo, { text: `Triangles: ${count}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
