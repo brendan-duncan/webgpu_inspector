@@ -1,5 +1,7 @@
 ## v0.0.8
 * Report an error if a canvas texture is used after it has expired.
+* Ability to capture a specific frame.
+* Inspect indirect buffers for draw*Indirect calls.
 
 ## v0.0.7
 * Fix error when capturing frames when a BindGroup buffer uses a static offset.
