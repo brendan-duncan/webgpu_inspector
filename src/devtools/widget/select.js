@@ -21,9 +21,9 @@ export class Select extends Widget {
       if (self.selectEdit) {
         self.selectEdit.value = self.select.element.value;
       } else {
-        self.onChange.emit(self.value);
+        self.onChange.emit(self.value, self.index);
         if (self._onChange) {
-          self._onChange(self.value);
+          self._onChange(self.value, self.index);
         }
       }
     });
@@ -37,7 +37,7 @@ export class Select extends Widget {
       this.selectEdit.onChange.addListener(function () {
         self.onChange.emit(self.value);
         if (self._onChange) {
-          self._onChange(self.value);
+          self._onChange(self.value, self.index);
         }
       });
     }
@@ -111,7 +111,7 @@ export class Select extends Widget {
   }
 
   set index(v) {
-    this.select.element.seelectedIndex = v;
+    this.select.element.selectedIndex = v;
   }
 
   get value() {

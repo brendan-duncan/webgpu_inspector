@@ -39,6 +39,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
       this._encodingTextureChunkCount = 0;
       this._mappedBufferCount = 0;
       this._encodingBufferChunkCount = 0;
+      this._captureData = null;
 
       if (!window.navigator.gpu) {
         // No WebGPU support
@@ -778,17 +779,22 @@ import { Actions, PanelActions } from "./utils/actions.js";
 
       const captureData = sessionStorage.getItem(webgpuInspectorCaptureFrameKey);
       if (captureData) {
-        let data = null;
         try {
-          data = JSON.parse(captureData);
+          this._captureData = JSON.parse(captureData);
         } catch (e) {
-          data = null;
+          this._captureData = null;
         }
         sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
+      }
 
-        this._captureMaxBufferSize = data.maxBufferSize || maxBufferCaptureSize;
-        this._captureFrameRequest = true;
-        this._gpuWrapper.recordStacktraces = true;
+      if (this._captureData) {
+        console.log(this._captureData.frame, this._frameIndex);
+        if (this._captureData.frame < 0 || this._frameIndex >= this._captureData.frame) {
+          this._captureMaxBufferSize = this._captureData.maxBufferSize || maxBufferCaptureSize;
+          this._captureFrameRequest = true;
+          this._gpuWrapper.recordStacktraces = true;
+          this._captureData = null;
+        }
       }
       this._frameData.length = 0;
       this._captureFrameCommands.length = 0;
@@ -808,7 +814,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
           const commands = this._captureFrameCommands.slice(i, i + length);
           window.postMessage({
               "action": Actions.CaptureFrameCommands,
-              "frame": this._frameIndex,
+              "frame": this._frameIndex - 1,
               "commands": commands,
               "index": i,
               "count": length

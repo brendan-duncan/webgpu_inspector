@@ -6,6 +6,7 @@ import { Widget } from "./widget/widget.js";
 import { getFlagString } from "../utils/flags.js";
 import { CaptureStatistics } from "./capture_statistics.js";
 import { NumberInput } from "./widget/number_input.js";
+import { Select } from "./widget/select.js";
 import {
   Sampler,
   TextureView
@@ -27,9 +28,40 @@ export class CapturePanel {
 
     new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => { 
       try {
-        self.port.postMessage({ action: PanelActions.Capture, maxBufferSize: self.maxBufferSize });
+        const frame = self.captureMode === 0 ? -1 : self.captureSpecificFrame;
+        self.port.postMessage({ action: PanelActions.Capture, maxBufferSize: self.maxBufferSize, frame });
       } catch (e) {}
     } });
+
+    this.captureMode = 0;
+
+    new Select(controlBar, {
+      options: ["Immediate", "Specific Frame"],
+      style: "margin-right: 10px; vertical-align: middle;",
+      onChange: (_, index) => {
+        self.captureMode = index;
+        if (self.captureMode === 0) {
+          self.captureFrameEdit.style.display = "none";
+        } else {
+          self.captureFrameEdit.style.display = "inline-block";
+        }
+      }
+    });
+
+    this.captureSpecificFrame = 0;
+    this.captureFrameEdit = new NumberInput(controlBar, {
+      value: this.captureSpecificFrame,
+      min: -1,
+      step: 1,
+      precision: 0,
+      style: "display: inline-block; width: 75px; margin-right: 10px; vertical-align: middle;",
+      onChange: (value) => {
+        self.captureSpecificFrame = Math.max(value, -1);
+      }
+    });
+    if (this.captureMode === 0) {
+      this.captureFrameEdit.style.display = "none";
+    }
 
     this.maxBufferSize = (1024 * 1024) / 4;
     new Span(controlBar, { text: "Max Buffer Size (Bytes):", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });

@@ -11,27 +11,36 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
     return;
   }
 
-  if (action === PanelActions.Capture) {
-    const messageString = JSON.stringify(message);
-    sessionStorage.setItem(webgpuInspectorCaptureFrameKey, messageString);
-    if (!inspectorInitialized) {
-      action = PanelActions.InitializeInspector;
-    }
-  }
-  
   if (action === PanelActions.RequestTexture || action === PanelActions.CompileShader) {
     window.postMessage(message, "*");
+    return;
   }
-  
-  if (action === PanelActions.InitializeInspector) {
-    sessionStorage.setItem(webgpuInspectorLoadedKey, "true");
+
+  if (action === PanelActions.InitializeRecorder) {
+    sessionStorage.setItem(webgpuRecorderLoadedKey, `${message.frames}%${message.filename}`);
     setTimeout(function () {
       window.location.reload();
     }, 50);
+    return;
+  }
+
+  // If a capture is requested and either the inspector hasn't been initialized yet or the frame is not -1,
+  // we need to initialize the inspector. If the frame is not -1, then a specific frame has been requested
+  // to be captured. We need to put this information into the inspector initialization so that it doesn't
+  // get lost in the reload.
+  let inspectMessage = "true";
+  if (action === PanelActions.Capture) {
+    const messageString = JSON.stringify(message);
+    if (!inspectorInitialized || message.frame >= 0) {
+      action = PanelActions.InitializeInspector;
+      inspectMessage = messageString;
+    } else {
+      sessionStorage.setItem(webgpuInspectorCaptureFrameKey, messageString);
+    }
   }
   
-  if (action === PanelActions.InitializeRecorder) {
-    sessionStorage.setItem(webgpuRecorderLoadedKey, `${message.frames}%${message.filename}`);
+  if (action === PanelActions.InitializeInspector) {
+    sessionStorage.setItem(webgpuInspectorLoadedKey, inspectMessage);
     setTimeout(function () {
       window.location.reload();
     }, 50);
@@ -77,20 +86,33 @@ function injectScriptNode(name, url, attributes) {
   (document.head || document.documentElement).appendChild(script);
 }
 
-
-if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
-  injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.js"));
+const inspectMessage = sessionStorage.getItem(webgpuInspectorLoadedKey);
+if (inspectMessage) {
   sessionStorage.removeItem(webgpuInspectorLoadedKey);
+
+  if (inspectMessage !== "true") {
+    sessionStorage.setItem(webgpuInspectorCaptureFrameKey, inspectMessage);
+  }
+
+  injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.js"));
+  
   inspectorInitialized = true;
-} else if (sessionStorage.getItem(webgpuRecorderLoadedKey)) {
-  const data = sessionStorage.getItem(webgpuRecorderLoadedKey).split("%");
+  if (captureMessage) {
+    sessionStorage.setItem(webgpuInspectorCaptureFrameKey, captureMessage);
+  }
+}
+
+const recordMessage = sessionStorage.getItem(webgpuRecorderLoadedKey);
+if (recordMessage) {
+  sessionStorage.removeItem(webgpuRecorderLoadedKey);
+  const data = recordMessage.split("%");
   injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder.js"), {
     filename: data[1],
     frames: data[0],
     removeUnusedResources: 1,
     messageRecording: 1
   });
-  sessionStorage.removeItem(webgpuRecorderLoadedKey);
+  
 }
 
 port.postMessage({action: "PageLoaded"});
