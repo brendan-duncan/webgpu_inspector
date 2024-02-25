@@ -1121,6 +1121,18 @@ import { Actions, PanelActions } from "./utils/actions.js";
         stacktrace
       });
 
+      if (method === "drawIndirect" || method === "drawIndexedIndirect") {
+        const buffer = args[0];
+        const offset = args[1];
+        const size = 32;
+        if (!object.__captureBuffers) {
+          object.__captureBuffers = [];
+        }
+        object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset, size });
+        this._captureBuffersCount++;
+        this._updateStatusMessage();
+      }
+
       if (method === "beginRenderPass") {
         if (args[0]?.colorAttachments?.length > 0) {
           result.__captureTextureViews = new Set();
@@ -1285,6 +1297,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
           const numChunks = Math.ceil(size / maxDataChunkSize);
           totalChunks += numChunks;
         }
+
         window.postMessage({
           "action": Actions.CaptureBuffers,
           "count": buffers.length,

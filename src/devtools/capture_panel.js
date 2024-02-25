@@ -12,6 +12,7 @@ import {
 } from "./gpu_objects/index.js";
 import { decodeDataUrl } from "../utils/base64.js";
 import { Actions, PanelActions } from "../utils/actions.js";
+import { ResourceType } from "../utils/wgsl_reflect.module.js";
 
 export class CapturePanel {
   constructor(window, parent) {
@@ -133,6 +134,7 @@ export class CapturePanel {
     if (id < 0 || id > this._captureCommands.length || id?.constructor !== Number) {
       return;
     }
+
     const command = this._captureCommands[id];
     if (!command) {
       return;
@@ -529,6 +531,10 @@ export class CapturePanel {
         new Span(cmd, { class: "capture_method_args", text: `indexCount:${args[0]} instanceCount:${args[1] ?? 1} firstIndex:${args[2] ?? 0} baseVertex:${args[3] ?? 0} firstInstance:${args[4] ?? 0}` });
       } else if (method === "draw") {
         new Span(cmd, { class: "capture_method_args", text: `vertexCount:${args[0]} instanceCount:${args[1] ?? 1} firstVertex:${args[2] ?? 0} firstInstance:${args[3] ?? 0}` });
+      } else if (method === "drawIndirect") {
+        new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0].__id)} offset:${args[1]}` });
+      } else if (method === "drawIndexedIndirect") {
+        new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0].__id)} offset:${args[1]}` });
       } else if (method === "dispatchWorkgroups") {
         new Span(cmd, { class: "capture_method_args", text: `countX:${args[0]} countY:${args[1] ?? 1} countZ:${args[2] ?? 1}` });
       } else if (method === "dispatchWorkgroupsIndirect") {
@@ -816,16 +822,16 @@ export class CapturePanel {
         const formatName = this._getTypeName(format);
         for (let i = 0; i < count; ++i) {
           let value = null;
-          if (formatName === "f32") {
+          if (formatName === "f32" || formatName === "atomic<f32>") {
             const data = new Float32Array(bufferData.buffer, elementOffset, 1);
             value = data[0];
-          } else if (formatName === "i32") {
+          } else if (formatName === "i32" || formatName === "atomic<i32>") {
             const data = new Int32Array(bufferData.buffer, elementOffset, 1);
             value = data[0];
-          } else if (formatName === "u32") {
+          } else if (formatName === "u32" || formatName === "atomic<u32>") {
             const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
             value = data[0];
-          } else if (formatName === "bool") {
+          } else if (formatName === "bool" || formatName === "atomic<bool>") {
             const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
             value = data[0] ? "true" : "false";
           }
@@ -844,35 +850,22 @@ export class CapturePanel {
     }
   }
 
-  _showBufferDataInfo(parentWidget, module, groupIndex, bindingIndex, bufferData) {
-    const reflection = module.reflection;
-    if (!reflection) {
-      return;
-    }
-
-    for (const uniform of reflection.uniforms) {
-      if (uniform.group != groupIndex || uniform.binding != bindingIndex) {
-        continue;
-      }
-      const typeName = this._getTypeName(uniform.type);
-      new Div(parentWidget, { text: `UNIFORM: ${uniform.name}: ${typeName}` });
-      this._showBufferDataType(parentWidget, uniform.type, bufferData);
-      return;
-    }
-
-    for (const storage of reflection.storage) {
-      if (storage.group != groupIndex || storage.binding != bindingIndex) {
-        continue;
-      }
-      const typeName = this._getTypeName(storage.type);
-      new Div(parentWidget, { text: `STORAGE ${storage.access}: ${storage.name}: ${typeName}` });
-      this._showBufferDataType(parentWidget, storage.type, bufferData);
-      return;
+  _showBufferDataInfo(parentWidget, resource, bufferData) {
+    if (resource.resourceType === ResourceType.Uniform) {
+      const typeName = this._getTypeName(resource.type);
+      new Div(parentWidget, { text: `UNIFORM: ${resource.name}: ${typeName}` });
+      this._showBufferDataType(parentWidget, resource.type, bufferData);
+    } else if (resource.resourceType === ResourceType.Storage) {
+      const typeName = this._getTypeName(resource.type);
+      new Div(parentWidget, { text: `STORAGE ${resource.access}: ${resource.name}: ${typeName}` });
+      this._showBufferDataType(parentWidget, resource.type, bufferData);
     }
   }
 
-  _showBufferData(parentWidget, groupIndex, entryIndex, bindGroup, state, bufferData) {
-    new Div(parentWidget, { text: `Group ${groupIndex} Binding ${entryIndex} Size: ${bufferData.length}` });
+  _findBindingResourceFromState(state, group, binding) {
+    if (!state) {
+      return null;
+    }
 
     const id = state.pipeline?.args[0].__id;
     const pipeline = this._getObject(id);
@@ -884,25 +877,48 @@ export class CapturePanel {
       const computeId = desc.compute?.module?.__id;
       if (computeId) {
         const module = this._getObject(computeId);
-        if (module) {
-          this._showBufferDataInfo(parentWidget, module, groupIndex, entryIndex, bufferData);
+        if (module?.reflection) {
+          const resource = module.reflection.findResource(group, binding);
+          if (resource) {
+            return resource;
+          }
         }
       } else if (vertexId !== undefined && vertexId === fragmentId) {
         const module = this._getObject(vertexId);
-        if (module) {
-          this._showBufferDataInfo(parentWidget, module, groupIndex, entryIndex, bufferData);
+        if (module?.reflection) {
+          const resource = module.reflection.findResource(group, binding);
+          if (resource) {
+            return resource;
+          }
         }
       } else {
         const vertexModule = this._getObject(vertexId);
-        if (vertexModule) {
-          this._showBufferDataInfo(parentWidget, vertexModule, groupIndex, entryIndex, bufferData);
+        if (vertexModule?.reflection) {
+          const resource = vertexModule.reflection.findResource(group, binding);
+          if (resource) {
+            return resource;
+          }
         }
 
         const fragmentModule = this._getObject(fragmentId);
-        if (fragmentModule) {
-          this._showBufferDataInfo(parentWidget, fragmentModule, groupIndex, entryIndex, bufferData);
+        if (fragmentModule?.reflection) {
+          const resource = fragmentModule.reflection.findResource(group, binding);
+          if (resource) {
+            return resource;
+          }
         }
       }
+    }
+
+    return null;
+  }
+
+  _showBufferData(parentWidget, groupIndex, entryIndex, bindGroup, state, bufferData) {
+    new Div(parentWidget, { text: `Group ${groupIndex} Binding ${entryIndex} Size: ${bufferData.length}` });
+
+    const resource = this._findBindingResourceFromState(state, groupIndex, entryIndex);
+    if (resource) {
+      this._showBufferDataInfo(parentWidget, resource, bufferData);
     }
   }
 
@@ -1087,12 +1103,23 @@ export class CapturePanel {
       }
 
       let label = `${groupLabel}Binding ${binding}: ${getResourceType(resource)} ID:${getResourceId(resource)} ${getResourceUsage(resource)}`;
+
       if (access) {
         label += ` ${access}`;
       }
 
       if (size) {
         label += ` Size: ${size}`;
+      }
+
+      if (resource.buffer) {
+        const binding = this._findBindingResourceFromState(state, groupIndex, entryIndex);
+        if (binding) {
+          const typeName = this._getTypeName(binding.type);
+          if (typeName) {
+            label += ` Type: ${typeName}`;
+          }
+        }
       }
 
       const resourceGrp = new Collapsable(commandInfo, { collapsed: true, label });
@@ -1349,6 +1376,9 @@ export class CapturePanel {
   }
 
   _getTypeName(t) {
+    if (!t) {
+      return "";
+    }
     if (t.format) {
       if (t.name === "array" && t.count) {
         return `${t.name}<${t.format.name}, ${t.count}>`
@@ -1617,11 +1647,43 @@ export class CapturePanel {
     }
   }
 
+  _showCaptureCommandInfo_indirectBuffer(command, indirectBuffer, indirectOffset, commandInfo, collapsed) {
+    const id = indirectBuffer.__id;
+    const buffer = this._getObject(id);
+    if (buffer) {
+      const self = this;
+      const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Indirect Buffer ID:${id} ${buffer.label}` });
+      new Button(bufferGrp.body, { label: "Inspect", callback: () => {
+        self.window.inspectObject(buffer);
+      } });
+      const desc = buffer.descriptor;
+      const newDesc = this._processCommandArgs(desc);
+      if (newDesc.usage) {
+        newDesc.usage = getFlagString(newDesc.usage, GPUBufferUsage);
+      }
+      new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+
+      if (command.isBufferDataLoaded && command.bufferData) {
+        const bufferData = command.bufferData[0];
+        if (bufferData) {
+          const u32Array = new Uint32Array(bufferData.buffer);
+          new Div(bufferGrp.body, { text: `Index Count: ${u32Array[0]}` });
+          new Div(bufferGrp.body, { text: `Instance Count: ${u32Array[1]}` });
+          new Div(bufferGrp.body, { text: `First Index: ${u32Array[2]}` });
+          new Div(bufferGrp.body, { text: `Base Vertex: ${u32Array[3]}` });
+          new Div(bufferGrp.body, { text: `First Instance: ${u32Array[4]}` });
+        }
+      }
+    }
+  }
+
   _showCaptureCommandInfo_drawIndirect(command, commandInfo) {
     const state = this._getPipelineState(command);
 
     this._showTextureOutputs(state, commandInfo, true);
     this._showTextureInputs(state, commandInfo);
+
+    this._showCaptureCommandInfo_indirectBuffer(command, command.args[0], command.args[1], commandInfo, true);
 
     if (state.pipeline) {
       this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
@@ -1639,6 +1701,8 @@ export class CapturePanel {
 
     this._showTextureOutputs(state, commandInfo, true);
     this._showTextureInputs(state, commandInfo);
+
+    this._showCaptureCommandInfo_indirectBuffer(command, command.args[0], command.args[1], commandInfo, true);
 
     if (state.pipeline) {
       this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
