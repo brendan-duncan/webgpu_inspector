@@ -14,6 +14,9 @@ export class RollingAverage {
   }
   
   get average() {
+    if (this.buffer.length === 0) {
+      return 0;
+    }
     return this.sum / this.buffer.length;
   }
 }

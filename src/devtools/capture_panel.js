@@ -484,6 +484,9 @@ export class CapturePanel {
       const self = this;
 
       function getName(id, className) {
+        if (id === undefined) {
+          return "";
+        }
         const obj = self._getObject(id);
         if (obj) {
           return obj.label || `${obj.name}(${obj.idName})`;
@@ -510,9 +513,9 @@ export class CapturePanel {
       } else if (method === "clearBuffer") {
         new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0].__id)} offset:${args[1]} size:${args[4]}` });
       } else if (method === "copyBufferToTexture") {
-        new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0].buffer.__id)} texture:${getName(args[1].texture.__id)}` });
+        new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0].buffer?.__id)} texture:${getName(args[1].texture?.__id)}` });
       } else if (method === "copyTextureToBuffer") {
-        new Span(cmd, { class: "capture_method_args", text: `texture:${getName(args[0].texture.__id)} buffer:${getName(args[1].buffer.__id)}` });
+        new Span(cmd, { class: "capture_method_args", text: `texture:${getName(args[0].texture?.__id)} buffer:${getName(args[1].buffer?.__id)}` });
       } else if (method === "copyTextureToTexture") {
         new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0].texture.__id)} dest:${getName(args[1].texture.__id)}` });
       } else if (method === "setViewport") {
