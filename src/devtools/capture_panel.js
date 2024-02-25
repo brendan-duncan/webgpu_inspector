@@ -872,7 +872,7 @@ export class CapturePanel {
   }
 
   _showBufferData(parentWidget, groupIndex, entryIndex, bindGroup, state, bufferData) {
-    new Div(parentWidget, { text: `Bind Group ${groupIndex} Binding ${entryIndex} size: ${bufferData.length}` });
+    new Div(parentWidget, { text: `Group ${groupIndex} Binding ${entryIndex} Size: ${bufferData.length}` });
 
     const id = state.pipeline?.args[0].__id;
     const pipeline = this._getObject(id);
@@ -1074,7 +1074,28 @@ export class CapturePanel {
         }
       }
 
-      const resourceGrp = new Collapsable(commandInfo, { collapsed: true, label: `${groupLabel}Binding ${binding}: ${getResourceType(resource)} ID:${getResourceId(resource)} ${getResourceUsage(resource)} ${access}` });
+      let size = null;
+      if (resource.buffer) {
+        if (bindGroupCmd?.isBufferDataLoaded) {
+          if (bindGroupCmd.isBufferDataLoaded[entryIndex]) {
+            const bufferData = bindGroupCmd.bufferData[entryIndex];
+            if (bufferData) {
+              size = bufferData.length;
+            }
+          }
+        }
+      }
+
+      let label = `${groupLabel}Binding ${binding}: ${getResourceType(resource)} ID:${getResourceId(resource)} ${getResourceUsage(resource)}`;
+      if (access) {
+        label += ` ${access}`;
+      }
+
+      if (size) {
+        label += ` Size: ${size}`;
+      }
+
+      const resourceGrp = new Collapsable(commandInfo, { collapsed: true, label });
       if (resource.__id !== undefined) {
         const obj = this._getObject(resource.__id);
         if (obj) {
