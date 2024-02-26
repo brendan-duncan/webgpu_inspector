@@ -470,7 +470,7 @@ import { RollingAverage } from "./utils/rolling_average.js";
           this._trackObject(result.__id, result);
           result.__descriptor = args[0];
         } else if (method === "setBindGroup") {
-          /*const descriptor = args[1].__descriptor;
+          const descriptor = args[1].__descriptor;
           if (descriptor) {
             for (const entry of descriptor.entries) {
               if (entry.resource instanceof GPUTextureView && entry.resource.__id < 0) {
@@ -482,7 +482,7 @@ import { RollingAverage } from "./utils/rolling_average.js";
                 }
               }
             }
-          }*/
+          }
         }
       }
 
