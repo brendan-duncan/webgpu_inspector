@@ -7,6 +7,7 @@ import { getFlagString } from "../utils/flags.js";
 import { CaptureStatistics } from "./capture_statistics.js";
 import { NumberInput } from "./widget/number_input.js";
 import { Select } from "./widget/select.js";
+import { TextInput } from "./widget/text_input.js";
 import {
   Sampler,
   TextureView
@@ -294,6 +295,24 @@ export class CapturePanel {
     return object;
   }
 
+  _filterCommands(filter, commands) {
+    for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
+      const command = commands[commandIndex];
+      if (!command) {
+        break;
+      }
+      const method = command.method;
+      const widget = command.widget;
+      if (widget) {
+        if (method.includes(filter)) {
+          widget.element.style.display = "block";
+        } else {
+          widget.element.style.display = "none";
+        }
+      }
+    }
+  }
+
   _captureFrameResults(frame, commands) {
     const contents = this._capturePanel;
 
@@ -312,10 +331,19 @@ export class CapturePanel {
     this._gpuTextureMap.clear();
 
     this._frameImages = new Span(contents, { class: "capture_frameImages" });
-    const frameContents = new Span(contents, { class: "capture_frame" });
+    const _frameContents = new Span(contents, { class: "capture_frameContents" });
     const commandInfo = new Span(contents, { class: "capture_commandInfo" });
 
     const self = this;
+
+    const filterArea = new Div(_frameContents, { class: "capture_filterArea" });
+    new Span(filterArea, { text: "Filter: ", style: "margin-right: 5px;" });
+    this.filterEdit = new TextInput(filterArea, { style: "width: 200px;", placeholder: "Filter", onEdit: (value) => {
+      self._filterCommands(value, commands);
+    } });
+
+    const frameContents = new Div(_frameContents, { class: "capture_frame" });
+
     this._captureStats.callback = () => {
       self._inspectStats(commandInfo);
     };
@@ -472,12 +500,14 @@ export class CapturePanel {
         cmdType.push("capture_drawcall");
       }
 
-      const cmd = new Div(currentBlock, { class: cmdType });
+      const cmd = new Div(currentBlock, { id: `CaptureCommand_${commandIndex}`, class: cmdType });
       if (method === "end") {
         cmd.element.id = `Pass_${currentBlock._passIndex}_end`;
       } else if (method === "beginRenderPass") {
         cmd.element.id = `RenderPass_${currentBlock._passIndex}_begin`;
       }
+
+      command.widget = cmd;
 
       new Span(cmd, { class: "capture_callnum", text: `${commandIndex}.` });
 

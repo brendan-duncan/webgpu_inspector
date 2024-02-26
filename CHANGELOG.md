@@ -2,6 +2,7 @@
 * Report an error if a canvas texture is used after it has expired.
 * Ability to capture a specific frame.
 * Inspect indirect buffers for draw*Indirect calls.
+* Add filter for capture command list.
 
 ## v0.0.7
 * Fix error when capturing frames when a BindGroup buffer uses a static offset.

@@ -937,10 +937,21 @@ ol::-webkit-scrollbar-thumb:hover {
   cursor: default;
 }
 
+.capture_frameContents {
+  width: calc(50% - 10px);
+}
+
+.capture_filterArea {
+  padding-top:5px;
+  padding-bottom: 5px;
+  padding-left: 10px;
+  border-bottom: 1px solid #000;
+  background-color: #444;
+}
+
 .capture_frame {
   overflow: auto;
-  width: calc(50% - 10px);
-  height: calc(100% - 10px);
+  height: calc(100% - 35px);
   scrollbar-width: thin;
   scrollbar-color: var(--thumbBG) var(--scrollbarBG);
   cursor: default;

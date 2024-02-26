@@ -97,9 +97,6 @@ if (inspectMessage) {
   injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.js"));
   
   inspectorInitialized = true;
-  if (inspectMessage) {
-    sessionStorage.setItem(webgpuInspectorCaptureFrameKey, captureMessage);
-  }
 }
 
 const recordMessage = sessionStorage.getItem(webgpuRecorderLoadedKey);
