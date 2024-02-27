@@ -957,11 +957,26 @@ ol::-webkit-scrollbar-thumb:hover {
   cursor: default;
 }
 
+.capture_debugGroup_header {
+  background-color: rgb(26, 72, 110);
+  font-size: 12pt;
+  color: #fff;
+  padding-left: 10px;
+  line-height: 30px;
+  border-radius: 5px 5px 0px 0px;
+}
+
+.capture_debugGroup_header:hover {
+  box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.8) inset;
+}
+
 .capture_debugGroup {
   padding: 10px;
   background-color: #115;
   font-size: 12pt;
   line-height: 20px;
+  border: 1px solid #fff;
+  border-radius: 5px;
 }
 
 .capture_commandInfo {
@@ -1006,12 +1021,12 @@ ol::-webkit-scrollbar-thumb:hover {
   font-style: italic;
 }
 
-.capture_renderpass {
-  margin-top: 20px;
-  margin-left: 10px;
+.capture_renderpass_block {
+  margin-bottom: 5px;
 }
 
 .capture_renderpass {
+  margin-left: 10px;
   background: #353;
 }
 
@@ -1075,6 +1090,7 @@ ol::-webkit-scrollbar-thumb:hover {
   -webkit-user-select: none;
   -ms-user-select: none;
   user-select: none;
+  border-radius: 5px 5px 0px 0px;
 }
 
 .capture_renderpass_header:hover {

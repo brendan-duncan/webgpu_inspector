@@ -1139,6 +1139,33 @@ import { RollingAverage } from "./utils/rolling_average.js";
         stacktrace
       });
 
+      if (method === "setIndexBuffer") {
+        object.__indexBuffer = args;
+      }
+
+      if (method === "drawIndexed") {
+        if (object.__indexBuffer) {
+          const indexCount = args[0];
+          const firstIndex = args[2] ?? 0;
+
+          const buffer = object.__indexBuffer[0];
+          const format = object.__indexBuffer[1];
+          const elementSize = format === "uint32" ? 4 : 2;
+          const bufferOffset = object.__indexBuffer[2] ?? 0;
+          //const bufferSize = object.__indexBuffer[3] ?? (buffer.size - bufferOffset);
+
+          const firstIndexOffset = bufferOffset + (firstIndex * elementSize);
+          const indexCountSize = indexCount * elementSize;
+
+          if (!object.__captureBuffers) {
+            object.__captureBuffers = [];
+          }
+          object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, firstIndexOffset, indexCountSize });
+          this._captureBuffersCount++;
+          this._updateStatusMessage();
+        }
+      }
+
       if (method === "drawIndirect" || method === "drawIndexedIndirect") {
         const buffer = args[0];
         const offset = args[1];
@@ -1146,7 +1173,25 @@ import { RollingAverage } from "./utils/rolling_average.js";
         if (!object.__captureBuffers) {
           object.__captureBuffers = [];
         }
-        object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset, size });
+
+        const indexBuffer = method === "drawIndexedIndirect" ? {} : undefined;
+
+        if (method === "drawIndexedIndirect" && object.__indexBuffer) {
+          // The index buffer for indirect draws can't be captured here because the
+          // indexCount and firstIndex args are in the indirect buffer. The indirect
+          // buffer needs to be read first, those args extracted, and then the index
+          // buffer can be copied.
+          const buffer = object.__indexBuffer[0];
+          const format = object.__indexBuffer[1];
+          const bufferOffset = object.__indexBuffer[2] ?? 0;
+          const bufferSize = object.__indexBuffer[3] ?? (buffer.size - bufferOffset);
+          indexBuffer.buffer = buffer;
+          indexBuffer.format = format;
+          indexBuffer.bufferOffset = bufferOffset;
+          indexBuffer.bufferSize = bufferSize;
+        }
+
+        object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset, size, indexBuffer });
         this._captureBuffersCount++;
         this._updateStatusMessage();
       }
