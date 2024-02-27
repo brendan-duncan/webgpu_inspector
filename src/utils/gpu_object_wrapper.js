@@ -43,8 +43,8 @@ export const GPUCreateMethods = new Set([
   "createQuerySet",
   "createView",
 
-  "beginRenderPass",
-  "setBindGroup",
+  //"beginRenderPass",
+  //"setBindGroup",
 ]);
 
 export class GPUObjectWrapper {
