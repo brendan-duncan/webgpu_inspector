@@ -1418,7 +1418,7 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_setIndexBuffer(command, commandInfo, collapsed) {
+  _showCaptureCommandInfo_setIndexBuffer(command, commandInfo, collapsed, indexArray) {
     const args = command.args;
     const self = this;
     const id = args[0].__id;
@@ -1434,6 +1434,14 @@ export class CapturePanel {
         newDesc.usage = getFlagString(newDesc.usage, GPUBufferUsage);
       }
       new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+
+      if (indexArray) {
+        new Div(bufferGrp.body, { text: `Index Buffer: ${buffer.name}(${buffer.id}) Format:${indexArray instanceof Uint32Array ? "uint32" : "uint16"} Count:${indexArray.length}` });
+        const ol = new Widget("ol", bufferGrp.body);
+        for (let index of indexArray) {
+          new Widget("li", ol, { text: `${index}` });
+        }
+      }
     }
   }
 
@@ -1765,7 +1773,15 @@ export class CapturePanel {
       this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
     }
     if (state.indexBuffer) {
-      this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer, commandInfo, true);
+      let bufferArray = null;
+      if (command.isBufferDataLoaded && command.bufferData) {
+        const bufferData = command.bufferData[0];
+        if (bufferData) {
+          const indexFormat = state.indexBuffer?.indexFormat;
+          bufferArray = indexFormat === "uint32" ? new Uint32Array(bufferData.buffer) : new Uint16Array(bufferData.buffer);
+        }
+      }
+      this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer, commandInfo, true, bufferArray);
     }
     for (const vertexBuffer of state.vertexBuffers) {
       this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true);

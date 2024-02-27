@@ -1160,7 +1160,7 @@ import { RollingAverage } from "./utils/rolling_average.js";
           if (!object.__captureBuffers) {
             object.__captureBuffers = [];
           }
-          object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, firstIndexOffset, indexCountSize });
+          object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset: firstIndexOffset, size: indexCountSize });
           this._captureBuffersCount++;
           this._updateStatusMessage();
         }
