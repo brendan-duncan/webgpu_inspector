@@ -962,6 +962,33 @@ export class CapturePanel {
           } else if (formatName === "bool" || formatName === "atomic<bool>") {
             const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
             value = data[0] ? "true" : "false";
+          } else if (formatName === "vec2i" || formatName === "vec2<i32>") {
+            const data = new Int32Array(bufferData.buffer, elementOffset, 2);
+            value = `${data[0]}, ${data[1]}`;
+          } else if (formatName === "vec2u" || formatName === "vec2<u32>") {
+            const data = new Uint32Array(bufferData.buffer, elementOffset, 2);
+            value = `${data[0]}, ${data[1]}`;
+          } else if (formatName === "vec2f" || formatName === "vec2<f32>") {
+            const data = new Float32Array(bufferData.buffer, elementOffset, 2);
+            value = `${data[0]}, ${data[1]}`;
+          } else if (formatName === "vec3i" || formatName === "vec3<i32>") {
+            const data = new Int32Array(bufferData.buffer, elementOffset, 3);
+            value = `${data[0]}, ${data[1]}, ${data[2]}`;
+          } else if (formatName === "vec3u" || formatName === "vec3<u32>") {
+            const data = new Uint32Array(bufferData.buffer, elementOffset, 3);
+            value = `${data[0]}, ${data[1]}, ${data[2]}`;
+          } else if (formatName === "vec3f" || formatName === "vec3<f32>") {
+            const data = new Float32Array(bufferData.buffer, elementOffset, 3);
+            value = `${data[0]}, ${data[1]}, ${data[2]}`;
+          } else if (formatName === "vec4i" || formatName === "vec4<i32>") {
+            const data = new Int32Array(bufferData.buffer, elementOffset, 4);
+            value = `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`;
+          } else if (formatName === "vec4u" || formatName === "vec4<u32>") {
+            const data = new Uint32Array(bufferData.buffer, elementOffset, 4);
+            value = `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`;
+          } else if (formatName === "vec4f" || formatName === "vec4<f32>") {
+            const data = new Float32Array(bufferData.buffer, elementOffset, 4);
+            value = `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`;
           }
 
           if (value !== null) {
