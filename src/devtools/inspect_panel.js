@@ -770,15 +770,20 @@ export class InspectPanel {
 
       compileButton.callback = () => {
         const code = editor.state.doc.toString();
-        self._compileShader(object, code);
-        object.replacementCode = code;
-        self._inspectObject(object); // refresh the inspection info panel
+        if (code === object.descriptor.code) {
+          self._revertShader(object);
+          object.replacementCode = null;
+          self._inspectObject(object); // refresh the inspection info panel
+        } else {
+          self._compileShader(object, code);
+          object.replacementCode = code;
+          self._inspectObject(object); // refresh the inspection info panel
+        }
       };
 
       if (revertButton) {
         revertButton.callback = () => {
-          const code = object.descriptor.code;
-          self._compileShader(object, code);
+          self._revertShader(object);
           object.replacementCode = null;
           self._inspectObject(object); // refresh the inspection info panel
         };
@@ -856,6 +861,10 @@ export class InspectPanel {
         }
       }
     }
+  }
+  
+  _revertShader(object) {
+    this.port.postMessage({ action: PanelActions.RevertShader, id: object.id });
   }
 
   _compileShader(object, code) {

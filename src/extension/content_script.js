@@ -11,7 +11,7 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
     return;
   }
 
-  if (action === PanelActions.RequestTexture || action === PanelActions.CompileShader) {
+  if (action === PanelActions.RequestTexture || action === PanelActions.CompileShader || action === PanelActions.RevertShader) {
     window.postMessage(message, "*");
     return;
   }

@@ -23,6 +23,7 @@ Actions.values = new Set(Object.values(Actions));
 export const PanelActions = {
   RequestTexture: "webgpu_inspect_request_texture",
   CompileShader: "webgpu_inspect_compile_shader",
+  RevertShader: "webgpu_inspect_revert_shader",
   Capture: "webgpu_inspector_capture",
   InitializeInspector: "webgpu_initialize_inspector",
   InitializeRecorder: "webgpu_initialize_recorder"

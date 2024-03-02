@@ -165,6 +165,9 @@ import { RollingAverage } from "./utils/rolling_average.js";
           const shaderId = message.id;
           const code = message.code;
           self._compileShader(shaderId, code);
+        } else if (message.action === PanelActions.RevertShader) {
+          const shaderId = message.id;
+          self._revertShader(shaderId);
         }
       });
     }
@@ -652,6 +655,50 @@ import { RollingAverage } from "./utils/rolling_average.js";
         }
       }
       return obj;
+    }
+
+    _revertShader(shaderId) {
+      const objectMap = this._objectReplacementMap.get(shaderId);
+      if (!objectMap) {
+        return;
+      }
+      const shader = objectMap.object?.deref();
+      if (!shader) {
+        return;
+      }
+
+      objectMap.replacement = null;
+
+      for (const objectRef of this._objectReplacementMap.values()) {
+        const object = objectRef.object.deref();
+        const isRenderPipeline = object instanceof GPURenderPipeline;
+        const isComputePipeline = object instanceof GPUComputePipeline;
+        if (isRenderPipeline || isComputePipeline) {
+          const descriptor = object.__descriptor;
+          
+          let found = false;
+          let vertexModule = null;
+          let fragmentModule = null;
+          let computeModule = 0;
+
+          if (descriptor.vertex?.module === shader) {
+            vertexModule = shader;
+            found = true;
+          }
+          if (descriptor.fragment?.module === shader) {
+            fragmentModule = shader;
+            found = true;
+          }
+          if (descriptor.compute?.module === shader) {
+            computeModule = shader;
+            found = true;
+          }
+
+          if (found) {
+            objectRef.replacement = null;
+          }
+        }
+      }
     }
 
     _compileShader(shaderId, code) {
