@@ -1,3 +1,7 @@
+## v0.0.9
+* Make buffer data view more compact for basic types.
+* Report memory leaks as a validation error (buffer/texture/device garbage collected without explicit destroy).
+
 ## v0.0.8
 * Report an error if a canvas texture is used after it has expired.
 * Ability to capture a specific frame.
