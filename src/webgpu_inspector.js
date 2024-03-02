@@ -27,7 +27,7 @@ import { RollingAverage } from "./utils/rolling_average.js";
       this._lastFrameTime = 0;
       this._frameCommandCount = 0;
       this._captureFrameRequest = false;
-      this._errorChecking = true;
+      this._errorChecking = 1;
       this._trackedObjects = new Map();
       this._trackedObjectInfo = new Map();
       this._bindGroupCount = 0;
@@ -240,8 +240,6 @@ import { RollingAverage } from "./utils/rolling_average.js";
     // Called before a GPU method is called, allowing the inspector to modify
     // the arguments or the object before the method is called.
     _preMethodCall(object, method, args) {
-      const self = this;
-
       if (method === "setPipeline") {
         // If a shader has been recompiled, that means the pipelines that
         // used that shader were also re-created. Patch in the replacement
@@ -271,7 +269,7 @@ import { RollingAverage } from "./utils/rolling_average.js";
           method === "createRenderPipeline" ||
           method === "createComputePipeline" ||
           method === "createBindGroup") {
-        if (this._errorChecking) {
+        if (this._errorChecking > 0) {
           this._gpuWrapper.disableRecording();
           object.pushErrorScope("validation");
           this._gpuWrapper.enableRecording();
@@ -279,13 +277,13 @@ import { RollingAverage } from "./utils/rolling_average.js";
       }
 
       if (method === "beginRenderPass") {
-        if (this._errorChecking) {
-          this.disableRecording();
+        /*if (this._errorChecking > 0) {
           if (object.__device) {
+            this.disableRecording();
             object.__device.pushErrorScope("validation");
+            this.enableRecording();
           }
-          this.enableRecording();
-        }
+        }*/
       }
 
       // We want to be able to capture canvas textures, so we need to add COPY_SRC to
@@ -377,10 +375,11 @@ import { RollingAverage } from "./utils/rolling_average.js";
           method === "createRenderPipeline" ||
           method === "createComputePipeline" ||
           method === "createBindGroup") {
-        if (this._errorChecking) {
+        if (this._errorChecking > 0) {
           this.disableRecording();
           object.popErrorScope().then((error) => {
             if (error) {
+              console.error(error.message);
               const id = result?.__id ?? 0;
               window.postMessage({ "action": Actions.ValidationError, id, "message": error.message, stacktrace }, "*");
             }
@@ -390,18 +389,19 @@ import { RollingAverage } from "./utils/rolling_average.js";
       }
 
       if (method === "end") {
-        if (this._errorChecking) {
-          this.disableRecording();
+        /*if (this._errorChecking > 0) {
           const device = object.__device;
           if (device) {
+            this.disableRecording();
             device.popErrorScope().then((error) => {
               if (error) {
+                console.error(error.message);
                 window.postMessage({ "action": Actions.ValidationError, "message": error.message, stacktrace }, "*");
               }
             });
+            this.enableRecording();
           }
-          this.enableRecording();
-        }
+        }*/
       }
 
       let id = undefined;
@@ -547,6 +547,10 @@ import { RollingAverage } from "./utils/rolling_average.js";
       if (device && device.__id === undefined) {
         device.queue.__device = device;
 
+        device.addEventListener('uncapturederror', (event) => {
+          window.postMessage({ "action": Actions.ValidationError, id: 0, "message": error.error.message }, "*");
+        });
+
         args ??= [];
         this._wrapObject(device, id);
         const descriptor = args[0] ?? {};
@@ -583,7 +587,7 @@ import { RollingAverage } from "./utils/rolling_average.js";
       const type = object.constructor.name;
       const id = object.__id;
       const message = `WebGPU ${type} ${id} ${label} was garbage collected without being explicitly destroyed. This is a memory leak.`;
-      window.postMessage({"action": Actions.MemoryLeakWarning, id, "message": message}, "*");
+      window.postMessage({"action": Actions.ValidationError, id, "message": message}, "*");
     }
 
     _isPrimitiveType(obj) {
@@ -635,6 +639,8 @@ import { RollingAverage } from "./utils/rolling_average.js";
           } else {
             obj[key] = x;
           }
+        } else if (x.label !== undefined) {
+          obj[key] = x;
         } else if (this._isTypedArray(x)) {
           obj[key] = x;
         } else if (this._isArray(x)) {
@@ -663,17 +669,18 @@ import { RollingAverage } from "./utils/rolling_average.js";
       descriptor.code = code;
 
       this.disableRecording();
-      this._errorChecking = false;
+      this._errorChecking--;
       device.pushErrorScope('validation');
       descriptor.__replacement = shaderId;
       const newShaderModule = device.createShaderModule(descriptor);
       device.popErrorScope().then((error) => {
         if (error) {
+          console.error(error.message);
           const id = shaderId ?? 0;
           window.postMessage({ "action": Actions.ValidationError, id, "message": error.message }, "*");
         }
       });
-      this._errorChecking = true;
+      this._errorChecking++;
       this.enableRecording();
 
       objectMap.replacement = newShaderModule;
@@ -685,30 +692,41 @@ import { RollingAverage } from "./utils/rolling_average.js";
         const isComputePipeline = object instanceof GPUComputePipeline;
         if (isRenderPipeline || isComputePipeline) {
           const descriptor = object.__descriptor;
-          let newDescriptor = null;
           
+          let found = false;
+          let newDescriptor = null;
+          let vertexModule = null;
+          let fragmentModule = null;
+          let computeModule = 0;
+
           if (descriptor.vertex?.module === shader) {
+            vertexModule = shader;
             if (!newDescriptor) {
               newDescriptor = this._duplicateObject(descriptor);
             }
+            found = true;
             newDescriptor.vertex.module = newShaderModule;
           }
           if (descriptor.fragment?.module === shader) {
+            fragmentModule = shader;
             if (!newDescriptor) {
               newDescriptor = this._duplicateObject(descriptor);
             }
+            found = true;
             newDescriptor.fragment.module = newShaderModule;
           }
           if (descriptor.compute?.module === shader) {
+            computeModule = shader;
             if (!newDescriptor) {
               newDescriptor = this._duplicateObject(descriptor);
             }
+            found = true;
             newDescriptor.compute.module = newShaderModule;
           }
 
-          if (newDescriptor !== null) {
+          if (found) {
             this.disableRecording();
-            this._errorChecking = false;
+            this._errorChecking--;
             newDescriptor.__replacement = objectRef.id;
             device.pushErrorScope('validation');
             const newPipeline = isRenderPipeline ?
@@ -716,11 +734,12 @@ import { RollingAverage } from "./utils/rolling_average.js";
                 device.createComputePipeline(newDescriptor);
             device.popErrorScope().then((error) => {
               if (error) {
+                console.error(error.message);
                 const id = objectRef.id ?? 0;
                 window.postMessage({ "action": Actions.ValidationError, id, "message": error.message }, "*");
               }
             });
-            this._errorChecking = true;
+            this._errorChecking++;
             this.enableRecording();
 
             objectRef.replacement = newPipeline;
