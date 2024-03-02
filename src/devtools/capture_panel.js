@@ -437,14 +437,17 @@ export class CapturePanel {
         currentBlock = new Div(debugGroup, { class: "capture_renderpass" });
 
         const header = new Div(currentBlock, { id: `RenderPass_${passIndex}`, class: "capture_renderpass_header" });
+        const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
         new Span(header, { text: `Render Pass ${passIndex}` });
         const extra = new Span(header, { style: "margin-left: 10px;" });
         const block = new Div(currentBlock, { class: "capture_renderpass_block" });
         header.element.onclick = () => {
           block.element.classList.toggle("collapsed");
           if (block.element.classList.contains("collapsed")) {
+            headerIcon.text = "+";
             extra.text = "...";
           } else {
+            headerIcon.text = "-";
             extra.text = "";
           }
         };
@@ -483,14 +486,17 @@ export class CapturePanel {
         }
         currentBlock = new Div(debugGroup, { class: "capture_computepass" });
         const header = new Div(currentBlock, { id: `ComputePass_${passIndex}`, class: "capture_computepass_header" });
+        const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
         new Span(header, { text: `Compute Pass ${passIndex}` });
         const extra = new Span(header, { style: "margin-left: 10px;" });
         const block = new Div(currentBlock);
         header.element.onclick = () => {
           block.element.classList.toggle("collapsed");
           if (block.element.classList.contains("collapsed")) {
+            headerIcon.text = "+";
             extra.text = "...";
           } else {
+            headerIcon.text = "-";
             extra.text = "";
           }
         };
@@ -518,14 +524,17 @@ export class CapturePanel {
             }
             currentBlock = new Div(debugGroup, { class: "capture_renderpass", style: "margin-top: 5px;" });
             const header = new Div(currentBlock, { id: `RenderPass_${passIndex}`, class: "capture_renderpass_header" });
+            const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
             new Span(header, { text: `Render Pass ${passIndex}` });
             const extra = new Span(header, { style: "margin-left: 10px;" });
             const block = new Div(currentBlock, { class: "capture_renderpass_block" });
             header.element.onclick = () => {
               block.element.classList.toggle("collapsed");
               if (block.element.classList.contains("collapsed")) {
+                headerIcon.text = "+";
                 extra.text = "...";
               } else {
+                headerIcon.text = "-";
                 extra.text = "";
               }
             };
@@ -701,6 +710,7 @@ export class CapturePanel {
 
       if (method === "pushDebugGroup") {
         const header = new Div(debugGroup, { id: `DebugGroup_${debugGroupIndex}`, class: "capture_debugGroup_header" });
+        const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
         new Span(header, { text: `${args[0]}` });
         const extra = new Span(header, { style: "margin-left: 10px;" });
 
@@ -711,8 +721,10 @@ export class CapturePanel {
         header.element.onclick = () => {
           grp.element.classList.toggle("collapsed");
           if (grp.element.classList.contains("collapsed")) {
+            headerIcon.text = "+";
             extra.text = "...";
           } else {
+            headerIcon.text = "-";
             extra.text = "";
           }
         };
