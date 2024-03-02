@@ -321,6 +321,7 @@ export class CapturePanel {
 
     contents.html = "";
 
+    this._captureCommands = commands;
     this._capturedObjects.clear();
     this._frameImageList.length = 0;
     this._passEncoderCommands.clear();
@@ -366,6 +367,7 @@ export class CapturePanel {
     let computePassIndex = 0;
     for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
       const command = commands[commandIndex];
+      command.id = commandIndex;
       const method = command.method;
       if (method === "beginRenderPass") {
         passEncoderMap.set(command.result, -1);
@@ -1200,6 +1202,69 @@ export class CapturePanel {
       return "";
     }
 
+    function getBindingAccess(state, group, binding) {
+      if (state) {
+        const pipelineId = state.pipeline?.args[0].__id;
+        const pipeline = self._getObject(pipelineId);
+        if (pipeline) {
+          const desc = pipeline.descriptor;
+          const vertexId = desc.vertex?.module?.__id;
+          const fragmentId = desc.fragment?.module?.__id;
+          const computeId = desc.compute?.module?.__id;
+          if (computeId) {
+            const module = self._getObject(computeId);
+            if (module) {
+              const reflection = module.reflection;
+              if (reflection) {
+                for (const storage of reflection.storage) {
+                  if (storage.group == group && storage.binding == binding) {
+                    return storage.access;
+                  }
+                }
+              }
+            }
+          } else if (vertexId !== undefined && vertexId === fragmentId) {
+            const module = self._getObject(vertexId);
+            if (module) {
+              const reflection = module.reflection;
+              if (reflection) {
+                for (const storage of reflection.storage) {
+                  if (storage.group == group && storage.binding == binding) {
+                    return storage.access;
+                  }
+                }
+              }
+            }
+          } else {
+            const vertexModule = self._getObject(vertexId);
+            if (vertexModule) {
+              const reflection = vertexModule.reflection;
+              if (reflection) {
+                for (const storage of reflection.storage) {
+                  if (storage.group == group && storage.binding == binding) {
+                    return storage.access;
+                  }
+                }
+              }
+            }
+
+            const fragmentModule = self._getObject(fragmentId);
+            if (fragmentModule) {
+              const reflection = fragmentModule.reflection;
+              if (reflection) {
+                for (const storage of reflection.storage) {
+                  if (storage.group == group && storage.binding == binding) {
+                    return storage.access;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      return "";
+    }
+
     if (!skipInputs) {
       const inputs = [];    
       if (bindGroup?.entries) {
@@ -1243,8 +1308,8 @@ export class CapturePanel {
       const resource = entry.resource;
       const groupLabel = groupIndex !== undefined ? `Group ${groupIndex} ` : "";
 
-      let access = "";
-      if (state) {
+      let access = getBindingAccess(state, groupIndex, binding);
+      /*if (state) {
         const pipelineId = state.pipeline?.args[0].__id;
         const pipeline = this._getObject(pipelineId);
         if (pipeline) {
@@ -1306,7 +1371,7 @@ export class CapturePanel {
             }
           }
         }
-      }
+      }*/
 
       let size = null;
       if (resource.buffer) {
@@ -1392,6 +1457,55 @@ export class CapturePanel {
             new Widget("pre", resourceGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
           } else {
             new Div(resourceGrp.body, { text: `Buffer ID:${bufferId}` });
+          }
+
+          const affectedByCommands = [];
+          let commandIndex = this._captureCommands.indexOf(command);
+          if (commandIndex !== -1) {
+            commandIndex--;
+            for (; commandIndex >= 0; --commandIndex) {
+              const cmd = this._captureCommands[commandIndex];
+              if (cmd.method === "writeBuffer") {
+                if (cmd.args[0].__id === bufferId) {
+                  affectedByCommands.push(cmd);
+                }
+              } else if (cmd.method === "createBuffer") {
+                if (cmd.result.__id === bufferId) {
+                  affectedByCommands.push(cmd);
+                }
+              } else if (cmd.method === "dispatchWorkgroups" || cmd.method === "dispatchWorkgroupsIndirect") {
+                const cmdState = this._getPipelineState(cmd);
+                if (cmdState) {
+                  for (const bindGroupCmd of cmdState.bindGroups) {
+                    const groupIndex = bindGroupCmd.args[0];
+                    const bindGroup = this.database.getObject(bindGroupCmd.args[1].__id);
+                    if (bindGroup) {
+                      const bindGroupDesc = bindGroup.descriptor;
+                      for (const entry of bindGroupDesc.entries) {
+                        if (entry.resource?.buffer?.__id === bufferId) {
+                          const access = getBindingAccess(cmdState, groupIndex, entry.binding);
+                          if (access === "write" || access === "read_write") {
+                            affectedByCommands.push(cmd);
+                          }
+                          break;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            if (affectedByCommands.length) {
+              new Div(resourceGrp.body, { text: "Affected by:" });
+              const ul = new Widget("ul", resourceGrp.body);
+              for (const cmd of affectedByCommands) {
+                const li = new Widget("li", ul, { text: `${cmd.id}: ${cmd.method}` });
+                li.element.onclick = () => {
+                  cmd.widget.element.click();
+                };
+              }
+            }
           }
 
           if (bindGroupCmd?.isBufferDataLoaded) {
