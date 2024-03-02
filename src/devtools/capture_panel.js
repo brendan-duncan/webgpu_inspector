@@ -573,7 +573,7 @@ export class CapturePanel {
           }
           const obj = self._getObject(id);
           if (obj) {
-            return obj.label || `${obj.name}(${obj.idName})`;
+            return `${obj.label || obj.name}(${obj.idName})`;
           }
           return id ?
             className ?
