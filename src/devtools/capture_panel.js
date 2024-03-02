@@ -991,6 +991,57 @@ export class CapturePanel {
             value = `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`;
           }
 
+          if (format.isStruct && format.members?.length === 1) {
+            const member = format.members[0];
+            if (member.isArray) {
+              const arrayFormat = member.format;
+              const arrayFormatName = this._getTypeName(arrayFormat);
+              if (arrayFormatName === "u32" || arrayFormatName === "atomic<u32>") {
+                if (member.count === 1) {
+                  const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
+                  value = `${data[0]}`;
+                } else if (member.count === 2) {
+                  const data = new Uint32Array(bufferData.buffer, elementOffset, 2);
+                  value = `${data[0]}, ${data[1]}`;
+                } else if (member.count === 3) {
+                  const data = new Uint32Array(bufferData.buffer, elementOffset, 3);
+                  value = `${data[0]}, ${data[1]}, ${data[2]}`;
+                } else if (member.count === 4) {
+                  const data = new Uint32Array(bufferData.buffer, elementOffset, 4);
+                  value = `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`;
+                }
+              } else if (arrayFormatName === "i32" || arrayFormatName === "atomic<i32>") {
+                if (member.count === 1) {
+                  const data = new Int32Array(bufferData.buffer, elementOffset, 1);
+                  value = `${data[0]}`;
+                } else if (member.count === 2) {
+                  const data = new Int32Array(bufferData.buffer, elementOffset, 2);
+                  value = `${data[0]}, ${data[1]}`;
+                } else if (member.count === 3) {
+                  const data = new Int32Array(bufferData.buffer, elementOffset, 3);
+                  value = `${data[0]}, ${data[1]}, ${data[2]}`;
+                } else if (member.count === 4) {
+                  const data = new Int32Array(bufferData.buffer, elementOffset, 4);
+                  value = `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`;
+                }
+              } else if (arrayFormatName === "f32" || arrayFormatName === "atomic<f32>") {
+                if (member.count === 1) {
+                  const data = new Float32Array(bufferData.buffer, elementOffset, 1);
+                  value = `${data[0]}`;
+                } else if (member.count === 2) {
+                  const data = new Float32Array(bufferData.buffer, elementOffset, 2);
+                  value = `${data[0]}, ${data[1]}`;
+                } else if (member.count === 3) {
+                  const data = new Float32Array(bufferData.buffer, elementOffset, 3);
+                  value = `${data[0]}, ${data[1]}, ${data[2]}`;
+                } else if (member.count === 4) {
+                  const data = new Float32Array(bufferData.buffer, elementOffset, 4);
+                  value = `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`;
+                }
+              }
+            }
+          }
+
           if (value !== null) {
             new Widget("li", ul, { text: `[${i}]: ${value}` });
           } else {
