@@ -1185,7 +1185,7 @@ import { RollingAverage } from "./utils/rolling_average.js";
         }
       }
 
-      if (method === "drawIndirect" || method === "drawIndexedIndirect") {
+      if (method === "drawIndirect" || method === "drawIndexedIndirect" || method === "dispatchWorkgroupsIndirect") {
         const buffer = args[0];
         const offset = args[1];
         const size = 32;

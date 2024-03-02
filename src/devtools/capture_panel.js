@@ -1818,7 +1818,7 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_indirectBuffer(command, indirectBuffer, indirectOffset, commandInfo, collapsed) {
+  _showCaptureCommandInfo_indirectBuffer(command, indirectBuffer, indirectOffset, commandInfo, collapsed, isCompute = false) {
     const id = indirectBuffer.__id;
     const buffer = this._getObject(id);
     if (buffer) {
@@ -1838,11 +1838,17 @@ export class CapturePanel {
         const bufferData = command.bufferData[0];
         if (bufferData) {
           const u32Array = new Uint32Array(bufferData.buffer);
-          new Div(bufferGrp.body, { text: `Index Count: ${u32Array[0]}` });
-          new Div(bufferGrp.body, { text: `Instance Count: ${u32Array[1]}` });
-          new Div(bufferGrp.body, { text: `First Index: ${u32Array[2]}` });
-          new Div(bufferGrp.body, { text: `Base Vertex: ${u32Array[3]}` });
-          new Div(bufferGrp.body, { text: `First Instance: ${u32Array[4]}` });
+          if (isCompute) {
+            new Div(bufferGrp.body, { text: `Workgroup Count X: ${u32Array[0]}` });
+            new Div(bufferGrp.body, { text: `Workgroup Count Y: ${u32Array[1]}` });
+            new Div(bufferGrp.body, { text: `Workgroup Count Z: ${u32Array[2]}` });
+          } else {
+            new Div(bufferGrp.body, { text: `Index Count: ${u32Array[0]}` });
+            new Div(bufferGrp.body, { text: `Instance Count: ${u32Array[1]}` });
+            new Div(bufferGrp.body, { text: `First Index: ${u32Array[2]}` });
+            new Div(bufferGrp.body, { text: `Base Vertex: ${u32Array[3]}` });
+            new Div(bufferGrp.body, { text: `First Instance: ${u32Array[4]}` });
+          }
         }
       }
     }
@@ -1890,6 +1896,18 @@ export class CapturePanel {
   }
 
   _showCaptureCommandInfo_dispatchWorkgroups(command, commandInfo) {
+    const state = this._getPipelineState(command);
+    if (state.pipeline) {
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
+    }
+    for (const index in state.bindGroups) {
+      this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index], commandInfo, index, true, state);
+    }
+  }
+
+  _showCaptureCommandInfo_dispatchWorkgroupsIndirect(command, commandInfo) {
+    this._showCaptureCommandInfo_indirectBuffer(command, command.args[0], command.args[1], commandInfo, true, true);
+
     const state = this._getPipelineState(command);
     if (state.pipeline) {
       this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
@@ -2039,6 +2057,8 @@ export class CapturePanel {
       this._showCaptureCommandInfo_drawIndexedIndirect(command, commandInfo);
     } else if (method === "dispatchWorkgroups") {
       this._showCaptureCommandInfo_dispatchWorkgroups(command, commandInfo);
+    } else if (method === "dispatchWorkgroupsIndirect") {
+        this._showCaptureCommandInfo_dispatchWorkgroupsIndirect(command, commandInfo);
     } else if (method === "end") {
       this._showCaptureCommandInfo_end(command, commandInfo);
     } else if (method === "createView") {
