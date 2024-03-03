@@ -38,3 +38,36 @@ Which would then present the buffer data as:
 
 ![Buffer Format Vec4f](images/buffer_format_vec4f.png)
 
+## Format data types
+
+Format types are specified as WGSL variable types. These can be either struct, array, or basic types. See the WGSL spec for more information.
+
+### Basic Types
+
+WGSL supprots the following basic types:
+* i32 - signed 32-bit integer
+* u32 - unsigned 32-bit integer
+* f32 - 32-bit floating-point number
+* f16 - 16-bit floating-point number
+* bool - boolean
+* atomic\<T> - an atomic basic type, interpreted as the basic type itself.
+
+### Arrays
+
+WGSL supports arrays of any type T, where T is a basic type, another array, or structure.
+
+* array\<T, count> - fixed sized array of type T.
+* array\<T> - runtime sized array of type T.
+
+### Structures
+
+WGSL supports structure types.
+
+* struct name { member: T, ... }
+
+For struct types, if the name of the struct in the format matches the name of the original type of the buffer, that struct will be used. Otherwise, the last struct defined in the format will be used.
+
+For non-struct types, due to how the reflection information works, these types will be automatically wrapped in a struct.
+
+For example, the format `array<f32>` will be automatically wrapped in a struct `struct _array { _: array<f32> }`.
+
