@@ -3,7 +3,8 @@
 [Inspect](docs/inspect.md) . [Capture](docs/capture.md) . [Record](docs/record.md)
 
 * [Introduction](#introduction)
-* [Problem Solving](#problem-solving)
+* [Developer Tools Window](#developer-tools-window)
+  * [Extension Problem Solving](#problem-solving)
 * [Inspect](#inspect)
 * [Capture](#capture)
 * [Record](#record)
@@ -35,20 +36,20 @@ WebGPU Inspector is designed to inspect what's happening with WebGPU on the page
 <img src="docs/images/webgpu_inspector_screen.png" style="width: 512px; border-radius: 10px; box-shadow: 3px 3px 10px rgba(0,0,0,0.5);">
 </a>
 
-### Opening the Developer Tools window
+### Developer Tools window
 Select __More Tools / Developer Tools__, or press __F12__ or __Shit+CTRL+J__ (__Option + ⌘ + J__ on MacOS). You can also right-click on the page and select __Inspect__. When the WebGPU Inspector extension is enabled in the extension manager, there will be a **WebGPU Inspector** tab.
 
 ![WebGPU Inspector Panel](docs/images/webgpu_inspector_panel.png)
 
-## Problem Solving
+### Extension Problem Solving
 
 ##### [Back to top](#webgpu-inspector)
 
-### WebGPU Inspector Panel Missing From Developer Tools
+#### WebGPU Inspector Panel Missing From Developer Tools
 
 If the WebGPU Inspector tab is not present on the Developer Tools panel, try closing the Developer Tools window and opening it again. Sometimes the browser doesn't load the extension.
 
-### Inspect Start, Capture, or Record Do Not Work
+#### Inspect Start, Capture, or Record Do Not Work
 
 Sometimes the browser extension script does not get injected into the page properly. Refresh the page and WebGPU Inspector should start working.
 
