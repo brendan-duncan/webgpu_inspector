@@ -258,6 +258,8 @@ export class ObjectDatabase {
     this.pendingRenderPipelines = new Map();
     this.pendingComputePipelines = new Map();
     this.frameTime = 0;
+    this.totalTextureMemory = 0;
+    this.totalBufferMemory = 0;
   }
 
   getObjectDependencies(object) {
