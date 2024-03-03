@@ -2,6 +2,8 @@
 
 # Formatting Buffer Data
 
+###### [Back to capture](capture.md/#uniform-and-storage-buffer-inspection)
+
 By default WebGPU Inspector will present the data of captured storage and uniform buffers based on parsed reflection information from the shader bound to the render state of the draw or dispatch call. In some cases you may want to view this data differently. WebGPU Inspector lets you override the format the buffer data is viewed as.
 
 Example:
