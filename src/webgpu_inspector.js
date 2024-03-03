@@ -83,7 +83,7 @@ import { RollingAverage } from "./utils/rolling_average.js";
           // so we'll batch them up and send them every so often.
           self._garbageCollectectedObjects.push(id);
           const objectClass = self._trackedObjectInfo.get(id);
-          const object = self._trackedObjects.get(id)?.deref();
+          //const object = self._trackedObjects.get(id)?.deref();
 
           if (objectClass) {
             if (objectClass === GPUBindGroup) {
@@ -92,8 +92,8 @@ import { RollingAverage } from "./utils/rolling_average.js";
             // If we're here, the object was garbage collected but not explicitly destroyed.
             // Some GPU objects need to be explicitly destroyed, otherwise it's a memory
             // leak. Notify the user of this.
-            if (objectClass === GPUBuffer || object === GPUTexture || object === GPUDevice) {
-              self._memoryLeakWarning(id);
+            if (objectClass === GPUBuffer || objectClass === GPUTexture || objectClass === GPUDevice) {
+              self._memoryLeakWarning(id, objectClass);
             }
           }
 
@@ -585,12 +585,12 @@ import { RollingAverage } from "./utils/rolling_average.js";
       return this._objectID++;
     }
 
-    _memoryLeakWarning(object) {
-      const label = object.label ?? "";
-      const type = object.constructor.name;
-      const id = object.__id;
-      const message = `WebGPU ${type} ${id} ${label} was garbage collected without being explicitly destroyed. This is a memory leak.`;
-      window.postMessage({"action": Actions.ValidationError, id, "message": message}, "*");
+    _memoryLeakWarning(id, object) {
+      if (object) {
+        const type = object.name;
+        const message = `${type} was garbage collected without being explicitly destroyed. These objects should explicitly destroyed to avoid GPU memory leaks.`;
+        window.postMessage({"action": Actions.ValidationError, id: 0, "message": message}, "*");
+      }
     }
 
     _isPrimitiveType(obj) {

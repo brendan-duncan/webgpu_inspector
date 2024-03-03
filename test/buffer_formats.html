@@ -179,6 +179,12 @@ async function main() {
   });
 
   function frame() {
+    const memoryLeakBuffer = device.createBuffer({
+      label: "memory leak buffer",
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
     const commandEncoder = device.createCommandEncoder();
 
     const canvasTextureView = context.getCurrentTexture().createView();
