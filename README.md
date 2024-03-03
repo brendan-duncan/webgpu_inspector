@@ -21,6 +21,10 @@
 
 Inspection and graphics debugging browser extension tool for WebGPU.
 
+<a href="docs/images/webgpu_inspector_screen.png">
+<img src="docs/images/webgpu_inspector_screen.png" style="width: 512px; border-radius: 10px; box-shadow: 3px 3px 10px rgba(0,0,0,0.5);">
+</a>
+
 ## [Documentation](docs/overview.md)
 
 ## Installation
