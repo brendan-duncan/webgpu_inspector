@@ -1,9 +1,12 @@
 # WebGPU Inspector
 
-[Overview](docs/overview.md) . [Inspect](docs/inspect.md) . [Capture](docs/capture.md) . [Record](docs/record.md)
+[Inspect](docs/inspect.md) . [Capture](docs/capture.md) . [Record](docs/record.md)
 
 * [Introduction](#introduction)
-* [Documentation](docs/overview.md)
+* [Problem Solving](#problem-solving)
+* [Inspect](#inspect)
+* [Capture](#capture)
+* [Record](#record)
 * [Installation](#installation)
   * [Chrome Web Store](#chrome-web-store)
   * [From Source](#from-source)
@@ -15,11 +18,9 @@
 
 ## Introduction
 
-##### [Back to top](#webgpu-inspector)
-
 **Version: 0.0.9**
 
-Inspection, profiling, and graphics debugging browser extension for WebGPU.
+Inspection, profiling, and graphics debugging browser extension for WebGPU. It can be installed from the [Chrome Web Store](https://chromewebstore.google.com/detail/webgpu-inspector/holcbbnljhkpkjkhgkagjkhhpeochfal), or from [source](#from-source).
 
 WebGPU Inspector is designed to inspect what's happening with WebGPU on the page, independent of the engine. It provides:
 * A live view of all GPU objects and inspect their details.
@@ -34,7 +35,46 @@ WebGPU Inspector is designed to inspect what's happening with WebGPU on the page
 <img src="docs/images/webgpu_inspector_screen.png" style="width: 512px; border-radius: 10px; box-shadow: 3px 3px 10px rgba(0,0,0,0.5);">
 </a>
 
-## [Documentation](docs/overview.md)
+### Opening the Developer Tools window
+Select __More Tools / Developer Tools__, or press __F12__ or __Shit+CTRL+J__ (__Option + ⌘ + J__ on MacOS). You can also right-click on the page and select __Inspect__. When the WebGPU Inspector extension is enabled in the extension manager, there will be a **WebGPU Inspector** tab.
+
+![WebGPU Inspector Panel](docs/images/webgpu_inspector_panel.png)
+
+## Problem Solving
+
+##### [Back to top](#webgpu-inspector)
+
+### WebGPU Inspector Panel Missing From Developer Tools
+
+If the WebGPU Inspector tab is not present on the Developer Tools panel, try closing the Developer Tools window and opening it again. Sometimes the browser doesn't load the extension.
+
+### Inspect Start, Capture, or Record Do Not Work
+
+Sometimes the browser extension script does not get injected into the page properly. Refresh the page and WebGPU Inspector should start working.
+
+## [Inspect](docs/inspect.md)
+
+##### [Back to top](#webgpu-inspector)
+
+[Inspect](inspect.md) reports all GPU objects that have been created and lets you inspect information about them, and in some cases edit them.
+
+![WebGPU Inspector](docs/images/inspect.png)
+
+## [Capture](docs/capture.md)
+
+##### [Back to top](#webgpu-inspector)
+
+[Capture](docs/capture.md) records all WebGPU commands used to render a frame and generates a report, letting you inspect each command, including rendering state and the image results of each render pass.
+
+![Capture](docs/images/capture.png)
+
+## [Record](docs/record.md)
+
+##### [Back to top](#webgpu-inspector)
+
+[Record](docs/record.md) records all WebGPU commands and their associated data, generating an HTML file with inlined Javascript that recreates the rendered frames. This lets you open the recording file in a browser to replay the render, and edit the javascript to test out changes independently of the engine used to create the render. It can also be used to create reproduction test cases for bug reports, to isolate the graphics issue separate from the engine.
+
+![Record](docs/images/record.png)
 
 ## Installation
 

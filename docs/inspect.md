@@ -1,6 +1,6 @@
 # Inspect
 
-[Overview](overview.md) . [Capture](capture.md) . [Record](record.md)
+[Overview](../README.md) . [Capture](capture.md) . [Record](record.md)
 
 * [Introduction](#introduction)
 * [Starting the Inspect Tool](#starting-the-inspect-tool)

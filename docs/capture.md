@@ -1,5 +1,5 @@
 # Capture
-[Overview](overview.md) . [Inspect](inspect.md) . [Record](record.md)
+[Overview](../README.md) . [Inspect](inspect.md) . [Record](record.md)
 
 * [Introduction](#introduction)
 * [Capturing Frame Data](#capturing-frame-data)
