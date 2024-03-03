@@ -50,13 +50,17 @@ Select __More Tools / Developer Tools__, or press __F12__ or __Shit+CTRL+J__ (__
 
 ##### [Back to top](#webgpu-inspector)
 
-#### WebGPU Inspector Panel Missing From Developer Tools
+#### WebGPU Inspector panel missing from Developer Tools
 
 If the WebGPU Inspector tab is not present on the Developer Tools panel, try closing the Developer Tools window and opening it again. Sometimes the browser doesn't load the extension.
 
-#### Inspect Start, Capture, or Record Do Not Work
+#### Inspect Start, Capture, or Record does not work
 
 Sometimes the browser extension script does not get injected into the page properly. Refresh the page and WebGPU Inspector should start working.
+
+#### Inspect is running but Capture does not work
+
+Some pages will not update if they do not have focus. If Capture is not recording anything, try selecting the page to make sure it has focus.
 
 
 ## Installation
