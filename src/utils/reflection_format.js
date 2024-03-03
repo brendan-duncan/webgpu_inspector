@@ -36,10 +36,22 @@ function _getStructFormat(struct) {
 }
   
 export function getFormatFromReflection(type) {
-  const structs = getNestedStructs(type);
-  let format = "";
-  for (const s of structs) {
-    format += _getStructFormat(s);
+  if (type.isArray) {
+    return `array<${getFormatFromReflection(type.format)}>`;
   }
-  return format;
+
+  if (type.isStruct) {
+    const structs = getNestedStructs(type);
+    let format = "";
+    for (const s of structs) {
+        format += _getStructFormat(s);
+    }
+    return format;
+  }
+
+  if (type.isTemplate) {
+    return `${type.name}<${getFormatFromReflection(type.format)}>`;
+  }
+
+  return type.name;
 }

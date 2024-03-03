@@ -54,6 +54,8 @@ async function main() {
 
       @group(0) @binding(0) var<storage, read> a : A;
       @group(0) @binding(1) var<storage, read> b : B;
+      @group(0) @binding(2) var<storage, read> c : f32;
+      @group(0) @binding(3) var<storage, read> d : array<f32>;
 
       @fragment
       fn fragmentMain() -> @location(0) vec4<f32> {
@@ -70,6 +72,16 @@ async function main() {
       },
       {
         binding: 1,
+        visibility: GPUShaderStage.FRAGMENT,
+        buffer: { type: "storage" },
+      },
+      {
+        binding: 2,
+        visibility: GPUShaderStage.FRAGMENT,
+        buffer: { type: "storage" },
+      },
+      {
+        binding: 3,
         visibility: GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" },
       },
@@ -110,6 +122,22 @@ async function main() {
   new Float32Array(bufferB.getMappedRange()).set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   bufferB.unmap();
 
+  const bufferC = device.createBuffer({
+    size: 4,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    mappedAtCreation: true,
+  });
+  new Float32Array(bufferC.getMappedRange()).set([42]);
+  bufferC.unmap();
+
+  const bufferD = device.createBuffer({
+    size: 4 * 5,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    mappedAtCreation: true,
+  });
+  new Float32Array(bufferD.getMappedRange()).set([100, 200, 300, 400, 500]);
+  bufferD.unmap();
+
   const bindGroup = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
@@ -120,6 +148,14 @@ async function main() {
       {
         binding: 1,
         resource: { buffer: bufferB, },
+      },
+      {
+        binding: 2,
+        resource: { buffer: bufferC, },
+      },
+      {
+        binding: 3,
+        resource: { buffer: bufferD, },
       },
     ],
   });

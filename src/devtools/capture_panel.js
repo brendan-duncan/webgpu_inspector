@@ -1073,16 +1073,21 @@ export class CapturePanel {
     }
   }
 
-  _setBufferFormat(type, format) {
+  _setBufferFormat(type, typeName, format, skipStructEncapsulation = false) {
     try {
-      const reflect = new WgslReflect(format);
+      let reflect = new WgslReflect(format);
       if (reflect) {
         for (const struct of reflect.structs) {
-          if (struct.name === type.name) {
+          if (struct.name === typeName) {
             type.replacement = struct;
             return;
           }
         }
+      }
+      if (!skipStructEncapsulation) {
+        const newTypeName = `_${type.name}`;
+        const structFormat = `struct _${type.name} { _: ${format} }`;
+        this._setBufferFormat(type, newTypeName, structFormat, true);
       }
     } catch (e) {
       console.error(e);
@@ -1090,6 +1095,10 @@ export class CapturePanel {
   }
 
   _showBufferDataInfo(parentWidget, resource, bufferData) {
+    function resourceType(resource) {
+      return resource.type.replacement || resource.type;
+    }
+
     if (resource.resourceType === ResourceType.Uniform) {
       const typeName = this._getTypeName(resource.type);
       new Div(parentWidget, { text: `UNIFORM: ${resource.name}: ${typeName}` });
@@ -1107,7 +1116,7 @@ export class CapturePanel {
           draggable: true,
         });
 
-        const format = getFormatFromReflection(resource.type.replacement || resource.type);
+        const format = getFormatFromReflection(resourceType(resource));
     
         const nameEdit = new TextArea(dialog.body, {
           value: format,
@@ -1125,9 +1134,11 @@ export class CapturePanel {
           style: 'margin-left: 15px; auto;',
           callback: function () {
             dialog.close();
-            self._setBufferFormat(resource.type, nameEdit.value);
+            const type = resourceType(resource);
+            self._setBufferFormat(resource.type, type.name, nameEdit.value);
             bufferDataUI.html = "";
-            self._showBufferDataType(bufferDataUI, resource.type.replacement || resource.type, bufferData);
+            const newType = resourceType(resource);
+            self._showBufferDataType(bufferDataUI, newType, bufferData);
           }
         });
 
