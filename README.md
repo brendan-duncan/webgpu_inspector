@@ -57,7 +57,7 @@ Sometimes the browser extension script does not get injected into the page prope
 
 ##### [Back to top](#webgpu-inspector)
 
-[Inspect](inspect.md) reports all GPU objects that have been created and lets you inspect information about them, and in some cases edit them.
+[Inspect](docs/inspect.md) reports all GPU objects that have been created and lets you inspect information about them, and in some cases edit them.
 
 ![WebGPU Inspector](docs/images/inspect.png)
 
