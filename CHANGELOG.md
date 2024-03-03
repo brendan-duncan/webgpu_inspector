@@ -1,6 +1,7 @@
 ## v0.0.9
 * Make buffer data view more compact for basic types.
 * Report memory leaks as a validation error (buffer/texture/device garbage collected without explicit destroy).
+* You can now edit the format used for viewing buffer data.
 
 ## v0.0.8
 * Report an error if a canvas texture is used after it has expired.

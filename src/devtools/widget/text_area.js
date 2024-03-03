@@ -1,5 +1,5 @@
 import { Widget } from './widget.js';
-import { Signal } from './signal.js';
+import { Signal } from '../../utils/signal.js';
 
 export class TextArea extends Widget {
   constructor(parent, options) {

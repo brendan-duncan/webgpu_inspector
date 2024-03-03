@@ -1,20 +1,23 @@
-import { Button } from "./widget/button.js";
-import { Collapsable } from "./widget/collapsable.js";
-import { Div } from "./widget/div.js";
-import { Span } from "./widget/span.js";
-import { Widget } from "./widget/widget.js";
-import { getFlagString } from "../utils/flags.js";
 import { CaptureStatistics } from "./capture_statistics.js";
-import { NumberInput } from "./widget/number_input.js";
-import { Select } from "./widget/select.js";
-import { TextInput } from "./widget/text_input.js";
 import {
   Sampler,
   TextureView
 } from "./gpu_objects/index.js";
-import { decodeDataUrl } from "../utils/base64.js";
+import { Button } from "./widget/button.js";
+import { Collapsable } from "./widget/collapsable.js";
+import { Dialog } from "./widget/dialog.js";
+import { Div } from "./widget/div.js";
+import { NumberInput } from "./widget/number_input.js";
+import { Span } from "./widget/span.js";
+import { TextArea } from "./widget/text_area.js";
+import { TextInput } from "./widget/text_input.js";
+import { Widget } from "./widget/widget.js";
+import { getFlagString } from "../utils/flags.js";
+import { Select } from "./widget/select.js";
 import { Actions, PanelActions } from "../utils/actions.js";
-import { ResourceType } from "../utils/wgsl_reflect.module.js";
+import { decodeDataUrl } from "../utils/base64.js";
+import { getFormatFromReflection } from "../utils/reflection_format.js";
+import { ResourceType, WgslReflect } from "../utils/wgsl_reflect.module.js";
 
 export class CapturePanel {
   constructor(window, parent) {
@@ -1070,6 +1073,22 @@ export class CapturePanel {
     }
   }
 
+  _setBufferFormat(type, format) {
+    try {
+      const reflect = new WgslReflect(format);
+      if (reflect) {
+        for (const struct of reflect.structs) {
+          if (struct.name === type.name) {
+            type.replacement = struct;
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   _showBufferDataInfo(parentWidget, resource, bufferData) {
     if (resource.resourceType === ResourceType.Uniform) {
       const typeName = this._getTypeName(resource.type);
@@ -1078,7 +1097,63 @@ export class CapturePanel {
     } else if (resource.resourceType === ResourceType.Storage) {
       const typeName = this._getTypeName(resource.type);
       new Div(parentWidget, { text: `STORAGE ${resource.access}: ${resource.name}: ${typeName}` });
-      this._showBufferDataType(parentWidget, resource.type, bufferData);
+      
+      let bufferDataUI = null;
+      
+      new Button(parentWidget, { label: "Format", callback: () => {
+        const dialog = new Dialog({
+          title: 'Buffer Format',
+          width: 300,
+          draggable: true,
+        });
+
+        const format = getFormatFromReflection(resource.type.replacement || resource.type);
+    
+        const nameEdit = new TextArea(dialog.body, {
+          value: format,
+          style: 'width: 100%; height: 200px;',
+        });
+    
+        const buttonRow = new Div(dialog.body, {
+          style: 'width: 100%; margin-top: 20px;',
+        });
+    
+        const self = this;
+
+        new Button(buttonRow, {
+          label: 'Apply',
+          style: 'margin-left: 15px; auto;',
+          callback: function () {
+            dialog.close();
+            self._setBufferFormat(resource.type, nameEdit.value);
+            bufferDataUI.html = "";
+            self._showBufferDataType(bufferDataUI, resource.type.replacement || resource.type, bufferData);
+          }
+        });
+
+        new Button(buttonRow, {
+          label: 'Revert',
+          style: 'margin-left: 15px; auto;',
+          callback: function () {
+            resource.type.replacement = null;
+            dialog.close();
+            bufferDataUI.html = "";
+            self._showBufferDataType(bufferDataUI, resource.type, bufferData);
+          }
+        });
+
+        new Button(buttonRow, {
+          label: 'Cancel',
+          style: 'margin-left: 15px; auto;',
+          callback: function () {
+            dialog.close();
+          }
+        });
+      } });
+
+      bufferDataUI = new Div(parentWidget);
+
+      this._showBufferDataType(bufferDataUI, resource.type.replacement || resource.type, bufferData);
     }
   }
 
