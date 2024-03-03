@@ -4,6 +4,7 @@ import { Signal } from '../../utils/signal.js';
 export class TextArea extends Widget {
   constructor(parent, options) {
     super('textArea', parent, options);
+    this.element.spellcheck = false;
     this.classList.add('text-area');
 
     this.onChange = new Signal();
