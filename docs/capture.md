@@ -8,11 +8,8 @@
 * [Command Stacktrace](#command-stacktrace)
 * [Command Inspection](#command-inspection)
 * [Uniform and Storage Buffer Inspection](#uniform-and-storage-buffer-inspection)
+    * [Formatting Buffer Data](formatting_buffer_data.md)
 * [Frame Stats](#frame-stats)
-
-----
-
-* [Formatting Buffer Data](formatting_buffer_data.md)
 
 ## Introduction
 ###### [Back to top](#capture)
