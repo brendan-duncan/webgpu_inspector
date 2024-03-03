@@ -56,7 +56,7 @@ If you select a Draw or Dispatch command, it will inspect the BindGroups and Pip
 
 **Affected By** lists the commands that have written to this particular buffer.
 
-**Format** lets you customize the format of the buffer data. See [Formatting Buffer Data](formatting_buffer_data) for more information.
+**Format** lets you customize the format of the buffer data. See [Formatting Buffer Data](formatting_buffer_data.md) for more information.
 
 <a href="images/buffer_data_inspection.png">
 <img src="images/buffer_data_inspection.png" style="width:512px">
