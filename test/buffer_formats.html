@@ -56,6 +56,7 @@ async function main() {
       @group(0) @binding(1) var<storage, read> b : B;
       @group(0) @binding(2) var<storage, read> c : f32;
       @group(0) @binding(3) var<storage, read> d : array<f32>;
+      @group(0) @binding(4) var<uniform> e : vec4f;
 
       @fragment
       fn fragmentMain() -> @location(0) vec4<f32> {
@@ -84,6 +85,11 @@ async function main() {
         binding: 3,
         visibility: GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" },
+      },
+      {
+        binding: 4,
+        visibility: GPUShaderStage.FRAGMENT,
+        buffer: { type: "uniform" },
       },
     ],
   });
@@ -138,6 +144,14 @@ async function main() {
   new Float32Array(bufferD.getMappedRange()).set([100, 200, 300, 400, 500]);
   bufferD.unmap();
 
+  const bufferE = device.createBuffer({
+    size: 16,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    mappedAtCreation: true,
+  });
+  new Float32Array(bufferE.getMappedRange()).set([110, 220, 330, 440]);
+  bufferE.unmap();
+
   const bindGroup = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
@@ -156,6 +170,10 @@ async function main() {
       {
         binding: 3,
         resource: { buffer: bufferD, },
+      },
+      {
+        binding: 4,
+        resource: { buffer: bufferE, },
       },
     ],
   });

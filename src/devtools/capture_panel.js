@@ -1095,6 +1095,67 @@ export class CapturePanel {
     }
   }
 
+  _createFormatButton(parentWidget, resource, bufferDataUI, bufferData) {
+    function resourceType(resource) {
+      return resource.type.replacement || resource.type;
+    }
+
+    const self = this;
+
+    new Button(parentWidget, { label: "Format", callback: () => {
+      const dialog = new Dialog({
+        title: 'Buffer Format',
+        width: 300,
+        draggable: true,
+      });
+
+      const format = getFormatFromReflection(resourceType(resource));
+  
+      const nameEdit = new TextArea(dialog.body, {
+        value: format,
+        style: 'width: 100%; height: 200px;',
+      });
+  
+      const buttonRow = new Div(dialog.body, {
+        style: 'width: 100%; margin-top: 20px;',
+      });
+  
+      const self = this;
+
+      new Button(buttonRow, {
+        label: 'Apply',
+        style: 'margin-left: 15px; auto;',
+        callback: function () {
+          dialog.close();
+          const type = resourceType(resource);
+          self._setBufferFormat(resource.type, type.name, nameEdit.value);
+          bufferDataUI.html = "";
+          const newType = resourceType(resource);
+          self._showBufferDataType(bufferDataUI, newType, bufferData);
+        }
+      });
+
+      new Button(buttonRow, {
+        label: 'Revert',
+        style: 'margin-left: 15px; auto;',
+        callback: function () {
+          resource.type.replacement = null;
+          dialog.close();
+          bufferDataUI.html = "";
+          self._showBufferDataType(bufferDataUI, resource.type, bufferData);
+        }
+      });
+
+      new Button(buttonRow, {
+        label: 'Cancel',
+        style: 'margin-left: 15px; auto;',
+        callback: function () {
+          dialog.close();
+        }
+      });
+    } });
+  }
+
   _showBufferDataInfo(parentWidget, resource, bufferData) {
     function resourceType(resource) {
       return resource.type.replacement || resource.type;
@@ -1103,69 +1164,21 @@ export class CapturePanel {
     if (resource.resourceType === ResourceType.Uniform) {
       const typeName = this._getTypeName(resource.type);
       new Div(parentWidget, { text: `UNIFORM: ${resource.name}: ${typeName}` });
-      this._showBufferDataType(parentWidget, resource.type, bufferData);
+
+      const bufferDataUI = new Div(null);
+      this._createFormatButton(parentWidget, resource, bufferDataUI, bufferData)
+      bufferDataUI.parent = parentWidget;
+
+      this._showBufferDataType(bufferDataUI, resourceType(resource), bufferData);
     } else if (resource.resourceType === ResourceType.Storage) {
       const typeName = this._getTypeName(resource.type);
       new Div(parentWidget, { text: `STORAGE ${resource.access}: ${resource.name}: ${typeName}` });
       
-      let bufferDataUI = null;
-      
-      new Button(parentWidget, { label: "Format", callback: () => {
-        const dialog = new Dialog({
-          title: 'Buffer Format',
-          width: 300,
-          draggable: true,
-        });
+      const bufferDataUI = new Div(null);
+      this._createFormatButton(parentWidget, resource, bufferDataUI, bufferData)
+      bufferDataUI.parent = parentWidget;
 
-        const format = getFormatFromReflection(resourceType(resource));
-    
-        const nameEdit = new TextArea(dialog.body, {
-          value: format,
-          style: 'width: 100%; height: 200px;',
-        });
-    
-        const buttonRow = new Div(dialog.body, {
-          style: 'width: 100%; margin-top: 20px;',
-        });
-    
-        const self = this;
-
-        new Button(buttonRow, {
-          label: 'Apply',
-          style: 'margin-left: 15px; auto;',
-          callback: function () {
-            dialog.close();
-            const type = resourceType(resource);
-            self._setBufferFormat(resource.type, type.name, nameEdit.value);
-            bufferDataUI.html = "";
-            const newType = resourceType(resource);
-            self._showBufferDataType(bufferDataUI, newType, bufferData);
-          }
-        });
-
-        new Button(buttonRow, {
-          label: 'Revert',
-          style: 'margin-left: 15px; auto;',
-          callback: function () {
-            resource.type.replacement = null;
-            dialog.close();
-            bufferDataUI.html = "";
-            self._showBufferDataType(bufferDataUI, resource.type, bufferData);
-          }
-        });
-
-        new Button(buttonRow, {
-          label: 'Cancel',
-          style: 'margin-left: 15px; auto;',
-          callback: function () {
-            dialog.close();
-          }
-        });
-      } });
-
-      bufferDataUI = new Div(parentWidget);
-
-      this._showBufferDataType(bufferDataUI, resource.type.replacement || resource.type, bufferData);
+      this._showBufferDataType(bufferDataUI, resourceType(resource), bufferData);
     }
   }
 
