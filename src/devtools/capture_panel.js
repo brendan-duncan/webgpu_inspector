@@ -1084,14 +1084,20 @@ export class CapturePanel {
             return;
           }
         }
+        // If structs are defined but none of the names match, use the last one.
+        if (reflect.structs.length > 0) {
+          type.replacement = reflect.structs[reflect.structs.length - 1];
+          return;
+        
+        }
       }
       if (!skipStructEncapsulation) {
+        // basic and array types need to be wrapped in a struct for the reflection to work.
         const newTypeName = `_${type.name}`;
         const structFormat = `struct _${type.name} { _: ${format} }`;
         this._setBufferFormat(type, newTypeName, structFormat, true);
       }
     } catch (e) {
-      console.error(e);
     }
   }
 
