@@ -1,4 +1,21 @@
-# WebGPU Inspector Debugging Tool
+# WebGPU Inspector
+
+[Overview](docs/overview.md) . [Inspect](docs/inspect.md) . [Capture](docs/capture.md) . [Record](docs/record.md)
+
+* [Introduction](#introduction)
+* [Documentation](docs/overview.md)
+* [Installation](#installation)
+  * [Chrome Web Store](#chrome-web-store)
+  * [From Source](#from-source)
+    * [Chrome](#chrome)
+    * [Firefox](#firefox-nightly)
+    * [Safari](#safari-technology-preview)
+* [Development](#development)
+
+
+## Introduction
+
+##### [Back to top](#webgpu-inspector)
 
 **Version: 0.0.9**
 
@@ -8,6 +25,8 @@ Inspection and graphics debugging browser extension tool for WebGPU.
 
 ## Installation
 
+##### [Back to top](#webgpu-inspector)
+
 ### Chrome Web Store
 
 **WebGPU Inspector is still in active development, expect many frequent changes and the published version will lag behind the source version.**
@@ -15,6 +34,8 @@ Inspection and graphics debugging browser extension tool for WebGPU.
 Install WebGPU Inspector from the [Chrome Web Store](https://chromewebstore.google.com/detail/webgpu-inspector/holcbbnljhkpkjkhgkagjkhhpeochfal).
 
 ### From Source
+
+##### [Back to top](#webgpu-inspector)
 
 To get the most up to date version of WebGPU Inspector, you can install the extension from source.
 
@@ -60,17 +81,9 @@ Crome and Firefox don't support the same version of extension plug-ins, so you'l
 - If you make changes to the WebGPU Inspector source
   - From Xcode, select **Product / Build** (**cmd-b**)
 
-## Usage
-
-The WebGPU Inspector extension is available from the Developer Tools window.
-
-From a page that has WebGPU content, press **F12** to open the Chrome Developer Tools window. When the WebGPU Inspector extension is enabled in the extension manager, there will be a **WebGPU Inspector** tab.
-
-The **WebGPU Inspector** tab contains several tools: [Inspect](docs/inspect.md), [Capture](docs/capture.md), and [Record](docs/record.md).
-
-![WebGPU Inspector GUI](docs/images/webgpu_inspector_gui.png)
-
 ## Development
+
+##### [Back to top](#webgpu-inspector)
 
 Building the project requires an installation of [Node.js](https://nodejs.org/en/).
 
