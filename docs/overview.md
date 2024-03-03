@@ -4,7 +4,16 @@
 
 The WebGPU Inspector extension is available from the Developer Tools window.
 
-From a page that has WebGPU content, press **F12** to open the Chrome Developer Tools window. When the WebGPU Inspector extension is enabled in the extension manager, there will be a **WebGPU Inspector** tab.
+#### Opening the Developer Tools window
+Select __More Tools / Developer Tools__, or press __F12__ or __Shit+CTRL+J__ (__Option + ⌘ + J__ on MacOS). You can also right-click on the page and select __Inspect__. When the WebGPU Inspector extension is enabled in the extension manager, there will be a **WebGPU Inspector** tab.
+
+![WebGPU Inspector Panel](images/webgpu_inspector_panel.png)
+
+#### Problem Solving
+
+If the WebGPU Inspector tab is not present on the Developer Tools panel, try closing the Developer Tools window and opening it again. Sometimes the browser doesn't load the extension.
+
+
 
 ## [Inspect](inspect.md)
 
