@@ -1,5 +1,17 @@
 [Overview](overview.md) . [Inspect](inspect.md) . [Record](record.md)
 
+* [Capturing Frame Data](#capturing-frame-data)
+* [Frame Commands](#frame-commands)
+* [Render Pass Textures](#render-pass-textures)
+* [Command Stacktrace](#command-stacktrace)
+* [Command Inspection](#command-inspection)
+* [Uniform and Storage Buffer Inspection](#uniform-and-storage-buffer-inspection)
+* [Frame Stats](#frame-stats)
+
+----
+
+* [Formatting Buffer Data](formatting_buffer_data.md)
+
 # Capture
 
 Capture all rendering commands used to render a frame, letting you inspect each command, as well as providing information about the rendering state at each command. It also captures the image results of each render pass.

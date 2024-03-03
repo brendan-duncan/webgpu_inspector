@@ -1,5 +1,14 @@
 [Overview](overview.md) . [Capture](capture.md) . [Record](record.md)
 
+* [Starting the Inspect Tool](#starting-the-inspect-tool)
+* [GPU Stats](#gpu-stats)
+* [GPU Objects](#gpu-objects)
+* [Object Stacktrace](#object-stacktrace)
+* [Textures](#textures)
+* [Shaders](#shaders)
+* [Editing Shaders](#editing-shaders)
+* [Profiling Tips](#profiling-tips)
+
 # Inspect
 
 The Inspect tool shows you a real-time view of all WebGPU Objects that have been created by the page. As objects are created and destroyed, they are reflected by the Inspect tool.
