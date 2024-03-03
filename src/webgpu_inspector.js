@@ -1111,6 +1111,8 @@ import { RollingAverage } from "./utils/rolling_average.js";
         result.__id = `_${commandId}`;
       } else if (method === "createCommandEncoder") {
         result.__id = `_${commandId}`;
+      } else if (method === "finish") {
+        result.__id = `_${commandId}`;
       }
 
       let newArgs = null;

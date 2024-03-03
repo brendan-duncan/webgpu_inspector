@@ -580,11 +580,9 @@ export class CapturePanel {
           if (obj) {
             return `${obj.label || obj.name}(${obj.idName})`;
           }
-          return id ?
-            className ?
+          return className ?
               `${className}(${id})` :
-              `${id}` :
-            "";
+              `${id}`;
         }
         
         new Span(cmd, { class: "capture_methodName", text: `${method}` });
@@ -592,7 +590,7 @@ export class CapturePanel {
         if (method === "createCommandEncoder") {
           new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUCommandEncoder")}` });
         } else if (method === "finish") {
-          new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)}` });
+          new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)} => ${getName(command.result, "GPUCommandBuffer")}` });
         } if (method === "getMappedRange") {
           new Span(cmd, { class: "capture_method_args", text: getName(command.object) });
         } else if (method === "unmap") {
@@ -688,7 +686,10 @@ export class CapturePanel {
         } else if (method === "submit") {
           let buffers = "[";
           for (const buffer of args[0]) {
-            buffers += `${getName(buffer.__id)}, `;
+            if (buffers !== "[") {
+              buffers += ", ";
+            }
+            buffers += `${getName(buffer.__id, "GPUCommandBuffer")}`;
           }
           buffers += "]";
           new Span(cmd, { class: "capture_method_args", text: `=> ${buffers}` });
