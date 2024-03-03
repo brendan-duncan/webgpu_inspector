@@ -1,5 +1,8 @@
+# Inspect
+
 [Overview](overview.md) . [Capture](capture.md) . [Record](record.md)
 
+* [Introduction](#introduction)
 * [Starting the Inspect Tool](#starting-the-inspect-tool)
 * [GPU Stats](#gpu-stats)
 * [GPU Objects](#gpu-objects)
@@ -9,7 +12,8 @@
 * [Editing Shaders](#editing-shaders)
 * [Profiling Tips](#profiling-tips)
 
-# Inspect
+## Introduction
+###### [Back to top](#inspect)
 
 The Inspect tool shows you a real-time view of all WebGPU Objects that have been created by the page. As objects are created and destroyed, they are reflected by the Inspect tool.
 
@@ -18,6 +22,7 @@ The Inspect tool shows you a real-time view of all WebGPU Objects that have been
 </a>
 
 ## Starting the Inspect Tool
+###### [Back to top](#inspect)
 
 WebGPU Inspector does not interfere with a page by default, so you must start the tool for the information to be reported.
 
@@ -38,6 +43,7 @@ When the WebGPU Inspector is active on the page, there will be a small icon draw
 * If you close the DevTools window and open it again, it will have lost the data it collected before. Press the Start button to re-start data collection.
 
 ## GPU Stats
+###### [Back to top](#inspect)
 
 ![GPU Stats](images/inspect_stats.png)
 
@@ -59,6 +65,7 @@ A plot that has a saw-tooth pattern indicates you are allocating GPU objects and
 
 
 ## GPU Objects
+###### [Back to top](#inspect)
 
 WebGPU is an object based API, and has different object types.
 
@@ -72,6 +79,7 @@ Each object category displays how many objects of that type are allocated.
 
 
 ## Object Stacktrace
+###### [Back to top](#inspect)
 
 The stacktrace for each object is recorded, identifying where in the code the object was created.
 
@@ -80,6 +88,7 @@ The stacktrace for each object is recorded, identifying where in the code the ob
 </a>
 
 ## Textures
+###### [Back to top](#inspect)
 
 When you inspect a texture, a Load button pulls the texture image from the page for visualizing.
 
@@ -93,6 +102,7 @@ A Channel control lets you inspect specific color channels of the image.
 </a>
 
 ## Shaders
+###### [Back to top](#inspect)
 
 When you inspect a shader, it provides an editor for the shader's code.
 
@@ -115,6 +125,7 @@ There are limitations to the types of changes you can make to the shader. The pa
 
 
 ## Profiling Tips
+###### [Back to top](#inspect)
 
 Profiling tools have not been added yet, but the Inspector can reveal some oportunities for optimizations.
 
