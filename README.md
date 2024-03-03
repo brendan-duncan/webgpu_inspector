@@ -19,7 +19,16 @@
 
 **Version: 0.0.9**
 
-Inspection and graphics debugging browser extension tool for WebGPU.
+Inspection, profiling, and graphics debugging browser extension for WebGPU.
+
+WebGPU Inspector is designed to inspect what's happening with WebGPU on the page, independent of the engine. It provides:
+* A live view of all GPU objects and inspect their details.
+* Capture all GPU commands used to render a frame, along with render pass output images, textures, buffer data, render state.
+* Edit shaders live on the page.
+* Inspect storage and uniform buffers used for draw and dispatch calls.
+* Inspect textures, including pixel values.
+* Plot frame times and object allocations over time.
+* Record all commands and data for a set of frames for playback or bug reports.
 
 <a href="docs/images/webgpu_inspector_screen.png">
 <img src="docs/images/webgpu_inspector_screen.png" style="width: 512px; border-radius: 10px; box-shadow: 3px 3px 10px rgba(0,0,0,0.5);">
