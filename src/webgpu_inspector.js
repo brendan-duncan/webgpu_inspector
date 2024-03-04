@@ -4,6 +4,7 @@ import { TextureFormatInfo } from "./utils/texture_format_info.js";
 import { TextureUtils } from "./utils/texture_utils.js";
 import { Actions, PanelActions } from "./utils/actions.js";
 import { RollingAverage } from "./utils/rolling_average.js";
+import { alignTo } from "./utils/align.js";
 
 (() => {
   const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
@@ -551,7 +552,7 @@ import { RollingAverage } from "./utils/rolling_average.js";
         device.queue.__device = device;
 
         device.addEventListener('uncapturederror', (event) => {
-          window.postMessage({ "action": Actions.ValidationError, id: 0, "message": error.error.message }, "*");
+          window.postMessage({ "action": Actions.ValidationError, id: 0, "message": event.error.message }, "*");
         });
 
         args ??= [];
@@ -1007,6 +1008,7 @@ import { RollingAverage } from "./utils/rolling_average.js";
 
       if (method === "destroy") {
         const id = object.__id;
+        object.__destroyed = true;
         // Don't remove canvas textures from the tracked objects, which have negative id's.
         // These are frequently created and destroyed via getCurrentTexture.
         if (id > 0) {
@@ -1151,7 +1153,8 @@ import { RollingAverage } from "./utils/rolling_average.js";
             const usesDynamicOffset = layoutEntry?.buffer?.hasDynamicOffset ?? false;
             if (buffer) {
               let offset = entry.resource.offset ?? 0;
-              const size = entry.resource.size ?? (buffer.size - offset);
+              const origSize = entry.resource.size ?? (buffer.size - offset);
+              const size = alignTo(origSize, 4);
 
               if (size < this._captureMaxBufferSize) {
                 if (usesDynamicOffset) {
@@ -1161,6 +1164,7 @@ import { RollingAverage } from "./utils/rolling_average.js";
                 if (!object.__captureBuffers) {
                   object.__captureBuffers = [];
                 }
+                
                 object.__captureBuffers.push({ commandId, entryIndex, buffer, offset, size });
                 this._captureBuffersCount++;
                 this._updateStatusMessage();
@@ -1228,7 +1232,9 @@ import { RollingAverage } from "./utils/rolling_average.js";
           if (!object.__captureBuffers) {
             object.__captureBuffers = [];
           }
-          object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset: firstIndexOffset, size: indexCountSize });
+          
+          const size = alignTo(indexCountSize, 4);
+          object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset: firstIndexOffset, size });
           this._captureBuffersCount++;
           this._updateStatusMessage();
         }
@@ -1471,6 +1477,10 @@ import { RollingAverage } from "./utils/rolling_average.js";
 
       for (const bufferInfo of buffers) {
         const { commandId, entryIndex, buffer, offset, size } = bufferInfo;
+
+        if (buffer.__destroyed) {
+          continue;
+        }
 
         let tempBuffer = null;
         this.disableRecording();
