@@ -1282,6 +1282,7 @@ import { alignTo } from "./utils/align.js";
             result.__captureTextureViews.add(captureTextureView);
           }
         }
+        result.__descriptor = args[0];
         if (args[0]?.depthStencilAttachment) {
           if (!result.__captureTextureViews) {
             result.__captureTextureViews = new Set();

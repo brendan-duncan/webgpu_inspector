@@ -887,52 +887,67 @@ export class CapturePanel {
     }
   }
 
-  _showBufferDataType(ui, type, bufferData, offset = 0) {
+  _showBufferDataType(ui, type, bufferData, offset = 0, radix = 10) {
     if (!type) {
       return;
+    }
+
+    radix = type.radix || radix;
+
+    function toString(value, radix) {
+      if (radix === 16) {
+        return `0x${value.toString(16)}`;
+      }
+      if (radix === 2) {
+        return `0b${value.toString(2)}`;
+      }
+      if (radix === 8) {
+        return `0o${value.toString(8)}`;
+      }
+      return `${value}`;
     }
 
     const typeName = this._getTypeName(type);
 
     if (typeName === "f32") {
       const data = new Float32Array(bufferData.buffer, offset, 1);
-      new Widget("li", ui, { text: `${data[0]}`});
+      new Widget("li", ui, { text: `${toString(data[0], radix)}`});
     } else if (typeName === "i32") {
       const data = new Int32Array(bufferData.buffer, offset, 1);
-      new Widget("li", ui, { text: `${data[0]}`});
+      new Widget("li", ui, { text: `${toString(data[0], radix)}`});
     } else if (typeName === "u32") {
       const data = new Uint32Array(bufferData.buffer, offset, 1);
-      new Widget("li", ui, { text: `${data[0]}`});
+      new Widget("li", ui, { text: `${toString(data[0], radix)}`});
     } else if (typeName === "bool") {
       const data = new Uint32Array(bufferData.buffer, offset, 1);
       new Widget("li", ui, { text: `${data[0] ? "true" : "false"}`});
     } else if (typeName === "vec2i" || typeName === "vec2<i32>") {
       const data = new Int32Array(bufferData.buffer, offset, 2);
-      new Widget("li", ui, { text: `${data[0]}, ${data[1]}`});
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${data[1]}`});
     } else if (typeName === "vec2u" || typeName === "vec2<u32>") {
       const data = new Uint32Array(bufferData.buffer, offset, 2);
-      new Widget("li", ui, { text: `${data[0]}, ${data[1]}`});
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${data[1]}`});
     } else if (typeName === "vec2f" || typeName === "vec2<f32>") {
       const data = new Float32Array(bufferData.buffer, offset, 2);
-      new Widget("li", ui, { text: `${data[0]}, ${data[1]}`});
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${data[1]}`});
     } else if (typeName === "vec3i" || typeName === "vec3<i32>") {
       const data = new Int32Array(bufferData.buffer, offset, 3);
-      new Widget("li", ui, { text: `${data[0]}, ${data[1]}, ${data[2]}`});
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${data[1]}, ${data[2]}`});
     } else if (typeName === "vec3u" || typeName === "vec3<u32>") {
       const data = new Uint32Array(bufferData.buffer, offset, 3);
-      new Widget("li", ui, { text: `${data[0]}, ${data[1]}, ${data[2]}`});
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`});
     } else if (typeName === "vec3f" || typeName === "vec3<f32>") {
       const data = new Float32Array(bufferData.buffer, offset, 3);
-      new Widget("li", ui, { text: `${data[0]}, ${data[1]}, ${data[2]}`});
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`});
     } else if (typeName === "vec4i" || typeName === "vec4<i32>") {
       const data = new Int32Array(bufferData.buffer, offset, 4);
-      new Widget("li", ui, { text: `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`});
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`});
     } else if (typeName === "vec4u" || typeName === "vec4<u32>") {
       const data = new Uint32Array(bufferData.buffer, offset, 4);
-      new Widget("li", ui, { text: `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`});
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`});
     } else if (typeName === "vec4f" || typeName === "vec4<f32>") {
       const data = new Float32Array(bufferData.buffer, offset, 4);
-      new Widget("li", ui, { text: `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`});
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`});
     } else if (CapturePanel.matrixTypes[type.name]) {
       const t = CapturePanel.matrixTypes[type.name];
       const rows = t.rows;
@@ -951,7 +966,7 @@ export class CapturePanel {
         const typeName = this._getTypeName(m.type);
         new Widget("li", l2, { text: `${m.name}: ${typeName}` });
         const l3 = new Widget("ul", l2);
-        this._showBufferDataType(l3, m.type, bufferData, offset + m.offset);
+        this._showBufferDataType(l3, m.type, bufferData, offset + m.offset, radix);
       }
     } else if (type.name === "array") {
       const ul = new Widget("ul", ui);
@@ -969,43 +984,43 @@ export class CapturePanel {
           let value = null;
           if (formatName === "f32" || formatName === "atomic<f32>") {
             const data = new Float32Array(bufferData.buffer, elementOffset, 1);
-            value = data[0];
+            value = toString(data[0], radix);
           } else if (formatName === "i32" || formatName === "atomic<i32>") {
             const data = new Int32Array(bufferData.buffer, elementOffset, 1);
-            value = data[0];
+            value = toString(data[0], radix);
           } else if (formatName === "u32" || formatName === "atomic<u32>") {
             const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
-            value = data[0];
+            value = toString(data[0], radix);
           } else if (formatName === "bool" || formatName === "atomic<bool>") {
             const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
             value = data[0] ? "true" : "false";
           } else if (formatName === "vec2i" || formatName === "vec2<i32>") {
             const data = new Int32Array(bufferData.buffer, elementOffset, 2);
-            value = `${data[0]}, ${data[1]}`;
+            value = `${toString(data[0], radix)}, ${data[1]}`;
           } else if (formatName === "vec2u" || formatName === "vec2<u32>") {
             const data = new Uint32Array(bufferData.buffer, elementOffset, 2);
-            value = `${data[0]}, ${data[1]}`;
+            value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
           } else if (formatName === "vec2f" || formatName === "vec2<f32>") {
             const data = new Float32Array(bufferData.buffer, elementOffset, 2);
-            value = `${data[0]}, ${data[1]}`;
+            value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
           } else if (formatName === "vec3i" || formatName === "vec3<i32>") {
             const data = new Int32Array(bufferData.buffer, elementOffset, 3);
-            value = `${data[0]}, ${data[1]}, ${data[2]}`;
+            value = `${data[0]}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
           } else if (formatName === "vec3u" || formatName === "vec3<u32>") {
             const data = new Uint32Array(bufferData.buffer, elementOffset, 3);
-            value = `${data[0]}, ${data[1]}, ${data[2]}`;
+            value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
           } else if (formatName === "vec3f" || formatName === "vec3<f32>") {
             const data = new Float32Array(bufferData.buffer, elementOffset, 3);
-            value = `${data[0]}, ${data[1]}, ${data[2]}`;
+            value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
           } else if (formatName === "vec4i" || formatName === "vec4<i32>") {
             const data = new Int32Array(bufferData.buffer, elementOffset, 4);
-            value = `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`;
+            value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
           } else if (formatName === "vec4u" || formatName === "vec4<u32>") {
             const data = new Uint32Array(bufferData.buffer, elementOffset, 4);
-            value = `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`;
+            value = `${data[0]}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
           } else if (formatName === "vec4f" || formatName === "vec4<f32>") {
             const data = new Float32Array(bufferData.buffer, elementOffset, 4);
-            value = `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`;
+            value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
           }
 
           if (format.isStruct && format.members?.length === 1) {
@@ -1016,44 +1031,44 @@ export class CapturePanel {
               if (arrayFormatName === "u32" || arrayFormatName === "atomic<u32>") {
                 if (member.count === 1) {
                   const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
-                  value = `${data[0]}`;
+                  value = `${toString(data[0], radix)}`;
                 } else if (member.count === 2) {
                   const data = new Uint32Array(bufferData.buffer, elementOffset, 2);
-                  value = `${data[0]}, ${data[1]}`;
+                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
                 } else if (member.count === 3) {
                   const data = new Uint32Array(bufferData.buffer, elementOffset, 3);
-                  value = `${data[0]}, ${data[1]}, ${data[2]}`;
+                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
                 } else if (member.count === 4) {
                   const data = new Uint32Array(bufferData.buffer, elementOffset, 4);
-                  value = `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`;
+                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
                 }
               } else if (arrayFormatName === "i32" || arrayFormatName === "atomic<i32>") {
                 if (member.count === 1) {
                   const data = new Int32Array(bufferData.buffer, elementOffset, 1);
-                  value = `${data[0]}`;
+                  value = `${toString(data[0], radix)}`;
                 } else if (member.count === 2) {
                   const data = new Int32Array(bufferData.buffer, elementOffset, 2);
-                  value = `${data[0]}, ${data[1]}`;
+                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
                 } else if (member.count === 3) {
                   const data = new Int32Array(bufferData.buffer, elementOffset, 3);
-                  value = `${data[0]}, ${data[1]}, ${data[2]}`;
+                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
                 } else if (member.count === 4) {
                   const data = new Int32Array(bufferData.buffer, elementOffset, 4);
-                  value = `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`;
+                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
                 }
               } else if (arrayFormatName === "f32" || arrayFormatName === "atomic<f32>") {
                 if (member.count === 1) {
                   const data = new Float32Array(bufferData.buffer, elementOffset, 1);
-                  value = `${data[0]}`;
+                  value = `${toString(data[0], radix)}`;
                 } else if (member.count === 2) {
                   const data = new Float32Array(bufferData.buffer, elementOffset, 2);
-                  value = `${data[0]}, ${data[1]}`;
+                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
                 } else if (member.count === 3) {
                   const data = new Float32Array(bufferData.buffer, elementOffset, 3);
-                  value = `${data[0]}, ${data[1]}, ${data[2]}`;
+                  value = `${data[0]}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
                 } else if (member.count === 4) {
                   const data = new Float32Array(bufferData.buffer, elementOffset, 4);
-                  value = `${data[0]}, ${data[1]}, ${data[2]}, ${data[3]}`;
+                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
                 }
               }
             }
@@ -1073,19 +1088,23 @@ export class CapturePanel {
     }
   }
 
-  _setBufferFormat(type, typeName, format, skipStructEncapsulation = false) {
+  _setBufferFormat(type, typeName, format, skipStructEncapsulation = false, radix = 10) {
     try {
       let reflect = new WgslReflect(format);
       if (reflect) {
         for (const struct of reflect.structs) {
           if (struct.name === typeName) {
             type.replacement = struct;
+            type.replacement.radix = radix;
+            console.log("REPLACEMENT RADIX", type.replacement.radix);
             return;
           }
         }
         // If structs are defined but none of the names match, use the last one.
         if (reflect.structs.length > 0) {
           type.replacement = reflect.structs[reflect.structs.length - 1];
+          type.replacement.radix = radix;
+          console.log("REPLACEMENT RADIX", type.replacement.radix);
           return;
         
         }
@@ -1094,7 +1113,7 @@ export class CapturePanel {
         // basic and array types need to be wrapped in a struct for the reflection to work.
         const newTypeName = `_${type.name}`;
         const structFormat = `struct _${type.name} { _: ${format} }`;
-        this._setBufferFormat(type, newTypeName, structFormat, true);
+        this._setBufferFormat(type, newTypeName, structFormat, true, radix);
       }
     } catch (e) {
     }
@@ -1120,6 +1139,18 @@ export class CapturePanel {
         value: format,
         style: 'width: 100%; height: 200px;',
       });
+
+      const optionssRow = new Div(dialog.body, { style: "padding-left: 10px; margin-top: 4px;" });
+      new Span(optionssRow, { text: "Radix:", style: "margin-right: 5px;" });
+      const radixSelect = [ 10, 16, 8, 2 ];
+      let radix = resourceType(resource)?.radix || 10;
+      new Select(optionssRow, {
+        options: [ "Decimal", "Hexadecimal", "Octal", "Binary" ],
+        value: radix === 16 ? "Hexadecimal" : radix === 8 ? "Octal" : radix === 2 ? "Binary" : "Decimal",
+        onChange: (_, index) => {
+          radix = radixSelect[index];
+        }
+      });
   
       const buttonRow = new Div(dialog.body, {
         style: 'width: 100%; margin-top: 20px;',
@@ -1133,7 +1164,7 @@ export class CapturePanel {
         callback: function () {
           dialog.close();
           const type = resourceType(resource);
-          self._setBufferFormat(resource.type, type.name, nameEdit.value);
+          self._setBufferFormat(resource.type, type.name, nameEdit.value, false, radix);
           bufferDataUI.html = "";
           const newType = resourceType(resource);
           self._showBufferDataType(bufferDataUI, newType, bufferData);
