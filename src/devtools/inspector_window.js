@@ -24,7 +24,6 @@ export class InspectorWindow extends Window {
     this.classList.add("main-window");
     this._selectedObject = null;
     this._inspectedObject = null;
-    this.objectDatabase = new ObjectDatabase(this.port);
 
     this.adapter = null;
     this.device = null;

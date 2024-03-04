@@ -1327,7 +1327,7 @@ import { RollingAverage } from "./utils/rolling_average.js";
         "chunkCount": totalChunks,
         "count": this._captureTexturedBuffers.length,
         textures }, "*");
-
+     
       for (const textureBuffer of this._captureTexturedBuffers) {
         const { id, tempBuffer, passId } = textureBuffer;
 
@@ -1340,6 +1340,8 @@ import { RollingAverage } from "./utils/rolling_average.js";
           const data = new Uint8Array(range);
           self._sendTextureData(id, passId, data);
           tempBuffer.destroy();
+        }).catch((e) => {
+          console.error(e);
         });
       }
       this._captureTexturedBuffers.length = 0;
@@ -1371,6 +1373,8 @@ import { RollingAverage } from "./utils/rolling_average.js";
           }, "*");
           self._encodingTextureChunkCount--;
           self._updateStatusMessage();
+        }).catch((e) => {
+          console.log("Error encoding texture data:", e);
         });
       }
     }

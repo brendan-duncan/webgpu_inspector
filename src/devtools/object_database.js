@@ -5,6 +5,8 @@ import * as GPU from "./gpu_objects/index.js";
 export class ObjectDatabase {
   constructor(port) {
     this.port = port;
+    this.frameTime = 0;
+    this.errorCount = 0;
 
     this.allObjects = new Map();
     this.adapters = new Map();
@@ -22,8 +24,8 @@ export class ObjectDatabase {
     this.pendingRenderPipelines = new Map();
     this.pendingComputePipelines = new Map();
     this.validationErrors = new Map();
-    this.frameTime = 0;
-    this.errorCount = 0;
+
+    this.capturedObjects = new Map();
 
     this.inspectedObject = null;
 
@@ -314,7 +316,7 @@ export class ObjectDatabase {
     if (this.inspectedObject?.id === id) {
       return this.inspectedObject;
     }
-    return this.allObjects.get(id);
+    return this.allObjects.get(id) || this.capturedObjects.get(id);
   }
 
   getTextureFromView(view) {
