@@ -40,6 +40,13 @@ Which would then present the buffer data as:
 
 ![Buffer Format Vec4f](images/buffer_format_vec4f.png)
 
+## Radix Views
+
+Not only can you change the format of the data, you can change the number radix of the display, from **Decimal**, **Hexidecimal**, **Octal**, or **Binary**. Changing the Radix to Hexidecimal will display all numbers as hexidecimal.
+
+![Buffer Format Hexidecimal](images/buffer_edit_format_hex.png)
+![Buffer Format Hexidecimal](images/buffer_format_hex.png)
+
 ## Format data types
 
 Format types are specified as WGSL variable types. These can be either struct, array, or basic types. See the WGSL spec for more information.
