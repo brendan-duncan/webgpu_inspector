@@ -1217,7 +1217,11 @@ import { alignTo } from "./utils/align.js";
 
       if (method === "drawIndexed") {
         if (object.__indexBuffer) {
-          const indexCount = args[0];
+          // TODO: Capture the index buffer.
+          // There is a problem that we can't copy the index buffer if the size isn't aligned to 4,
+          // and if we bump the size up to the next multiple of 4, we'll be copying more data than
+          // the original buffer has. We need to make sure index buffers are allocated to an alignment size of 4.
+          /*const indexCount = args[0];
           const firstIndex = args[2] ?? 0;
 
           const buffer = object.__indexBuffer[0];
@@ -1236,7 +1240,7 @@ import { alignTo } from "./utils/align.js";
           const size = alignTo(indexCountSize, 4);
           object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset: firstIndexOffset, size });
           this._captureBuffersCount++;
-          this._updateStatusMessage();
+          this._updateStatusMessage();*/
         }
       }
 
