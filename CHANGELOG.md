@@ -1,3 +1,6 @@
+## v0.1.0
+* Add ability to change radix of number views for buffer data.
+
 ## v0.0.9
 * Make buffer data view more compact for basic types.
 * Report memory leaks as a validation error (buffer/texture/device garbage collected without explicit destroy).
