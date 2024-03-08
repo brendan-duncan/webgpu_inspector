@@ -757,7 +757,7 @@ export class InspectPanel {
       revertButton = isModified ? new Button(compileRow, { label: "Revert", style: "background-color: rgb(200, 150, 51);" }) : null;
     }
 
-    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-235px + 100vh); overflow: auto;" });
+    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-320px + 100vh); overflow: auto;" });
 
     if (object instanceof ShaderModule) {
       const self = this;
