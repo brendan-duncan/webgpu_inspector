@@ -24,6 +24,7 @@ import {
 import { getFlagString } from "../utils/flags.js";
 import { PanelActions } from "../utils/actions.js";
 import { Plot } from "./widget/plot.js";
+import { Split } from "./widget/split.js";
 import { EditorView } from "codemirror";
 
 import { keymap, highlightSpecialChars, drawSelection, dropCursor,
@@ -37,6 +38,7 @@ import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } 
 import { lintKeymap } from "@codemirror/lint";
 import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
 import { cobalt } from 'thememirror';
+
 
 const shaderEditorSetup = (() => [
   lineNumbers(),
@@ -220,15 +222,17 @@ export class InspectPanel {
     this._selectedGroup = null;
     this.inspectorGUI.html = "";
 
-    const pane1 = new Span(this.inspectorGUI);
+    const split = new Split(this.inspectorGUI, { direction: Split.Horizontal, position: 340 });
+
+    const pane1 = new Span(split);
 
     const objectsTab = new TabWidget(pane1);
-    const objectsPanel = new Div(null, { style: "font-size: 11pt; overflow: auto; height: calc(-115px + 100vh); max-width: 340px;" });
+    const objectsPanel = new Div(null, { style: "font-size: 11pt; overflow: auto; height: calc(-115px + 100vh);" });
     objectsTab.addTab("Objects", objectsPanel);
 
-    const pane3 = new Span(this.inspectorGUI, { style: "padding-left: 20px; flex-grow: 1; overflow: hidden;" });
+    const pane2 = new Span(split, { style: "flex-grow: 1; overflow: hidden;" });
 
-    const inspectTab = new TabWidget(pane3);
+    const inspectTab = new TabWidget(pane2);
     this.inspectPanel = new Div(null, { class: "inspector_panel_content" });
     inspectTab.addTab("Inspect", this.inspectPanel);
 
@@ -753,7 +757,7 @@ export class InspectPanel {
       revertButton = isModified ? new Button(compileRow, { label: "Revert", style: "background-color: rgb(200, 150, 51);" }) : null;
     }
 
-    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-300px + 100vh); overflow: auto;" });
+    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-235px + 100vh); overflow: auto;" });
 
     if (object instanceof ShaderModule) {
       const self = this;

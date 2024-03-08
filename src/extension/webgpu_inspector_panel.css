@@ -767,6 +767,32 @@ span {
   cursor: default;
 }
 
+/* split */
+.split {
+  white-space: nowrap;
+  overflow: hidden;
+  display: flex;
+}
+
+.hsplit {
+  flex-direction: row;
+  width: 100%;
+  height: 100%;
+}
+
+.vsplit {
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.splitbar {
+  background-color: #222;
+  -webkit-box-shadow: inset -4px -4px 4px -3px #000;
+  box-shadow: inset -4px -4px 4px -3px #000;
+}
+
+
 /* menu */
 .menubar {
   background-color: #1a1a1a;
