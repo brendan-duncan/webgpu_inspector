@@ -13,6 +13,11 @@ class WebGPURecorder {
 
     this._objectIndex = 1;
     this._initalized = false;
+    
+    this._initializeCommandObjects = [];
+    this._frameCommandObjects = [];
+    this._currentFrameCommandObjects = null;
+
     this._initializeCommands = [];
     this._frameCommands = [];
     this._frameObjects = [];
@@ -90,6 +95,9 @@ class WebGPURecorder {
     this._frameCommands.push(this._currentFrameCommands);
     this._currentFrameObjects = [];
     this._frameObjects.push(this._currentFrameObjects);
+
+    this._currentFrameCommandObjects = [];
+    this._frameCommandObjects.push(this._currentFrameCommandObjects);
   }
 
   _frameEnd() {
@@ -114,6 +122,7 @@ class WebGPURecorder {
   generateOutput() {
     const unusedObjects = new Set();
     this._isRecording = false;
+
     if (this.config.removeUnusedResources) {
       for (const object of this._unusedTextures) {
         unusedObjects.add(object);
@@ -127,6 +136,7 @@ class WebGPURecorder {
 
       this._removeUnusedCommands(this._initializeObjects, this._initializeCommands, unusedObjects);
     }
+
     this._initializeCommands = this._initializeCommands.filter((cmd) => cmd != "");
     if (this.config.removeUnusedResources) {
       for (const obj of unusedObjects) {
@@ -144,14 +154,10 @@ class WebGPURecorder {
               this._arrayCache[di].array = new Uint8Array(0);
             }
           }
-          /*if (dataObj && dataObj.__id == obj) {
-              this._arrayCache[di].length = 0;
-              this._arrayCache[di].type = "Uint8Array";
-              this._arrayCache[di].array = new Uint8Array(0);
-          }*/
         }
       }
     }
+
     let s =`
     <!DOCTYPE html>
     <html>
@@ -169,6 +175,7 @@ class WebGPURecorder {
       document.body.append(frameLabel);
       ${this._getVariableDeclarations(-1)}
       ${this._initializeCommands.join("\n  ")}\n`;
+
     for (let fi = 0, fl = this._frameCommands.length; fi < fl; ++fi) {
       if (this.config.removeUnusedResources) {
         this._removeUnusedCommands(this._frameObjects[fi], this._frameCommands[fi], unusedObjects);
@@ -180,11 +187,13 @@ class WebGPURecorder {
           ${this._frameCommands[fi].join("\n  ")}
       }\n`;
     }
+
     s += "    let frames=[";
     for (let fi = 0, fl = this._frameCommands.length; fi < fl; ++fi) {
       s += `f${fi},`;
     }
     s += "];";
+
     s += `
         let frame = 0;
         let lastFrame = -1;
@@ -224,10 +233,9 @@ class WebGPURecorder {
     }
     
     async function loadData() {\n`;
-    let promises = [];
+    const promises = [];
     for (let ai = 0; ai < this._arrayCache.length; ++ai) {
-      let a = this._arrayCache[ai];
-      //let b64 = this._arrayToBase64(a.array);
+      const a = this._arrayCache[ai];
       promises.push(new Promise((resolve) => {
         this._encodeDataUrl(a.array).then((b64) => {
           s += `D[${ai}] = await B64ToA("${b64}", "${a.type}", ${a.length});\n`;
@@ -243,6 +251,7 @@ class WebGPURecorder {
               </script>
           </body>
       </html>\n`;
+
       this._downloadFile(s, (this.config.exportName || "WebGpuRecord") + ".html");
     });   
   }
@@ -267,21 +276,41 @@ class WebGPURecorder {
     document.body.removeChild(link);
 
     if (this.config.messageRecording) {
-      const maxMessageSize = 1024 * 1024; // Break message up into chunks
-      if (data.length <= maxMessageSize) {
-        window.postMessage({ "action": "webgpu_record_recording", data, "index": 0, "count": 1 });
-      } else {
-        let startIndex = 0;
-        const dataLength = data.length;
-        let messageIndex = 0;
-        let messageCount = Math.ceil(dataLength / maxMessageSize);
-        while (startIndex < dataLength) {
-          const remainder = dataLength - startIndex;
-          const size = remainder > maxMessageSize ? maxMessageSize : remainder;
-          const dataChunk = data.substr(startIndex, size);
-          window.postMessage({ "action": "webgpu_record_recording", "data": dataChunk, "index": messageIndex, "count": messageCount });
-          messageIndex++;
-          startIndex += size;
+      let count = this._initializeCommandObjects.length;
+      for (let i = 0; i < this._frameCommandObjects.length; ++i) {
+        count += this._frameCommandObjects[i].length;
+      }
+
+      window.postMessage({ action: "webgpu_record_data_count", count: this._arrayCache.length });
+
+      let index = 0;
+      let frame = -1;
+      const action = "webgpu_record_command";
+      for (let i = 0; i < this._initializeCommandObjects.length; ++i) {
+        const command = this._initializeCommandObjects[i];
+        window.postMessage({ action, command, commandIndex: i, frame, index, count });
+        index++;
+      }
+
+      for (frame = 0; frame < this._frameCommandObjects.length; ++frame) {
+        const commands = this._frameCommandObjects[frame];
+        for (let j = 0; j < commands.length; ++j) {
+          const command = commands[j];
+          window.postMessage({ action, command, commandIndex: j, frame, index, count });
+          index++;
+        }
+      }
+
+      {
+        const count = this._arrayCache.length;
+        const action = "webgpu_record_data";
+        for (let index = 0; index < count; ++index) {
+          const a = this._arrayCache[index];
+          const size = a.length;
+          const type = a.type;
+          this._encodeDataUrl(a.array).then((data) => {
+            window.postMessage({ action, data, type, size, index, count });
+          });      
         }
       }
     }
@@ -343,6 +372,10 @@ class WebGPURecorder {
   }
 
   _getObjectVariable(object) {
+    if (!object) {
+      return undefined;
+    }
+
     if (object instanceof GPUCanvasContext) {
       return "context";
     }
@@ -370,12 +403,12 @@ class WebGPURecorder {
   }
 
   _getBytesFromImageSource(src) {
-    let canvas = document.createElement("canvas");
+    const canvas = document.createElement("canvas");
     canvas.width = src.width;
     canvas.height = src.height;
-    let c2d = canvas.getContext("2d");
+    const c2d = canvas.getContext("2d");
     c2d.drawImage(src, 0, 0);
-    let data = c2d.getImageData(0, 0, src.width, src.height);
+    const data = c2d.getImageData(0, 0, src.width, src.height);
     return data.data;
   }
 
@@ -404,11 +437,13 @@ class WebGPURecorder {
           // Set the mappedRange buffer data in the recording to what is in the buffer
           // at the time unmap is called.
           this._recordLine(`new Uint8Array(${this._getObjectVariable(buffer)}).set(D[${cacheIndex}]);`, null);
+          this._recordCommand("", buffer, "__writeData", null, [cacheIndex], true);
         }
         delete object.__mappedRanges;
       }
     } else if (method === "getCurrentTexture") {
       this._recordLine(`setCanvasSize(${this._getObjectVariable(object)}.canvas, ${object.canvas.width}, ${object.canvas.height})`, null);
+      this._recordCommand("", object, "__setCanvasSize", null, [object.canvas.width, object.canvas.height], true);
     }
   }
 
@@ -425,6 +460,7 @@ class WebGPURecorder {
       const texture = args[1]["texture"];
       const cacheIndex = this._getDataCache(bytes, bytes.byteOffset, bytes.byteLength, texture);
       this._recordLine(`${this._getObjectVariable(object)}.writeTexture(${this._stringifyObject(method, args[1])}, D[${cacheIndex}], {bytesPerRow:${bytesPerRow}}, ${this._stringifyObject(method, args[2])});`, object);
+      this._recordCommand(false, object, "__writeTexture", null, [args[1], { __data: cacheIndex }, { bytesPerRow }, args[2]], true);
     } else {
       this._recordCommand(false, object, method, result, args);
     }
@@ -442,7 +478,7 @@ class WebGPURecorder {
     }
   }
 
-  _stringifyObject(method, object) {
+  _stringifyObject(method, object, toJson) {
     let s = "";
     let first = true;
     for (let key in object) {
@@ -487,16 +523,24 @@ class WebGPURecorder {
       }
       if (value === null) {
         s += "null";
-      } else if (typeof (value) == "string") {
-        s += `\`${value}\``;
+      } else if (typeof (value) === "string") {
+        s += JSON.stringify(value);
       } else if (value.__id !== undefined) {
-        s += this._getObjectVariable(value);
+        if (toJson) {
+          s += `{ "__id":"${this._getObjectVariable(value)}" }`;
+        } else {
+          s += this._getObjectVariable(value);
+        }
       } else if (value.__data !== undefined) {
-        s += `D[${value.__data}]`;
+        if (toJson) {
+          s += `{ "__data": ${value.__data} }`;
+        } else {
+          s += `D[${value.__data}]`;
+        }
       } else if (value.constructor == Array) {
-        s += this._stringifyArray(value);
-      } else if (typeof (value) == "object") {
-        s += this._stringifyObject(method, value);
+        s += this._stringifyArray(value, toJson);
+      } else if (typeof (value) === "object") {
+        s += this._stringifyObject(method, value, toJson);
       } else {
         s += `${value}`;
       }
@@ -505,9 +549,9 @@ class WebGPURecorder {
     return s;
   }
 
-  _stringifyArray(a) {
+  _stringifyArray(a, toJson) {
     let s = "[";
-    s += this._stringifyArgs("", a);
+    s += this._stringifyArgs("", a, toJson);
     s += "]";
     return s;
   }
@@ -572,11 +616,7 @@ class WebGPURecorder {
     return cacheIndex;
   }
 
-  _stringifyArgs(method, args) {
-    if (args.length == 0 || (args.length == 1 && args[0] === undefined)) {
-      return "";
-    }
-
+  _processArgs(method, args) {
     args = [...args];
 
     // In order to capture buffer data, we need to know the offset and size of the data,
@@ -684,23 +724,40 @@ class WebGPURecorder {
         }
       }
     }
+    return args;
+  }
+
+  _stringifyArgs(method, args, toJson) {
+    if (args.length == 0 || (args.length == 1 && args[0] === undefined)) {
+      return "";
+    }
+
+    args = this._processArgs(method, args);
 
     const argStrings = [];
-    for (let a of args) {
+    for (const a of args) {
       if (a === undefined) {
         argStrings.push("undefined");
       } else if (a === null) {
         argStrings.push("null");
       } else if (a.__data !== undefined) {
-        argStrings.push(`D[${a.__data}]`); // This is a captured data buffer.
+        if (toJson) {
+          argStrings.push(`{ "__data": ${a.__data} }`); // This is a captured data buffer.
+        } else {
+          argStrings.push(`D[${a.__data}]`);
+        }
       } else if (a.__id) {
-        argStrings.push(this._getObjectVariable(a));
+        if (toJson) {
+          argStrings.push(`{ "__id": "${this._getObjectVariable(a)}" }`);
+        } else {
+          argStrings.push(this._getObjectVariable(a));
+        }
       } else if (a.constructor === Array) {
-        argStrings.push(this._stringifyArray(a));
-      } else if (typeof (a) == "object") {
-        argStrings.push(this._stringifyObject(method, a));
-      } else if (typeof (a) == "string") {
-        argStrings.push(`\`${a}\``);
+        argStrings.push(this._stringifyArray(a, toJson));
+      } else if (typeof (a) === "object") {
+        argStrings.push(this._stringifyObject(method, a, toJson));
+      } else if (typeof (a) === "string") {
+        argStrings.push(JSON.stringify(a));
       } else {
         argStrings.push(a);
       }
@@ -720,75 +777,92 @@ class WebGPURecorder {
     }
   }
 
-  _recordCommand(async, object, method, result, args) {
-    if (this._isRecording) {
-      if (result) {
-        if (typeof (result) === "string") {
-          return;
-        }
+  _recordCommand(async, object, method, result, args, skipLine) {
+    if (!this._isRecording) {
+      return;
+    }
+    if (result) {
+      if (typeof (result) === "string") {
+        return;
+      }
 
+      if (result.__id === undefined) {
         this._registerObject(result);
       }
+    }
 
-      async = async ? "await " : "";
+    async = async ? "await " : "";
 
-      let obj = object;
-      const hasAdapter = !!this._adapter;
+    let obj = object;
+    const hasAdapter = !!this._adapter;
 
-      if (!hasAdapter && method == "requestAdapter") {
-        this._adapter = result;
-      } else if (method == "createTexture") {
-        this._unusedTextures.add(result.__id);
-        obj = result;
-      } else if (method == "createView") {
-        this._unusedTextureViews.set(result.__id, object.__id);
-      } else if (method == "writeTexture") {
-        obj = args[0].texture;
-      } else if (method == "createBuffer") {
-        this._unusedBuffers.add(result.__id);
-        obj = result;
-      } else if (method == "writeBuffer") {
-        obj = args[0];
-      }
+    if (!hasAdapter && method == "requestAdapter") {
+      this._adapter = result;
+    } else if (method == "createTexture") {
+      this._unusedTextures.add(result.__id);
+      obj = result;
+    } else if (method == "createView") {
+      this._unusedTextureViews.set(result.__id, object.__id);
+    } else if (method == "writeTexture") {
+      obj = args[0].texture;
+    } else if (method == "createBuffer") {
+      this._unusedBuffers.add(result.__id);
+      obj = result;
+    } else if (method == "writeBuffer") {
+      obj = args[0];
+    }
 
-      // Add a blank line before render and compute passes to make them easier to
-      // identify in the recording file.
-      if (method == "beginRenderPass" || method == "beginComputePass") {
-        this._recordLine("\n", null);
-      }
+    const newArgs = `[${this._stringifyArgs(method, args, true)}]`;
+    const commandObj = { "object": this._getObjectVariable(object), method, "result": this._getObjectVariable(result), args: newArgs, async };
+    if (this._frameIndex == -1) {
+      this._initializeCommandObjects.push(commandObj);
+    } else {
+      this._currentFrameCommandObjects.push(commandObj);
+    }
 
-      if (result) {
-        this._recordLine(`${this._getObjectVariable(result)} = ${async}${this._getObjectVariable(object)}.${method}(${this._stringifyArgs(method, args)});`, obj);
-      } else {
-        this._recordLine(`${async}${this._getObjectVariable(object)}.${method}(${this._stringifyArgs(method, args)});`, obj);
-      }
+    if (skipLine) {
+      return;
+    }
 
-      // Add a blank line after ending render and compute passes to make them easier
-      // to identify in the recording file.
-      if (method == "end") {
-        this._recordLine("\n", null);
-      }
+    // Add a blank line before render and compute passes to make them easier to
+    // identify in the recording file.
+    if (method == "beginRenderPass" || method == "beginComputePass") {
+      this._recordLine("\n", null);
+    }
 
-      if (!hasAdapter && method == "requestAdapter") {
-        const adapter = this._getObjectVariable(result);
-        this._recordLine(`const requiredFeatures = [];
-          for (const x of ${adapter}.features) {
-              requiredFeatures.push(x);
-          }`, obj);
-        this._recordLine(`const requiredLimits = {};
-          const exclude = new Set(["minSubgroupSize", "maxSubgroupSize"]);
-          for (const x in ${adapter}.limits) {
-            if (!exclude.has(x)) {
-              requiredLimits[x] = ${adapter}.limits[x];
-            }
-          }`, obj);
-      }
+    if (result) {
+      this._recordLine(`${this._getObjectVariable(result)} = ${async}${this._getObjectVariable(object)}.${method}(${this._stringifyArgs(method, args)});`, obj);
+    } else {
+      this._recordLine(`${async}${this._getObjectVariable(object)}.${method}(${this._stringifyArgs(method, args)});`, obj);
+    }
 
-      if (result instanceof GPUDevice) {
-        const q = result.queue;
-        if (q.__id === undefined) {
-          this._recordLine(`${this._getObjectVariable(q)} = ${this._getObjectVariable(result)}.queue;`, result);
-        }
+    // Add a blank line after ending render and compute passes to make them easier
+    // to identify in the recording file.
+    if (method == "end") {
+      this._recordLine("\n", null);
+    }
+
+    if (!hasAdapter && method == "requestAdapter") {
+      const adapter = this._getObjectVariable(result);
+      this._recordLine(`const requiredFeatures = [];
+        for (const x of ${adapter}.features) {
+            requiredFeatures.push(x);
+        }`, obj);
+      this._recordLine(`const requiredLimits = {};
+        const exclude = new Set(["minSubgroupSize", "maxSubgroupSize"]);
+        for (const x in ${adapter}.limits) {
+          if (!exclude.has(x)) {
+            requiredLimits[x] = ${adapter}.limits[x];
+          }
+        }`, obj);
+    }
+
+    if (result instanceof GPUDevice) {
+      const q = result.queue;
+      if (q.__id === undefined) {
+        const queueVar = this._getObjectVariable(q);
+        this._recordLine(`${queueVar} = ${this._getObjectVariable(result)}.queue;`, result);
+        this._recordCommand("", result, "__getQueue", q, [], true);
       }
     }
   }

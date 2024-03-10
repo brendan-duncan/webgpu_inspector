@@ -971,9 +971,9 @@ export class CapturePanel {
     } else if (type.name === "array") {
       const ul = new Widget("ul", ui);
       let count = type.count ?? 0;
-      if (count == 0) {
+      if (count === 0) {
         // Runtime length array
-        count = (bufferData.length - offset) / (type.stride || 1);
+        count = (bufferData.length - offset) / (type.stride || type.format.size);
       }
       if (count) {
         let elementOffset = offset;
@@ -1758,7 +1758,7 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_setIndexBuffer(command, commandInfo, collapsed, indexArray) {
+  _showCaptureCommandInfo_setIndexBuffer(command, commandInfo, collapsed) {
     const args = command.args;
     const self = this;
     const id = args[0].__id;
@@ -1775,24 +1775,51 @@ export class CapturePanel {
       }
       new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
 
-      if (indexArray) {
-        new Div(bufferGrp.body, { text: `Index Buffer: ${buffer.name}(${buffer.id}) Format:${indexArray instanceof Uint32Array ? "uint32" : "uint16"} Count:${indexArray.length}` });
-        const ol = new Widget("ol", bufferGrp.body);
-        for (let index of indexArray) {
-          new Widget("li", ol, { text: `${index}` });
+      if (command.isBufferDataLoaded && command.bufferData) {
+        const bufferData = command.bufferData[0];
+        if (bufferData) {
+          const indexArray = args[1] === "uint32" ? new Uint32Array(bufferData.buffer, bufferData.byteOffset, bufferData.byteLength / 4)
+              : new Uint16Array(bufferData.buffer, bufferData.byteOffset, bufferData.byteLength / 2);
+          new Div(bufferGrp.body, { text: `Index Buffer: ${buffer.name}(${buffer.id}) Format:${indexArray instanceof Uint32Array ? "uint32" : "uint16"} Count:${indexArray.length}` });
+          const button = new Button(bufferGrp.body, { label: "Show Data", callback: () => {
+            if (button.element.innerText === "Hide Data") {
+              button.element.innerText = "Show Data";
+              bufferGrp.body.removeChild(bufferGrp.body.lastChild);
+              return;
+            }
+            button.element.innerText = "Hide Data";
+            const ol = new Widget("ol", bufferGrp.body);
+            for (const index of indexArray) {
+              new Widget("li", ol, { text: `${index}` });
+            }
+          } });
         }
       }
     }
   }
 
-  _showCaptureCommandInfo_setVertexBuffer(command, commandInfo, collapsed) {
+  _showCaptureCommandInfo_setVertexBuffer(command, commandInfo, collapsed, state) {
     const args = command.args;
     const self = this;
     const index = args[0];
     const id = args[1]?.__id;
     const buffer = this._getObject(id);
+
+    let input = null;
+    const pipeline = this._getObject(state?.pipeline?.args[0].__id);
+    if (pipeline) {
+      const desc = pipeline.descriptor;
+      const vertexId = desc?.vertex?.module?.__id;
+      const vertexShader = this._getObject(vertexId);
+      const reflection = vertexShader?.reflection;
+      const inputs = reflection?.entry.vertex[0]?.inputs;
+      if (inputs) {
+        input = inputs[index];
+      }
+    }
+
     if (buffer) {
-      const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Vertex Buffer ${index} ID:${id}` });
+      const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Vertex Buffer ${index} ID:${id} ${input?.name ?? ""}` });
       new Button(bufferGrp.body, { label: "Inspect", callback: () => {
         self.window.inspectObject(buffer);
       } });
@@ -1802,6 +1829,24 @@ export class CapturePanel {
         newDesc.usage = getFlagString(newDesc.usage, GPUBufferUsage);
       }
       new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
+
+      if (input && command.isBufferDataLoaded && command.bufferData) {
+        const bufferData = command.bufferData[index];
+        if (bufferData) {
+          const button = new Button(bufferGrp.body, { label: "Show Data", callback: () => {
+            if (button.element.innerText === "Hide Data") {
+              button.element.innerText = "Show Data";
+              bufferGrp.body.removeChild(bufferGrp.body.lastChild);
+              return;
+            }
+            button.element.innerText = "Hide Data";
+            const count = bufferData.length / input.type.size;
+            const stride = input.type.size;
+            const type = { name: "array", count, stride, format: input.type };
+            self._showBufferDataType(bufferGrp.body, type, bufferData);
+          } });
+        }
+      }
     }
   }
 
@@ -2086,6 +2131,19 @@ export class CapturePanel {
     this._showTextureOutputs(state, commandInfo, false);
   }
 
+  _renderDrawCommand(command, parent) {
+    /*const outputGrp = new Collapsable(parent, { collapsed: true, label: "Output" });
+    const canvas = new Widget("canvas", new Div(outputGrp.body));
+    canvas.element.width = 256;
+    canvas.element.height = 256;
+
+    const commands = this._passEncoderCommands.get(command.object);
+
+    for (let command of commands) {
+
+    }*/
+  }
+
   _showCaptureCommandInfo_draw(command, commandInfo) {
     const state = this._getPipelineState(command);
 
@@ -2096,7 +2154,7 @@ export class CapturePanel {
       this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
     }
     for (const vertexBuffer of state.vertexBuffers) {
-      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true);
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true, state);
     }
     for (const index in state.bindGroups) {
       this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index], commandInfo, index, true, state);
@@ -2113,22 +2171,16 @@ export class CapturePanel {
       this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
     }
     if (state.indexBuffer) {
-      let bufferArray = null;
-      if (command.isBufferDataLoaded && command.bufferData) {
-        const bufferData = command.bufferData[0];
-        if (bufferData) {
-          const indexFormat = state.indexBuffer?.indexFormat;
-          bufferArray = indexFormat === "uint32" ? new Uint32Array(bufferData.buffer) : new Uint16Array(bufferData.buffer);
-        }
-      }
-      this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer, commandInfo, true, bufferArray);
+      this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer, commandInfo, true);
     }
     for (const vertexBuffer of state.vertexBuffers) {
-      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true);
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true, state);
     }
     for (const index in state.bindGroups) {
       this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index], commandInfo, index, true, state);
     }
+
+    this._renderDrawCommand(command, commandInfo);
   }
 
   _showCaptureCommandInfo_indirectBuffer(command, indirectBuffer, indirectOffset, commandInfo, collapsed, isCompute = false) {
@@ -2179,7 +2231,7 @@ export class CapturePanel {
       this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
     }
     for (const vertexBuffer of state.vertexBuffers) {
-      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true);
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true, state);
     }
     for (const index in state.bindGroups) {
       this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index], commandInfo, index, true, state);
@@ -2201,7 +2253,7 @@ export class CapturePanel {
       this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer, commandInfo, true);
     }
     for (const vertexBuffer of state.vertexBuffers) {
-      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true);
+      this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true, state);
     }
     for (const index in state.bindGroups) {
       this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index], commandInfo, index, true, state);

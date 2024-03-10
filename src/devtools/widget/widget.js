@@ -175,6 +175,10 @@ export class Widget {
     this.onResize();
   }
 
+  get lastChild() {
+    return this.children[this.children.length - 1];
+  }
+
   /**
    * Insert a child widget before the given child widget.
    * @param {*} newChild

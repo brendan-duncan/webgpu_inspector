@@ -1215,33 +1215,28 @@ import { alignTo } from "./utils/align.js";
         object.__indexBuffer = args;
       }
 
-      if (method === "drawIndexed") {
-        if (object.__indexBuffer) {
-          // TODO: Capture the index buffer.
-          // There is a problem that we can't copy the index buffer if the size isn't aligned to 4,
-          // and if we bump the size up to the next multiple of 4, we'll be copying more data than
-          // the original buffer has. We need to make sure index buffers are allocated to an alignment size of 4.
-          /*const indexCount = args[0];
-          const firstIndex = args[2] ?? 0;
-
-          const buffer = object.__indexBuffer[0];
-          const format = object.__indexBuffer[1];
-          const elementSize = format === "uint32" ? 4 : 2;
-          const bufferOffset = object.__indexBuffer[2] ?? 0;
-          //const bufferSize = object.__indexBuffer[3] ?? (buffer.size - bufferOffset);
-
-          const firstIndexOffset = bufferOffset + (firstIndex * elementSize);
-          const indexCountSize = indexCount * elementSize;
-
-          if (!object.__captureBuffers) {
-            object.__captureBuffers = [];
-          }
-          
-          const size = alignTo(indexCountSize, 4);
-          object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset: firstIndexOffset, size });
-          this._captureBuffersCount++;
-          this._updateStatusMessage();*/
+      if (method === "setVertexBuffer") {
+        const slot = args[0];
+        const buffer = args[1];
+        const offset = args[2] ?? 0;
+        const size = args[3] ?? (buffer.size - offset);
+        if (!object.__captureBuffers) {
+          object.__captureBuffers = [];
         }
+        object.__captureBuffers.push({ commandId, entryIndex: slot, buffer, offset, size });
+        this._captureBuffersCount++;
+        this._updateStatusMessage();
+      }
+
+      if (method === "setIndexBuffer") {
+        const buffer = args[0];
+        const size = buffer.size;
+        if (!object.__captureBuffers) {
+          object.__captureBuffers = [];
+        }
+        object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset: 0, size });
+        this._captureBuffersCount++;
+        this._updateStatusMessage();
       }
 
       if (method === "drawIndirect" || method === "drawIndexedIndirect" || method === "dispatchWorkgroupsIndirect") {
@@ -1251,25 +1246,7 @@ import { alignTo } from "./utils/align.js";
         if (!object.__captureBuffers) {
           object.__captureBuffers = [];
         }
-
-        const indexBuffer = method === "drawIndexedIndirect" ? {} : undefined;
-
-        if (method === "drawIndexedIndirect" && object.__indexBuffer) {
-          // The index buffer for indirect draws can't be captured here because the
-          // indexCount and firstIndex args are in the indirect buffer. The indirect
-          // buffer needs to be read first, those args extracted, and then the index
-          // buffer can be copied.
-          const buffer = object.__indexBuffer[0];
-          const format = object.__indexBuffer[1];
-          const bufferOffset = object.__indexBuffer[2] ?? 0;
-          const bufferSize = object.__indexBuffer[3] ?? (buffer.size - bufferOffset);
-          indexBuffer.buffer = buffer;
-          indexBuffer.format = format;
-          indexBuffer.bufferOffset = bufferOffset;
-          indexBuffer.bufferSize = bufferSize;
-        }
-
-        object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset, size, indexBuffer });
+        object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset, size });
         this._captureBuffersCount++;
         this._updateStatusMessage();
       }

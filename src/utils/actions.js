@@ -15,7 +15,10 @@ export const Actions = {
   CaptureTextureData: "webgpu_inspect_capture_texture_data",
   CaptureBufferData: "webgpu_inspect_capture_buffer_data",
 
-  Recording: "webgpu_record_recording"
+  Recording: "webgpu_record_recording",
+  RecordingCommand: "webgpu_record_command",
+  RecordingDataCount: "webgpu_record_data_count",
+  RecordingData: "webgpu_record_data"
 };
 
 Actions.values = new Set(Object.values(Actions));
