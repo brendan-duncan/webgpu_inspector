@@ -268,12 +268,12 @@ class WebGPURecorder {
   }
 
   _downloadFile(data, filename) {
-    const link = document.createElement("a");
+    /*const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([data], { type: "text/html" }));
     link.download = filename;
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    document.body.removeChild(link);*/
 
     if (this.config.messageRecording) {
       let count = this._initializeCommandObjects.length;

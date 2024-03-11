@@ -2131,19 +2131,6 @@ export class CapturePanel {
     this._showTextureOutputs(state, commandInfo, false);
   }
 
-  _renderDrawCommand(command, parent) {
-    /*const outputGrp = new Collapsable(parent, { collapsed: true, label: "Output" });
-    const canvas = new Widget("canvas", new Div(outputGrp.body));
-    canvas.element.width = 256;
-    canvas.element.height = 256;
-
-    const commands = this._passEncoderCommands.get(command.object);
-
-    for (let command of commands) {
-
-    }*/
-  }
-
   _showCaptureCommandInfo_draw(command, commandInfo) {
     const state = this._getPipelineState(command);
 
@@ -2179,8 +2166,6 @@ export class CapturePanel {
     for (const index in state.bindGroups) {
       this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index], commandInfo, index, true, state);
     }
-
-    this._renderDrawCommand(command, commandInfo);
   }
 
   _showCaptureCommandInfo_indirectBuffer(command, indirectBuffer, indirectOffset, commandInfo, collapsed, isCompute = false) {
