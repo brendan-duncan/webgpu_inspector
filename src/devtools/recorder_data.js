@@ -1,7 +1,9 @@
 import { Signal } from "../utils/signal.js";
+import { TextureUtils } from "../utils/texture_utils.js";
 
 export class RecorderData {
-  constructor() {
+  constructor(window) {
+    this.window = window;
     this.data = [];
     this.initiazeCommands = [];
     this.frames = [];
@@ -14,6 +16,8 @@ export class RecorderData {
     this._objectMap = new Map();
     this._canvas = null;
     this._context = null;
+    this._device = null;
+    this._textureUtils = null;
   }
 
   get ready() {
@@ -57,7 +61,26 @@ export class RecorderData {
 
   addCommand(command, commandIndex, frame, index, count) {
     try {
-      command.args = JSON.parse(command.args);
+      if (command.method === "requestDevice") {
+        const adapter = this.window.adapter;
+        const requiredFeatures = [];
+        for (const x of adapter.features) {
+          requiredFeatures.push(x);
+        }
+        const requiredLimits = {};
+        const exclude = new Set(["minSubgroupSize", "maxSubgroupSize"]);
+        for (const x in adapter.limits) {
+          if (!exclude.has(x)) {
+            requiredLimits[x] = adapter.limits[x];
+          }
+        }
+        command.args = [{
+          requiredFeatures,
+          requiredLimits
+        }];
+      } else {
+        command.args = JSON.parse(command.args);
+      }
       if (frame < 0) {
         this.initiazeCommands[commandIndex] = command;
       } else {
@@ -94,7 +117,9 @@ export class RecorderData {
     return this._objectMap.get(id);
   }
 
-  async executeCommands(canvas, frameIndex) {
+  async executeCommands(canvas, frameIndex, commandIndex) {
+    commandIndex ??= -1;
+
     this._objectMap.forEach((value) => {
       if (value instanceof GPUDevice) {
         value.destroy();
@@ -104,17 +129,102 @@ export class RecorderData {
     this._objectMap.clear();
     this._canvas = canvas;
     this._context = null;
+    this._device = null;
+    this._textureUtils = null;
 
+    let ci = 0;
     for (const command of this.initiazeCommands) {
-      await this._executeCommand(command);
+      await this._executeCommand(command, -1, ci);
+      ci++;
     }
 
     frameIndex = Math.max(0, Math.min(frameIndex, this.frames.length - 1));
+    const hasCommandIndex = commandIndex >= 0;
 
-    for (let i = 0; i <= frameIndex; ++i) {
-      const frame = this.frames[i];
+    const commandEncoders = new Set();
+    const passes = new Set();
+    let debugGroups = 0;
+    let lastPass = null;
+
+    for (let fi = 0; fi <= frameIndex; ++fi) {
+      const frame = this.frames[fi];
+      ci = 0;
+      const hasFrameCommandIndex = hasCommandIndex && fi === frameIndex;
       for (const command of frame) {
-        await this._executeCommand(command);
+        if (hasFrameCommandIndex && ci > commandIndex) {
+          if (passes.size > 0 && command.method === "end") {
+            await this._executeCommand(command, fi, ci);
+            const object = this._getObject(command.object);
+            if (object) {
+              passes.delete(object);
+            }
+            lastPass = object;
+          }
+          if (commandEncoders.size > 0 && command.method === "finish") {
+            await this._executeCommand(command, fi, ci);
+            const object = this._getObject(command.object);
+            if (object) {
+              commandEncoders.delete(object);
+            }
+          }
+          if (command.method === "popDebugGroup" && debugGroups > 0) {
+            this._executeCommand(command, fi, ci);
+            debugGroups--;
+          }
+          if (command.method === "submit") {
+            await this._executeCommand(command, fi, ci);
+          }
+
+          ci++;
+          continue;
+        }
+
+        const result = await this._executeCommand(command, fi, ci);
+        ci++;
+
+        if (fi === frameIndex) {
+          if (command.method === "pushDebugGroup") {
+            debugGroups++;
+          } else if (command.method === "popDebugGroup") {
+            debugGroups--;
+          } else if (command.method === "createCommandEncoder") {
+            commandEncoders.add(result);
+          } else if (command.method === "beginRenderPass" || command.method === "beginComputePass") {
+            result.__descriptor = command.args[0];
+            passes.add(result);
+          } else if (command.method === "end") {
+            const object = this._getObject(command.object);
+            if (object) {
+              passes.delete(object);
+            }
+          } else if (command.method === "finish") {
+            const object = this._getObject(command.object);
+            if (object) {
+              commandEncoders.delete(object);
+            }
+          }
+        }
+      }
+    }
+
+    if (lastPass instanceof GPURenderPassEncoder) {
+      if (lastPass.__descriptor.colorAttachments.length > 0) {
+        const colorOutput0 = this._getObject(lastPass.__descriptor.colorAttachments[0].view?.__id);
+        const colorOutputTexture = colorOutput0.texture;
+        if (!colorOutputTexture.isCanvasTexture) {
+          const canvasTexture = this._context.getCurrentTexture();
+          const canvasView = canvasTexture.createView();
+
+          if (!this._textureUtils) {
+            if (this._device) {
+              this._textureUtils = new TextureUtils(this._device);
+            }
+          }
+          
+          if (this._textureUtils) {
+            this._textureUtils.blitTexture(colorOutput0, colorOutput0.texture.format, 1, canvasView, canvasTexture.format, null);
+          }
+        }
       }
     }
   }
@@ -157,41 +267,103 @@ export class RecorderData {
     return newArgs;
   }
 
-  async _executeCommand(command) {
+  async _executeCommand(command, frameIndex, commandIndex) {
     const object = this._getObject(command.object);
+    const method = command.method;
+
+    if (method === "pushDebugGroup" || method === "popDebugGroup") {
+      return;
+    }
+
     if (!object) {
       //console.log("!!!!!!!!!!!!!!!!", command.object, command.method);
       return;
     }
 
+    if (object instanceof GPUDevice) {
+      this._device = object;
+    }
+
+    if (method === "__writeTexture") {
+      method = "writeTexture;"
+    }
+
     const args = this._prepareArgs(command.args);
 
-    if (command.method === "__setCanvasSize") {
+    if (method === "__setCanvasSize") {
       this._canvas.element.width = args[0];
       this._canvas.element.height = args[1];
       return;
-    } else if (command.method === "__writeData") {
+    } else if (method === "__writeData") {
       const dataIndex = args[0];
       const data = this.data[dataIndex];
       new Uint8Array(object).set(data);
       return;
-    } else if (command.method === "__getQueue") {
+    } else if (method === "__getQueue") {
       this._objectMap.set(command.result, object.queue);
       return;
-    } else if (command.method === "__writeTexture") {
-      command.method = "writeTexture";
     }
-
+    
     if (command.async) {
-      const result = await object[command.method](...args);
-      if (command.result) {
-        this._objectMap.set(command.result, result);
-      }  
-    } else {
-      const result = object[command.method](...args);
+      if (this._device) {
+        this._device.pushErrorScope("validation");
+      }
+
+      let result = undefined;
+      try {
+        result = await object[method](...args);
+      } catch (e) {
+        console.log(`EXCEPTION frame:${frameIndex} command:${commandIndex} ${method}: ${e.message}`);
+      }
+
+      if (this._device) {
+        this._device.popErrorScope().then((error) => {
+          if (error) {
+            console.log(`ERROR frame:${frameIndex} command:${commandIndex} ${method}: ${error.message}`);
+          }
+        });
+      }
+
       if (command.result) {
         this._objectMap.set(command.result, result);
       }
+
+      if (result instanceof GPUDevice) {
+        this._device = result;
+      }
+      return result;  
+    } else {
+      if (this._device) {
+        this._device.pushErrorScope("validation");
+      }
+
+      let result = undefined;
+
+      try {
+        result = object[method](...args);
+      } catch (e) {
+        console.log(`EXCEPTION frame:${frameIndex} command:${commandIndex} ${method}: ${e.message}`);
+      }
+
+      if (method === "createView") {
+        result.texture = object;
+      } else if (method === "getCurrentTexture") {
+        result.isCanvasTexture = true;
+      }
+
+      if (this._device) {
+        this._device.popErrorScope().then((error) => {
+          if (error) {
+            console.log(`ERROR frame:${frameIndex} command:${commandIndex} ${method} ${command.args}: ${error.message}`);
+          }
+        });
+      }
+
+      if (command.result) {
+        this._objectMap.set(command.result, result);
+      }
+
+      return result;
     }
   }
 }
