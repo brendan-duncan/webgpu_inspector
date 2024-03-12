@@ -8,13 +8,12 @@ import { Widget } from "./widget/widget.js";
 import { Actions, PanelActions } from "../utils/actions.js";
 import { RecorderData } from "./recorder_data.js";
 import { NumberInput } from "./widget/number_input.js";
-import { TextInput } from "./widget/text_input.js";
 
 export class RecorderPanel {
   constructor(window, parent) {
     this.window = window;
 
-    this._recorderData = new RecorderData();
+    this._recorderData = new RecorderData(window);
     this._recorderData.onReady.addListener(this._recordingReady, this);
     
     const self = this;
@@ -30,7 +29,7 @@ export class RecorderPanel {
     }});
 
     new Span(recorderBar, { text: "Frames:", style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
-    this.recordFramesInput = new Input(recorderBar, { id: "record_frames", type: "number", value: 10 });
+    this.recordFramesInput = new Input(recorderBar, { id: "record_frames", type: "number", value: 1 });
 
     new Span(recorderBar, { text: "Name:", style: "margin-left: 20px; margin-right: 10px;  vertical-align: middle;" });
     this.recordNameInput = new Input(recorderBar, { id: "record_frames", type: "text", value: "webgpu_record" });
@@ -84,31 +83,17 @@ export class RecorderPanel {
     split.position = 800;
 
     let grp = new Collapsable(commands, { label: "Initialize Commands", collapsed: true });
-    /*let ol = new Widget("ol", grp.body);
-    for (const command of this._recorderData.initiazeCommands) {
-      const result = `${command.result ? `${command.result} = ` : ""}`;
-      const async = `${command.async ? command.async + " " : ""}`;
-      const text = `${result}${async}${command.object}.${command.method}(${JSON.stringify(command.args)})`;
-      new Widget("li", ol, { text });
-    }*/
-    this._captureFrameResults(grp.body, this._recorderData.initiazeCommands);
+    this._captureFrameResults(grp.body, this._recorderData.initiazeCommands, canvas, -1);
 
     for (let i = 0; i < this._recorderData.frames.length; ++i) {
       grp = new Collapsable(commands, { label: `Frame ${i}`, collapsed: true });
-      this._captureFrameResults(grp.body, this._recorderData.frames[i]);
-      /*ol = new Widget("ol", grp.body);
-      for (const command of this._recorderData.frames[i]) {
-        const result = `${command.result ? `${command.result} = ` : ""}`;
-        const async = `${command.async ? command.async + " " : ""}`;
-        const text = `${result}${async}${command.object}.${command.method}(${JSON.stringify(command.args)})`;
-        new Widget("li", ol, { text });
-      }*/
+      this._captureFrameResults(grp.body, this._recorderData.frames[i], canvas, i);
     }
 
     this._recorderData.executeCommands(canvas, lastFrame);
   }
 
-  _captureFrameResults(_frameContents, commands) {
+  _captureFrameResults(_frameContents, commands, canvas, frameIndex) {
     const self = this;
 
     this._passEncoderCommands = new Map();
@@ -473,12 +458,15 @@ export class RecorderPanel {
             self._lastSelectedCommand = cmd;
           }
           
+          if (frameIndex >= 0) {
+            self._recorderData.executeCommands(canvas, frameIndex, commandIndex);
+          }
           //self._showCaptureCommandInfo(command, name, commandInfo);
         };
 
         if (first) {
           // Start off selecting the first command.
-          cmd.element.click();
+          //cmd.element.click();
           first = false;
         }
       }

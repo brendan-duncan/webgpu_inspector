@@ -21,8 +21,12 @@ class WebGPURecorder {
     this._initializeCommands = [];
     this._frameCommands = [];
     this._frameObjects = [];
+    this._initializeObjects = [];
     this._currentFrameCommands = null;
     this._currentFrameObjects = null;
+    this.__frameObjects = [];
+    this.__initializeObjects = [];
+    this.__currentFrameObjects = null;
     this._frameIndex = -1;
     this._isRecording = false;
     this._frameVariables = {};
@@ -30,7 +34,6 @@ class WebGPURecorder {
     this._totalData = 0;
     this._isRecording = true;
     this._initalized = true;
-    this._initializeObjects = [];
     this._frameVariables[-1] = new Set();
     this._adapter = null;
     this._unusedTextures = new Set();
@@ -95,6 +98,8 @@ class WebGPURecorder {
     this._frameCommands.push(this._currentFrameCommands);
     this._currentFrameObjects = [];
     this._frameObjects.push(this._currentFrameObjects);
+    this.__currentFrameObjects = [];
+    this.__frameObjects.push(this.__currentFrameObjects);
 
     this._currentFrameCommandObjects = [];
     this._frameCommandObjects.push(this._currentFrameCommandObjects);
@@ -106,7 +111,7 @@ class WebGPURecorder {
     }
   }
 
-  _removeUnusedCommands(objects, commands, unusedObjects) {
+  _removeUnusedCommands(objects, commands, unusedObjects, removeValue) {
     const l = objects.length;
     for (let i = l - 1; i >= 0; --i) {
       const object = objects[i];
@@ -114,7 +119,7 @@ class WebGPURecorder {
         continue;
       }
       if (unusedObjects.has(object.__id)) {
-        commands[i] = "";
+        commands[i] = removeValue;
       }
     }
   }
@@ -134,10 +139,11 @@ class WebGPURecorder {
         unusedObjects.add(object);
       }
 
-      this._removeUnusedCommands(this._initializeObjects, this._initializeCommands, unusedObjects);
+      this._removeUnusedCommands(this._initializeObjects, this._initializeCommands, unusedObjects, "");
+      this._removeUnusedCommands(this.__initializeObjects, this._initializeCommandObjects, unusedObjects, null);
     }
 
-    this._initializeCommands = this._initializeCommands.filter((cmd) => cmd != "");
+    this._initializeCommands = this._initializeCommands.filter((cmd) => !!cmd);
     if (this.config.removeUnusedResources) {
       for (const obj of unusedObjects) {
         for (let di = 0, dl = this._dataCacheObjects.length; di < dl; ++di) {
@@ -178,8 +184,9 @@ class WebGPURecorder {
 
     for (let fi = 0, fl = this._frameCommands.length; fi < fl; ++fi) {
       if (this.config.removeUnusedResources) {
-        this._removeUnusedCommands(this._frameObjects[fi], this._frameCommands[fi], unusedObjects);
-        this._frameCommands[fi] = this._frameCommands[fi].filter((cmd) => cmd != "");
+        this._removeUnusedCommands(this._frameObjects[fi], this._frameCommands[fi], unusedObjects, "");
+        this._removeUnusedCommands(this.__frameObjects[fi], this._frameCommandObjects[fi], unusedObjects, null);
+        this._frameCommands[fi] = this._frameCommands[fi].filter((cmd) => !!cmd);
       }
       s += `
       async function f${fi}() {
@@ -276,8 +283,10 @@ class WebGPURecorder {
     document.body.removeChild(link);*/
 
     if (this.config.messageRecording) {
+      this._initializeCommandObjects = this._initializeCommandObjects.filter((value) => !!value);
       let count = this._initializeCommandObjects.length;
       for (let i = 0; i < this._frameCommandObjects.length; ++i) {
+        this._frameCommandObjects[i] = this._frameCommandObjects[i].filter((value) => !!value);
         count += this._frameCommandObjects[i].length;
       }
 
@@ -568,6 +577,9 @@ class WebGPURecorder {
 
     function _compareCacheData(ai, view) {
       const a = self._arrayCache[ai].array;
+      if (indexedDB.cmp) {
+        return indexedDB.cmp(a, view) == 0;
+      }
       if (a.length != view.length) {
         return false;
       }
@@ -798,14 +810,14 @@ class WebGPURecorder {
 
     if (!hasAdapter && method == "requestAdapter") {
       this._adapter = result;
-    } else if (method == "createTexture") {
+    } else if (method === "createTexture") {
       this._unusedTextures.add(result.__id);
       obj = result;
-    } else if (method == "createView") {
+    } else if (method === "createView") {
       this._unusedTextureViews.set(result.__id, object.__id);
-    } else if (method == "writeTexture") {
+    } else if (method === "writeTexture") {
       obj = args[0].texture;
-    } else if (method == "createBuffer") {
+    } else if (method === "createBuffer") {
       this._unusedBuffers.add(result.__id);
       obj = result;
     } else if (method == "writeBuffer") {
@@ -816,8 +828,10 @@ class WebGPURecorder {
     const commandObj = { "object": this._getObjectVariable(object), method, "result": this._getObjectVariable(result), args: newArgs, async };
     if (this._frameIndex == -1) {
       this._initializeCommandObjects.push(commandObj);
+      this.__initializeObjects.push(obj);
     } else {
       this._currentFrameCommandObjects.push(commandObj);
+      this.__currentFrameObjects.push(obj);
     }
 
     if (skipLine) {

@@ -776,7 +776,7 @@ import { alignTo } from "./utils/align.js";
             this.disableRecording();
             this._errorChecking--;
             newDescriptor.__replacement = objectRef.id;
-            device.pushErrorScope('validation');
+            device.pushErrorScope("validation");
             const newPipeline = isRenderPipeline ?
                 device.createRenderPipeline(newDescriptor) :
                 device.createComputePipeline(newDescriptor);
