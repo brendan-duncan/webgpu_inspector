@@ -7,14 +7,12 @@ function build(name, input, file, copyFiles, watchInclude) {
   const format = "iife";
   const info = {
       input,
-      output: [
-        {
-          format,
-          file,
-          sourcemap: true,
-          name
-        }
-      ],
+      output: {
+        format,
+        file,
+        sourcemap: true,
+        name
+      },
       plugins: [
         nodeResolve(),
         terser({
@@ -50,7 +48,6 @@ function build(name, input, file, copyFiles, watchInclude) {
 
   return info;
 }
-
 
 const builds = [];
 const versions = ["chrome", "firefox"];

@@ -17,7 +17,7 @@ import { Select } from "./widget/select.js";
 import { Actions, PanelActions } from "../utils/actions.js";
 import { decodeDataUrl } from "../utils/base64.js";
 import { getFormatFromReflection } from "../utils/reflection_format.js";
-import { ResourceType, WgslReflect } from "../utils/wgsl_reflect.module.js";
+import { ResourceType, WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
 
 export class CapturePanel {
   constructor(window, parent) {

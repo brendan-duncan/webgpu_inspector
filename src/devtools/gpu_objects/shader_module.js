@@ -1,5 +1,5 @@
 import { GPUObject } from "./gpu_object.js";
-import { WgslReflect } from "../../utils/wgsl_reflect.module.js";
+import { WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
 
 export class ShaderModule extends GPUObject {
   constructor(id, descriptor, stacktrace) {
@@ -24,8 +24,6 @@ export class ShaderModule extends GPUObject {
       try {
         this._reflection = new WgslReflect(this.code);
       } catch (e) {
-        //console.log(e);
-        //console.log(this.code);
         this._reflection = null;
       }
     }

@@ -275,12 +275,15 @@ class WebGPURecorder {
   }
 
   _downloadFile(data, filename) {
-    /*const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([data], { type: "text/html" }));
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);*/
+    try {
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(new Blob([data], { type: "text/html" }));
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+    }
 
     if (this.config.messageRecording) {
       this._initializeCommandObjects = this._initializeCommandObjects.filter((value) => !!value);

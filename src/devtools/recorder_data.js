@@ -269,7 +269,7 @@ export class RecorderData {
 
   async _executeCommand(command, frameIndex, commandIndex) {
     const object = this._getObject(command.object);
-    const method = command.method;
+    let method = command.method;
 
     if (method === "pushDebugGroup" || method === "popDebugGroup") {
       return;
