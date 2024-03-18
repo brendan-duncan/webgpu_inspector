@@ -8,7 +8,8 @@ class WebGPURecorder {
       canvasWidth: options.width || 800,
       canvasHeight: options.height || 600,
       removeUnusedResources: !!options.removeUnusedResources,
-      messageRecording: !!options.messageRecording
+      messageRecording: !!options.messageRecording,
+      download: options.download ?? true
     };
 
     this._objectIndex = 1;
@@ -275,14 +276,16 @@ class WebGPURecorder {
   }
 
   _downloadFile(data, filename) {
-    try {
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(new Blob([data], { type: "text/html" }));
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (e) {
+    if (this.config.download) {
+      try {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(new Blob([data], { type: "text/html" }));
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (e) {
+      }
     }
 
     if (this.config.messageRecording) {
@@ -465,11 +468,19 @@ class WebGPURecorder {
       // its source, which we can"t record. ConvertcopyExternalImageToTexture to
       // writeTexture, and record the bytes from the ImageBitmap. To do that, we need
       // to draw the ImageBitmap into a canvas, and record the bytes from that.
-      // A very heavy process, but not sure what else to do.
+      //
+      // TODO: this will really only work for rgba8 textures. Some external textures are
+      // 16-bit. To properly record all textures, we need to inject a `createBuffer`,
+      // `copyTextureToBuffer`, `mapAsync` to record the bytes from the texture. This means
+      // the data in the data cache will be pending the async map resolve. Make a slot for the data
+      // in the data cache, and fill it in when the map resolves. Keep track of all pending promises
+      // and resolve them before generating the recording data.
       const bytes = this._getBytesFromImageSource(args[0].source);
-      const bytesPerPixel = 4;
-      const bytesPerRow = args[0].source.width * bytesPerPixel;
       const texture = args[1]["texture"];
+      const format = texture.format;
+      const formatInfo = WebGPURecorder._formatInfo[format];
+      const bytesPerPixel = formatInfo ? formatInfo.bytesPerBlock : 4;
+      const bytesPerRow = args[0].source.width * bytesPerPixel;
       const cacheIndex = this._getDataCache(bytes, bytes.byteOffset, bytes.byteLength, texture);
       this._recordLine(`${this._getObjectVariable(object)}.writeTexture(${this._stringifyObject(method, args[1])}, D[${cacheIndex}], {bytesPerRow:${bytesPerRow}}, ${this._stringifyObject(method, args[2])});`, object);
       this._recordCommand(false, object, "__writeTexture", null, [args[1], { __data: cacheIndex }, { bytesPerRow }, args[2]], true);
@@ -696,23 +707,25 @@ class WebGPURecorder {
           }
         }
       }
+    } else if (method === "copyBufferToTexture") {
+      const buffer = args[0].buffer;
+      this._unusedBuffers.delete(buffer.__id);
+      const texture = args[1].texture;
+      this._unusedTextures.delete(texture.__id);
+    } else if (method === "copyTextureToBuffer") {
+      const texture = args[0].texture;
+      this._unusedTextures.delete(texture.__id);
+      const buffer = args[1].buffer;
+      this._unusedBuffers.delete(buffer.__id);
     } else if (method == "copyBufferToBuffer") {
-      if (this._unusedBuffers.has(args[0].__id)) {
-        this._unusedBuffers.delete(args[0].__id);
-      }
-      if (this._unusedBuffers.has(args[2].__id)) {
-        this._unusedBuffers.delete(args[2].__id);
-      }
+      this._unusedBuffers.delete(args[0].__id);
+      this._unusedBuffers.delete(args[2].__id);
     } else if (method == "setVertexBuffer") {
       const buffer = args[1];
-      if (this._unusedBuffers.has(buffer.__id)) {
-        this._unusedBuffers.delete(buffer.__id);
-      }
+      this._unusedBuffers.delete(buffer.__id);
     } else if (method == "setIndexBuffer") {
       const buffer = args[0];
-      if (this._unusedBuffers.has(buffer.__id)) {
-        this._unusedBuffers.delete(buffer.__id);
-      }
+      this._unusedBuffers.delete(buffer.__id);
     } else if (method == "beginRenderPass") {
       if (args[0]["colorAttachments"]) {
         const value = args[0]["colorAttachments"];
@@ -796,6 +809,7 @@ class WebGPURecorder {
     if (!this._isRecording) {
       return;
     }
+
     if (result) {
       if (typeof (result) === "string") {
         return;
@@ -1182,12 +1196,14 @@ function main() {
     const frames = script.getAttribute("frames");
     const messageRecording = script.getAttribute("messageRecording");
     const removeUnusedResources = script.getAttribute("removeUnusedResources");
+    const download = script.getAttribute("download");
     if (filename) {
       new WebGPURecorder({
         "frames": frames || 1,
         "export": filename,
         "removeUnusedResources": !!removeUnusedResources,
-        "messageRecording": !!messageRecording
+        "messageRecording": !!messageRecording,
+        "download": download === null ? true : download == "false" ? false : download === "true" ? true : download
       });
     }
   }

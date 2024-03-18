@@ -285,7 +285,7 @@ export class RecorderData {
     }
 
     if (method === "__writeTexture") {
-      method = "writeTexture;"
+      method = "writeTexture";
     }
 
     const args = this._prepareArgs(command.args);
@@ -313,13 +313,13 @@ export class RecorderData {
       try {
         result = await object[method](...args);
       } catch (e) {
-        console.log(`EXCEPTION frame:${frameIndex} command:${commandIndex} ${method}: ${e.message}`);
+        console.log(`EXCEPTION frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${e.message}`);
       }
 
       if (this._device) {
         this._device.popErrorScope().then((error) => {
           if (error) {
-            console.log(`ERROR frame:${frameIndex} command:${commandIndex} ${method}: ${error.message}`);
+            console.log(`ERROR frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${error.message}`);
           }
         });
       }
@@ -342,7 +342,7 @@ export class RecorderData {
       try {
         result = object[method](...args);
       } catch (e) {
-        console.log(`EXCEPTION frame:${frameIndex} command:${commandIndex} ${method}: ${e.message}`);
+        console.log(`EXCEPTION frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${e.message}`);
       }
 
       if (method === "createView") {
@@ -354,7 +354,7 @@ export class RecorderData {
       if (this._device) {
         this._device.popErrorScope().then((error) => {
           if (error) {
-            console.log(`ERROR frame:${frameIndex} command:${commandIndex} ${method} ${command.args}: ${error.message}`);
+            console.log(`ERROR frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${error.message}`);
           }
         });
       }

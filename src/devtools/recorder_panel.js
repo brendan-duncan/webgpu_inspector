@@ -1,4 +1,5 @@
 import { Button } from "./widget/button.js";
+import { Checkbox } from "./widget/checkbox.js";
 import { Collapsable } from "./widget/collapsable.js";
 import { Div } from "./widget/div.js";
 import { Input } from "./widget/input.js";
@@ -8,6 +9,7 @@ import { Widget } from "./widget/widget.js";
 import { Actions, PanelActions } from "../utils/actions.js";
 import { RecorderData } from "./recorder_data.js";
 import { NumberInput } from "./widget/number_input.js";
+import { TextInput } from "./widget/text_input.js";
 
 export class RecorderPanel {
   constructor(window, parent) {
@@ -24,12 +26,15 @@ export class RecorderPanel {
     this.recordButton = new Button(recorderBar, { label: "Record", style: "background-color: #755;", callback: () => {
       const frames = self.recordFramesInput.value || 1;
       const filename = self.recordNameInput.value;
+      const download = self._downloadCheckbox.checked;
       self._recorderData.clear();
-      port.postMessage({ action: PanelActions.InitializeRecorder, frames, filename });
+      port.postMessage({ action: PanelActions.InitializeRecorder, frames, filename, download });
     }});
 
     new Span(recorderBar, { text: "Frames:", style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
-    this.recordFramesInput = new Input(recorderBar, { id: "record_frames", type: "number", value: 1 });
+    this.recordFramesInput = new Input(recorderBar, { id: "record_frames", type: "number", value: 1, style: "width: 60px; display: inline-block;"});
+
+    this._downloadCheckbox = new Checkbox(recorderBar, { label: "Download", tooltip: "Automatically Download Recording", checked: true, style: "margin-left: 20px; color: #fff;" });
 
     new Span(recorderBar, { text: "Name:", style: "margin-left: 20px; margin-right: 10px;  vertical-align: middle;" });
     this.recordNameInput = new Input(recorderBar, { id: "record_frames", type: "text", value: "webgpu_record" });
@@ -82,6 +87,12 @@ export class RecorderPanel {
 
     split.position = 800;
 
+    const filterArea = new Div(commands, { class: "capture_filterArea" });
+    new Span(filterArea, { text: "Filter: ", style: "margin-right: 5px;" });
+    this.filterEdit = new TextInput(filterArea, { style: "width: 200px;", placeholder: "Filter", onEdit: (value) => {
+      self._filterCommands(value);
+    } });
+
     let grp = new Collapsable(commands, { label: "Initialize Commands", collapsed: true });
     this._captureFrameResults(grp.body, this._recorderData.initiazeCommands, canvas, -1);
 
@@ -93,16 +104,35 @@ export class RecorderPanel {
     this._recorderData.executeCommands(canvas, lastFrame);
   }
 
+  _filterCommands(filter) {
+    function filterCommands(commands) {
+      for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
+        const command = commands[commandIndex];
+        if (!command) {
+          break;
+        }
+        const method = command.method;
+        const widget = command.widget;
+        if (widget) {
+          if (method.includes(filter)) {
+            widget.element.style.display = "block";
+          } else {
+            widget.element.style.display = "none";
+          }
+        }
+      }
+    }
+
+    filterCommands(this._recorderData.initiazeCommands);
+    for (let i = 0; i < this._recorderData.frames.length; ++i) {
+      filterCommands(this._recorderData.frames[i]);
+    }
+  }
+
   _captureFrameResults(_frameContents, commands, canvas, frameIndex) {
     const self = this;
 
     this._passEncoderCommands = new Map();
-
-    /*const filterArea = new Div(_frameContents, { class: "capture_filterArea" });
-    new Span(filterArea, { text: "Filter: ", style: "margin-right: 5px;" });
-    this.filterEdit = new TextInput(filterArea, { style: "width: 200px;", placeholder: "Filter", onEdit: (value) => {
-      self._filterCommands(value, commands);
-    } });*/
 
     const frameContents = new Div(_frameContents, { class: "capture_frame" });
 
@@ -386,6 +416,8 @@ export class RecorderPanel {
               }
             }
           }*/
+        } else if (method === "__writeData") {
+          new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(command.object)} Data:${args[0]}` });
         } else if (method === "writeBuffer") {
           const data = args[2];
           if (data.constructor === String) {

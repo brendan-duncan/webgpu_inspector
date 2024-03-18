@@ -14,6 +14,11 @@ export class Checkbox extends Span {
     if (!this.label) {
       this.label = new Label('', this, { for: this });
     }
+
+    if (options?.tooltip) {
+      this.input.title = options.tooltip;
+      this.label.title = options.tooltip;
+    }
   }
 
   get checked() {

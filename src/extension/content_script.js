@@ -17,7 +17,7 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
   }
 
   if (action === PanelActions.InitializeRecorder) {
-    sessionStorage.setItem(webgpuRecorderLoadedKey, `${message.frames}%${message.filename}`);
+    sessionStorage.setItem(webgpuRecorderLoadedKey, `${message.frames}%${message.filename}%${message.download}`);
     setTimeout(function () {
       window.location.reload();
     }, 50);
@@ -48,6 +48,13 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
 });
 
 let inspectorInitialized = false;
+
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    // The page is restored from BFCache, set up a new connection.
+    port.reset();
+  }
+});
 
 // Listen for messages from the page
 window.addEventListener('message', (event) => {
@@ -106,6 +113,7 @@ if (recordMessage) {
   injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder.js"), {
     filename: data[1],
     frames: data[0],
+    download: data[2],
     removeUnusedResources: 1,
     messageRecording: 1
   });
