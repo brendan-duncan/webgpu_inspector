@@ -634,7 +634,13 @@ import { alignTo } from "./utils/align.js";
     _duplicateObject(object, replaceGpuObjects) {
       const obj = {};
       for (const key in object) {
+        if (key.startsWith("_")) {
+          continue;
+        }
         const x = object[key];
+        if (x === undefined) {
+          continue;
+        }
         if (this._isPrimitiveType(x)) {
           obj[key] = x;
         } else if (x.__id !== undefined) {
@@ -994,8 +1000,12 @@ import { alignTo } from "./utils/align.js";
 
     _stringifyDescriptor(args) {
       const descriptor = this._duplicateObject(args, true) ?? {};
-      //return descriptor;
-      const s = JSON.stringify(descriptor);
+      let s = null;
+      try {
+        s = JSON.stringify(descriptor);
+      } catch (e) {
+        console.log(e.message);
+      }
       return s;
     }
 
