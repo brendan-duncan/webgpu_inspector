@@ -35,13 +35,31 @@ export class RecorderData {
   }
 
   addData(data, type, index, count) {
-    async function B64ToA(s, type, length) {
-      const res = await fetch(s);
-      const x = new Uint8Array(await res.arrayBuffer());
-      if (type == "Uint32Array") {
-        return new Uint32Array(x.buffer, 0, x.length/4);
+    if (data === undefined) {
+      this.data[index] = new Uint8Array(count);
+      this._dataCount++;
+      if (this._dataCount >= count) {
+        this._dataReady = true;
+        if (this.ready) {
+          this.onReady.emit();
+        }
+      } else {
+        this._dataReady = false;
       }
-      return new Uint8Array(x.buffer, 0, x.length);
+      return;
+    }
+    async function B64ToA(s, type, length) {
+      try {
+        const res = await fetch(s);
+        const x = new Uint8Array(await res.arrayBuffer());
+        if (type == "Uint32Array") {
+          return new Uint32Array(x.buffer, 0, x.length/4);
+        }
+        return new Uint8Array(x.buffer, 0, x.length);
+      } catch (e) {
+        console.log(e.message);
+      }
+      return new Uint8Array(length);
     }
 
     const self = this;

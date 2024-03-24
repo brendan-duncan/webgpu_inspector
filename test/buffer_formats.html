@@ -146,7 +146,7 @@ async function main() {
 
   const bufferE = device.createBuffer({
     size: 16,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    usage: GPUBufferUsage.UNIFORM,
     mappedAtCreation: true,
   });
   new Float32Array(bufferE.getMappedRange()).set([110, 220, 330, 440]);
@@ -178,12 +178,16 @@ async function main() {
     ],
   });
 
-  function frame() {
+  async function frame() {
     const memoryLeakBuffer = device.createBuffer({
       label: "memory leak buffer",
       size: 16,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.MAP_WRITE,
     });
+
+    await memoryLeakBuffer.mapAsync(GPUMapMode.WRITE);
+    new Float32Array(memoryLeakBuffer.getMappedRange()).set([110, 220, 330, 440]);
+    memoryLeakBuffer.unmap();
 
     const commandEncoder = device.createCommandEncoder();
 

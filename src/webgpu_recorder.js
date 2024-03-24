@@ -441,6 +441,9 @@ class WebGPURecorder {
   }
 
   _preMethodCall(object, method, args) {
+    if (!this._isRecording) {
+      return;
+    }
     // We can"t track every change made to a mappedRange buffer since that all happens 
     // outside the scope of what WebGPU is in control of. So we keep track of all the
     // mapped buffer ranges, and when unmap is called, we record the content of their data
@@ -453,7 +456,7 @@ class WebGPURecorder {
           const cacheIndex = this._getDataCache(buffer, 0, buffer.byteLength, buffer);
           // Set the mappedRange buffer data in the recording to what is in the buffer
           // at the time unmap is called.
-          this._recordLine(`new Uint8Array(${this._getObjectVariable(buffer)}).set(D[${cacheIndex}]);`, null);
+          this._recordLine(`new Uint8Array(${this._getObjectVariable(buffer)}).set(D[${cacheIndex}]);`, object);
           this._recordCommand("", buffer, "__writeData", null, [cacheIndex], true);
         }
         delete object.__mappedRanges;
@@ -467,20 +470,22 @@ class WebGPURecorder {
   }
 
   _onMethodCall(object, method, args, result) {
+    if (!this._isRecording) {
+      return;
+    }
+
     if (method == "copyExternalImageToTexture") {
       const queue = object;
 
       // copyExternalImageToTexture uses ImageBitmap (or canvas or offscreenCanvas) as
-      // its source, which we can"t record. ConvertcopyExternalImageToTexture to
+      // its source, which we can"t record. Convert copyExternalImageToTexture to
       // writeTexture, and record the bytes from the ImageBitmap. To do that, we need
-      // to draw the ImageBitmap into a canvas, and record the bytes from that.
-      //
-      // TODO: this will really only work for rgba8 textures. Some external textures are
-      // 16-bit. To properly record all textures, we need to inject a `createBuffer`,
-      // `copyTextureToBuffer`, `mapAsync` to record the bytes from the texture. This means
-      // the data in the data cache will be pending the async map resolve. Make a slot for the data
+      // to inject a `createBuffer`, `copyTextureToBuffer`, `mapAsync` to record the bytes from the texture.
+      // This means the data in the data cache will be pending the async map resolve. Make a slot for the data
       // in the data cache, and fill it in when the map resolves. Keep track of all pending promises
       // and resolve them before generating the recording data.
+      // The reason we can't just draw the ImageBitmap to a canvas and then copy that to a texture is because
+      // that would only work for RGBA8 textures, and ImageBitmap can be 16-bit or other formats.
       const texture = args[1]["texture"];
       const format = texture.format;
       const formatInfo = WebGPURecorder._formatInfo[format];
