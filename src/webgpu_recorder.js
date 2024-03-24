@@ -236,12 +236,15 @@ class WebGPURecorder {
     async function B64ToA(s, type, length) {
         const res = await fetch(s);
         const x = new Uint8Array(await res.arrayBuffer());
-        if (type == "Uint32Array")
+        if (type == "Uint32Array") {
             return new Uint32Array(x.buffer, 0, x.length/4);
+        }
         return new Uint8Array(x.buffer, 0, x.length);
     }
     
     async function loadData() {\n`;
+
+    this._encodedData = [];
     
     const self = this;
     Promise.all(this._externalImageBufferPromises).then(() => {
@@ -251,6 +254,7 @@ class WebGPURecorder {
         const a = self._arrayCache[ai];
         promises.push(new Promise((resolve) => {
           self._encodeDataUrl(a.array).then((b64) => {
+            self._encodedData[ai] = b64;
             s += `D[${ai}] = await B64ToA("${b64}", "${a.type}", ${a.length});\n`;
             resolve();
           });
@@ -329,12 +333,13 @@ class WebGPURecorder {
           const a = this._arrayCache[index];
           const size = a.length;
           const type = a.type;
-          this._encodeDataUrl(a.array).then((data) => {
-            window.postMessage({ action, data, type, size, index, count });
-          });      
+          const data = this._encodedData[index];
+          window.postMessage({ action, data, type, size, index, count });
         }
       }
     }
+
+    this._encodedData.length = 0;
   }
 
   _wrapCanvas(c) {
@@ -423,16 +428,6 @@ class WebGPURecorder {
     this._recordLine(`${this._getObjectVariable(ctx)} = canvas.getContext("webgpu");`, null);
   }
 
-  _getBytesFromImageSource(src) {
-    const canvas = document.createElement("canvas");
-    canvas.width = src.width;
-    canvas.height = src.height;
-    const c2d = canvas.getContext("2d");
-    c2d.drawImage(src, 0, 0);
-    const data = c2d.getImageData(0, 0, src.width, src.height);
-    return data.data;
-  }
-
   _onAsyncResolve(object, method, args, id, result) {
     if (method === "requestDevice") {
       const adapter = object;
@@ -503,7 +498,6 @@ class WebGPURecorder {
       commandEncoder.copyTextureToBuffer({ texture: args[1].texture }, { buffer, bytesPerRow, rowsPerImage }, copySize);
       queue.submit([commandEncoder.finish()]);
 
-      //const bytes = this._getBytesFromImageSource(args[0].source);
       let cacheIndex = -1;
       try {
         const bytes = new Uint8Array(size);
@@ -587,7 +581,7 @@ class WebGPURecorder {
       if (value === null) {
         s += "null";
       } else if (typeof (value) === "string") {
-        if (method === "createShaderModule") {
+        if (!toJson && method === "createShaderModule") {
           s += `\`${value}\``;
         } else {
           s += JSON.stringify(value);
@@ -645,24 +639,20 @@ class WebGPURecorder {
     };
   }
 
-  _getDataCache(heap, offset, length, object, skipCompare) {
-    let self = this;
-
-    function _compareCacheData(ai, view) {
-      const a = self._arrayCache[ai].array;
-      if (indexedDB.cmp) {
-        return indexedDB.cmp(a, view) == 0;
-      }
-      if (a.length != view.length) {
+  _compareCacheData(a, b) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (let i = 0, l = a.length; i < l; ++i) {
+      if (a[i] != b[i]) {
         return false;
       }
-      for (let i = 0, l = a.length; i < l; ++i) {
-        if (a[i] != view[i]) {
-          return false;
-        }
-      }
-      return true;
     }
+    return true;
+  }
+
+  _getDataCache(heap, offset, length, object, skipCompare) {
+    let self = this;
 
     let cacheIndex = -1;
 
@@ -676,7 +666,7 @@ class WebGPURecorder {
       for (let ai = 0; ai < self._arrayCache.length; ++ai) {
         const c = self._arrayCache[ai];
         if (c.length == length) {
-          if (_compareCacheData(ai, view)) {
+          if (this._compareCacheData(this._arrayCache[ai].array, view)) {
             cacheIndex = ai;
             break;
           }
@@ -738,13 +728,13 @@ class WebGPURecorder {
       const size = totalRows > 0
         ? bytesPerRow * (totalRows - 1) + widthInBlocks * bytesPerBlock
         : 0;
-        const offset = args[2].offset;
+      const offset = args[2].offset;
       // offset is in bytes but source can be any TypedArray
       // getDataCache assumes offset is in TypedArray.BYTES_PER_ELEMENT size
       // so view the data as bytes.
       const cacheIndex = this._getDataCache(new Uint8Array(buffer.buffer || buffer, buffer.byteOffset, buffer.byteLength), offset, size, texture);
       args[1] = { __data: cacheIndex };
-      args[2].offset = 0;
+      args[2] = { offset: 0, bytesPerRow: args[2].bytesPerRow, rowsPerImage: args[2].rowsPerImage };
     } else if (method == "setBindGroup") {
       if (args.length == 5) {
         const buffer = args[2];
@@ -855,7 +845,7 @@ class WebGPURecorder {
       } else if (typeof (a) === "object") {
         argStrings.push(this._stringifyObject(method, a, toJson));
       } else if (typeof (a) === "string") {
-        if (method === "createShaderModule") {
+        if (!toJson && method === "createShaderModule") {
           argStrings.push(`\`${a}\``);
         } else {
           argStrings.push(JSON.stringify(a));
