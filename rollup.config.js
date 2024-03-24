@@ -15,7 +15,7 @@ function build(name, input, file, copyFiles, watchInclude) {
       },
       plugins: [
         nodeResolve(),
-        /*terser({
+        terser({
           ecma: 2020,
           compress: {
             module: true,
@@ -26,7 +26,7 @@ function build(name, input, file, copyFiles, watchInclude) {
             drop_debugger: false
           },
           output: { quote_style: 1 }
-        })*/
+        })
       ]
   };
 
