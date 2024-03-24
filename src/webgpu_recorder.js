@@ -41,6 +41,7 @@ class WebGPURecorder {
     this._unusedTextureViews = new Map();
     this._unusedBuffers = new Set();
     this._dataCacheObjects = [];
+    this._externalImageBufferPromises = [];
 
     // Check if the browser supports WebGPU
     if (!navigator.gpu) {
@@ -241,27 +242,32 @@ class WebGPURecorder {
     }
     
     async function loadData() {\n`;
-    const promises = [];
-    for (let ai = 0; ai < this._arrayCache.length; ++ai) {
-      const a = this._arrayCache[ai];
-      promises.push(new Promise((resolve) => {
-        this._encodeDataUrl(a.array).then((b64) => {
-          s += `D[${ai}] = await B64ToA("${b64}", "${a.type}", ${a.length});\n`;
-          resolve();
-        });
-      }));
-    }
-
-    Promise.all(promises).then(() => {
-      s += `
+    
+    const self = this;
+    Promise.all(this._externalImageBufferPromises).then(() => {
+      self._externalImageBufferPromises.length = 0;
+      const promises = [];
+      for (let ai = 0; ai < self._arrayCache.length; ++ai) {
+        const a = self._arrayCache[ai];
+        promises.push(new Promise((resolve) => {
+          self._encodeDataUrl(a.array).then((b64) => {
+            s += `D[${ai}] = await B64ToA("${b64}", "${a.type}", ${a.length});\n`;
+            resolve();
+          });
+        }));
       }
-      main();
-              </script>
-          </body>
-      </html>\n`;
 
-      this._downloadFile(s, (this.config.exportName || "WebGpuRecord") + ".html");
-    });   
+      Promise.all(promises).then(() => {
+        s += `
+        }
+        main();
+                </script>
+            </body>
+        </html>\n`;
+
+        self._downloadFile(s, (self.config.exportName || "WebGpuRecord") + ".html");
+      });
+    });
   }
 
   async _encodeDataUrl(a, type = "application/octet-stream") {
@@ -433,6 +439,7 @@ class WebGPURecorder {
       if (adapter.__id === undefined) {
         this._recordCommand(true, navigator.gpu, "requestAdapter", adapter, []);
       }
+      result.queue.__device = result; // Add a reference to the device on the queue object.
     }
 
     this._recordCommand(true, object, method, result, args);
@@ -459,11 +466,15 @@ class WebGPURecorder {
     } else if (method === "getCurrentTexture") {
       this._recordLine(`setCanvasSize(${this._getObjectVariable(object)}.canvas, ${object.canvas.width}, ${object.canvas.height})`, null);
       this._recordCommand("", object, "__setCanvasSize", null, [object.canvas.width, object.canvas.height], true);
+    } else if (method === "createTexture") {
+      args[0].usage |= GPUTextureUsage.COPY_SRC;
     }
   }
 
   _onMethodCall(object, method, args, result) {
     if (method == "copyExternalImageToTexture") {
+      const queue = object;
+
       // copyExternalImageToTexture uses ImageBitmap (or canvas or offscreenCanvas) as
       // its source, which we can"t record. ConvertcopyExternalImageToTexture to
       // writeTexture, and record the bytes from the ImageBitmap. To do that, we need
@@ -475,15 +486,44 @@ class WebGPURecorder {
       // the data in the data cache will be pending the async map resolve. Make a slot for the data
       // in the data cache, and fill it in when the map resolves. Keep track of all pending promises
       // and resolve them before generating the recording data.
-      const bytes = this._getBytesFromImageSource(args[0].source);
       const texture = args[1]["texture"];
       const format = texture.format;
       const formatInfo = WebGPURecorder._formatInfo[format];
       const bytesPerPixel = formatInfo ? formatInfo.bytesPerBlock : 4;
-      const bytesPerRow = args[0].source.width * bytesPerPixel;
-      const cacheIndex = this._getDataCache(bytes, bytes.byteOffset, bytes.byteLength, texture);
-      this._recordLine(`${this._getObjectVariable(object)}.writeTexture(${this._stringifyObject(method, args[1])}, D[${cacheIndex}], {bytesPerRow:${bytesPerRow}}, ${this._stringifyObject(method, args[2])});`, object);
-      this._recordCommand(false, object, "__writeTexture", null, [args[1], { __data: cacheIndex }, { bytesPerRow }, args[2]], true);
+      const width = args[0].source.width;
+      const bytesPerRow = (width * bytesPerPixel + 255) & ~0xff;
+      const rowsPerImage = args[0].source.height;
+      const size = bytesPerRow * rowsPerImage;
+      const copySize = args[2];
+
+      const device = queue.__device;
+      const buffer = device.createBuffer({ size, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+
+      const commandEncoder = device.createCommandEncoder();
+      commandEncoder.copyTextureToBuffer({ texture: args[1].texture }, { buffer, bytesPerRow, rowsPerImage }, copySize);
+      queue.submit([commandEncoder.finish()]);
+
+      //const bytes = this._getBytesFromImageSource(args[0].source);
+      let cacheIndex = -1;
+      try {
+        const bytes = new Uint8Array(size);
+        cacheIndex = this._getDataCache(bytes, 0, size, texture, false);
+        this._recordLine(`${this._getObjectVariable(queue)}.writeTexture(${this._stringifyObject(method, args[1])}, D[${cacheIndex}], {bytesPerRow:${bytesPerRow}}, ${this._stringifyObject(method, copySize)});`, object);
+        this._recordCommand(false, queue, "__writeTexture", null, [args[1], { __data: cacheIndex }, { bytesPerRow }, copySize], true);
+      } catch (e) {
+        console.error(e.message);
+      }
+
+      const self = this;
+      const promise = new Promise((resolve) => {
+        buffer.mapAsync(GPUMapMode.READ).then(() => {
+          const range = buffer.getMappedRange();
+          const bufferData = new Uint8Array(range);
+          self._replaceDataCache(cacheIndex, bufferData, 0, bufferData.length);
+          resolve();
+        });
+      });
+      this._externalImageBufferPromises.push(promise);
     } else {
       this._recordCommand(false, object, method, result, args);
     }
@@ -579,15 +619,30 @@ class WebGPURecorder {
     return s;
   }
 
-  _getDataCache(heap, offset, length, object) {
-    let self = this;
-
-    function _heapAccessShiftForWebGPUHeap(heap) {
-      if (!heap.BYTES_PER_ELEMENT) {
-        return 0;
-      }
-      return 31 - Math.clz32(heap.BYTES_PER_ELEMENT);
+  _heapAccessShiftForWebGPUHeap(heap) {
+    if (!heap.BYTES_PER_ELEMENT) {
+      return 0;
     }
+    return 31 - Math.clz32(heap.BYTES_PER_ELEMENT);
+  }
+
+  _replaceDataCache(index, heap, offset, length) {
+    const byteOffset = (heap.byteOffset ?? 0) + ((offset ?? 0) << this._heapAccessShiftForWebGPUHeap(heap));
+    const byteLength = length === undefined ? heap.byteLength : (length << this._heapAccessShiftForWebGPUHeap(heap));
+
+    this._totalData += byteLength;
+    const view = new Uint8Array(heap.buffer ?? heap, byteOffset, byteLength);
+
+    const arrayCopy = Uint8Array.from(view);
+    this._arrayCache[index] = {
+      length: byteLength,
+      type: heap.constructor === "ArrayBuffer" ? Uint8Array : heap.constructor.name,
+      array: arrayCopy
+    };
+  }
+
+  _getDataCache(heap, offset, length, object, skipCompare) {
+    let self = this;
 
     function _compareCacheData(ai, view) {
       const a = self._arrayCache[ai].array;
@@ -605,30 +660,41 @@ class WebGPURecorder {
       return true;
     }
 
-    const byteOffset = (heap.byteOffset ?? 0) + ((offset ?? 0) << _heapAccessShiftForWebGPUHeap(heap));
-    const byteLength = length === undefined ? heap.byteLength : (length << _heapAccessShiftForWebGPUHeap(heap));
-
-    this._totalData += byteLength;
-    const view = new Uint8Array(heap.buffer ?? heap, byteOffset, byteLength);
-
     let cacheIndex = -1;
-    for (let ai = 0; ai < self._arrayCache.length; ++ai) {
-      const c = self._arrayCache[ai];
-      if (c.length == length) {
-        if (_compareCacheData(ai, view)) {
-          cacheIndex = ai;
-          break;
+
+    if (!skipCompare) {
+      const byteOffset = (heap.byteOffset ?? 0) + ((offset ?? 0) << this._heapAccessShiftForWebGPUHeap(heap));
+      const byteLength = length === undefined ? heap.byteLength : (length << this._heapAccessShiftForWebGPUHeap(heap));
+
+      this._totalData += byteLength;
+      const view = new Uint8Array(heap.buffer ?? heap, byteOffset, byteLength);
+
+      for (let ai = 0; ai < self._arrayCache.length; ++ai) {
+        const c = self._arrayCache[ai];
+        if (c.length == length) {
+          if (_compareCacheData(ai, view)) {
+            cacheIndex = ai;
+            break;
+          }
         }
       }
-    }
 
-    if (cacheIndex == -1) {
+      if (cacheIndex == -1) {
+        cacheIndex = self._arrayCache.length;
+        const arrayCopy = Uint8Array.from(view);
+        self._arrayCache.push({
+          length: byteLength,
+          type: heap.constructor === "ArrayBuffer" ? Uint8Array : heap.constructor.name,
+          array: arrayCopy
+        });
+      }
+    } else {
       cacheIndex = self._arrayCache.length;
-      const arrayCopy = Uint8Array.from(view);
+      const array = heap;
       self._arrayCache.push({
-        length: byteLength,
+        length,
         type: heap.constructor === "ArrayBuffer" ? Uint8Array : heap.constructor.name,
-        array: arrayCopy
+        array
       });
     }
 
