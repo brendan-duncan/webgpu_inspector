@@ -587,7 +587,11 @@ class WebGPURecorder {
       if (value === null) {
         s += "null";
       } else if (typeof (value) === "string") {
-        s += JSON.stringify(value);
+        if (method === "createShaderModule") {
+          s += `\`${value}\``;
+        } else {
+          s += JSON.stringify(value);
+        }
       } else if (value.__id !== undefined) {
         if (toJson) {
           s += `{ "__id":"${this._getObjectVariable(value)}" }`;
@@ -851,7 +855,11 @@ class WebGPURecorder {
       } else if (typeof (a) === "object") {
         argStrings.push(this._stringifyObject(method, a, toJson));
       } else if (typeof (a) === "string") {
-        argStrings.push(JSON.stringify(a));
+        if (method === "createShaderModule") {
+          argStrings.push(`\`${a}\``);
+        } else {
+          argStrings.push(JSON.stringify(a));
+        }
       } else {
         argStrings.push(a);
       }

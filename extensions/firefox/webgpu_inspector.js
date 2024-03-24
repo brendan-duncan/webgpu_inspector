@@ -1,2 +1,2718 @@
-!function(){async function e(e,t='application/octet-stream'){return await new Promise(((r,s)=>{const o=Object.assign(new FileReader,{onload:()=>r(o.result),onerror:()=>s(o.error)});o.readAsDataURL(new File([e],'',{type:t}))}))}class t{constructor(e){this._lastSlotId=0,this.slots=new Map,e&&(this.name=e)}static get enabled(){return 0==t._disableSignals}static get disabled(){return t._disableSignals>0}static disable(){return t._disableSignals++}static enable(e){return e?(t._disableSignals=0,0):t._disableSignals>0?t._disableSignals--:0}static disconnect(e,r,s){for(const o in e){const i=e[o];i.constructor===t&&i.disconnect(r,s)}}static getSignals(e,r){r=r||[];for(const s in e){const o=e[s];o.constructor===t&&r.push(o)}return r}get hasListeners(){return this.slots.size>0}emit(){if(!t.disabled)for(const e of this.slots){const r=e[1][0],s=e[1][1]||r;r&&(r.constructor===t?r.emit.apply(s,arguments):r.apply(s,arguments))}}addListener(e,t){return this.isListening(e,t)?null:(this.slots.set(this._lastSlotId++,[e,t]),this._lastSlotId-1)}isListening(e,t){for(const r of this.slots){const s=r[1];if(e&&!t){if(s[0]===e||s[1]===e)return!0}else if(!e&&t){if(s[1]===t)return!0}else if(s[0]===e&&s[1]===t)return!0}return!1}disconnect(e,t){if(null==e&&null==t)return this.slots.clear(),!0;if(e.constructor===Number){const t=e;return!!this.slots.has(t)&&(this.slots.delete(t),!0)}let r=!1;for(const s of this.slots){const o=s[0],i=s[1];e&&!t?i[0]!==e&&i[1]!==e||(this.slots.delete(o),r=!0):!e&&t?i[1]===t&&(this.slots.delete(o),r=!0):i[0]===e&&i[1]===t&&(this.slots.delete(o),r=!0)}return r}}function r(){if(!Error.captureStackTrace)return'';const e={};if(Error.captureStackTrace(e,r),!e.stack)return'';return e.stack.split('\n').map((e=>e.split('at ')[1])).slice(2).filter((e=>e&&!e.includes('webgpu_inspector.js'))).join('\n')}t._disableSignals=0;const s=new Set([GPUAdapter,GPUDevice,GPUBuffer,GPUTexture,GPUTextureView,GPUSampler,GPUBindGroupLayout,GPUBindGroup,GPUPipelineLayout,GPUShaderModule,GPUComputePipeline,GPURenderPipeline,GPUCommandBuffer,GPUCommandEncoder,GPUComputePassEncoder,GPURenderPassEncoder,GPURenderBundle,GPUQueue,GPUQuerySet,GPUCanvasContext]),o=new Set(['createBuffer','createTexture','createSampler','importExternalTexture','createBindGroupLayout','createPipelineLayout','createBindGroup','createShaderModule','createComputePipeline','createRenderPipeline','createComputePipelineAsync','createRenderPipelineAsync','createCommandEncoder','createRenderBundleEncoder','createQuerySet','createView']);class i{constructor(e){this._idGenerator=e,this.onPreCall=new t,this.onPostCall=new t,this.onPromise=new t,this.onPromiseResolve=new t,this.recordStacktraces=!1,this._skipRecord=0,this._wrapGPUTypes()}_wrapGPUTypes(){GPU.prototype.requestAdapter=this._wrapMethod('requestAdapter',GPU.prototype.requestAdapter),GPU.prototype.getPreferredFormat=this._wrapMethod('getPreferredFormat',GPU.prototype.getPreferredFormat),GPUAdapter.prototype.requestDevice=this._wrapMethod('requestDevice',GPUAdapter.prototype.requestDevice),GPUDevice.prototype.destroy=this._wrapMethod('destroy',GPUDevice.prototype.destroy),GPUDevice.prototype.createBuffer=this._wrapMethod('createBuffer',GPUDevice.prototype.createBuffer),GPUDevice.prototype.createTexture=this._wrapMethod('createTexture',GPUDevice.prototype.createTexture),GPUDevice.prototype.createSampler=this._wrapMethod('createSampler',GPUDevice.prototype.createSampler),GPUDevice.prototype.importExternalTexture=this._wrapMethod('importExternalTexture',GPUDevice.prototype.importExternalTexture),GPUDevice.prototype.createBindGroupLayout=this._wrapMethod('createBindGroupLayout',GPUDevice.prototype.createBindGroupLayout),GPUDevice.prototype.createPipelineLayout=this._wrapMethod('createPipelineLayout',GPUDevice.prototype.createPipelineLayout),GPUDevice.prototype.createBindGroup=this._wrapMethod('createBindGroup',GPUDevice.prototype.createBindGroup),GPUDevice.prototype.createShaderModule=this._wrapMethod('createShaderModule',GPUDevice.prototype.createShaderModule),GPUDevice.prototype.createComputePipeline=this._wrapMethod('createComputePipeline',GPUDevice.prototype.createComputePipeline),GPUDevice.prototype.createRenderPipeline=this._wrapMethod('createRenderPipeline',GPUDevice.prototype.createRenderPipeline),GPUDevice.prototype.createComputePipelineAsync=this._wrapMethod('createComputePipelineAsync',GPUDevice.prototype.createComputePipelineAsync),GPUDevice.prototype.createRenderPipelineAsync=this._wrapMethod('createRenderPipelineAsync',GPUDevice.prototype.createRenderPipelineAsync),GPUDevice.prototype.createCommandEncoder=this._wrapMethod('createCommandEncoder',GPUDevice.prototype.createCommandEncoder),GPUDevice.prototype.createRenderBundleEncoder=this._wrapMethod('createRenderBundleEncoder',GPUDevice.prototype.createRenderBundleEncoder),GPUDevice.prototype.createQuerySet=this._wrapMethod('createQuerySet',GPUDevice.prototype.createQuerySet),GPUBuffer.prototype.mapAsync=this._wrapMethod('mapAsync',GPUBuffer.prototype.mapAsync),GPUBuffer.prototype.getMappedRange=this._wrapMethod('getMappedRange',GPUBuffer.prototype.getMappedRange),GPUBuffer.prototype.unmap=this._wrapMethod('unmap',GPUBuffer.prototype.unmap),GPUBuffer.prototype.destroy=this._wrapMethod('destroy',GPUBuffer.prototype.destroy),GPUTexture.prototype.createView=this._wrapMethod('createView',GPUTexture.prototype.createView),GPUTexture.prototype.destroy=this._wrapMethod('destroy',GPUTexture.prototype.destroy),GPUShaderModule.prototype.getCompilationInfo=this._wrapMethod('getCompilationInfo',GPUShaderModule.prototype.getCompilationInfo),GPUComputePipeline.prototype.getBindGroupLayout=this._wrapMethod('getBindGroupLayout',GPUComputePipeline.prototype.getBindGroupLayout),GPURenderPipeline.prototype.getBindGroupLayout=this._wrapMethod('getBindGroupLayout',GPURenderPipeline.prototype.getBindGroupLayout),GPUCommandEncoder.prototype.beginRenderPass=this._wrapMethod('beginRenderPass',GPUCommandEncoder.prototype.beginRenderPass),GPUCommandEncoder.prototype.beginComputePass=this._wrapMethod('beginComputePass',GPUCommandEncoder.prototype.beginComputePass),GPUCommandEncoder.prototype.copyBufferToBuffer=this._wrapMethod('copyBufferToBuffer',GPUCommandEncoder.prototype.copyBufferToBuffer),GPUCommandEncoder.prototype.copyBufferToTexture=this._wrapMethod('copyBufferToTexture',GPUCommandEncoder.prototype.copyBufferToTexture),GPUCommandEncoder.prototype.copyTextureToBuffer=this._wrapMethod('copyTextureToBuffer',GPUCommandEncoder.prototype.copyTextureToBuffer),GPUCommandEncoder.prototype.copyTextureToTexture=this._wrapMethod('copyTextureToTexture',GPUCommandEncoder.prototype.copyTextureToTexture),GPUCommandEncoder.prototype.clearBuffer=this._wrapMethod('clearBuffer',GPUCommandEncoder.prototype.clearBuffer),GPUCommandEncoder.prototype.resolveQuerySet=this._wrapMethod('resolveQuerySet',GPUCommandEncoder.prototype.resolveQuerySet),GPUCommandEncoder.prototype.finish=this._wrapMethod('finish',GPUCommandEncoder.prototype.finish),GPUCommandEncoder.prototype.pushDebugGroup=this._wrapMethod('pushDebugGroup',GPUCommandEncoder.prototype.pushDebugGroup),GPUCommandEncoder.prototype.popDebugGroup=this._wrapMethod('popDebugGroup',GPUCommandEncoder.prototype.popDebugGroup),GPUCommandEncoder.prototype.insertDebugMarker=this._wrapMethod('insertDebugMarker',GPUCommandEncoder.prototype.insertDebugMarker),GPUComputePassEncoder.prototype.setPipeline=this._wrapMethod('setPipeline',GPUComputePassEncoder.prototype.setPipeline),GPUComputePassEncoder.prototype.dispatchWorkgroups=this._wrapMethod('dispatchWorkgroups',GPUComputePassEncoder.prototype.dispatchWorkgroups),GPUComputePassEncoder.prototype.dispatchWorkgroupsIndirect=this._wrapMethod('dispatchWorkgroupsIndirect',GPUComputePassEncoder.prototype.dispatchWorkgroupsIndirect),GPUComputePassEncoder.prototype.end=this._wrapMethod('end',GPUComputePassEncoder.prototype.end),GPUComputePassEncoder.prototype.setBindGroup=this._wrapMethod('setBindGroup',GPUComputePassEncoder.prototype.setBindGroup),GPUComputePassEncoder.prototype.setBindGroup=this._wrapMethod('setBindGroup',GPUComputePassEncoder.prototype.setBindGroup),GPUComputePassEncoder.prototype.pushDebugGroup=this._wrapMethod('pushDebugGroup',GPUComputePassEncoder.prototype.pushDebugGroup),GPUComputePassEncoder.prototype.popDebugGroup=this._wrapMethod('popDebugGroup',GPUComputePassEncoder.prototype.popDebugGroup),GPUComputePassEncoder.prototype.insertDebugMarker=this._wrapMethod('insertDebugMarker',GPUComputePassEncoder.prototype.insertDebugMarker),GPURenderPassEncoder.prototype.setViewport=this._wrapMethod('setViewport',GPURenderPassEncoder.prototype.setViewport),GPURenderPassEncoder.prototype.setScissorRect=this._wrapMethod('setScissorRect',GPURenderPassEncoder.prototype.setScissorRect),GPURenderPassEncoder.prototype.setBlendConstant=this._wrapMethod('setBlendConstant',GPURenderPassEncoder.prototype.setBlendConstant),GPURenderPassEncoder.prototype.setStencilReference=this._wrapMethod('setStencilReference',GPURenderPassEncoder.prototype.setStencilReference),GPURenderPassEncoder.prototype.beginOcclusionQuery=this._wrapMethod('beginOcclusionQuery',GPURenderPassEncoder.prototype.beginOcclusionQuery),GPURenderPassEncoder.prototype.endOcclusionQuery=this._wrapMethod('endOcclusionQuery',GPURenderPassEncoder.prototype.endOcclusionQuery),GPURenderPassEncoder.prototype.executeBundles=this._wrapMethod('executeBundles',GPURenderPassEncoder.prototype.executeBundles),GPURenderPassEncoder.prototype.end=this._wrapMethod('end',GPURenderPassEncoder.prototype.end),GPURenderPassEncoder.prototype.setPipeline=this._wrapMethod('setPipeline',GPURenderPassEncoder.prototype.setPipeline),GPURenderPassEncoder.prototype.setIndexBuffer=this._wrapMethod('setIndexBuffer',GPURenderPassEncoder.prototype.setIndexBuffer),GPURenderPassEncoder.prototype.setVertexBuffer=this._wrapMethod('setVertexBuffer',GPURenderPassEncoder.prototype.setVertexBuffer),GPURenderPassEncoder.prototype.draw=this._wrapMethod('draw',GPURenderPassEncoder.prototype.draw),GPURenderPassEncoder.prototype.drawIndexed=this._wrapMethod('drawIndexed',GPURenderPassEncoder.prototype.drawIndexed),GPURenderPassEncoder.prototype.drawIndirect=this._wrapMethod('drawIndirect',GPURenderPassEncoder.prototype.drawIndirect),GPURenderPassEncoder.prototype.drawIndexedIndirect=this._wrapMethod('drawIndexedIndirect',GPURenderPassEncoder.prototype.drawIndexedIndirect),GPURenderPassEncoder.prototype.setBindGroup=this._wrapMethod('setBindGroup',GPURenderPassEncoder.prototype.setBindGroup),GPURenderPassEncoder.prototype.pushDebugGroup=this._wrapMethod('pushDebugGroup',GPURenderPassEncoder.prototype.pushDebugGroup),GPURenderPassEncoder.prototype.popDebugGroup=this._wrapMethod('popDebugGroup',GPURenderPassEncoder.prototype.popDebugGroup),GPURenderPassEncoder.prototype.insertDebugMarker=this._wrapMethod('insertDebugMarker',GPURenderPassEncoder.prototype.insertDebugMarker),GPUQueue.prototype.submit=this._wrapMethod('submit',GPUQueue.prototype.submit),GPUQueue.prototype.writeBuffer=this._wrapMethod('writeBuffer',GPUQueue.prototype.writeBuffer),GPUQueue.prototype.writeTexture=this._wrapMethod('writeTexture',GPUQueue.prototype.writeTexture),GPUQueue.prototype.copyExternalImageToTexture=this._wrapMethod('copyExternalImageToTexture',GPUQueue.prototype.copyExternalImageToTexture),GPUQuerySet.prototype.destroy=this._wrapMethod('destroy',GPUQuerySet.prototype.destroy),GPUCanvasContext.prototype.configure=this._wrapMethod('configure',GPUCanvasContext.prototype.configure),GPUCanvasContext.prototype.unconfigure=this._wrapMethod('unconfigure',GPUCanvasContext.prototype.unconfigure),GPUCanvasContext.prototype.getCurrentTexture=this._wrapMethod('getCurrentTexture',GPUCanvasContext.prototype.getCurrentTexture)}disableRecording(){this._skipRecord++}enableRecording(){this._skipRecord--,this._skipRecord<0&&(this._skipRecord=0)}get isRecordingEnabled(){return 0===this._skipRecord}_wrapMethod(e,t){const s=this;return function(){const i=this,n=[...arguments];if(s._skipRecord>0)return t.call(i,...n);s.onPreCall.emit(i,e,n);const a=t.call(i,...n),c=o.has(e),d=s.recordStacktraces||c?r():void 0;if(a instanceof Promise){const t=s._idGenerator.getNextId(i);s.onPromise.emit(i,e,n,t,d);const r=a,o=new Promise((o=>{r.then((r=>{s.onPromiseResolve.emit(i,e,n,t,r,d),o(r)}))}));return o}return s.onPostCall.emit(i,e,n,a,d),a}}}const n={r8unorm:{bytesPerBlock:1,blockWidth:1,blockHeight:1,isCompressed:!1,channels:1},r8snorm:{bytesPerBlock:1,blockWidth:1,blockHeight:1,isCompressed:!1,channels:1},r8uint:{bytesPerBlock:1,blockWidth:1,blockHeight:1,isCompressed:!1,channels:1},r8sint:{bytesPerBlock:1,blockWidth:1,blockHeight:1,isCompressed:!1,channels:1},rg8unorm:{bytesPerBlock:2,blockWidth:1,blockHeight:1,isCompressed:!1,channels:2},rg8snorm:{bytesPerBlock:2,blockWidth:1,blockHeight:1,isCompressed:!1,channels:2},rg8uint:{bytesPerBlock:2,blockWidth:1,blockHeight:1,isCompressed:!1,channels:2},rg8sint:{bytesPerBlock:2,blockWidth:1,blockHeight:1,isCompressed:!1,channels:2},rgba8unorm:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},'rgba8unorm-srgb':{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},rgba8snorm:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},rgba8uint:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},rgba8sint:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},bgra8unorm:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},'bgra8unorm-srgb':{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},r16uint:{bytesPerBlock:2,blockWidth:1,blockHeight:1,isCompressed:!1,channels:1},r16sint:{bytesPerBlock:2,blockWidth:1,blockHeight:1,isCompressed:!1,channels:1},r16float:{bytesPerBlock:2,blockWidth:1,blockHeight:1,isCompressed:!1,channels:1},rg16uint:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:2},rg16sint:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:2},rg16float:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:2},rgba16uint:{bytesPerBlock:8,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},rgba16sint:{bytesPerBlock:8,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},rgba16float:{bytesPerBlock:8,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},r32uint:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:1},r32sint:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:1},r32float:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:1},rg32uint:{bytesPerBlock:8,blockWidth:1,blockHeight:1,isCompressed:!1,channels:2},rg32sint:{bytesPerBlock:8,blockWidth:1,blockHeight:1,isCompressed:!1,channels:2},rg32float:{bytesPerBlock:8,blockWidth:1,blockHeight:1,isCompressed:!1,channels:2},rgba32uint:{bytesPerBlock:16,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},rgba32sint:{bytesPerBlock:16,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},rgba32float:{bytesPerBlock:16,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},rgb10a2uint:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},rgb10a2unorm:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},rg11b10ufloat:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},stencil8:{bytesPerBlock:1,blockWidth:1,blockHeight:1,isCompressed:!1,isDepthStencil:!0,hasDepth:!1,hasStencil:!0,channels:1},depth16unorm:{bytesPerBlock:2,blockWidth:1,blockHeight:1,isCompressed:!1,isDepthStencil:!0,hasDepth:!0,hasStencil:!1,channels:1},depth24plus:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,isDepthStencil:!0,hasDepth:!0,hasStencil:!1,depthOnlyFormat:'depth32float',channels:1},'depth24plus-stencil8':{bytesPerBlock:8,blockWidth:1,blockHeight:1,isCompressed:!1,isDepthStencil:!0,hasDepth:!0,hasStencil:!0,depthOnlyFormat:'depth32float',channels:1},depth32float:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,isDepthStencil:!0,hasDepth:!0,hasStencil:!1,channels:1},'depth32float-stencil8':{bytesPerBlock:8,blockWidth:1,blockHeight:1,isCompressed:!1,isDepthStencil:!0,hasDepth:!0,hasStencil:!0,stencilOnlyFormat:'depth32float',channels:1},rgb9e5ufloat:{bytesPerBlock:4,blockWidth:1,blockHeight:1,isCompressed:!1,channels:4},'bc1-rgba-unorm':{bytesPerBlock:8,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'bc1-rgba-unorm-srgb':{bytesPerBlock:8,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'bc2-rgba-unorm':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'bc2-rgba-unorm-srgb':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'bc3-rgba-unorm':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'bc3-rgba-unorm-srgb':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'bc4-r-unorm':{bytesPerBlock:8,blockWidth:4,blockHeight:4,isCompressed:!0,channels:1},'bc4-r-snorm':{bytesPerBlock:8,blockWidth:4,blockHeight:4,isCompressed:!0,channels:1},'bc5-rg-unorm':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:2},'bc5-rg-snorm':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:2},'bc6h-rgb-ufloat':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'bc6h-rgb-float':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'bc7-rgba-unorm':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'bc7-rgba-unorm-srgb':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'etc2-rgb8unorm':{bytesPerBlock:8,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'etc2-rgb8unorm-srgb':{bytesPerBlock:8,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'etc2-rgb8a1unorm':{bytesPerBlock:8,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'etc2-rgb8a1unorm-srgb':{bytesPerBlock:8,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'etc2-rgba8unorm':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'etc2-rgba8unorm-srgb':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'eac-r11unorm':{bytesPerBlock:8,blockWidth:1,blockHeight:1,isCompressed:!0,channels:1},'eac-r11snorm':{bytesPerBlock:8,blockWidth:1,blockHeight:1,isCompressed:!0,channels:1},'eac-rg11unorm':{bytesPerBlock:16,blockWidth:1,blockHeight:1,isCompressed:!0,channels:2},'eac-rg11snorm':{bytesPerBlock:16,blockWidth:1,blockHeight:1,isCompressed:!0,channels:2},'astc-4x4-unorm':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'astc-4x4-unorm-srgb':{bytesPerBlock:16,blockWidth:4,blockHeight:4,isCompressed:!0,channels:4},'astc-5x4-unorm':{bytesPerBlock:16,blockWidth:5,blockHeight:4,isCompressed:!0,channels:4},'astc-5x4-unorm-srgb':{bytesPerBlock:16,blockWidth:5,blockHeight:4,isCompressed:!0,channels:4},'astc-5x5-unorm':{bytesPerBlock:16,blockWidth:5,blockHeight:5,isCompressed:!0,channels:4},'astc-5x5-unorm-srgb':{bytesPerBlock:16,blockWidth:5,blockHeight:5,isCompressed:!0,channels:4},'astc-6x5-unorm':{bytesPerBlock:16,blockWidth:6,blockHeight:5,isCompressed:!0,channels:4},'astc-6x5-unorm-srgb':{bytesPerBlock:16,blockWidth:6,blockHeight:5,isCompressed:!0,channels:4},'astc-6x6-unorm':{bytesPerBlock:16,blockWidth:6,blockHeight:6,isCompressed:!0,channels:4},'astc-6x6-unorm-srgb':{bytesPerBlock:16,blockWidth:6,blockHeight:6,isCompressed:!0,channels:4},'astc-8x5-unorm':{bytesPerBlock:16,blockWidth:8,blockHeight:5,isCompressed:!0,channels:4},'astc-8x5-unorm-srgb':{bytesPerBlock:16,blockWidth:8,blockHeight:5,isCompressed:!0,channels:4},'astc-8x6-unorm':{bytesPerBlock:16,blockWidth:8,blockHeight:6,isCompressed:!0,channels:4},'astc-8x6-unorm-srgb':{bytesPerBlock:16,blockWidth:8,blockHeight:6,isCompressed:!0,channels:4},'astc-8x8-unorm':{bytesPerBlock:16,blockWidth:8,blockHeight:8,isCompressed:!0,channels:4},'astc-8x8-unorm-srgb':{bytesPerBlock:16,blockWidth:8,blockHeight:8,isCompressed:!0,channels:4},'astc-10x5-unorm':{bytesPerBlock:16,blockWidth:10,blockHeight:5,isCompressed:!0,channels:4},'astc-10x5-unorm-srgb':{bytesPerBlock:16,blockWidth:10,blockHeight:5,isCompressed:!0,channels:4},'astc-10x6-unorm':{bytesPerBlock:16,blockWidth:10,blockHeight:6,isCompressed:!0,channels:4},'astc-10x6-unorm-srgb':{bytesPerBlock:16,blockWidth:10,blockHeight:6,isCompressed:!0,channels:4},'astc-10x8-unorm':{bytesPerBlock:16,blockWidth:10,blockHeight:8,isCompressed:!0,channels:4},'astc-10x8-unorm-srgb':{bytesPerBlock:16,blockWidth:10,blockHeight:8,isCompressed:!0,channels:4},'astc-10x10-unorm':{bytesPerBlock:16,blockWidth:10,blockHeight:10,isCompressed:!0,channels:4},'astc-10x10-unorm-srgb':{bytesPerBlock:16,blockWidth:10,blockHeight:10,isCompressed:!0,channels:4},'astc-12x10-unorm':{bytesPerBlock:16,blockWidth:12,blockHeight:10,isCompressed:!0,channels:4},'astc-12x10-unorm-srgb':{bytesPerBlock:16,blockWidth:12,blockHeight:10,isCompressed:!0,channels:4},'astc-12x12-unorm':{bytesPerBlock:16,blockWidth:12,blockHeight:12,isCompressed:!0,channels:4},'astc-12x12-unorm-srgb':{bytesPerBlock:16,blockWidth:12,blockHeight:12,isCompressed:!0,channels:4}};class a{constructor(e){this.device=e,this.blitShaderModule=e.createShaderModule({code:a.blitShader}),this.multisampleBlitShaderModule=e.createShaderModule({code:a.multisampleBlitShader}),this.depthToFloatShaderModule=e.createShaderModule({code:a.depthToFloatShader}),this.depthToFloatMultisampleShaderModule=e.createShaderModule({code:a.depthToFloatMultisampleShader}),this.blitPipelines={},this.blitDepthPipelines={},this.bindGroupLayouts=new Map,this.pipelineLayouts=new Map,this.depthToFloatPipeline=null,this.depthToFloatMSPipeline=null,this.pointSampler=e.createSampler({magFilter:'nearest',minFilter:'nearest'}),this.displayUniformBuffer=e.createBuffer({size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST}),this.displayBingGroupLayout=e.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,buffer:{type:'uniform'}}]}),this.displayBindGroup=e.createBindGroup({layout:this.displayBingGroupLayout,entries:[{binding:0,resource:{buffer:this.displayUniformBuffer}}]})}copyDepthTexture(e,t,r){const s=e.width,o=e.height,i=e.depthOrArrayLayers,n=e.usage|GPUTextureUsage.RENDER_TARGET|GPUTextureUsage.COPY_SRC,a=[s,o,i];t=t||'r32float';const c=this.device.createTexture({format:t,size:a,usage:n});for(let s=0;s<i;++s){const o=e.createView({dimension:'2d',aspect:'depth-only',baseArrayLayer:s,arrayLayerCount:1}),i=c.createView({dimension:'2d',baseArrayLayer:s,arrayLayerCount:1});this.convertDepthToFloat(o,e.sampleCount,i,t,r)}return c}copyMultisampledTexture(e){const t=e.width,r=e.height,s=e.format,o=e.usage|GPUTextureUsage.RENDER_TARGET|GPUTextureUsage.COPY_SRC,i=[t,r,1],n=this.device.createTexture({format:s,size:i,usage:o});return this.blitTexture(e.createView(),e.format,e.sampleCount,n.createView(),s),n}blitTexture(e,t,r,s,o,i){const a='unfilterable-float',c=`${a}#${r}`;if(!this.bindGroupLayouts.has(c)){const e=this.device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,sampler:{type:'non-filtering'}},{binding:1,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:a,multisampled:r>1}}]});this.bindGroupLayouts.set(c,e);const t=this.device.createPipelineLayout({bindGroupLayouts:[e,this.displayBingGroupLayout]});this.pipelineLayouts.set(c,t)}const d=n[t],p=d?.channels??4,u=this.bindGroupLayouts.get(c),l=this.pipelineLayouts.get(c),h=`${o}#${a}#${r}`;let _=this.blitPipelines[h];if(!_){const e=r>1?this.multisampleBlitShaderModule:this.blitShaderModule;_=this.device.createRenderPipeline({layout:l,vertex:{module:e,entryPoint:'vertexMain'},fragment:{module:e,entryPoint:'fragmentMain',targets:[{format:o}]},primitive:{topology:'triangle-list'}}),this.blitPipelines[h]=_}const f=this.device.createBindGroup({layout:u,entries:[{binding:0,resource:this.pointSampler},{binding:1,resource:e}]}),m=this.device.createCommandEncoder(),g={colorAttachments:[{view:s,loadOp:'clear',storeOp:'store'}]};i?this.device.queue.writeBuffer(this.displayUniformBuffer,0,new Float32Array([i.exposure,i.channels,p,0])):this.device.queue.writeBuffer(this.displayUniformBuffer,0,new Float32Array([1,0,p,0]));const b=m.beginRenderPass(g);b.setPipeline(_),b.setBindGroup(0,f),b.setBindGroup(1,this.displayBindGroup),b.draw(3),b.end(),this.device.queue.submit([m.finish()])}convertDepthToFloat(e,t,r,s,o){if(t>1){if(!this.depthToFloatMSPipeline){this.device.pushErrorScope('validation'),this.depthToFloatBindGroupMSLayout=this.device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:'depth',multisampled:!0}}]});const e=this.device.createPipelineLayout({bindGroupLayouts:[this.depthToFloatBindGroupMSLayout]}),t=this.depthToFloatMultisampleShaderModule;this.depthToFloatMSPipeline=this.device.createRenderPipeline({layout:e,vertex:{module:t,entryPoint:'vertexMain'},fragment:{module:t,entryPoint:'fragmentMain',targets:[{format:s}]},primitive:{topology:'triangle-list'}}),this.device.popErrorScope().then((e=>{e&&console.error(e.message)}))}}else if(!this.depthToFloatPipeline){this.device.pushErrorScope('validation'),this.depthToFloatBindGroupLayout=this.device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:'depth'}}]});const e=this.device.createPipelineLayout({bindGroupLayouts:[this.depthToFloatBindGroupLayout]}),t=this.depthToFloatShaderModule;this.depthToFloatPipeline=this.device.createRenderPipeline({layout:e,vertex:{module:t,entryPoint:'vertexMain'},fragment:{module:t,entryPoint:'fragmentMain',targets:[{format:s}]},primitive:{topology:'triangle-list'}}),this.device.popErrorScope().then((e=>{e&&console.error(e.message)}))}this.device.pushErrorScope('validation');const i=this.device.createBindGroup({layout:t>1?this.depthToFloatBindGroupMSLayout:this.depthToFloatBindGroupLayout,entries:[{binding:0,resource:e}]}),n=!o;o??=this.device.createCommandEncoder();const a=o.beginRenderPass({colorAttachments:[{view:r,loadOp:'clear',storeOp:'store',clearColor:{r:0,g:0,b:0,a:0}}]});a.setPipeline(t>1?this.depthToFloatMSPipeline:this.depthToFloatPipeline),a.setBindGroup(0,i),a.draw(3),a.end(),n&&this.device.queue.submit([o.finish()]),this.device.popErrorScope().then((e=>{e&&console.error(e.message)}))}}a.blitShader='\n  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(\n    vec4f(-1.0, 1.0, 0.0, 0.0),\n    vec4f(3.0, 1.0, 2.0, 0.0),\n    vec4f(-1.0, -3.0, 0.0, 2.0));\n  struct VertexOutput {\n    @builtin(position) position: vec4f,\n    @location(0) uv: vec2f\n  };\n  @vertex\n  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {\n    var output: VertexOutput;\n    output.uv = posTex[vertexIndex].zw;\n    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);\n    return output;;\n  }\n  @group(0) @binding(0) var texSampler: sampler;\n  @group(0) @binding(1) var texture: texture_2d<f32>;\n  struct Display {\n    exposure: f32,\n    channels: f32,\n    numChannels: f32,\n    _pad: f32\n  };\n  @group(1) @binding(0) var<uniform> display: Display; \n  @fragment\n  fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {\n    var color = textureSample(texture, texSampler, input.uv);\n\n    if (display.numChannels == 1.0) {\n      color = vec4f(color.r, color.r, color.r, 1.0);\n    } else if (display.numChannels == 2.0) {\n      color = vec4f(color.r, color.g, 0.0, 1.0);\n    }\n\n    if (display.channels == 1.0) { // R\n      var rgb = color.rgb * display.exposure;\n      return vec4f(rgb.r, 0.0, 0.0, 1);\n    } else if (display.channels == 2.0) { // G\n      var rgb = color.rgb * display.exposure;\n      return vec4f(0.0, rgb.g, 0.0, 1);\n    } else if (display.channels == 3.0) { // B\n      var rgb = color.rgb * display.exposure;\n      return vec4f(0.0, 0.0, rgb.b, 1);\n    } else if (display.channels == 4.0) { // A\n      var a = color.a * display.exposure;\n      return vec4f(a, a, a, 1);\n    } else if (display.channels == 5.0) { // Luminance\n      var luminance = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));\n      var rgb = vec3f(luminance) * display.exposure;\n      return vec4f(rgb, 1);\n    }\n\n    // RGB\n    var rgb = color.rgb * display.exposure;\n    return vec4f(rgb, 1);\n  }\n',a.multisampleBlitShader='\n  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(\n    vec4f(-1.0, 1.0, 0.0, 0.0),\n    vec4f(3.0, 1.0, 2.0, 0.0),\n    vec4f(-1.0, -3.0, 0.0, 2.0));\n  struct VertexOutput {\n    @builtin(position) position: vec4f,\n    @location(0) uv: vec2f\n  };\n  @vertex\n  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {\n    var output: VertexOutput;\n    output.uv = posTex[vertexIndex].zw;\n    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);\n    return output;;\n  }\n  @group(0) @binding(0) var texSampler: sampler;\n  @group(0) @binding(1) var texture: texture_multisampled_2d<f32>;\n  struct Display {\n    exposure: f32,\n    channels: f32\n  };\n  @group(1) @binding(0) var<uniform> display: Display; \n  @fragment\n  fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {\n    var coords = vec2i(input.uv * vec2f(textureDimensions(texture)));\n    var color = textureLoad(texture, coords, 0);\n    if (display.channels == 1.0) { // R\n      var rgb = color.rgb * display.exposure;\n      return vec4f(rgb.r, 0.0, 0.0, color.a);\n    } else if (display.channels == 2.0) { // G\n      var rgb = color.rgb * display.exposure;\n      return vec4f(0.0, rgb.g, 0.0, color.a);\n    } else if (display.channels == 3.0) { // B\n      var rgb = color.rgb * display.exposure;\n      return vec4f(0.0, 0.0, rgb.b, color.a);\n    } else if (display.channels == 4.0) { // A\n      var a = color.a * display.exposure;\n      return vec4f(a, a, a, color.a);\n    } else if (display.channels == 5.0) { // Luminance\n      var luminance = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));\n      var rgb = vec3f(luminance) * display.exposure;\n      return vec4f(rgb, color.a);\n    }\n\n    // RGB\n    var rgb = color.rgb * display.exposure;\n    return vec4f(rgb, color.a);\n  }',a.depthToFloatShader='\n  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(\n    vec4f(-1.0, 1.0, 0.0, 0.0),\n    vec4f(3.0, 1.0, 2.0, 0.0),\n    vec4f(-1.0, -3.0, 0.0, 2.0));\n  struct VertexOutput {\n    @builtin(position) position: vec4<f32>,\n    @location(0) uv : vec2<f32>\n  };\n  @vertex\n  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {\n    var output: VertexOutput;\n    output.uv = posTex[vertexIndex].zw;\n    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);\n    return output;;\n  }\n  \n  @binding(0) @group(0) var depth: texture_depth_2d;\n  @fragment\n  fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {\n    var depthSize = textureDimensions(depth);\n    var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),\n                           i32(f32(depthSize.y) * input.uv.y));\n    var d = textureLoad(depth, coords, 0);\n    return vec4<f32>(d, 0.0, 0.0, 1.0);\n  }',a.depthToFloatMultisampleShader='\n  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(\n    vec4f(-1.0, 1.0, 0.0, 0.0),\n    vec4f(3.0, 1.0, 2.0, 0.0),\n    vec4f(-1.0, -3.0, 0.0, 2.0));\n  struct VertexOutput {\n    @builtin(position) position: vec4<f32>,\n    @location(0) uv : vec2<f32>\n  };\n  @vertex\n  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {\n    var output: VertexOutput;\n    output.uv = posTex[vertexIndex].zw;\n    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);\n    return output;;\n  }\n  \n  @binding(0) @group(0) var depth: texture_depth_multisampled_2d;\n  @fragment\n  fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {\n    var depthSize = textureDimensions(depth);\n    var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),\n                           i32(f32(depthSize.y) * input.uv.y));\n    var d = textureLoad(depth, coords, 0);\n    return vec4<f32>(d, 0.0, 0.0, 1.0);\n  }';const c={CaptureBufferData:'webgpu_inspect_capture_buffer_data',CaptureBuffers:'webgpu_inspect_capture_buffers',DeleteObjects:'webgpu_inspect_delete_objects',ValidationError:'webgpu_inspect_validation_error',MemoryLeakWarning:'webgpu_inspect_memory_leak_warning',DeltaTime:'webgpu_inspect_delta_time',CaptureFrameResults:'webgpu_inspect_capture_frame_results',CaptureFrameCommands:'webgpu_inspect_capture_frame_commands',ObjectSetLabel:'webgpu_inspect_object_set_label',AddObject:'webgpu_inspect_add_object',ResolveAsyncObject:'webgpu_inspect_resolve_async_object',DeleteObject:'webgpu_inspect_delete_object',CaptureTextureFrames:'webgpu_inspect_capture_texture_frames',CaptureTextureData:'webgpu_inspect_capture_texture_data',CaptureBufferData:'webgpu_inspect_capture_buffer_data',Recording:'webgpu_record_recording',RecordingCommand:'webgpu_record_command',RecordingDataCount:'webgpu_record_data_count',RecordingData:'webgpu_record_data'};c.values=new Set(Object.values(c));const d='webgpu_inspect_request_texture',p='webgpu_inspect_compile_shader',u='webgpu_inspect_revert_shader';class l{constructor(e){this.windowSize=e,this.buffer=[],this.sum=0}add(e){this.buffer.push(e),this.buffer.length>this.windowSize&&(this.sum-=this.buffer.shift()),this.sum+=e}get average(){return 0===this.buffer.length?0:this.sum/this.buffer.length}}function h(e,t){return e+t-1&~(t-1)}(()=>{const t='WEBGPU_INSPECTOR_CAPTURE_FRAME',r=262144;new class o{constructor(){if(this._captureFrameCommands=[],this._frameData=[],this._frameRenderPassCount=0,this._captureTexturedBuffers=[],this._currentFrame=null,this._frameIndex=0,this._initalized=!0,this._objectID=1,this._lastFrameTime=0,this._frameCommandCount=0,this._captureFrameRequest=!1,this._errorChecking=1,this._trackedObjects=new Map,this._trackedObjectInfo=new Map,this._bindGroupCount=0,this._captureTextureRequest=new Map,this._toDestroy=[],this._objectReplacementMap=new Map,this._captureBuffersCount=0,this._captureTempBuffers=[],this._mappedTextureBufferCount=0,this._encodingTextureChunkCount=0,this._mappedBufferCount=0,this._encodingBufferChunkCount=0,this._captureData=null,this._frameRate=new l(60),!window.navigator.gpu)return;const e=document.createElement('div');e.style='position: absolute; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt;',document.body.insertBefore(e,document.body.firstChild),this._inspectingStatus=document.createElement('div'),this._inspectingStatus.title='WebGPU Inspector Running',this._inspectingStatus.style='height: 10px; width: 10px; display: inline-block; margin-right: 5px; background-color: #ff0; border-radius: 50%; border: 1px solid #000; box-shadow: inset -4px -4px 4px -3px rgb(255,100,0), 2px 2px 3px rgba(0,0,0,0.8);',e.appendChild(this._inspectingStatus),this._inspectingStatusFrame=document.createElement('div'),this._inspectingStatusFrame.style='display: inline-block;',this._inspectingStatusFrame.textContent='Frame: 0',e.appendChild(this._inspectingStatusFrame),this._inspectingStatusText=document.createElement('div'),this._inspectingStatusText.style='display: inline-block; margin-left: 10px;',e.appendChild(this._inspectingStatusText),this._gpuWrapper=new i(this);const t=this;this._gpuWrapper.onPromise.addListener(this._onAsyncPromise,this),this._gpuWrapper.onPromiseResolve.addListener(this._onAsyncResolve,this),this._gpuWrapper.onPreCall.addListener(this._preMethodCall,this),this._gpuWrapper.onPostCall.addListener(this._postMethodCall,this),this._garbageCollectectedObjects=[],this._garbageCollectionRegistry=new FinalizationRegistry((e=>{if(e>0){t._garbageCollectectedObjects.push(e);const r=t._trackedObjectInfo.get(e);r&&(r===GPUBindGroup&&t._bindGroupCount--,r!==GPUBuffer&&r!==GPUTexture&&r!==GPUDevice||t._memoryLeakWarning(e,r)),t._garbageCollectectedObjects.length>100&&(window.postMessage({action:c.DeleteObjects,idList:t._garbageCollectectedObjects},'*'),t._garbageCollectectedObjects.length=0)}e>0&&(t._trackedObjects.delete(e),t._trackedObjectInfo.delete(e),t._captureTextureRequest.delete(e),t._objectReplacementMap.delete(e))}));setInterval((()=>{t._garbageCollectectedObjects.length>0&&(window.postMessage({action:c.DeleteObjects,idList:t._garbageCollectectedObjects},'*'),t._garbageCollectectedObjects.length=0)}),200);const r=document.getElementsByTagName('canvas');for(const e of r)this._wrapCanvas(e);const s=document.createElement;document.createElement=e=>{const r=s.call(document,e);return'canvas'===e&&t._wrapCanvas(r),r};const o=window.requestAnimationFrame;window.requestAnimationFrame=e=>{o((function(){const r=performance.now();t._frameStart(r),e(r),t._frameEnd()}))},window.addEventListener('message',(e=>{if(e.source!==window)return;const r=e.data;if('object'==typeof r&&null!==r)if(r.action===d){const e=r.id;t._requestTexture(e)}else if(r.action===p){const e=r.id,s=r.code;t._compileShader(e,s)}else if(r.action===u){const e=r.id;t._revertShader(e)}}))}disableRecording(){this._gpuWrapper.disableRecording()}enableRecording(){this._gpuWrapper.enableRecording()}_updateCanvasAttachment(e){let t=null;e.resolveTarget?t=e.resolveTarget:e.view&&(t=e.view);const r=t?.__texture,s=r?.__context;if(!s)return;s.__captureTexture&&(s.__captureTexture.width==r.width&&s.__captureTexture.height==r.height&&s.__captureTexture.format==r.format||(this.disableRecording(),s.__captureTexture.destroy(),s.__captureTexture=null,this.enableRecording()));const o=s.__device;if(o){this.disableRecording();const i=o.createTexture({size:[r.width,r.height,1],format:r.format,usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});if(s.__captureTexture=i,i){i.__id=r.__id,i.__canvasTexture=r,i.__context=s;const o=i.createView();o.__texture=i,o.__canvasView=t,i.__view=o,o.__context=s,e.resolveTarget?e.resolveTarget=o:e.view=o}this.enableRecording()}}_preMethodCall(e,t,r){if('setPipeline'===t){let e=r[0];const t=this._objectReplacementMap.get(e.__id);t&&t.replacement&&(r[0]=t.replacement)}if('createTexture'===t&&(r[0].usage|=GPUTextureUsage.COPY_SRC|GPUTextureUsage.TEXTURE_BINDING),'createBuffer'===t&&(r[0].usage&GPUBufferUsage.MAP_READ||(r[0].usage|=GPUBufferUsage.COPY_SRC)),'createShaderModule'!==t&&'createRenderPipeline'!==t&&'createComputePipeline'!==t&&'createBindGroup'!==t||this._errorChecking>0&&(this._gpuWrapper.disableRecording(),e.pushErrorScope('validation'),this._gpuWrapper.enableRecording()),e instanceof GPUCanvasContext&&'configure'===t){const t=r[0];t.usage?t.usage|=GPUTextureUsage.COPY_DST|GPUTextureUsage.COPY_SRC:t.usage=GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_DST|GPUTextureUsage.COPY_SRC,e.__device=t.device}}_postMethodCall(e,t,r,o,i){if(this._frameCommandCount++,'beginRenderPass'===t){o.__commandEncoder=e;for(const t of r[0].colorAttachments){const r=t.resolveTarget??t.view;if(r&&r.__id<0){e.__rendersToCanvas=!0;if(r.__texture.__frameIndex<this._frameIndex){const e='An expired canvas texture is being used as an attachment for a RenderPass.';window.postMessage({action:c.ValidationError,id:0,message:e,stacktrace:i},'*')}break}}}if('finish'===t&&(o.__rendersToCanvas=e.__rendersToCanvas),'submit'===t){if(this.disableRecording(),this._captureTextureRequest.size>0){const t=this,s=r[0];let o=!1;for(const e of s)o|=!!e.__rendersToCanvas;this._captureTextureRequest.forEach(((r,s)=>{(s>0||o)&&(r=r||t._trackedObjects.get(s)?.deref(),t._captureTextureBuffer(e.__device,null,r),t._captureTextureRequest.delete(s))}))}this._captureTempBuffers.length&&this._sendCapturedBuffers(),this._captureTexturedBuffers.length&&this._sendCaptureTextureBuffers();for(const e of this._toDestroy)e.destroy();this._toDestroy.length=0,this.enableRecording()}let n;if('createShaderModule'!==t&&'createRenderPipeline'!==t&&'createComputePipeline'!==t&&'createBindGroup'!==t||this._errorChecking>0&&(this.disableRecording(),e.popErrorScope().then((e=>{if(e){console.error(e.message);const t=o?.__id??0;window.postMessage({action:c.ValidationError,id:t,message:e.message,stacktrace:i},'*')}})),this.enableRecording()),'getCurrentTexture'===t?(e.__id||(this._wrapObject(e),this._trackObject(e.__id,e)),n=-e.__id,e.__canvasTexture=new WeakRef(o),o.__frameIndex=this._frameIndex):'createView'===t&&e.__id<0&&(n=e.__id-.5),e instanceof GPUDevice&&void 0===e?.__id&&(this._wrapDevice(null,e),e.__adapter||navigator.gpu.requestAdapter().then((t=>{e.__adapter=t}))),o)if(s.has(o.constructor)&&this._wrapObject(o,n),'createShaderModule'===t||'createRenderPipeline'===t)o.__descriptor=r[0],o.__device=e,this._objectReplacementMap.set(o.__id,{id:o.__id,object:new WeakRef(o),replacement:null});else if('getCurrentTexture'===t)o.__context=e,this._trackObject(o.__id,o),o.label='CanvasTexture';else if('createTexture'===t)this._trackObject(o.__id,o);else if('createView'!==t||n){if('createBuffer'===t)this._trackObject(o.__id,o);else if('createBindGroup'===t)this._trackObject(o.__id,o),o.__descriptor=r[0];else if('setBindGroup'===t){const t=r[1].__descriptor;if(t)for(const r of t.entries)if(r.resource instanceof GPUTextureView&&r.resource.__id<0){if(r.resource.__texture.__frameIndex<this._frameIndex){const t=`A BindGroup(${e.__id}) with an expired canvs texture is being used.`;window.postMessage({action:c.ValidationError,id:0,message:t,stacktrace:i},'*')}}}}else this._trackObject(o.__id,o),o.__texture=e,o.__id<0&&(o.label='CanvasTextureView');this._recordCommand(e,t,o,r,i)}_onAsyncPromise(e,t,r,s,o){switch(t){case'createRenderPipelineAsync':this._sendAddObjectMessage(s,e.__id,'RenderPipeline',this._stringifyDescriptor(r[0]),o,!0);break;case'createComputePipelineAsync':this._sendAddObjectMessage(s,e.__id,'ComputePipeline',this._stringifyDescriptor(r[0]),o,!0)}}_onAsyncResolve(e,t,r,s,o,i){if('requestAdapter'===t){o&&this._wrapAdapter(o,s,i)}else if('requestDevice'===t){const t=e,n=o;n&&this._wrapDevice(t,n,s,r,i)}else o&&(this._wrapObject(o,s),window.postMessage({action:c.ResolveAsyncObject,id:o.__id}))}_wrapAdapter(e,t,r){this._wrapObject(e,t),t??=e.__id;const s=this;e.requestAdapterInfo().then((o=>{const i={vendor:o.vendor,architecture:o.architecture,device:o.device,description:o.description,features:s._gpuToArray(e.features),limits:s._gpuToObject(e.limits),isFallbackAdapter:e.isFallbackAdapter,wgslFeatures:s._gpuToArray(navigator.gpu.wgslLanguageFeatures)};s._sendAddObjectMessage(t,0,'Adapter',JSON.stringify(i),r)}))}_wrapDevice(e,t,r,s,o){if(e&&void 0===e.__id&&this._wrapAdapter(e,void 0,o),t&&void 0===t.__id){t.queue.__device=t,t.addEventListener('uncapturederror',(e=>{window.postMessage({action:c.ValidationError,id:0,message:e.error.message},'*')})),s??=[],this._wrapObject(t,r);const i=s[0]??{},n=t.__id,a=e?.__id??0;i.features=this._gpuToArray(t.features),i.limits=this._gpuToObject(t.limits),this._trackObject(n,t),this._sendAddObjectMessage(r,a,'Device',JSON.stringify(i),o),t.__adapter=e}}clear(){this._captureFrameCommands.length=0,this._currentFrame=null}getNextId(e){return e instanceof GPUCommandEncoder||e instanceof GPUComputePassEncoder||e instanceof GPURenderPassEncoder||e instanceof GPUCommandBuffer?0:this._objectID++}_memoryLeakWarning(e,t){if(t){const e=`${t.name} was garbage collected without being explicitly destroyed. These objects should explicitly destroyed to avoid GPU memory leaks.`;window.postMessage({action:c.ValidationError,id:0,message:e},'*')}}_isPrimitiveType(e){return!e||e.constructor===String||e.constructor===Number||e.constructor===Boolean}_isTypedArray(e){return e&&(e instanceof ArrayBuffer||e.buffer instanceof ArrayBuffer)}_isArray(e){return e&&e.constructor===Array}_duplicateArray(e,t){const r=new Array(e.length);for(let s=0,o=e.length;s<o;++s){const o=e[s];this._isPrimitiveType(o)?r[s]=o:void 0!==o.__id?r[s]=t?{__id:o.__id,__class:o.constructor.name}:o:this._isTypedArray(o)?r[s]=o:this._isArray(o)?r[s]=this._duplicateArray(o,t):r[s]=o instanceof Object?this._duplicateObject(o,t):o}return r}_duplicateObject(e,t){const r={};for(const s in e){if(s.startsWith('_'))continue;const o=e[s];void 0!==o&&(this._isPrimitiveType(o)?r[s]=o:void 0!==o.__id?r[s]=t?{__id:o.__id,__class:o.constructor.name}:o:void 0!==o.label||this._isTypedArray(o)?r[s]=o:this._isArray(o)?r[s]=this._duplicateArray(o,t):r[s]=o instanceof Object?this._duplicateObject(o,t):o)}return r}_revertShader(e){const t=this._objectReplacementMap.get(e);if(!t)return;const r=t.object?.deref();if(r){t.replacement=null;for(const e of this._objectReplacementMap.values()){const t=e.object.deref(),s=t instanceof GPURenderPipeline,o=t instanceof GPUComputePipeline;if(s||o){const s=t.__descriptor;let o=!1;s.vertex?.module===r&&(o=!0),s.fragment?.module===r&&(o=!0),s.compute?.module===r&&(o=!0),o&&(e.replacement=null)}}}}_compileShader(e,t){const r=this._objectReplacementMap.get(e);if(!r)return;const s=r.object?.deref();if(!s)return;const o=s.__device,i=this._duplicateObject(s.__descriptor);i.code=t,this.disableRecording(),this._errorChecking--,o.pushErrorScope('validation'),i.__replacement=e;const n=o.createShaderModule(i);o.popErrorScope().then((t=>{if(t){console.error(t.message);const r=e??0;window.postMessage({action:c.ValidationError,id:r,message:t.message},'*')}})),this._errorChecking++,this.enableRecording(),r.replacement=n;for(const e of this._objectReplacementMap.values()){const t=e.object.deref(),r=t instanceof GPURenderPipeline,i=t instanceof GPUComputePipeline;if(r||i){const i=t.__descriptor;let a=!1,d=null;if(i.vertex?.module===s&&(d||(d=this._duplicateObject(i)),a=!0,d.vertex.module=n),i.fragment?.module===s&&(d||(d=this._duplicateObject(i)),a=!0,d.fragment.module=n),i.compute?.module===s&&(d||(d=this._duplicateObject(i)),a=!0,d.compute.module=n),a){this.disableRecording(),this._errorChecking--,d.__replacement=e.id,o.pushErrorScope('validation');const t=r?o.createRenderPipeline(d):o.createComputePipeline(d);o.popErrorScope().then((t=>{if(t){console.error(t.message);const r=e.id??0;window.postMessage({action:c.ValidationError,id:r,message:t.message},'*')}})),this._errorChecking++,this.enableRecording(),e.replacement=t}}}}_requestTexture(e){if(e<0)this._captureTextureRequest.set(e,null);else{const t=this._trackedObjects.get(e),r=t?.deref();r instanceof GPUTexture&&this._captureTextureRequest.set(e,r)}}_updateStatusMessage(){let e='';this._captureTexturedBuffers.length>0&&(e+=`Texture: ${this._captureTexturedBuffers.length} `),this._mappedTextureBufferCount>0&&(e+=`Pending Texture Reads: ${this._mappedTextureBufferCount} `),this._encodingTextureChunkCount>0&&(e+=`Pending Texture Encoding: ${this._encodingTextureChunkCount} `),this._captureBuffersCount&&(e+=`Buffers: ${this._captureBuffersCount} `),this._mappedBufferCount>0&&(e+=`Pending Buffer Reads: ${this._mappedBufferCount} `),this._encodingBufferChunkCount>0&&(e+=`Pending Buffer Encoding: ${this._encodingBufferChunkCount} `),e&&(e=`Capturing: ${e} `),this._inspectingStatusText.textContent=e}_frameStart(e){let r=0;0==this._lastFrameTime?this._lastFrameTime=e:(r=e-this._lastFrameTime,window.postMessage({action:c.DeltaTime,deltaTime:r},'*'),this._lastFrameTime=e,this._frameRate.add(r));const s=sessionStorage.getItem(t);if(s){try{this._captureData=JSON.parse(s)}catch(e){this._captureData=null}sessionStorage.removeItem(t)}this._captureData&&(this._captureData.frame<0||this._frameIndex>=this._captureData.frame)&&(this._captureMaxBufferSize=this._captureData.maxBufferSize||262144,this._captureFrameRequest=!0,this._gpuWrapper.recordStacktraces=!0,this._captureData=null),this._frameData.length=0,this._captureFrameCommands.length=0,this._frameRenderPassCount=0,this._frameIndex++,this._frameCommandCount=0,this._inspectingStatusFrame.textContent=`Frame: ${this._frameIndex} : ${this._frameRate.average.toFixed(2)}ms`}_frameEnd(){if(this._captureFrameCommands.length){const e=2e3,t=Math.ceil(this._captureFrameCommands.length/e);window.postMessage({action:c.CaptureFrameResults,frame:this._frameIndex,count:this._captureFrameCommands.length,batches:t},'*');for(let t=0;t<this._captureFrameCommands.length;t+=e){const r=Math.min(e,this._captureFrameCommands.length-t),s=this._captureFrameCommands.slice(t,t+r);window.postMessage({action:c.CaptureFrameCommands,frame:this._frameIndex-1,commands:s,index:t,count:r},'*')}this._captureFrameCommands.length=0,this._captureFrameRequest=!1,this._gpuWrapper.recordStacktraces=!1}this._updateStatusMessage()}_trackObject(e,t){this._trackedObjects.set(e,new WeakRef(t)),this._trackedObjectInfo.set(e,t.constructor)}_wrapCanvas(e){if(e.__id)return;e.__id=this.getNextId(e),this._trackObject(e.__id,e);const t=this,r=e.getContext;e.getContext=(s,o)=>{const i=r.call(e,s,o);return i instanceof GPUCanvasContext&&(t._wrapObject(i),t._trackObject(i.__id,i)),i}}_wrapObject(e,t){if(e&&void 0===e.__id){if(e.__id=t??this.getNextId(e),this._garbageCollectionRegistry.register(e,e.__id),void 0!==e.label){const t=e.label;e._label=t,Object.defineProperty(e,'label',{enumerable:!0,configurable:!0,get(){return this._label},set(e){if(e!==this._label){this._label=e;const t=this.__id;window.postMessage({action:c.ObjectSetLabel,id:t,label:e},'*')}}})}e instanceof GPUDevice&&void 0===e.queue.__id&&this._wrapObject(e.queue)}}_gpuToArray(e){const t=[];if(e)for(const r of e)t.push(r);return t}_gpuToObject(e){const t={};if(e)for(const r in e)t[r]=e[r];return t}_stringifyDescriptor(e){const t=this._duplicateObject(e,!0)??{};let r=null;try{r=JSON.stringify(t)}catch(e){console.log(e.message)}return r}_sendAddObjectMessage(e,t,r,s,o,i){window.postMessage({action:c.AddObject,id:e,parent:t,type:r,descriptor:s,stacktrace:o,pending:i},'*')}_recordCommand(e,t,r,s,o){const i=e?.__id??0;if('destroy'===t){const t=e.__id;e.__destroyed=!0,t>0&&(this._trackedObjects.delete(t),this._trackedObjectInfo.delete(t),this._objectReplacementMap.delete(t)),e instanceof GPUBindGroup&&this._bindGroupCount--,t>=0&&(this._captureTextureRequest.delete(t),window.postMessage({action:c.DeleteObject,id:t},'*'))}else if('createShaderModule'===t){const e=r.__id;s[0].__replacement||this._sendAddObjectMessage(e,i,'ShaderModule',this._stringifyDescriptor(s[0]),o)}else if('createBuffer'===t){const e=r.__id;this._sendAddObjectMessage(e,i,'Buffer',this._stringifyDescriptor(s[0]),o)}else if('createTexture'===t){const t=r.__id;this._sendAddObjectMessage(t,i,'Texture',this._stringifyDescriptor(s[0]),o),r.__device=e}else if('getCurrentTexture'===t){const e=r.__id;if(r){const t={size:[r.width,r.height,r.depthOrArrayLayers],mipLevelCount:r.mipLevelCount,sampleCount:r.sampleCount,dimension:r.dimension,format:r.format,usage:r.usage},s=JSON.stringify(t);this._sendAddObjectMessage(e,i,'Texture',s,o)}}else if('createView'===t){const t=r.__id;r.__texture=e,this._sendAddObjectMessage(t,i,'TextureView',this._stringifyDescriptor(s[0]),o)}else if('createSampler'===t){const e=r.__id;this._sendAddObjectMessage(e,i,'Sampler',this._stringifyDescriptor(s[0]),o)}else if('createBindGroup'===t){this._bindGroupCount++;const e=r.__id;r.__descriptor=s[0],this._sendAddObjectMessage(e,i,'BindGroup',this._stringifyDescriptor(s[0]),o)}else if('createBindGroupLayout'===t){const e=r.__id;r.__descriptor=s[0],this._sendAddObjectMessage(e,i,'BindGroupLayout',this._stringifyDescriptor(s[0]),o)}else if('createPipelineLayout'===t){const e=r.__id;this._sendAddObjectMessage(e,i,'PipelineLayout',this._stringifyDescriptor(s[0]),o)}else if('createRenderPipeline'===t){const e=r.__id;s[0].__replacement||(this._sendAddObjectMessage(e,i,'RenderPipeline',this._stringifyDescriptor(s[0]),o),s[0].vertex?.module&&(r.__vertexModule=s[0].vertex?.module),s[0].fragment?.module&&(r.__fragmentModule=s[0].fragment?.module))}else if('createComputePipeline'===t){const e=r.__id;s[0].__replacement||(this._sendAddObjectMessage(e,i,'ComputePipeline',this._stringifyDescriptor(s[0]),o),s[0].compute?.module&&(r.__computeModule=s[0].compute?.module))}else'createCommandEncoder'===t&&(r.__device=e);this._captureFrameRequest&&this._captureCommand(e,t,s,o,r)}_captureCommand(e,t,r,s,o){const i=this._captureFrameCommands.length,n=r;1===n.length&&void 0===n[0]&&(n.length=0),('beginRenderPass'===t||'beginComputePass'===t||'createCommandEncoder'===t||'finish'===t)&&(o.__id=`_${i}`);let a=null;if('setBindGroup'===t){a=[];const t=n[0],r=n[1];if(a.push(t),a.push(r),n.length>2){const e=n[2];if(e.length>0)if(e instanceof Uint32Array){const t=n[3],r=n[4];if(r>0){const s=new Uint32Array(e.buffer,4*t,r);a.push(s)}}else a.push(e)}const s=a.length>2?a[2]:null;let o=0;const c=r.__descriptor,d=c.layout?.__descriptor;if(c)for(const t in c.entries){const r=c.entries[t],n=d?.entries[t],a=r?.resource?.buffer,p=n?.buffer?.hasDynamicOffset??!1;if(a){let n=r.resource.offset??0;const c=h(r.resource.size??a.size-n,4);c<this._captureMaxBufferSize&&(p&&(n=s[o++]),e.__captureBuffers||(e.__captureBuffers=[]),e.__captureBuffers.push({commandId:i,entryIndex:t,buffer:a,offset:n,size:c}),this._captureBuffersCount++,this._updateStatusMessage())}}}else if('writeBuffer'===t){a=[];const e=n[0],t=n[1];a.push(e),a.push(t);let r=n[2];if(n.length>3){const e=n[3]??0,t=n[4],s=r instanceof ArrayBuffer?r:r.buffer;s&&(t>0?r=new Uint8Array(s,e,t):e>0&&(r=new Uint8Array(s,e)))}a.push(r)}else a=n;if(a=this._processCommandArgs(a),this._captureFrameCommands.push({class:e.constructor.name,object:e.__id,result:o?.__id??0,commandId:i,method:t,args:a,stacktrace:s}),'setIndexBuffer'===t&&(e.__indexBuffer=r),'setVertexBuffer'===t){const t=r[0],s=r[1],o=r[2]??0,n=r[3]??s.size-o;e.__captureBuffers||(e.__captureBuffers=[]),e.__captureBuffers.push({commandId:i,entryIndex:t,buffer:s,offset:o,size:n}),this._captureBuffersCount++,this._updateStatusMessage()}if('setIndexBuffer'===t){const t=r[0],s=t.size;e.__captureBuffers||(e.__captureBuffers=[]),e.__captureBuffers.push({commandId:i,entryIndex:0,buffer:t,offset:0,size:s}),this._captureBuffersCount++,this._updateStatusMessage()}if('drawIndirect'===t||'drawIndexedIndirect'===t||'dispatchWorkgroupsIndirect'===t){const t=r[0],s=r[1],o=32;e.__captureBuffers||(e.__captureBuffers=[]),e.__captureBuffers.push({commandId:i,entryIndex:0,buffer:t,offset:s,size:o}),this._captureBuffersCount++,this._updateStatusMessage()}if('beginRenderPass'===t){if(r[0]?.colorAttachments?.length>0){o.__captureTextureViews=new Set;for(const e of r[0].colorAttachments){const t=e.resolveTarget??e.view;o.__captureTextureViews.add(t)}}if(o.__descriptor=r[0],r[0]?.depthStencilAttachment){o.__captureTextureViews||(o.__captureTextureViews=new Set);const e=r[0].depthStencilAttachment,t=e.resolveTarget??e.view;o.__captureTextureViews.add(t)}this._inComputePass=!1,o.__commandEncoder=e}else if('beginComputePass'===t)o.__commandEncoder=e,this._inComputePass=!0;else if('end'===t){this._inComputePass=!1;const t=e.__commandEncoder;if(e.__captureBuffers?.length>0&&(this._recordCaptureBuffers(t,e.__captureBuffers),this._updateStatusMessage()),e.__captureTextureViews?.size>0){let r=10*this._frameRenderPassCount;for(const s of e.__captureTextureViews){const e=s.__texture;e&&this._captureTextureBuffer(t?.__device,t,e,r++)}e.__captureTextureViews.clear()}e.__commandEncoder=null,e instanceof GPURenderPassEncoder&&this._frameRenderPassCount++}}_sendCaptureTextureBuffers(){const e=[];for(const t of this._captureTexturedBuffers)e.push(t.id);let t=0;for(const e of this._captureTexturedBuffers){const s=e.tempBuffer.size;t+=Math.ceil(s/r)}window.postMessage({action:c.CaptureTextureFrames,chunkCount:t,count:this._captureTexturedBuffers.length,textures:e},'*');for(const e of this._captureTexturedBuffers){const{id:t,tempBuffer:r,passId:s}=e;this._mappedTextureBufferCount++;const o=this;r.mapAsync(GPUMapMode.READ).then((()=>{o._mappedTextureBufferCount--,o._updateStatusMessage();const e=r.getMappedRange(),i=new Uint8Array(e);o._sendTextureData(t,s,i),r.destroy()})).catch((e=>{console.error(e)}))}this._captureTexturedBuffers.length=0,this._updateStatusMessage()}_sendTextureData(t,s,o){const i=o.length,n=Math.ceil(i/r),a=this;for(let d=0;d<n;++d){const p=d*r,u=Math.min(r,i-p),l=o.slice(p,p+u);this._encodingTextureChunkCount++,this._updateStatusMessage(),e(l).then((e=>{window.postMessage({action:c.CaptureTextureData,id:t,passId:s,offset:p,size:i,index:d,count:n,chunk:e},'*'),a._encodingTextureChunkCount--,a._updateStatusMessage()})).catch((e=>{console.log('Error encoding texture data:',e)}))}}_getTextureUtils(e){return e?(e.__textureUtils||(e.__textureUtils=new a(e)),e.__textureUtils):null}_sendBufferData(t,s,o){const i=o.length,n=Math.ceil(i/r),a=this;for(let d=0;d<n;++d){const p=d*r,u=Math.min(r,i-p),l=o.slice(p,p+u);this._encodingBufferChunkCount++,this._updateStatusMessage(),e(l).then((e=>{window.postMessage({action:c.CaptureBufferData,commandId:t,entryIndex:s,offset:p,size:i,index:d,count:n,chunk:e},'*'),a._encodingBufferChunkCount--,a._updateStatusMessage()}))}}_sendCapturedBuffers(){const e=this._captureTempBuffers;if(e.length>0){let t=0;for(const s of e){const e=s.tempBuffer.size;t+=Math.ceil(e/r)}window.postMessage({action:c.CaptureBuffers,count:e.length,chunkCount:t},'*')}for(const t of e){const e=t.tempBuffer,r=t.commandId,s=t.entryIndex,o=this;this._mappedBufferCount++,this._updateStatusMessage(),e.mapAsync(GPUMapMode.READ).then((()=>{o._mappedBufferCount--,o._updateStatusMessage();const t=e.getMappedRange(),i=new Uint8Array(t);o._sendBufferData(r,s,i),e.destroy()}))}this._captureTempBuffers.length=0}_recordCaptureBuffers(e,t){const r=e?.__device;if(!r)return this._captureBuffersCount-=t.length,void(t.length=0);for(const s of t){const{commandId:t,entryIndex:o,buffer:i,offset:n,size:a}=s;if(i.__destroyed)continue;let c=null;this.disableRecording();try{c=r.createBuffer({size:a,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ,label:`BUFFER CAPTURE TEMP [${t},${o}]`}),e.copyBufferToBuffer(i,n,c,0,a),this._captureTempBuffers.push({commandId:t,entryIndex:o,tempBuffer:c})}catch(e){console.log(e)}this.enableRecording()}this._captureBuffersCount-=t.length,t.length=0}_captureTextureBuffer(e,t,r,s){if(!e)return;const o=!t;t??=e.createCommandEncoder(),s??=-1;const i=r.__id;let a=r.format,c=a?n[a]:void 0;if(!c)return;if(c.isDepthStencil){this.disableRecording();try{r=this._getTextureUtils(e).copyDepthTexture(r,'r32float',t)}catch(e){return this.enableRecording(),void console.log(e)}this.enableRecording(),a=r.format,c=a?n[a]:void 0,r.__id=i,this._toDestroy.push(r)}else if(r.sampleCount>1){this.disableRecording();try{(r=this._getTextureUtils(e).copyMultisampledTexture(r)).__id=i,this._toDestroy.push(r)}catch(e){return this.enableRecording(),void console.log(e)}this.enableRecording()}const d=r.width,p=r.height||1,u=r.depthOrArrayLayers||1,l=d*c.bytesPerBlock+255&-256,h=l*p*u;if(!h)return;const _={width:d,height:p,depthOrArrayLayers:u};let f=null;try{this.disableRecording(),f=e.createBuffer({size:h,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});const s='all';t.copyTextureToBuffer({texture:r,aspect:s},{buffer:f,bytesPerRow:l,rowsPerImage:p},_)}catch(e){console.log(e)}o&&e.queue.submit([t.finish()]),this.enableRecording(),f&&(this._captureTexturedBuffers.push({id:i,tempBuffer:f,width:d,height:p,depthOrArrayLayers:u,format:a,passId:s}),this._updateStatusMessage())}_addCommandData(e){if(this._captureFrameRequest){const t=this._frameData.length;return this._frameData.push(e),t}return-1}_processCommandArgs(e){if(!e||e.constructor===Number||e.constructor===String||e.constructor===Boolean)return e;if(void 0!==e.__id)return{__id:e.__id,__class:e.constructor.name};if(e instanceof ImageBitmap||e instanceof ImageData||e instanceof HTMLImageElement||e instanceof HTMLCanvasElement||e instanceof HTMLVideoElement||e instanceof OffscreenCanvas||e instanceof VideoFrame)return`@-1 ${e.constructor.name} ${e.width} ${e.height}`;if(e instanceof Array||void 0!==e.buffer){const t=100;if(e.length>t){return`@${this._addCommandData(e)} ${e.constructor.name} ${e.byteLength}`}const r=[];for(const t in e)r[t]=this._processCommandArgs(e[t]);return r}if(e instanceof ArrayBuffer){return`@${this._addCommandData(e)} ${e.constructor.name} ${e.byteLength}`}if(e instanceof Object){const t={};for(const r in e)t[r]=this._processCommandArgs(e[r]);return t}return e}}})()}();
+(function () {
+  'use strict';
+
+  async function encodeDataUrl(bytes, type = "application/octet-stream") {
+    return await new Promise((resolve, reject) => {
+      const reader = Object.assign(new FileReader(), {
+        onload: () => resolve(reader.result),
+        onerror: () => reject(reader.error),
+      });
+      reader.readAsDataURL(new File([bytes], "", { type }));
+    });
+  }
+
+  /**
+   * A Signal is like a proxy function that can have multiple "listeners" assigned to it, such that
+   * when the Signal is executed (or "emitted"), it executes each of its associated listeners.
+   * A listener is a callback function, object method, or another Signal.
+   */
+  class Signal {
+    /**
+     * @param {String} [name=""] Optional name for the signal, usually used for debugging purposes.
+     */
+    constructor(name) {
+      this._lastSlotId = 0;
+      this.slots = new Map();
+      if (name) {
+        this.name = name;
+      }
+    }
+
+    /**
+     * @property {bool} enabled Returns true if signals are allowed to be emitted. If false,
+     * calling the Signal's emit method will do nothing.
+     */
+    static get enabled() {
+      return Signal._disableSignals == 0;
+    }
+
+    /***
+     * @property {bool} disabled Returns true if signals are disabled from being emitted. If true,
+     * calling the Signal's emit method will do nothing.
+     */
+    static get disabled() {
+      return Signal._disableSignals > 0;
+    }
+
+    /**
+     * Disables all signals from being emitted. This can be called multiple times, but an equal
+     * number of calls to enable should be used to re-enable signals. This is often used to disable
+     * any callbacks while doing heavy operations, like file loading, so a single signal will be
+     * emitted at the end.
+     */
+    static disable() {
+      return Signal._disableSignals++;
+    }
+
+    /**
+     * Enable signals to be emitted, having been previously disabled.
+     * @param {bool} [force=false] If true, signals will be forced to the enabled state,
+     * even if there were an unbalanced number of calls to disable..
+     */
+    static enable(force) {
+      if (force) {
+        Signal._disableSignals = 0;
+        return 0;
+      }
+      return Signal._disableSignals > 0 ? Signal._disableSignals-- : 0;
+    }
+
+    /**
+     * Disconnect the listener from all signals of the given object.
+     * @param {Object} object The object to disconnect from.
+     * @param {Function|Signal|Object} callback The listener to disconnect
+     * @param {Object?} [instance=null] The optional listener instance that owns callback.
+     */
+    static disconnect(object, callback, instance) {
+      for (const i in object) {
+        const p = object[i];
+        if (p.constructor === Signal) {
+          p.disconnect(callback, instance);
+        }
+      }
+    }
+
+    /**
+     * Return all signals that belong to the object.
+     * @param {Object} object The object to get the signals from.
+     * @param {Array?} out Optional storage for the results. A new array will be created if null.
+     * @return {Array} The list of signals that belong to the object.
+     */
+    static getSignals(object, out) {
+      out = out || [];
+      for (const i in object) {
+        const p = object[i];
+        if (p.constructor === Signal) {
+          out.push(p);
+        }
+      }
+      return out;
+    }
+
+    /**
+     * @property {bool} hasListeners True if this signal has at least one listener.
+     */
+    get hasListeners() {
+      return this.slots.size > 0;
+    }
+
+    /**
+     * Emit a signal, calling all listeners.
+     * @param {...*} arguments Optional arguments to call the listeners with.
+     */
+    emit() {
+      if (Signal.disabled) {
+        return;
+      }
+
+      for (const k of this.slots) {
+        const s = k[1][0];
+        const o = k[1][1] || s;
+        if (!s) {
+          continue;
+        }
+
+        if (s.constructor === Signal) {
+          s.emit.apply(o, arguments);
+        } else {
+          s.apply(o, arguments);
+        }
+      }
+    }
+
+    /**
+     * Connect a listener to the signal. This can be a function, object method,
+     * class static method, or another signal. There is no type-checking to
+     * ensure the listener function can successfully receive the arguments that
+     * will be emitted by the signal, which will result in an exception of you
+     * connect an incompatible listener and emit the signal.
+     * To have an object method listen to a signal, pass in the object, too.
+     * @param {Function|Signal} callback
+     * @param {Object?} [object=null]
+     * @example
+     * listen(Function)
+     * listen(Signal)
+     * listen(method, object)
+     */
+    addListener(callback, object) {
+      // Don't add the same listener multiple times.
+      if (this.isListening(callback, object)) {
+        return null;
+      }
+
+      this.slots.set(this._lastSlotId++, [callback, object]);
+      return this._lastSlotId - 1;
+    }
+
+    /**
+     * Checks if there is a binded listener that matches the criteria.
+     * @param {Function|Signal|Object} callback
+     * @param {Object?} [object=null]
+     * @return {bool}
+     * @example
+     * isListening(Signal)
+     * isListening(callback)
+     * isListening(object)
+     * isListening(method, object)
+     */
+    isListening(callback, object) {
+      for (const slot of this.slots) {
+        const slotInfo = slot[1];
+
+        if (callback && !object) {
+          if (slotInfo[0] === callback || slotInfo[1] === callback) {
+            return true;
+          }
+        } else if (!callback && object) {
+          if (slotInfo[1] === object) {
+            return true;
+          }
+        } else {
+          if (slotInfo[0] === callback && slotInfo[1] === object) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    /**
+     * Disconnect a listener from the signal.
+     * @param {*} callback
+     * @param {Object?} object
+     * @example
+     * disconnect(Object) -- Disconnect all method listeners of the given object.
+     * disconnect(Function) -- Disconnect the function listener.
+     * disconnect(Signal) -- Disconnect the signal listener.
+     * disconnect(method, object) -- Disconnect the method listener.
+     * disconnect() -- Disconnect all listeners from the signal.
+     */
+    disconnect(callback, object) {
+      if (
+        (callback === null || callback === undefined) &&
+        (object === null || object === undefined)
+      ) {
+        this.slots.clear();
+        return true;
+      }
+
+      if (callback.constructor === Number) {
+        const handle = callback;
+        if (!this.slots.has(handle)) {
+          return false;
+        }
+        this.slots.delete(handle);
+        return true;
+      }
+
+      let found = false;
+      for (const slot of this.slots) {
+        const slotHandle = slot[0];
+        const slotInfo = slot[1];
+
+        if (callback && !object) {
+          if (slotInfo[0] === callback || slotInfo[1] === callback) {
+            this.slots.delete(slotHandle);
+            found = true;
+          }
+        } else if (!callback && object) {
+          if (slotInfo[1] === object) {
+            this.slots.delete(slotHandle);
+            found = true;
+          }
+        } else {
+          if (slotInfo[0] === callback && slotInfo[1] === object) {
+            this.slots.delete(slotHandle);
+            found = true;
+          }
+        }
+      }
+
+      return found;
+    }
+  }
+
+  Signal._disableSignals = 0;
+
+  function getStacktrace() {
+    if (!Error.captureStackTrace) {
+      return "";
+    }
+    const stacktrace = {};
+    Error.captureStackTrace(stacktrace, getStacktrace);
+    if (!stacktrace.stack) {
+      return "";
+    }
+    let stack = stacktrace.stack
+      .split("\n")
+      .map((line) => line.split("at ")[1])
+      .slice(2) // Skip the Error line and the GPU.* line.
+      .filter((line) => line && !line.includes("webgpu_inspector.js"));
+
+    return stack.join("\n");
+  }
+
+  const GPUObjectTypes = new Set([
+    GPUAdapter,
+    GPUDevice,
+    GPUBuffer,
+    GPUTexture,
+    GPUTextureView,
+    //GPUExternalTexture,
+    GPUSampler,
+    GPUBindGroupLayout,
+    GPUBindGroup,
+    GPUPipelineLayout,
+    GPUShaderModule,
+    GPUComputePipeline,
+    GPURenderPipeline,
+    GPUCommandBuffer,
+    GPUCommandEncoder,
+    GPUComputePassEncoder,
+    GPURenderPassEncoder,
+    GPURenderBundle,
+    GPUQueue,
+    GPUQuerySet,
+    GPUCanvasContext
+  ]);
+
+  const GPUCreateMethods = new Set([
+    "createBuffer",
+    "createTexture",
+    "createSampler",
+    "importExternalTexture",
+    "createBindGroupLayout",
+    "createPipelineLayout",
+    "createBindGroup",
+    "createShaderModule",
+    "createComputePipeline",
+    "createRenderPipeline",
+    "createComputePipelineAsync",
+    "createRenderPipelineAsync",
+    "createCommandEncoder",
+    "createRenderBundleEncoder",
+    "createQuerySet",
+    "createView",
+
+    //"beginRenderPass",
+    //"setBindGroup",
+  ]);
+
+  class GPUObjectWrapper {
+    constructor(idGenerator) {
+      this._idGenerator = idGenerator;
+      this.onPreCall = new Signal();
+      this.onPostCall = new Signal();
+      this.onPromise = new Signal();
+      this.onPromiseResolve = new Signal();
+      this.recordStacktraces = false;
+      this._skipRecord = 0;
+      this._wrapGPUTypes();
+    }
+
+    _wrapGPUTypes() {
+      GPU.prototype.requestAdapter = this._wrapMethod("requestAdapter", GPU.prototype.requestAdapter);
+      GPU.prototype.getPreferredFormat = this._wrapMethod("getPreferredFormat", GPU.prototype.getPreferredFormat);
+
+      GPUAdapter.prototype.requestDevice = this._wrapMethod("requestDevice", GPUAdapter.prototype.requestDevice);
+
+      GPUDevice.prototype.destroy = this._wrapMethod("destroy", GPUDevice.prototype.destroy);
+      GPUDevice.prototype.createBuffer = this._wrapMethod("createBuffer", GPUDevice.prototype.createBuffer);
+      GPUDevice.prototype.createTexture = this._wrapMethod("createTexture", GPUDevice.prototype.createTexture);
+      GPUDevice.prototype.createSampler = this._wrapMethod("createSampler", GPUDevice.prototype.createSampler);
+      GPUDevice.prototype.importExternalTexture = this._wrapMethod("importExternalTexture", GPUDevice.prototype.importExternalTexture);
+      GPUDevice.prototype.createBindGroupLayout = this._wrapMethod("createBindGroupLayout", GPUDevice.prototype.createBindGroupLayout);
+      GPUDevice.prototype.createPipelineLayout = this._wrapMethod("createPipelineLayout", GPUDevice.prototype.createPipelineLayout);
+      GPUDevice.prototype.createBindGroup = this._wrapMethod("createBindGroup", GPUDevice.prototype.createBindGroup);
+      GPUDevice.prototype.createShaderModule = this._wrapMethod("createShaderModule", GPUDevice.prototype.createShaderModule);
+      GPUDevice.prototype.createComputePipeline = this._wrapMethod("createComputePipeline", GPUDevice.prototype.createComputePipeline);
+      GPUDevice.prototype.createRenderPipeline = this._wrapMethod("createRenderPipeline", GPUDevice.prototype.createRenderPipeline);
+      GPUDevice.prototype.createComputePipelineAsync = this._wrapMethod("createComputePipelineAsync", GPUDevice.prototype.createComputePipelineAsync);
+      GPUDevice.prototype.createRenderPipelineAsync = this._wrapMethod("createRenderPipelineAsync", GPUDevice.prototype.createRenderPipelineAsync);
+      GPUDevice.prototype.createCommandEncoder = this._wrapMethod("createCommandEncoder", GPUDevice.prototype.createCommandEncoder);
+      GPUDevice.prototype.createRenderBundleEncoder = this._wrapMethod("createRenderBundleEncoder", GPUDevice.prototype.createRenderBundleEncoder);
+      GPUDevice.prototype.createQuerySet = this._wrapMethod("createQuerySet", GPUDevice.prototype.createQuerySet);
+
+      GPUBuffer.prototype.mapAsync = this._wrapMethod("mapAsync", GPUBuffer.prototype.mapAsync);
+      GPUBuffer.prototype.getMappedRange = this._wrapMethod("getMappedRange", GPUBuffer.prototype.getMappedRange);
+      GPUBuffer.prototype.unmap = this._wrapMethod("unmap", GPUBuffer.prototype.unmap);
+      GPUBuffer.prototype.destroy = this._wrapMethod("destroy", GPUBuffer.prototype.destroy);
+
+      GPUTexture.prototype.createView = this._wrapMethod("createView", GPUTexture.prototype.createView);
+      GPUTexture.prototype.destroy = this._wrapMethod("destroy", GPUTexture.prototype.destroy);
+
+      GPUShaderModule.prototype.getCompilationInfo = this._wrapMethod("getCompilationInfo", GPUShaderModule.prototype.getCompilationInfo);
+
+      GPUComputePipeline.prototype.getBindGroupLayout = this._wrapMethod("getBindGroupLayout", GPUComputePipeline.prototype.getBindGroupLayout);
+
+      GPURenderPipeline.prototype.getBindGroupLayout = this._wrapMethod("getBindGroupLayout", GPURenderPipeline.prototype.getBindGroupLayout);
+
+      GPUCommandEncoder.prototype.beginRenderPass = this._wrapMethod("beginRenderPass", GPUCommandEncoder.prototype.beginRenderPass);
+      GPUCommandEncoder.prototype.beginComputePass = this._wrapMethod("beginComputePass", GPUCommandEncoder.prototype.beginComputePass);
+      GPUCommandEncoder.prototype.copyBufferToBuffer = this._wrapMethod("copyBufferToBuffer", GPUCommandEncoder.prototype.copyBufferToBuffer);
+      GPUCommandEncoder.prototype.copyBufferToTexture = this._wrapMethod("copyBufferToTexture", GPUCommandEncoder.prototype.copyBufferToTexture);
+      GPUCommandEncoder.prototype.copyTextureToBuffer = this._wrapMethod("copyTextureToBuffer", GPUCommandEncoder.prototype.copyTextureToBuffer);
+      GPUCommandEncoder.prototype.copyTextureToTexture = this._wrapMethod("copyTextureToTexture", GPUCommandEncoder.prototype.copyTextureToTexture);
+      GPUCommandEncoder.prototype.clearBuffer = this._wrapMethod("clearBuffer", GPUCommandEncoder.prototype.clearBuffer);
+      GPUCommandEncoder.prototype.resolveQuerySet = this._wrapMethod("resolveQuerySet", GPUCommandEncoder.prototype.resolveQuerySet);
+      GPUCommandEncoder.prototype.finish = this._wrapMethod("finish", GPUCommandEncoder.prototype.finish);
+      GPUCommandEncoder.prototype.pushDebugGroup = this._wrapMethod("pushDebugGroup", GPUCommandEncoder.prototype.pushDebugGroup);
+      GPUCommandEncoder.prototype.popDebugGroup = this._wrapMethod("popDebugGroup", GPUCommandEncoder.prototype.popDebugGroup);
+      GPUCommandEncoder.prototype.insertDebugMarker = this._wrapMethod("insertDebugMarker", GPUCommandEncoder.prototype.insertDebugMarker);
+
+      GPUComputePassEncoder.prototype.setPipeline = this._wrapMethod("setPipeline", GPUComputePassEncoder.prototype.setPipeline);
+      GPUComputePassEncoder.prototype.dispatchWorkgroups = this._wrapMethod("dispatchWorkgroups", GPUComputePassEncoder.prototype.dispatchWorkgroups);
+      GPUComputePassEncoder.prototype.dispatchWorkgroupsIndirect = this._wrapMethod("dispatchWorkgroupsIndirect", GPUComputePassEncoder.prototype.dispatchWorkgroupsIndirect);
+      GPUComputePassEncoder.prototype.end = this._wrapMethod("end", GPUComputePassEncoder.prototype.end);
+      GPUComputePassEncoder.prototype.setBindGroup = this._wrapMethod("setBindGroup", GPUComputePassEncoder.prototype.setBindGroup);
+      GPUComputePassEncoder.prototype.setBindGroup = this._wrapMethod("setBindGroup", GPUComputePassEncoder.prototype.setBindGroup);
+      GPUComputePassEncoder.prototype.pushDebugGroup = this._wrapMethod("pushDebugGroup", GPUComputePassEncoder.prototype.pushDebugGroup);
+      GPUComputePassEncoder.prototype.popDebugGroup = this._wrapMethod("popDebugGroup", GPUComputePassEncoder.prototype.popDebugGroup);
+      GPUComputePassEncoder.prototype.insertDebugMarker = this._wrapMethod("insertDebugMarker", GPUComputePassEncoder.prototype.insertDebugMarker);
+
+      GPURenderPassEncoder.prototype.setViewport = this._wrapMethod("setViewport", GPURenderPassEncoder.prototype.setViewport);
+      GPURenderPassEncoder.prototype.setScissorRect = this._wrapMethod("setScissorRect", GPURenderPassEncoder.prototype.setScissorRect);
+      GPURenderPassEncoder.prototype.setBlendConstant = this._wrapMethod("setBlendConstant", GPURenderPassEncoder.prototype.setBlendConstant);
+      GPURenderPassEncoder.prototype.setStencilReference = this._wrapMethod("setStencilReference", GPURenderPassEncoder.prototype.setStencilReference);
+      GPURenderPassEncoder.prototype.beginOcclusionQuery = this._wrapMethod("beginOcclusionQuery", GPURenderPassEncoder.prototype.beginOcclusionQuery);
+      GPURenderPassEncoder.prototype.endOcclusionQuery = this._wrapMethod("endOcclusionQuery", GPURenderPassEncoder.prototype.endOcclusionQuery);
+      GPURenderPassEncoder.prototype.executeBundles = this._wrapMethod("executeBundles", GPURenderPassEncoder.prototype.executeBundles);
+      GPURenderPassEncoder.prototype.end = this._wrapMethod("end", GPURenderPassEncoder.prototype.end);
+      GPURenderPassEncoder.prototype.setPipeline = this._wrapMethod("setPipeline", GPURenderPassEncoder.prototype.setPipeline);
+      GPURenderPassEncoder.prototype.setIndexBuffer = this._wrapMethod("setIndexBuffer", GPURenderPassEncoder.prototype.setIndexBuffer);
+      GPURenderPassEncoder.prototype.setVertexBuffer = this._wrapMethod("setVertexBuffer", GPURenderPassEncoder.prototype.setVertexBuffer);
+      GPURenderPassEncoder.prototype.draw = this._wrapMethod("draw", GPURenderPassEncoder.prototype.draw);
+      GPURenderPassEncoder.prototype.drawIndexed = this._wrapMethod("drawIndexed", GPURenderPassEncoder.prototype.drawIndexed);
+      GPURenderPassEncoder.prototype.drawIndirect = this._wrapMethod("drawIndirect", GPURenderPassEncoder.prototype.drawIndirect);
+      GPURenderPassEncoder.prototype.drawIndexedIndirect = this._wrapMethod("drawIndexedIndirect", GPURenderPassEncoder.prototype.drawIndexedIndirect);
+      GPURenderPassEncoder.prototype.setBindGroup = this._wrapMethod("setBindGroup", GPURenderPassEncoder.prototype.setBindGroup);
+      GPURenderPassEncoder.prototype.pushDebugGroup = this._wrapMethod("pushDebugGroup", GPURenderPassEncoder.prototype.pushDebugGroup);
+      GPURenderPassEncoder.prototype.popDebugGroup = this._wrapMethod("popDebugGroup", GPURenderPassEncoder.prototype.popDebugGroup);
+      GPURenderPassEncoder.prototype.insertDebugMarker = this._wrapMethod("insertDebugMarker", GPURenderPassEncoder.prototype.insertDebugMarker);
+
+      GPUQueue.prototype.submit = this._wrapMethod("submit", GPUQueue.prototype.submit);
+      GPUQueue.prototype.writeBuffer = this._wrapMethod("writeBuffer", GPUQueue.prototype.writeBuffer);
+      GPUQueue.prototype.writeTexture = this._wrapMethod("writeTexture", GPUQueue.prototype.writeTexture);
+      GPUQueue.prototype.copyExternalImageToTexture = this._wrapMethod("copyExternalImageToTexture", GPUQueue.prototype.copyExternalImageToTexture);
+
+      GPUQuerySet.prototype.destroy = this._wrapMethod("destroy", GPUQuerySet.prototype.destroy);
+
+      GPUCanvasContext.prototype.configure = this._wrapMethod("configure", GPUCanvasContext.prototype.configure);
+      GPUCanvasContext.prototype.unconfigure = this._wrapMethod("unconfigure", GPUCanvasContext.prototype.unconfigure);
+      GPUCanvasContext.prototype.getCurrentTexture = this._wrapMethod("getCurrentTexture", GPUCanvasContext.prototype.getCurrentTexture);
+    }
+
+    disableRecording() {
+      this._skipRecord++;
+    }
+
+    enableRecording() {
+      this._skipRecord--;
+      if (this._skipRecord < 0) {
+        this._skipRecord = 0; // If this happened, we did something wrong and disable/enable calls are unbalanced.
+      }
+    }
+
+    get isRecordingEnabled() {
+      return this._skipRecord === 0;
+    }
+
+    _wrapMethod(method, origMethod) {
+      const self = this;
+      return function () {
+        const object = this;
+
+        const args = [...arguments];
+
+        if (self._skipRecord > 0) {
+          return origMethod.call(object, ...args);
+        }
+
+        // Allow the arguments to be modified before the method is called.
+        self.onPreCall.emit(object, method, args);
+
+        // Call the original method
+        const result = origMethod.call(object, ...args);
+
+        const isCreate = GPUCreateMethods.has(method);
+
+        const stacktrace = self.recordStacktraces || isCreate ? getStacktrace() : undefined;
+
+        // If it was an async method it will have returned a Promise
+        if (result instanceof Promise) {
+          const id = self._idGenerator.getNextId(object);
+          self.onPromise.emit(object, method, args, id, stacktrace);
+          const promise = result;
+          const wrappedPromise = new Promise((resolve) => {
+            promise.then((result) => {
+              self.onPromiseResolve.emit(object, method, args, id, result, stacktrace);
+              resolve(result);
+            });
+          });
+          return wrappedPromise;
+        }
+
+        // Otherwise it's a synchronous method
+        self.onPostCall.emit(object, method, args, result, stacktrace);
+
+        return result;
+      };
+    }
+  }
+
+  const TextureFormatInfo = {
+      "r8unorm": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r8snorm": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r8uint": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r8sint": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "rg8unorm": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg8snorm": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg8uint": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg8sint": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+
+      "rgba8unorm": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba8unorm-srgb": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba8snorm": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba8uint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba8sint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "bgra8unorm": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "bgra8unorm-srgb": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+
+      "r16uint": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r16sint": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r16float": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+
+      "rg16uint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg16sint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg16float": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+
+      "rgba16uint": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba16sint": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba16float": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+
+      "r32uint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r32sint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r32float": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+
+      "rg32uint": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg32sint": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg32float": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+
+      "rgba32uint": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba32sint": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba32float": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgb10a2uint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgb10a2unorm": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rg11b10ufloat": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+
+      // Depth Stencil Formats
+      "stencil8": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": false, "hasStencil": true, "channels": 1 }, // bytesPerBlock is actually 1-4
+      "depth16unorm": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": false, "channels": 1 },
+      "depth24plus": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": false, "depthOnlyFormat": "depth32float", "channels": 1 },
+      "depth24plus-stencil8": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": true, "depthOnlyFormat": "depth32float", "channels": 1 }, // bytesPerBlock is actually 4-8
+      "depth32float": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": false, "channels": 1 },
+      "depth32float-stencil8": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": true, "stencilOnlyFormat": "depth32float", "channels": 1 }, // bytesPerBlock is actually 5-8
+
+      // Packed Formats
+      "rgb9e5ufloat": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+
+      // Compressed Formats
+      "bc1-rgba-unorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc1-rgba-unorm-srgb": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc2-rgba-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc2-rgba-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc3-rgba-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc3-rgba-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+
+      "bc4-r-unorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 1 },
+      "bc4-r-snorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 1 },
+
+      "bc5-rg-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 2 },
+      "bc5-rg-snorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 2 },
+
+      "bc6h-rgb-ufloat": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc6h-rgb-float": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc7-rgba-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc7-rgba-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      
+      "etc2-rgb8unorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "etc2-rgb8unorm-srgb": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "etc2-rgb8a1unorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "etc2-rgb8a1unorm-srgb": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "etc2-rgba8unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "etc2-rgba8unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      
+      "eac-r11unorm": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": true, "channels": 1 },
+      "eac-r11snorm": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": true, "channels": 1 },
+
+      "eac-rg11unorm": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": true, "channels": 2 },
+      "eac-rg11snorm": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": true, "channels": 2 },
+
+      "astc-4x4-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "astc-4x4-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "astc-5x4-unorm": { "bytesPerBlock": 16, "blockWidth": 5, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "astc-5x4-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 5, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "astc-5x5-unorm": { "bytesPerBlock": 16, "blockWidth": 5, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-5x5-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 5, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-6x5-unorm": { "bytesPerBlock": 16, "blockWidth": 6, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-6x5-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 6, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-6x6-unorm": { "bytesPerBlock": 16, "blockWidth": 6, "blockHeight": 6, "isCompressed": true, "channels": 4 },
+      "astc-6x6-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 6, "blockHeight": 6, "isCompressed": true, "channels": 4 },
+      "astc-8x5-unorm": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-8x5-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-8x6-unorm": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 6, "isCompressed": true, "channels": 4 },
+      "astc-8x6-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 6, "isCompressed": true, "channels": 4 },
+      "astc-8x8-unorm": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 8, "isCompressed": true, "channels": 4 },
+      "astc-8x8-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 8, "isCompressed": true, "channels": 4 },
+      "astc-10x5-unorm": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-10x5-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-10x6-unorm": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 6, "isCompressed": true, "channels": 4 },
+      "astc-10x6-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 6, "isCompressed": true, "channels": 4 },
+      "astc-10x8-unorm": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 8, "isCompressed": true, "channels": 4 },
+      "astc-10x8-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 8, "isCompressed": true, "channels": 4 },
+      "astc-10x10-unorm": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 10, "isCompressed": true, "channels": 4 },
+      "astc-10x10-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 10, "isCompressed": true, "channels": 4 },
+      "astc-12x10-unorm": { "bytesPerBlock": 16, "blockWidth": 12, "blockHeight": 10, "isCompressed": true, "channels": 4 },
+      "astc-12x10-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 12, "blockHeight": 10, "isCompressed": true, "channels": 4 },
+      "astc-12x12-unorm": { "bytesPerBlock": 16, "blockWidth": 12, "blockHeight": 12, "isCompressed": true, "channels": 4 },
+      "astc-12x12-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 12, "blockHeight": 12, "isCompressed": true, "channels": 4 },
+  };
+
+  class TextureUtils {
+    constructor(device) {
+      this.device = device;
+      this.blitShaderModule = device.createShaderModule({ code: TextureUtils.blitShader });
+      this.multisampleBlitShaderModule = device.createShaderModule({ code: TextureUtils.multisampleBlitShader });
+      this.depthToFloatShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatShader });
+      this.depthToFloatMultisampleShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatMultisampleShader });
+      this.blitPipelines = {};
+      this.blitDepthPipelines = {};
+      this.bindGroupLayouts = new Map();
+      this.pipelineLayouts = new Map();
+      this.depthToFloatPipeline = null;
+      this.depthToFloatMSPipeline = null;
+
+      this.pointSampler = device.createSampler({
+          magFilter: 'nearest',
+          minFilter: 'nearest',
+      });
+
+      this.displayUniformBuffer = device.createBuffer({
+        size: 16,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+
+      this.displayBingGroupLayout = device.createBindGroupLayout({
+        entries: [
+          {
+            binding: 0,
+            visibility: GPUShaderStage.FRAGMENT,
+            buffer: {
+              type: "uniform"
+            }
+          }
+        ]
+      });
+
+      this.displayBindGroup = device.createBindGroup({
+        layout: this.displayBingGroupLayout,
+        entries: [
+          {
+            binding: 0,
+            resource: { buffer: this.displayUniformBuffer }
+          }
+        ]
+      });
+    }
+
+    copyDepthTexture(src, format, commandEncoder) {
+      const width = src.width;
+      const height = src.height;
+      const depthOrArrayLayers = src.depthOrArrayLayers;
+      const usage = src.usage | GPUTextureUsage.RENDER_TARGET | GPUTextureUsage.COPY_SRC;
+      const size = [width, height, depthOrArrayLayers];
+      format = format || "r32float";
+
+      const dst = this.device.createTexture({ format, size, usage });
+
+      for (let i = 0; i < depthOrArrayLayers; ++i) {
+        const srcView = src.createView({ dimension: "2d", aspect: "depth-only", baseArrayLayer: i, arrayLayerCount: 1 });
+        const dstView = dst.createView({ dimension: "2d", baseArrayLayer: i, arrayLayerCount: 1 });
+        this.convertDepthToFloat(srcView, src.sampleCount, dstView, format, commandEncoder);
+      }
+      
+      return dst;
+    }
+
+    copyMultisampledTexture(src) {
+      const width = src.width;
+      const height = src.height;
+      const format = src.format;
+      const usage = src.usage | GPUTextureUsage.RENDER_TARGET | GPUTextureUsage.COPY_SRC;
+      const size = [width, height, 1];
+      const dst = this.device.createTexture({ format, size, usage });
+
+      this.blitTexture(src.createView(), src.format, src.sampleCount, dst.createView(), format);
+
+      return dst;
+    }
+
+    blitTexture(srcView, srcFormat, sampleCount, dstView, dstFormat, display) {
+      const sampleType = "unfilterable-float";
+
+      const bgLayoutKey = `${sampleType}#${sampleCount}`;
+
+      if (!this.bindGroupLayouts.has(bgLayoutKey)) {
+        const bindGroupLayout = this.device.createBindGroupLayout({
+          entries: [
+            {
+              binding: 0,
+              visibility: GPUShaderStage.FRAGMENT,
+              sampler: {
+                type: "non-filtering"
+              }
+            },
+            {
+              binding: 1,
+              visibility: GPUShaderStage.FRAGMENT,
+              texture: {
+                sampleType: sampleType,
+                multisampled: sampleCount > 1
+              }
+            }
+          ]
+        });
+        this.bindGroupLayouts.set(bgLayoutKey, bindGroupLayout);
+
+        const pipelineLayout = this.device.createPipelineLayout({
+          bindGroupLayouts: [bindGroupLayout, this.displayBingGroupLayout]
+        });
+        this.pipelineLayouts.set(bgLayoutKey, pipelineLayout);
+      }
+
+      const formatInfo = TextureFormatInfo[srcFormat];
+      const numChannels = formatInfo?.channels ?? 4;
+
+      const bindGroupLayout = this.bindGroupLayouts.get(bgLayoutKey);
+      const pipelineLayout = this.pipelineLayouts.get(bgLayoutKey);
+
+      const pipelineKey = `${dstFormat}#${sampleType}#${sampleCount}`;
+      let pipeline = this.blitPipelines[pipelineKey];
+      if (!pipeline) {
+        const module = sampleCount > 1 ? this.multisampleBlitShaderModule : this.blitShaderModule;
+        pipeline = this.device.createRenderPipeline({
+          layout: pipelineLayout,
+          vertex: {
+            module,
+            entryPoint: 'vertexMain',
+          },
+          fragment: {
+            module: module,
+            entryPoint: 'fragmentMain',
+            targets: [ { format: dstFormat } ],
+          },
+          primitive: {
+            topology: 'triangle-list',
+          },
+        });
+        this.blitPipelines[pipelineKey] = pipeline;
+      }
+
+      const bindGroup = this.device.createBindGroup({
+        layout: bindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.pointSampler },
+          { binding: 1, resource: srcView }
+        ],
+      });
+      
+      const commandEncoder = this.device.createCommandEncoder();
+
+      const passDesc = {
+        colorAttachments: [{
+          view: dstView,
+          loadOp: 'clear',
+          storeOp: 'store'
+        }]
+      };
+
+      if (display) {
+        this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
+          new Float32Array([display.exposure, display.channels, numChannels, 0]));
+      } else {
+        this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
+          new Float32Array([1, 0, numChannels, 0]));
+      }
+
+      const passEncoder = commandEncoder.beginRenderPass(passDesc);
+      passEncoder.setPipeline(pipeline);
+      passEncoder.setBindGroup(0, bindGroup);
+      passEncoder.setBindGroup(1, this.displayBindGroup);
+      passEncoder.draw(3);
+      passEncoder.end();
+      this.device.queue.submit([commandEncoder.finish()]);
+    }
+
+    convertDepthToFloat(fromTextureView, sampleCount, toTextureView, dstFormat, commandEncoder) {
+      if (sampleCount > 1) {
+        if (!this.depthToFloatMSPipeline) {
+          this.device.pushErrorScope('validation');
+    
+          this.depthToFloatBindGroupMSLayout = this.device.createBindGroupLayout({
+            entries: [
+              {
+                binding: 0,
+                visibility: GPUShaderStage.FRAGMENT,
+                texture: { sampleType: "depth", multisampled: true },
+              }
+            ]
+          });
+    
+          const pipelineLayout = this.device.createPipelineLayout({
+            bindGroupLayouts: [this.depthToFloatBindGroupMSLayout]
+          });
+    
+          const module = this.depthToFloatMultisampleShaderModule;
+          this.depthToFloatMSPipeline = this.device.createRenderPipeline({
+            layout: pipelineLayout,
+            vertex: {
+              module,
+              entryPoint: 'vertexMain',
+            },
+            fragment: {
+              module: module,
+              entryPoint: 'fragmentMain',
+              targets: [ { format: dstFormat } ],
+            },
+            primitive: {
+              topology: 'triangle-list',
+            },
+          });
+    
+          this.device.popErrorScope().then((result) => {
+            if (result) {
+              console.error(result.message);
+            }
+          });
+        }
+      } else if (!this.depthToFloatPipeline) {
+        this.device.pushErrorScope('validation');
+
+        this.depthToFloatBindGroupLayout = this.device.createBindGroupLayout({
+          entries: [
+            {
+              binding: 0,
+              visibility: GPUShaderStage.FRAGMENT,
+              texture: { sampleType: "depth" },
+            }
+          ]
+        });
+
+        const pipelineLayout = this.device.createPipelineLayout({
+          bindGroupLayouts: [this.depthToFloatBindGroupLayout]
+        });
+
+        const module = this.depthToFloatShaderModule;
+        this.depthToFloatPipeline = this.device.createRenderPipeline({
+          layout: pipelineLayout,
+          vertex: {
+            module,
+            entryPoint: 'vertexMain',
+          },
+          fragment: {
+            module: module,
+            entryPoint: 'fragmentMain',
+            targets: [ { format: dstFormat } ],
+          },
+          primitive: {
+            topology: 'triangle-list',
+          },
+        });
+
+        this.device.popErrorScope().then((result) => {
+          if (result) {
+            console.error(result.message);
+          }
+        });
+      }
+
+      this.device.pushErrorScope('validation');
+
+      const bindGroup = this.device.createBindGroup({
+        layout: sampleCount > 1 ? this.depthToFloatBindGroupMSLayout : this.depthToFloatBindGroupLayout,
+        entries: [ { binding: 0, resource: fromTextureView } ],
+      });
+
+      const doSubmit = !commandEncoder;
+
+      commandEncoder ??= this.device.createCommandEncoder();
+      const passEncoder = commandEncoder.beginRenderPass({
+        colorAttachments: [{
+          view: toTextureView,
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearColor: { r: 0, g: 0, b: 0, a: 0 }
+        }]
+      });
+
+      passEncoder.setPipeline(sampleCount > 1 ? this.depthToFloatMSPipeline : this.depthToFloatPipeline);
+      passEncoder.setBindGroup(0, bindGroup);
+      passEncoder.draw(3);
+      passEncoder.end();
+
+      if (doSubmit) {
+        this.device.queue.submit([commandEncoder.finish()]);
+      }
+
+      this.device.popErrorScope().then((result) => {
+        if (result) {
+          console.error(result.message);
+        }
+      });
+    }
+  }
+
+  TextureUtils.blitShader = `
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
+    vec4f(-1.0, 1.0, 0.0, 0.0),
+    vec4f(3.0, 1.0, 2.0, 0.0),
+    vec4f(-1.0, -3.0, 0.0, 2.0));
+  struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f
+  };
+  @vertex
+  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.uv = posTex[vertexIndex].zw;
+    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
+    return output;;
+  }
+  @group(0) @binding(0) var texSampler: sampler;
+  @group(0) @binding(1) var texture: texture_2d<f32>;
+  struct Display {
+    exposure: f32,
+    channels: f32,
+    numChannels: f32,
+    _pad: f32
+  };
+  @group(1) @binding(0) var<uniform> display: Display; 
+  @fragment
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+    var color = textureSample(texture, texSampler, input.uv);
+
+    if (display.numChannels == 1.0) {
+      color = vec4f(color.r, color.r, color.r, 1.0);
+    } else if (display.numChannels == 2.0) {
+      color = vec4f(color.r, color.g, 0.0, 1.0);
+    }
+
+    if (display.channels == 1.0) { // R
+      var rgb = color.rgb * display.exposure;
+      return vec4f(rgb.r, 0.0, 0.0, 1);
+    } else if (display.channels == 2.0) { // G
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, rgb.g, 0.0, 1);
+    } else if (display.channels == 3.0) { // B
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, 0.0, rgb.b, 1);
+    } else if (display.channels == 4.0) { // A
+      var a = color.a * display.exposure;
+      return vec4f(a, a, a, 1);
+    } else if (display.channels == 5.0) { // Luminance
+      var luminance = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));
+      var rgb = vec3f(luminance) * display.exposure;
+      return vec4f(rgb, 1);
+    }
+
+    // RGB
+    var rgb = color.rgb * display.exposure;
+    return vec4f(rgb, 1);
+  }
+`;
+
+  TextureUtils.multisampleBlitShader = `
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
+    vec4f(-1.0, 1.0, 0.0, 0.0),
+    vec4f(3.0, 1.0, 2.0, 0.0),
+    vec4f(-1.0, -3.0, 0.0, 2.0));
+  struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f
+  };
+  @vertex
+  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.uv = posTex[vertexIndex].zw;
+    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
+    return output;;
+  }
+  @group(0) @binding(0) var texSampler: sampler;
+  @group(0) @binding(1) var texture: texture_multisampled_2d<f32>;
+  struct Display {
+    exposure: f32,
+    channels: f32
+  };
+  @group(1) @binding(0) var<uniform> display: Display; 
+  @fragment
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+    var coords = vec2i(input.uv * vec2f(textureDimensions(texture)));
+    var color = textureLoad(texture, coords, 0);
+    if (display.channels == 1.0) { // R
+      var rgb = color.rgb * display.exposure;
+      return vec4f(rgb.r, 0.0, 0.0, color.a);
+    } else if (display.channels == 2.0) { // G
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, rgb.g, 0.0, color.a);
+    } else if (display.channels == 3.0) { // B
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, 0.0, rgb.b, color.a);
+    } else if (display.channels == 4.0) { // A
+      var a = color.a * display.exposure;
+      return vec4f(a, a, a, color.a);
+    } else if (display.channels == 5.0) { // Luminance
+      var luminance = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));
+      var rgb = vec3f(luminance) * display.exposure;
+      return vec4f(rgb, color.a);
+    }
+
+    // RGB
+    var rgb = color.rgb * display.exposure;
+    return vec4f(rgb, color.a);
+  }`;
+
+  TextureUtils.depthToFloatShader = `
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
+    vec4f(-1.0, 1.0, 0.0, 0.0),
+    vec4f(3.0, 1.0, 2.0, 0.0),
+    vec4f(-1.0, -3.0, 0.0, 2.0));
+  struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv : vec2<f32>
+  };
+  @vertex
+  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.uv = posTex[vertexIndex].zw;
+    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
+    return output;;
+  }
+  
+  @binding(0) @group(0) var depth: texture_depth_2d;
+  @fragment
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
+    var depthSize = textureDimensions(depth);
+    var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),
+                           i32(f32(depthSize.y) * input.uv.y));
+    var d = textureLoad(depth, coords, 0);
+    return vec4<f32>(d, 0.0, 0.0, 1.0);
+  }`;
+
+  TextureUtils.depthToFloatMultisampleShader = `
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
+    vec4f(-1.0, 1.0, 0.0, 0.0),
+    vec4f(3.0, 1.0, 2.0, 0.0),
+    vec4f(-1.0, -3.0, 0.0, 2.0));
+  struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv : vec2<f32>
+  };
+  @vertex
+  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.uv = posTex[vertexIndex].zw;
+    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
+    return output;;
+  }
+  
+  @binding(0) @group(0) var depth: texture_depth_multisampled_2d;
+  @fragment
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
+    var depthSize = textureDimensions(depth);
+    var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),
+                           i32(f32(depthSize.y) * input.uv.y));
+    var d = textureLoad(depth, coords, 0);
+    return vec4<f32>(d, 0.0, 0.0, 1.0);
+  }`;
+
+  const Actions = {
+    CaptureBufferData: "webgpu_inspect_capture_buffer_data",
+    CaptureBuffers: "webgpu_inspect_capture_buffers",
+    DeleteObjects: "webgpu_inspect_delete_objects",
+    ValidationError: "webgpu_inspect_validation_error",
+    MemoryLeakWarning: "webgpu_inspect_memory_leak_warning",
+    DeltaTime: "webgpu_inspect_delta_time",
+    CaptureFrameResults: "webgpu_inspect_capture_frame_results",
+    CaptureFrameCommands: "webgpu_inspect_capture_frame_commands",
+    ObjectSetLabel: "webgpu_inspect_object_set_label",
+    AddObject: "webgpu_inspect_add_object",
+    ResolveAsyncObject: "webgpu_inspect_resolve_async_object",
+    DeleteObject: "webgpu_inspect_delete_object",
+    CaptureTextureFrames: "webgpu_inspect_capture_texture_frames",
+    CaptureTextureData: "webgpu_inspect_capture_texture_data",
+    CaptureBufferData: "webgpu_inspect_capture_buffer_data",
+
+    Recording: "webgpu_record_recording",
+    RecordingCommand: "webgpu_record_command",
+    RecordingDataCount: "webgpu_record_data_count",
+    RecordingData: "webgpu_record_data"
+  };
+
+  Actions.values = new Set(Object.values(Actions));
+
+  const PanelActions = {
+    RequestTexture: "webgpu_inspect_request_texture",
+    CompileShader: "webgpu_inspect_compile_shader",
+    RevertShader: "webgpu_inspect_revert_shader",
+    Capture: "webgpu_inspector_capture",
+    InitializeInspector: "webgpu_initialize_inspector",
+    InitializeRecorder: "webgpu_initialize_recorder"
+  };
+
+  class RollingAverage {
+    constructor(windowSize) {
+      this.windowSize = windowSize;
+      this.buffer = [];
+      this.sum = 0;
+    }
+    
+    add(frameTime) {
+      this.buffer.push(frameTime);
+      if (this.buffer.length > this.windowSize) {
+        this.sum -= this.buffer.shift();
+      }
+      this.sum += frameTime;
+    }
+    
+    get average() {
+      if (this.buffer.length === 0) {
+        return 0;
+      }
+      return this.sum / this.buffer.length;
+    }
+  }
+
+  function alignTo(size, alignment) {
+    return (size + alignment - 1) & ~(alignment - 1);
+  }
+
+  (() => {
+    const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
+
+    // How much data should we send to the panel via message as a chunk.
+    // Messages can't send that much data .
+    const maxDataChunkSize = (1024 * 1024) / 4; // 256KB
+    const maxBufferCaptureSize = (1024 * 1024) / 4; // 256KB
+    const maxColorAttachments = 10;
+
+    class WebGPUInspector {
+      constructor() {
+        this._captureFrameCommands = [];
+        this._frameData = [];
+        this._frameRenderPassCount = 0;
+        this._captureTexturedBuffers = [];
+        this._currentFrame = null;
+        this._frameIndex = 0;
+        this._initalized = true;
+        this._objectID = 1;
+        this._lastFrameTime = 0;
+        this._frameCommandCount = 0;
+        this._captureFrameRequest = false;
+        this._errorChecking = 1;
+        this._trackedObjects = new Map();
+        this._trackedObjectInfo = new Map();
+        this._bindGroupCount = 0;
+        this._captureTextureRequest = new Map();
+        this._toDestroy = []; // Defer deleting temp objects until after finish
+        this._objectReplacementMap = new Map(); // Map objects to their replacements
+        this._captureBuffersCount = 0;
+        this._captureTempBuffers = [];
+        this._mappedTextureBufferCount = 0;
+        this._encodingTextureChunkCount = 0;
+        this._mappedBufferCount = 0;
+        this._encodingBufferChunkCount = 0;
+        this._captureData = null;
+        this._frameRate = new RollingAverage(60);
+
+        if (!window.navigator.gpu) {
+          // No WebGPU support
+          return;
+        }
+
+        const statusContainer = document.createElement("div");
+        statusContainer.style = "position: absolute; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt;";
+        document.body.insertBefore(statusContainer, document.body.firstChild);
+
+        this._inspectingStatus = document.createElement("div");
+        this._inspectingStatus.title = "WebGPU Inspector Running";
+        this._inspectingStatus.style = "height: 10px; width: 10px; display: inline-block; margin-right: 5px; background-color: #ff0; border-radius: 50%; border: 1px solid #000; box-shadow: inset -4px -4px 4px -3px rgb(255,100,0), 2px 2px 3px rgba(0,0,0,0.8);";
+        statusContainer.appendChild(this._inspectingStatus);
+
+        this._inspectingStatusFrame = document.createElement("div");
+        this._inspectingStatusFrame.style = "display: inline-block;";
+        this._inspectingStatusFrame.textContent = "Frame: 0";
+        statusContainer.appendChild(this._inspectingStatusFrame);
+
+        this._inspectingStatusText = document.createElement("div");
+        this._inspectingStatusText.style = "display: inline-block; margin-left: 10px;";
+        statusContainer.appendChild(this._inspectingStatusText);
+
+        this._gpuWrapper = new GPUObjectWrapper(this);
+
+        const self = this;
+        this._gpuWrapper.onPromise.addListener(this._onAsyncPromise, this);
+        this._gpuWrapper.onPromiseResolve.addListener(this._onAsyncResolve, this);
+        this._gpuWrapper.onPreCall.addListener(this._preMethodCall, this);
+        this._gpuWrapper.onPostCall.addListener(this._postMethodCall, this);
+
+        this._garbageCollectectedObjects = [];
+       
+        // Track garbage collected WebGPU objects
+        this._garbageCollectionRegistry = new FinalizationRegistry((id) => {
+          if (id > 0) {
+            // It's too slow to send a message for every object that gets garbage collected,
+            // so we'll batch them up and send them every so often.
+            self._garbageCollectectedObjects.push(id);
+            const objectClass = self._trackedObjectInfo.get(id);
+            //const object = self._trackedObjects.get(id)?.deref();
+
+            if (objectClass) {
+              if (objectClass === GPUBindGroup) {
+                self._bindGroupCount--;
+              }
+              // If we're here, the object was garbage collected but not explicitly destroyed.
+              // Some GPU objects need to be explicitly destroyed, otherwise it's a memory
+              // leak. Notify the user of this.
+              if (objectClass === GPUBuffer || objectClass === GPUTexture || objectClass === GPUDevice) {
+                self._memoryLeakWarning(id, objectClass);
+              }
+            }
+
+            if (self._garbageCollectectedObjects.length > 100) {
+              window.postMessage({ "action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects }, "*");
+              self._garbageCollectectedObjects.length = 0;
+            }
+          }
+
+          if (id > 0) {
+            self._trackedObjects.delete(id);
+            self._trackedObjectInfo.delete(id);
+            self._captureTextureRequest.delete(id);
+            self._objectReplacementMap.delete(id);
+          }
+        });
+
+        // Clean out the garbage collected objects every so often.
+        const garbageCollectionInterval = 200;
+        setInterval(() => {
+          if (self._garbageCollectectedObjects.length > 0) {
+            window.postMessage({ "action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects }, "*");
+            self._garbageCollectectedObjects.length = 0;
+          }
+        }, garbageCollectionInterval);
+
+        // Wrap the canvas elements so we can capture when their context is created.
+        const canvases = document.getElementsByTagName("canvas");
+        for (const canvas of canvases) {
+          this._wrapCanvas(canvas);
+        }
+
+        // Capture any dynamically created canvases.
+        const __createElement = document.createElement;
+        document.createElement = function (type) {
+          const element = __createElement.call(document, type);
+          if (type === "canvas") {
+            self._wrapCanvas(element);
+          }
+          return element;
+        };
+
+        // Wrap requestAnimationFrame so it can keep track of framerates and frame captures.
+        // This requires that the page uses requestAnimationFrame to drive the rendering loop.
+        const __requestAnimationFrame = window.requestAnimationFrame;
+        window.requestAnimationFrame = function (cb) {
+          function callback() {
+            const time = performance.now();
+            self._frameStart(time);
+            cb(time);
+            self._frameEnd();
+          }
+          __requestAnimationFrame(callback);
+        };
+
+        // Listen for messages from the content-script.
+        window.addEventListener("message", (event) => {
+          if (event.source !== window) {
+            return;
+          }
+          const message = event.data;
+          if (typeof message !== "object" || message === null) {
+            return;
+          }
+          if (message.action === PanelActions.RequestTexture) {
+            const textureId = message.id;
+            self._requestTexture(textureId);
+          } else if (message.action === PanelActions.CompileShader) {
+            const shaderId = message.id;
+            const code = message.code;
+            self._compileShader(shaderId, code);
+          } else if (message.action === PanelActions.RevertShader) {
+            const shaderId = message.id;
+            self._revertShader(shaderId);
+          }
+        });
+      }
+
+      disableRecording() {
+        this._gpuWrapper.disableRecording();
+      }
+
+      enableRecording() {
+        this._gpuWrapper.enableRecording();
+      }
+
+      _updateCanvasAttachment(attachment) {
+        let textureView = null;
+        if (attachment.resolveTarget) {
+          textureView = attachment.resolveTarget;
+        } else if (attachment.view) {
+          textureView = attachment.view;
+        }
+
+        const texture = textureView?.__texture;
+        const context = texture?.__context;
+
+        // If the texture has a context, it's a canvas texture.
+        if (!context) {
+          return;
+        }
+
+        if (context.__captureTexture) {
+          if (context.__captureTexture.width != texture.width ||
+              context.__captureTexture.height != texture.height ||
+              context.__captureTexture.format != texture.format) {
+            this.disableRecording();
+            context.__captureTexture.destroy();
+            context.__captureTexture = null;
+            this.enableRecording();
+          }
+        }
+
+        const device = context.__device;
+        if (device) {
+          this.disableRecording();
+
+          const captureTexture = device.createTexture({
+            size: [texture.width, texture.height, 1],
+            format: texture.format,
+            usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+          });
+
+          context.__captureTexture = captureTexture;
+          if (captureTexture) {
+            captureTexture.__id = texture.__id;
+            captureTexture.__canvasTexture = texture;
+            captureTexture.__context = context;
+
+            const captureView = captureTexture.createView();
+            captureView.__texture = captureTexture;
+            captureView.__canvasView = textureView;
+            captureTexture.__view = captureView;
+            captureView.__context = context;
+
+            if (attachment.resolveTarget) {
+              attachment.resolveTarget = captureView;
+            } else {
+              attachment.view = captureView;
+            }
+          }
+
+          this.enableRecording();
+        }
+      }
+
+      // Called before a GPU method is called, allowing the inspector to modify
+      // the arguments or the object before the method is called.
+      _preMethodCall(object, method, args) {
+        if (method === "setPipeline") {
+          // If a shader has been recompiled, that means the pipelines that
+          // used that shader were also re-created. Patch in the replacement
+          // pipeline so the new version of the shader is used.
+          let pipeline = args[0];
+          const objectRef = this._objectReplacementMap.get(pipeline.__id);
+          if (objectRef) {
+            if (objectRef.replacement) {
+              args[0] = objectRef.replacement;
+            }
+          }
+        }
+
+        if (method === "createTexture") {
+          // Add COPY_SRC usage to all textures so we can capture them
+          args[0].usage |= GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING;
+        }
+
+        if (method === "createBuffer") {
+          // Add COPY_SRC usage to all buffers so we can capture them
+          if (!(args[0].usage & GPUBufferUsage.MAP_READ)) {
+            args[0].usage |= GPUBufferUsage.COPY_SRC;
+          }
+        }
+
+        if (method === "createShaderModule" ||
+            method === "createRenderPipeline" ||
+            method === "createComputePipeline" ||
+            method === "createBindGroup") {
+          if (this._errorChecking > 0) {
+            this._gpuWrapper.disableRecording();
+            object.pushErrorScope("validation");
+            this._gpuWrapper.enableRecording();
+          }
+        }
+
+        // We want to be able to capture canvas textures, so we need to add COPY_SRC to
+        // the usage flags of any textures created from canvases.
+        if ((object instanceof GPUCanvasContext) && method === "configure") {
+          const descriptor = args[0];
+          if (descriptor.usage) {
+            descriptor.usage |= GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC;
+          } else {
+            descriptor.usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC;
+          }
+          // Keep tabs on the device that the context was initialized with.
+          object.__device = descriptor.device;
+        }
+      }
+
+      // Called after a GPU method is called, allowing the inspector to wrap the result.
+      _postMethodCall(object, method, args, result, stacktrace) {
+        this._frameCommandCount++;
+
+        if (method === "beginRenderPass") {
+          // object is a GPUCommandEncoder
+          // result is a GPURenderPassEncoder
+          result.__commandEncoder = object;
+
+          // Check to see if any of the color attachments are canvas textures.
+          // We need to know this so we can capture the canvas texture after the
+          // render pass is finished.
+          for (const colorAttachment of args[0].colorAttachments) {
+            const view = colorAttachment.resolveTarget ?? colorAttachment.view;
+            if (view) {
+              if (view.__id < 0) {
+                object.__rendersToCanvas = true;
+                const texture = view.__texture;
+                if (texture.__frameIndex < this._frameIndex) {
+                  const message = "An expired canvas texture is being used as an attachment for a RenderPass.";
+                  window.postMessage({ "action": Actions.ValidationError, id: 0, message, stacktrace }, "*");
+                }
+                break;
+              }
+            }
+          }
+        }
+
+        if (method === "finish") {
+          // Renders to canvas tracks whether the render pass encoder renders to a canvas.
+          // We only want to capture canvas textures if it's been immediatley rendered to,
+          // otherwise it will be black. Store the value in the command buffer so we can
+          // see it from the submit function.
+          result.__rendersToCanvas = object.__rendersToCanvas;
+        }
+
+        if (method === "submit") {
+          this.disableRecording();
+
+          if (this._captureTextureRequest.size > 0) {
+            const self = this;
+            const commandBuffers = args[0];
+            let rendersToCanvas = false;
+            for (const commandBuffer of commandBuffers) {
+              rendersToCanvas |= !!commandBuffer.__rendersToCanvas;
+            }
+            this._captureTextureRequest.forEach((texture, id) => {
+              if (id > 0 || rendersToCanvas) {
+                texture = texture || self._trackedObjects.get(id)?.deref();
+                self._captureTextureBuffer(object.__device, null, texture);
+                self._captureTextureRequest.delete(id);
+              }
+            });
+          }
+
+          if (this._captureTempBuffers.length) {
+            this._sendCapturedBuffers();
+          }
+
+          if (this._captureTexturedBuffers.length) {
+            this._sendCaptureTextureBuffers();
+          }
+
+          for (const obj of this._toDestroy) {
+            obj.destroy();
+          }
+          this._toDestroy.length = 0;
+
+          this.enableRecording();
+        }
+
+        if (method === "createShaderModule" ||
+            method === "createRenderPipeline" ||
+            method === "createComputePipeline" ||
+            method === "createBindGroup") {
+          if (this._errorChecking > 0) {
+            this.disableRecording();
+            object.popErrorScope().then((error) => {
+              if (error) {
+                console.error(error.message);
+                const id = result?.__id ?? 0;
+                window.postMessage({ "action": Actions.ValidationError, id, "message": error.message, stacktrace }, "*");
+              }
+            });
+            this.enableRecording();
+          }
+        }
+
+        let id = undefined;
+
+        // Canvas textures will have a negative id, which is the negative of the context's id.
+        if (method === "getCurrentTexture") {
+          // object is a GPUCanvasContext
+          if (!object.__id) {
+            // If the context hasn't been captured yet, do it now.
+            this._wrapObject(object);
+            this._trackObject(object.__id, object);
+          }
+
+          id = -object.__id;
+          object.__canvasTexture = new WeakRef(result);
+          result.__frameIndex = this._frameIndex;
+        } else if (method === "createView") {
+          if (object.__id < 0) {
+            id = object.__id - 0.5;
+          }
+        }
+
+        if (object instanceof GPUDevice && object?.__id === undefined) {
+          // If we haven't wrapped the object yet, so do it now.
+          // Probably the GPUDevice where requestDevice happened
+          // before we started recording.
+          this._wrapDevice(null, object);
+
+          // This probably means we haven't wrapped the adapter yet, either.
+          if (!object.__adapter) {
+            // The wrapper will pick up and register the resulting adapter.
+            // We don't need the adapter to be a true owner of the device,
+            // we're just using it for inspection purposes.
+            navigator.gpu.requestAdapter().then((adapter) => {
+              object.__adapter = adapter;
+            });
+          }
+        }
+        
+        if (result) {
+          // Wrap GPU objects
+          if (GPUObjectTypes.has(result.constructor)) {
+            this._wrapObject(result, id);
+          }
+
+          if (method === "createShaderModule" ||
+              method === "createRenderPipeline") {
+            result.__descriptor = args[0];
+            result.__device = object;
+            this._objectReplacementMap.set(result.__id, { id: result.__id, object: new WeakRef(result), replacement: null });
+          } else if (method === "getCurrentTexture") {
+            result.__context = object;
+            this._trackObject(result.__id, result);
+            result.label = "CanvasTexture";
+          } else if (method === "createTexture") {
+            this._trackObject(result.__id, result);
+          } else if (method === "createView" && !id) {
+            this._trackObject(result.__id, result);
+            result.__texture = object;
+            if (result.__id < 0) {
+              result.label = "CanvasTextureView";
+            }
+          } else if (method === "createBuffer") {
+            this._trackObject(result.__id, result);
+          } else if (method === "createBindGroup") {
+            this._trackObject(result.__id, result);
+            result.__descriptor = args[0];
+          } else if (method === "setBindGroup") {
+            const descriptor = args[1].__descriptor;
+            if (descriptor) {
+              for (const entry of descriptor.entries) {
+                if (entry.resource instanceof GPUTextureView && entry.resource.__id < 0) {
+                  // This is a canvas texture view
+                  const texture = entry.resource.__texture;
+                  if (texture.__frameIndex < this._frameIndex) {
+                    const message = `A BindGroup(${object.__id}) with an expired canvs texture is being used.`;
+                    window.postMessage({ "action": Actions.ValidationError, id: 0, message, stacktrace }, "*");
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        this._recordCommand(object, method, result, args, stacktrace);
+      }
+
+      // Called when an async GPU method promise is created, allowing the inspector to wrap the result.
+      _onAsyncPromise(object, method, args, id, stacktrace) {
+        switch (method) {
+          case "createRenderPipelineAsync":
+            this._sendAddObjectMessage(id, object.__id, "RenderPipeline", this._stringifyDescriptor(args[0]), stacktrace, true);
+            break;
+          case "createComputePipelineAsync":
+            this._sendAddObjectMessage(id, object.__id, "ComputePipeline", this._stringifyDescriptor(args[0]), stacktrace, true);
+            break;
+        }
+      }
+
+      // Called when an async GPU method promise resolves, allowing the inspector to wrap the result.
+      _onAsyncResolve(object, method, args, id, result, stacktrace) {
+        if (method === "requestAdapter") {
+          const adapter = result;
+          if (adapter) {
+            this._wrapAdapter(result, id, stacktrace);
+          }
+        } else if (method === "requestDevice") {
+          const adapter = object;
+          const device = result;
+          if (device) {
+            this._wrapDevice(adapter, device, id, args, stacktrace);
+          }
+        } else if (result) {
+          this._wrapObject(result, id);
+          window.postMessage({ action: Actions.ResolveAsyncObject, id: result.__id });
+        }
+      }
+
+      _wrapAdapter(adapter, id, stacktrace) {
+        this._wrapObject(adapter, id);
+        id ??= adapter.__id;
+        const self = this;
+        adapter.requestAdapterInfo().then((infoObj) => {
+          const info = {
+            vendor: infoObj.vendor,
+            architecture: infoObj.architecture,
+            device: infoObj.device,
+            description: infoObj.description,
+            features: self._gpuToArray(adapter.features),
+            limits: self._gpuToObject(adapter.limits),
+            isFallbackAdapter: adapter.isFallbackAdapter,
+            wgslFeatures: self._gpuToArray(navigator.gpu.wgslLanguageFeatures)
+          };
+          self._sendAddObjectMessage(id, 0, "Adapter", JSON.stringify(info), stacktrace);
+        });
+      }
+
+      _wrapDevice(adapter, device, id, args, stacktrace) {
+        if (adapter && adapter.__id === undefined) {
+          this._wrapAdapter(adapter, undefined, stacktrace);
+        }
+
+        if (device && device.__id === undefined) {
+          device.queue.__device = device;
+
+          device.addEventListener('uncapturederror', (event) => {
+            window.postMessage({ "action": Actions.ValidationError, id: 0, "message": event.error.message }, "*");
+          });
+
+          args ??= [];
+          this._wrapObject(device, id);
+          const descriptor = args[0] ?? {};
+          const deviceId = device.__id;
+          const adapterId = adapter?.__id ?? 0;
+          descriptor["features"] = this._gpuToArray(device.features);
+          descriptor["limits"] = this._gpuToObject(device.limits);
+          this._trackObject(deviceId, device);
+          this._sendAddObjectMessage(id, adapterId, "Device", JSON.stringify(descriptor), stacktrace);
+          device.__adapter = adapter; // prevent adapter from being garbage collected
+        }
+      }
+
+      clear() {
+        this._captureFrameCommands.length = 0;
+        this._currentFrame = null;
+      }
+
+      getNextId(object) {
+        // We don't need unique id's for some types of objects
+        // and they get created so frequenty they make the ID's
+        // grow too quickly.
+        if (object instanceof GPUCommandEncoder ||
+            object instanceof GPUComputePassEncoder ||
+            object instanceof GPURenderPassEncoder ||
+            object instanceof GPUCommandBuffer) {
+          return 0;
+        }
+        return this._objectID++;
+      }
+
+      _memoryLeakWarning(id, object) {
+        if (object) {
+          const type = object.name;
+          const message = `${type} was garbage collected without being explicitly destroyed. These objects should explicitly destroyed to avoid GPU memory leaks.`;
+          window.postMessage({"action": Actions.ValidationError, id: 0, "message": message}, "*");
+        }
+      }
+
+      _isPrimitiveType(obj) {
+        return !obj || obj.constructor === String || obj.constructor === Number || obj.constructor === Boolean;
+      }
+
+      _isTypedArray(obj) {
+        return obj && (obj instanceof ArrayBuffer || obj.buffer instanceof ArrayBuffer);
+      }
+
+      _isArray(obj) {
+        return obj && obj.constructor === Array;
+      }
+
+      _duplicateArray(array, replaceGpuObjects) {
+        const newArray = new Array(array.length);
+        for (let i = 0, l = array.length; i < l; ++i) {
+          const x = array[i];
+          if (this._isPrimitiveType(x)) {
+            newArray[i] = x;
+          } else if (x.__id !== undefined) {
+            if (replaceGpuObjects) {
+              newArray[i] = { __id: x.__id, __class: x.constructor.name };
+            } else {
+              newArray[i] = x;
+            }
+          } else if (this._isTypedArray(x)) {
+            newArray[i] = x;
+          } else if (this._isArray(x)) {
+            newArray[i] = this._duplicateArray(x, replaceGpuObjects);
+          } else if (x instanceof Object) {
+            newArray[i] = this._duplicateObject(x, replaceGpuObjects);
+          } else {
+            newArray[i] = x;
+          }
+        }
+        return newArray;
+      }
+
+      _duplicateObject(object, replaceGpuObjects) {
+        const obj = {};
+        for (const key in object) {
+          if (key.startsWith("_")) {
+            continue;
+          }
+          const x = object[key];
+          if (x === undefined) {
+            continue;
+          }
+          if (this._isPrimitiveType(x)) {
+            obj[key] = x;
+          } else if (x.__id !== undefined) {
+            if (replaceGpuObjects) {
+              obj[key] = { __id: x.__id, __class: x.constructor.name };
+            } else {
+              obj[key] = x;
+            }
+          } else if (x.label !== undefined) {
+            obj[key] = x;
+          } else if (this._isTypedArray(x)) {
+            obj[key] = x;
+          } else if (this._isArray(x)) {
+            obj[key] = this._duplicateArray(x, replaceGpuObjects);
+          } else if (x instanceof Object) {
+            obj[key] = this._duplicateObject(x, replaceGpuObjects);
+          } else {
+            obj[key] = x;
+          }
+        }
+        return obj;
+      }
+
+      _revertShader(shaderId) {
+        const objectMap = this._objectReplacementMap.get(shaderId);
+        if (!objectMap) {
+          return;
+        }
+        const shader = objectMap.object?.deref();
+        if (!shader) {
+          return;
+        }
+
+        objectMap.replacement = null;
+
+        for (const objectRef of this._objectReplacementMap.values()) {
+          const object = objectRef.object.deref();
+          const isRenderPipeline = object instanceof GPURenderPipeline;
+          const isComputePipeline = object instanceof GPUComputePipeline;
+          if (isRenderPipeline || isComputePipeline) {
+            const descriptor = object.__descriptor;
+            
+            let found = false;
+
+            if (descriptor.vertex?.module === shader) {
+              found = true;
+            }
+            if (descriptor.fragment?.module === shader) {
+              found = true;
+            }
+            if (descriptor.compute?.module === shader) {
+              found = true;
+            }
+
+            if (found) {
+              objectRef.replacement = null;
+            }
+          }
+        }
+      }
+
+      _compileShader(shaderId, code) {
+        const objectMap = this._objectReplacementMap.get(shaderId);
+        if (!objectMap) {
+          return;
+        }
+        const shader = objectMap.object?.deref();
+        if (!shader) {
+          return;
+        }
+
+        const device = shader.__device;
+        const descriptor = this._duplicateObject(shader.__descriptor);
+        descriptor.code = code;
+
+        this.disableRecording();
+        this._errorChecking--;
+        device.pushErrorScope('validation');
+        descriptor.__replacement = shaderId;
+        const newShaderModule = device.createShaderModule(descriptor);
+        device.popErrorScope().then((error) => {
+          if (error) {
+            console.error(error.message);
+            const id = shaderId ?? 0;
+            window.postMessage({ "action": Actions.ValidationError, id, "message": error.message }, "*");
+          }
+        });
+        this._errorChecking++;
+        this.enableRecording();
+
+        objectMap.replacement = newShaderModule;
+
+        // Create replacements for any RenderPipeline that uses shaderId
+        for (const objectRef of this._objectReplacementMap.values()) {
+          const object = objectRef.object.deref();
+          const isRenderPipeline = object instanceof GPURenderPipeline;
+          const isComputePipeline = object instanceof GPUComputePipeline;
+          if (isRenderPipeline || isComputePipeline) {
+            const descriptor = object.__descriptor;
+            
+            let found = false;
+            let newDescriptor = null;
+
+            if (descriptor.vertex?.module === shader) {
+              if (!newDescriptor) {
+                newDescriptor = this._duplicateObject(descriptor);
+              }
+              found = true;
+              newDescriptor.vertex.module = newShaderModule;
+            }
+            if (descriptor.fragment?.module === shader) {
+              if (!newDescriptor) {
+                newDescriptor = this._duplicateObject(descriptor);
+              }
+              found = true;
+              newDescriptor.fragment.module = newShaderModule;
+            }
+            if (descriptor.compute?.module === shader) {
+              if (!newDescriptor) {
+                newDescriptor = this._duplicateObject(descriptor);
+              }
+              found = true;
+              newDescriptor.compute.module = newShaderModule;
+            }
+
+            if (found) {
+              this.disableRecording();
+              this._errorChecking--;
+              newDescriptor.__replacement = objectRef.id;
+              device.pushErrorScope("validation");
+              const newPipeline = isRenderPipeline ?
+                  device.createRenderPipeline(newDescriptor) :
+                  device.createComputePipeline(newDescriptor);
+              device.popErrorScope().then((error) => {
+                if (error) {
+                  console.error(error.message);
+                  const id = objectRef.id ?? 0;
+                  window.postMessage({ "action": Actions.ValidationError, id, "message": error.message }, "*");
+                }
+              });
+              this._errorChecking++;
+              this.enableRecording();
+
+              objectRef.replacement = newPipeline;
+            }
+          }
+        }
+      }
+
+      _requestTexture(textureId) {
+        if (textureId < 0) {
+          this._captureTextureRequest.set(textureId, null);
+        } else {
+          const ref = this._trackedObjects.get(textureId);
+          const texture = ref?.deref();
+          if (texture instanceof GPUTexture) {
+            this._captureTextureRequest.set(textureId, texture);
+          }
+        }
+      }
+
+      _updateStatusMessage() {
+        let status = "";
+
+        if (this._captureTexturedBuffers.length > 0) {
+          status += `Texture: ${this._captureTexturedBuffers.length} `;
+        }
+
+        if (this._mappedTextureBufferCount > 0) {
+          status += `Pending Texture Reads: ${this._mappedTextureBufferCount} `;
+        }
+
+        if (this._encodingTextureChunkCount > 0) {
+          status += `Pending Texture Encoding: ${this._encodingTextureChunkCount} `;
+        }
+
+        if (this._captureBuffersCount) {
+          status += `Buffers: ${this._captureBuffersCount} `;
+        }
+
+        if (this._mappedBufferCount > 0) {
+          status += `Pending Buffer Reads: ${this._mappedBufferCount} `;
+        }
+
+        if (this._encodingBufferChunkCount > 0) {
+          status += `Pending Buffer Encoding: ${this._encodingBufferChunkCount} `;
+        }
+
+        if (status) {
+          status = `Capturing: ${status} `;
+        }
+
+        this._inspectingStatusText.textContent = status;
+      }
+
+      _frameStart(time) {
+        let deltaTime = 0;
+        if (this._lastFrameTime == 0) {
+          this._lastFrameTime = time;
+        } else {
+          deltaTime = time - this._lastFrameTime;
+          window.postMessage({ "action": Actions.DeltaTime, deltaTime }, "*");
+          this._lastFrameTime = time;
+
+          this._frameRate.add(deltaTime);
+        }
+
+        const captureData = sessionStorage.getItem(webgpuInspectorCaptureFrameKey);
+        if (captureData) {
+          try {
+            this._captureData = JSON.parse(captureData);
+          } catch (e) {
+            this._captureData = null;
+          }
+          sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
+        }
+
+        if (this._captureData) {
+          if (this._captureData.frame < 0 || this._frameIndex >= this._captureData.frame) {
+            this._captureMaxBufferSize = this._captureData.maxBufferSize || maxBufferCaptureSize;
+            this._captureFrameRequest = true;
+            this._gpuWrapper.recordStacktraces = true;
+            this._captureData = null;
+          }
+        }
+
+        this._frameData.length = 0;
+        this._captureFrameCommands.length = 0;
+        this._frameRenderPassCount = 0;
+        this._frameIndex++;
+        this._frameCommandCount = 0;
+
+        this._inspectingStatusFrame.textContent = `Frame: ${this._frameIndex} : ${this._frameRate.average.toFixed(2)}ms`;
+      }
+
+      _frameEnd() {
+        if (this._captureFrameCommands.length) {
+          const maxFrameCount = 2000;
+          const batches = Math.ceil(this._captureFrameCommands.length / maxFrameCount);
+          window.postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": this._captureFrameCommands.length, "batches": batches }, "*");
+
+          for (let i = 0; i < this._captureFrameCommands.length; i += maxFrameCount) {
+            const length = Math.min(maxFrameCount, this._captureFrameCommands.length - i);
+            const commands = this._captureFrameCommands.slice(i, i + length);
+            window.postMessage({
+                "action": Actions.CaptureFrameCommands,
+                "frame": this._frameIndex - 1,
+                "commands": commands,
+                "index": i,
+                "count": length
+              }, "*");
+          }
+          this._captureFrameCommands.length = 0;
+          this._captureFrameRequest = false;
+          this._gpuWrapper.recordStacktraces = false;
+        }
+
+        this._updateStatusMessage();
+      }
+
+      _trackObject(id, object) {
+        this._trackedObjects.set(id, new WeakRef(object));
+        this._trackedObjectInfo.set(id, object.constructor);
+      }
+
+      _wrapCanvas(canvas) {
+        if (canvas.__id) {
+          return;
+        }
+
+        canvas.__id = this.getNextId(canvas);
+        this._trackObject(canvas.__id, canvas);
+
+        const self = this;
+        const __getContext = canvas.getContext;
+
+        canvas.getContext = function (a1, a2) {
+          const result = __getContext.call(canvas, a1, a2);
+          if (result instanceof GPUCanvasContext) {
+            self._wrapObject(result);
+            self._trackObject(result.__id, result);
+          }
+          return result;
+        };
+      }
+
+      _wrapObject(object, id) {
+        // The object has already been wrapped
+        if (!object || object.__id !== undefined) {
+          return;
+        }
+        
+        object.__id = id ?? this.getNextId(object);
+
+        // Track garbage collected objects
+        this._garbageCollectionRegistry.register(object, object.__id);
+
+        if (object.label !== undefined) {
+          // Capture chaning of the GPUObjectBase label
+          const l = object.label;
+          object._label = l;
+          Object.defineProperty(object, "label", {
+            enumerable: true,
+            configurable: true,
+            get() {
+              return this._label;
+            },
+            set(label) {
+              if (label !== this._label) {
+                this._label = label;
+                const id = this.__id;
+                window.postMessage({ "action": Actions.ObjectSetLabel, id, label }, "*");
+              }
+            }
+          });
+        }
+
+        if (object instanceof GPUDevice) {
+          // Automatically wrap the device's queue
+          if (object.queue.__id === undefined) {
+            this._wrapObject(object.queue);
+          }
+        }
+      }
+
+      _gpuToArray(gpu) {
+        const array = [];
+        if (gpu) {
+          for (const v of gpu) {
+            array.push(v);
+          }
+        }
+        return array;
+      }
+
+      _gpuToObject(gpu) {
+        const obj = {};
+        if (gpu) {
+          for (const v in gpu) {
+            obj[v] = gpu[v];
+          }
+        }
+        return obj;
+      }
+
+      _stringifyDescriptor(args) {
+        const descriptor = this._duplicateObject(args, true) ?? {};
+        let s = null;
+        try {
+          s = JSON.stringify(descriptor);
+        } catch (e) {
+          console.log(e.message);
+        }
+        return s;
+      }
+
+      _sendAddObjectMessage(id, parent, type, descriptor, stacktrace, pending) {
+        window.postMessage({ "action": Actions.AddObject, id, parent, type, descriptor, stacktrace, pending }, "*");
+      }
+
+      _recordCommand(object, method, result, args, stacktrace) {
+        const parent = object?.__id ?? 0;
+
+        if (method === "destroy") {
+          const id = object.__id;
+          object.__destroyed = true;
+          // Don't remove canvas textures from the tracked objects, which have negative id's.
+          // These are frequently created and destroyed via getCurrentTexture.
+          if (id > 0) {
+            this._trackedObjects.delete(id);
+            this._trackedObjectInfo.delete(id);
+            this._objectReplacementMap.delete(id);
+          }
+          if (object instanceof GPUBindGroup) {
+            this._bindGroupCount--;
+          }
+          if (id >= 0) {
+            this._captureTextureRequest.delete(id);
+            window.postMessage({"action": Actions.DeleteObject, id}, "*");
+          }
+        } else if (method === "createShaderModule") {
+          const id = result.__id;
+          if (!args[0].__replacement) {
+            this._sendAddObjectMessage(id, parent, "ShaderModule", this._stringifyDescriptor(args[0]), stacktrace);
+          }
+        } else if (method === "createBuffer") {
+          const id = result.__id;
+          this._sendAddObjectMessage(id, parent, "Buffer", this._stringifyDescriptor(args[0]), stacktrace);
+        } else if (method === "createTexture") {
+          const id = result.__id;
+          this._sendAddObjectMessage(id, parent, "Texture", this._stringifyDescriptor(args[0]), stacktrace);
+          result.__device = object;
+        } else if (method === "getCurrentTexture") {
+          const id = result.__id;
+          if (result) {
+            const info = {
+              size: [result.width, result.height, result.depthOrArrayLayers],
+              mipLevelCount: result.mipLevelCount,
+              sampleCount: result.sampleCount,
+              dimension: result.dimension,
+              format: result.format,
+              usage: result.usage
+            };
+            const infoStr = JSON.stringify(info);
+            this._sendAddObjectMessage(id, parent, "Texture", infoStr, stacktrace);
+          }
+        } else if (method === "createView") {
+          const id = result.__id;
+          result.__texture = object;
+          this._sendAddObjectMessage(id, parent, "TextureView", this._stringifyDescriptor(args[0]), stacktrace);
+        } else if (method === "createSampler") {
+          const id = result.__id;
+          this._sendAddObjectMessage(id, parent, "Sampler", this._stringifyDescriptor(args[0]), stacktrace);
+        } else if (method === "createBindGroup") {
+          this._bindGroupCount++;
+          const id = result.__id;
+          result.__descriptor = args[0];
+          this._sendAddObjectMessage(id, parent, "BindGroup", this._stringifyDescriptor(args[0]), stacktrace);
+        } else if (method === "createBindGroupLayout") {
+          const id = result.__id;
+          result.__descriptor = args[0];
+          this._sendAddObjectMessage(id, parent, "BindGroupLayout", this._stringifyDescriptor(args[0]), stacktrace);
+        } else if (method === "createPipelineLayout") {
+          const id = result.__id;
+          this._sendAddObjectMessage(id, parent, "PipelineLayout", this._stringifyDescriptor(args[0]), stacktrace);
+        } else if (method === "createRenderPipeline") {
+          const id = result.__id;
+          if (!args[0].__replacement) {
+            this._sendAddObjectMessage(id, parent, "RenderPipeline", this._stringifyDescriptor(args[0]), stacktrace);
+            // There are cases when the shader modules used by the render pipeline will be garbage collected, and we won't be able to inspect them after that.
+            // Hang on to the shader modules used in the descriptor by attaching them to the pipeline.
+            if (args[0].vertex?.module) {
+              result.__vertexModule = args[0].vertex?.module;
+            }
+            if (args[0].fragment?.module) {
+              result.__fragmentModule = args[0].fragment?.module;
+            }
+          }
+        } else if (method === "createComputePipeline") {
+          const id = result.__id;
+          if (!args[0].__replacement) {
+            this._sendAddObjectMessage(id, parent, "ComputePipeline", this._stringifyDescriptor(args[0]), stacktrace);
+            if (args[0].compute?.module) {
+              result.__computeModule = args[0].compute?.module;
+            }
+          }
+        } else if (method === "createCommandEncoder") {
+          // We'll need the CommandEncoder's device for capturing textures
+          result.__device = object;
+        }
+
+        if (this._captureFrameRequest) {
+          this._captureCommand(object, method, args, stacktrace, result);
+        }
+      }
+
+      _captureCommand(object, method, args, stacktrace, result) {
+        const commandId = this._captureFrameCommands.length;
+
+        const a = args;
+        if (a.length === 1 && a[0] === undefined) {
+          a.length = 0;
+        }
+
+        if (method === "beginRenderPass") {
+          result.__id = `_${commandId}`;
+        } else if (method === "beginComputePass") {
+          result.__id = `_${commandId}`;
+        } else if (method === "createCommandEncoder") {
+          result.__id = `_${commandId}`;
+        } else if (method === "finish") {
+          result.__id = `_${commandId}`;
+        }
+
+        let newArgs = null;
+        if (method === "setBindGroup") {
+          newArgs = [];
+          const binding = a[0];
+          const bindGroup = a[1];
+          newArgs.push(binding);
+          newArgs.push(bindGroup);
+          // handle dynamic offsets data, converting buffer views to Uint32Array
+          if (a.length > 2) {
+            const array = a[2];
+            if (array.length > 0) {
+              if (array instanceof Uint32Array) {
+                const offset = a[3];
+                const size = a[4];
+                if (size > 0) {
+                  const subArray = new Uint32Array(array.buffer, offset * 4, size);
+                  newArgs.push(subArray);
+                }
+              } else {
+                newArgs.push(array);
+              }
+            }
+          }
+
+          const dynamicOffsets = (newArgs.length > 2) ? newArgs[2] : null;
+          let dynamicOffsetIndex = 0;
+          const bindGroupDesc = bindGroup.__descriptor;
+          const bindGroupLayoutDesc = bindGroupDesc.layout?.__descriptor;
+          if (bindGroupDesc) {
+            for (const entryIndex in bindGroupDesc.entries) {
+              const entry = bindGroupDesc.entries[entryIndex];
+              const layoutEntry = bindGroupLayoutDesc?.entries[entryIndex];
+              const buffer = entry?.resource?.buffer;
+              const usesDynamicOffset = layoutEntry?.buffer?.hasDynamicOffset ?? false;
+              if (buffer) {
+                let offset = entry.resource.offset ?? 0;
+                const origSize = entry.resource.size ?? (buffer.size - offset);
+                const size = alignTo(origSize, 4);
+
+                if (size < this._captureMaxBufferSize) {
+                  if (usesDynamicOffset) {
+                    offset = dynamicOffsets[dynamicOffsetIndex++];
+                  }
+
+                  if (!object.__captureBuffers) {
+                    object.__captureBuffers = [];
+                  }
+                  
+                  object.__captureBuffers.push({ commandId, entryIndex, buffer, offset, size });
+                  this._captureBuffersCount++;
+                  this._updateStatusMessage();
+                }
+              }
+            }
+          }
+        } else if (method === "writeBuffer") {
+          newArgs = [];
+          const buffer = a[0];
+          const bufferOffset = a[1];
+          newArgs.push(buffer);
+          newArgs.push(bufferOffset);
+          let data = a[2];
+          if (a.length > 3) {
+            const offset = a[3] ?? 0;
+            const size = a[4];
+            const buffer = data instanceof ArrayBuffer ? data : data.buffer;
+            if (!buffer) ; else if (size > 0) {
+              data = new Uint8Array(buffer, offset, size);
+            } else if (offset > 0) {
+              data = new Uint8Array(buffer, offset);
+            }
+          }
+          // We can't push the actual data to the inspector server, it would be too much data.
+          // Instead, we push a description of the data. If we actually want the data, we should
+          // push it seperately in chunks as an ID'd data block, and then reference that ID here.
+          newArgs.push(data);
+        } else {
+          newArgs = a;
+        }
+
+        newArgs = this._processCommandArgs(newArgs);
+
+        this._captureFrameCommands.push({
+          "class": object.constructor.name,
+          "object": object.__id,
+          "result": result?.__id ?? 0,
+          commandId,
+          method,
+          args: newArgs,
+          stacktrace
+        });
+
+        if (method === "setIndexBuffer") {
+          object.__indexBuffer = args;
+        }
+
+        if (method === "setVertexBuffer") {
+          const slot = args[0];
+          const buffer = args[1];
+          const offset = args[2] ?? 0;
+          const size = args[3] ?? (buffer.size - offset);
+          if (!object.__captureBuffers) {
+            object.__captureBuffers = [];
+          }
+          object.__captureBuffers.push({ commandId, entryIndex: slot, buffer, offset, size });
+          this._captureBuffersCount++;
+          this._updateStatusMessage();
+        }
+
+        if (method === "setIndexBuffer") {
+          const buffer = args[0];
+          const size = buffer.size;
+          if (!object.__captureBuffers) {
+            object.__captureBuffers = [];
+          }
+          object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset: 0, size });
+          this._captureBuffersCount++;
+          this._updateStatusMessage();
+        }
+
+        if (method === "drawIndirect" || method === "drawIndexedIndirect" || method === "dispatchWorkgroupsIndirect") {
+          const buffer = args[0];
+          const offset = args[1];
+          const size = 32;
+          if (!object.__captureBuffers) {
+            object.__captureBuffers = [];
+          }
+          object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset, size });
+          this._captureBuffersCount++;
+          this._updateStatusMessage();
+        }
+
+        if (method === "beginRenderPass") {
+          if (args[0]?.colorAttachments?.length > 0) {
+            result.__captureTextureViews = new Set();
+            for (const attachment of args[0].colorAttachments) {
+              const captureTextureView = attachment.resolveTarget ?? attachment.view;
+              result.__captureTextureViews.add(captureTextureView);
+            }
+          }
+          result.__descriptor = args[0];
+          if (args[0]?.depthStencilAttachment) {
+            if (!result.__captureTextureViews) {
+              result.__captureTextureViews = new Set();
+            }
+            const attachment = args[0].depthStencilAttachment;
+            const captureTextureView = attachment.resolveTarget ?? attachment.view;
+            result.__captureTextureViews.add(captureTextureView);
+          }
+          this._inComputePass = false;
+          result.__commandEncoder = object;
+        } else if (method === "beginComputePass") {
+          result.__commandEncoder = object;
+          this._inComputePass = true;
+        } else if (method === "end") {
+          this._inComputePass = false;
+          const commandEncoder = object.__commandEncoder;
+          if (object.__captureBuffers?.length > 0) {
+            this._recordCaptureBuffers(commandEncoder, object.__captureBuffers);
+            this._updateStatusMessage();
+          }
+          if (object.__captureTextureViews?.size > 0) {
+            let passId = this._frameRenderPassCount * maxColorAttachments;
+            for (const captureTextureView of object.__captureTextureViews) {
+              const texture = captureTextureView.__texture;
+              if (texture) {
+                this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, passId++);
+              }
+            }
+            object.__captureTextureViews.clear();
+          }
+          object.__commandEncoder = null;
+          if (object instanceof GPURenderPassEncoder) {
+            this._frameRenderPassCount++;
+          }
+        }
+      }
+
+      _sendCaptureTextureBuffers() {
+        const textures = [];
+        for (const textureBuffer of this._captureTexturedBuffers) {
+          textures.push(textureBuffer.id);
+        }
+
+        let totalChunks = 0;
+        for (const textureBuffer of this._captureTexturedBuffers) {
+          const size = textureBuffer.tempBuffer.size;
+          const numChunks = Math.ceil(size / maxDataChunkSize);
+          totalChunks += numChunks;
+        }
+
+        window.postMessage({
+          "action": Actions.CaptureTextureFrames, 
+          "chunkCount": totalChunks,
+          "count": this._captureTexturedBuffers.length,
+          textures }, "*");
+       
+        for (const textureBuffer of this._captureTexturedBuffers) {
+          const { id, tempBuffer, passId } = textureBuffer;
+
+          this._mappedTextureBufferCount++;
+          const self = this;
+          tempBuffer.mapAsync(GPUMapMode.READ).then(() => {
+            self._mappedTextureBufferCount--;
+            self._updateStatusMessage();
+            const range = tempBuffer.getMappedRange();
+            const data = new Uint8Array(range);
+            self._sendTextureData(id, passId, data);
+            tempBuffer.destroy();
+          }).catch((e) => {
+            console.error(e);
+          });
+        }
+        this._captureTexturedBuffers.length = 0;
+        this._updateStatusMessage();
+      }
+
+      _sendTextureData(id, passId, data) {
+        const size = data.length;
+        const numChunks = Math.ceil(size / maxDataChunkSize);
+
+        const self = this;
+        for (let i = 0; i < numChunks; ++i) {
+          const offset = i * maxDataChunkSize;
+          const chunkSize = Math.min(maxDataChunkSize, size - offset);
+          const chunk = data.slice(offset, offset + chunkSize);
+
+          this._encodingTextureChunkCount++;
+          this._updateStatusMessage();
+          encodeDataUrl(chunk).then((chunkData) => {
+            window.postMessage({
+              "action": Actions.CaptureTextureData,
+              id,
+              passId,
+              offset,
+              size,
+              index: i,
+              count: numChunks,
+              chunk: chunkData
+            }, "*");
+            self._encodingTextureChunkCount--;
+            self._updateStatusMessage();
+          }).catch((e) => {
+            console.log("Error encoding texture data:", e);
+          });
+        }
+      }
+
+      _getTextureUtils(device) {
+        if (!device) {
+          return null;
+        }
+        if (!device.__textureUtils) {
+          device.__textureUtils = new TextureUtils(device);
+        }
+        return device.__textureUtils;
+      }
+
+      // Send buffer data associated with a command to the inspector server.
+      // The data is sent in chunks since the message pipe can't handle very
+      // much data at a time.
+      _sendBufferData(commandId, entryIndex, data) {
+        const size = data.length;
+        const numChunks = Math.ceil(size / maxDataChunkSize);
+        const self = this;
+
+        for (let i = 0; i < numChunks; ++i) {
+          const offset = i * maxDataChunkSize;
+          const chunkSize = Math.min(maxDataChunkSize, size - offset);
+          const chunk = data.slice(offset, offset + chunkSize);
+
+          this._encodingBufferChunkCount++;
+          this._updateStatusMessage();
+          encodeDataUrl(chunk).then((chunkData) => {
+            window.postMessage({
+              "action": Actions.CaptureBufferData,
+              commandId,
+              entryIndex,
+              offset,
+              size,
+              index: i,
+              count: numChunks,
+              chunk: chunkData
+            }, "*");
+            self._encodingBufferChunkCount--;
+            self._updateStatusMessage();
+          });
+        }
+      }
+
+      // Buffers associated with a command are recorded and then sent to the inspector server.
+      // The data is sent in chunks since the message pipe can't handle very much data at a time.
+      _sendCapturedBuffers() {
+        const buffers = this._captureTempBuffers;
+        if (buffers.length > 0) {
+          let totalChunks = 0;
+          for (const bufferInfo of buffers) {
+            const size = bufferInfo.tempBuffer.size;
+            const numChunks = Math.ceil(size / maxDataChunkSize);
+            totalChunks += numChunks;
+          }
+
+          window.postMessage({
+            "action": Actions.CaptureBuffers,
+            "count": buffers.length,
+            "chunkCount": totalChunks }, "*");
+        }
+
+        for (const bufferInfo of buffers) {
+          const tempBuffer = bufferInfo.tempBuffer;
+          const commandId = bufferInfo.commandId;
+          const entryIndex = bufferInfo.entryIndex;
+          const self = this;
+          this._mappedBufferCount++;
+          this._updateStatusMessage();
+          tempBuffer.mapAsync(GPUMapMode.READ).then(() => {
+            self._mappedBufferCount--;
+            self._updateStatusMessage();
+            const range = tempBuffer.getMappedRange();
+            const data = new Uint8Array(range);
+            self._sendBufferData(commandId, entryIndex, data);
+            tempBuffer.destroy();
+          });
+        }
+        this._captureTempBuffers.length = 0;
+      }
+
+      // Buffers associated with a command are recorded and then sent to the inspector server.
+      // The data is copied to a temp buffer so that the original buffer can continue to be used
+      // by the page.
+      _recordCaptureBuffers(commandEncoder, buffers) {
+        const device = commandEncoder?.__device;
+        if (!device) {
+          this._captureBuffersCount -= buffers.length;
+          buffers.length = 0;
+          return;
+        }
+
+        for (const bufferInfo of buffers) {
+          const { commandId, entryIndex, buffer, offset, size } = bufferInfo;
+
+          if (buffer.__destroyed) {
+            continue;
+          }
+
+          let tempBuffer = null;
+          this.disableRecording();
+
+          try {
+            tempBuffer = device.createBuffer({
+              size,
+              usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+              label: `BUFFER CAPTURE TEMP [${commandId},${entryIndex}]`
+            });
+
+            commandEncoder.copyBufferToBuffer(buffer, offset, tempBuffer, 0, size);
+
+            this._captureTempBuffers.push({ commandId, entryIndex, tempBuffer });
+            
+          } catch (e) {
+            console.log(e);
+          }
+
+          this.enableRecording();
+        }
+
+        this._captureBuffersCount -= buffers.length;
+        buffers.length = 0;
+      }
+
+      // Copy the texture to a buffer so we can send it to the inspector server.
+      // The texture data is copied to a buffer now, then after the frame has finished
+      // the buffer data is sent to the inspector server.
+      _captureTextureBuffer(device, commandEncoder, texture, passId) {
+        // can't capture canvas texture
+        if (!device) {
+          return;
+        }
+
+        const doSubmit = !commandEncoder;
+        commandEncoder ??= device.createCommandEncoder();
+
+        passId ??= -1;
+
+        const id = texture.__id;
+        let format = texture.format;
+        let formatInfo = format ? TextureFormatInfo[format] : undefined;
+        if (!formatInfo) { // GPUExternalTexture?
+          return;
+        }
+
+        if (formatInfo.isDepthStencil) {
+          this.disableRecording();
+          try {
+            const textureUtils = this._getTextureUtils(device);
+            // depth24plus texture's can't be copied to a buffer,
+            // https://github.com/gpuweb/gpuweb/issues/652,
+            // convert it to a float texture.
+            texture = textureUtils.copyDepthTexture(texture, "r32float", commandEncoder);
+          } catch (e) {
+            this.enableRecording();
+            console.log(e);
+            return;
+          }
+          this.enableRecording();
+          format = texture.format;
+          formatInfo = format ? TextureFormatInfo[format] : undefined;
+          texture.__id = id;
+          this._toDestroy.push(texture); // Destroy the temp texture at the end of the frame
+        } else if (texture.sampleCount > 1) {
+          this.disableRecording();
+          try {
+            const textureUtils = this._getTextureUtils(device);
+            texture = textureUtils.copyMultisampledTexture(texture);
+            texture.__id = id;
+            this._toDestroy.push(texture); // Destroy the temp texture at the end of the frame
+          } catch (e) {
+            this.enableRecording();
+            console.log(e);
+            return;
+          }
+          this.enableRecording();
+        }
+
+        const width = texture.width;
+        const height = texture.height || 1;
+        const depthOrArrayLayers = texture.depthOrArrayLayers || 1;
+        const texelByteSize = formatInfo.bytesPerBlock;
+        const bytesPerRow = (width * texelByteSize + 255) & ~0xff;
+        const rowsPerImage = height;
+        const bufferSize = bytesPerRow * rowsPerImage * depthOrArrayLayers;
+        if (!bufferSize) {
+          return;
+        }
+        const copySize = { width, height, depthOrArrayLayers };
+
+        let tempBuffer = null;
+        try {
+          this.disableRecording();
+
+          tempBuffer = device.createBuffer({
+            size: bufferSize,
+            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+          });
+
+          const aspect = "all";
+
+          commandEncoder.copyTextureToBuffer(
+            { texture, aspect },
+            { buffer: tempBuffer, bytesPerRow, rowsPerImage: height },
+            copySize
+          );
+
+        } catch (e) {
+          console.log(e);
+        }
+
+        if (doSubmit) {
+          device.queue.submit([commandEncoder.finish()]);
+        }
+
+        this.enableRecording();
+
+        if (tempBuffer) {
+          this._captureTexturedBuffers.push({ id, tempBuffer, width, height, depthOrArrayLayers, format, passId });
+          this._updateStatusMessage();
+        }
+      }
+
+      _addCommandData(data) {
+        if (this._captureFrameRequest) {
+          const id = this._frameData.length;
+          this._frameData.push(data);
+          return id;
+        }
+        return -1;
+      }
+
+      // Convert any objects to a string representation that can be sent to the inspector server.
+      _processCommandArgs(object) {
+        if (!object || object.constructor === Number || object.constructor === String || object.constructor === Boolean) {
+          return object;
+        }
+        if (object.__id !== undefined) {
+          return {"__id": object.__id, "__class": object.constructor.name };
+        }
+        if (object instanceof ImageBitmap ||
+          object instanceof ImageData ||
+          object instanceof HTMLImageElement ||
+          object instanceof HTMLCanvasElement ||
+          object instanceof HTMLVideoElement ||
+          object instanceof OffscreenCanvas ||
+          object instanceof VideoFrame) {
+          return `@-1 ${object.constructor.name} ${object.width} ${object.height}`;
+        }
+        if (object instanceof Array || object.buffer !== undefined) {
+          const maxMessageArrayLength = 100;
+          if (object.length > maxMessageArrayLength) {
+            const id = this._addCommandData(object);
+            return `@${id} ${object.constructor.name} ${object.byteLength}`;
+          }
+          const newArray = [];
+          for (const i in object) {
+            newArray[i] = this._processCommandArgs(object[i]);
+          }
+          return newArray;
+        }
+        if (object instanceof ArrayBuffer) {
+          const id = this._addCommandData(object);
+          return `@${id} ${object.constructor.name} ${object.byteLength}`;
+        }
+        if (object instanceof Object) {
+          const newObject = {};
+          for (const key in object) {
+            newObject[key] = this._processCommandArgs(object[key]);
+          }
+          return newObject;
+        }
+        return object;
+      }
+    }
+
+    new WebGPUInspector();
+  })();
+
+})();
 //# sourceMappingURL=webgpu_inspector.js.map
