@@ -135,6 +135,8 @@ export class RecorderData {
     return this._objectMap.get(id);
   }
 
+  // if commandIndex is provided, it is the last command to be executed
+  // on the given frameIndex.
   async executeCommands(canvas, frameIndex, commandIndex) {
     commandIndex ??= -1;
 
@@ -161,6 +163,7 @@ export class RecorderData {
 
     const commandEncoders = new Set();
     const passes = new Set();
+    const commandBuffers = new Set();
     let debugGroups = 0;
     let lastPass = null;
 
@@ -169,6 +172,9 @@ export class RecorderData {
       ci = 0;
       const hasFrameCommandIndex = hasCommandIndex && fi === frameIndex;
       for (const command of frame) {
+        // If the current command is after the requested last command to be executed,
+        // then skip the command. We do want to close the current render or compute pass,
+        // debug group, and commandEncoder, so we do want to execute those commands.
         if (hasFrameCommandIndex && ci > commandIndex) {
           if (passes.size > 0 && command.method === "end") {
             await this._executeCommand(command, fi, ci);
@@ -178,19 +184,37 @@ export class RecorderData {
             }
             lastPass = object;
           }
+
           if (commandEncoders.size > 0 && command.method === "finish") {
             await this._executeCommand(command, fi, ci);
             const object = this._getObject(command.object);
             if (object) {
               commandEncoders.delete(object);
             }
+            commandBuffers.add(command.result);
           }
+
           if (command.method === "popDebugGroup" && debugGroups > 0) {
             this._executeCommand(command, fi, ci);
             debugGroups--;
           }
+
           if (command.method === "submit") {
-            await this._executeCommand(command, fi, ci);
+            let found = false;
+            if (commandBuffers.size > 0) {
+              for (const cb of command.args[0]) {
+                for (const commandBuffer of commandBuffers) {
+                  if (commandBuffer === cb.__id) {
+                    found = true;
+                    commandBuffers.delete(commandBuffer);
+                    break;
+                  }
+                }
+              }
+              if (found) {
+                await this._executeCommand(command, fi, ci);
+              }
+            }
           }
 
           ci++;
@@ -227,7 +251,9 @@ export class RecorderData {
 
     if (lastPass instanceof GPURenderPassEncoder) {
       if (lastPass.__descriptor.colorAttachments.length > 0) {
-        const colorOutput0 = this._getObject(lastPass.__descriptor.colorAttachments[0].view?.__id);
+        const colorOutput0 = this._getObject(
+          lastPass.__descriptor.colorAttachments[0].resolveTarget?.__id ??
+          lastPass.__descriptor.colorAttachments[0].view?.__id);
         const colorOutputTexture = colorOutput0.texture;
         if (!colorOutputTexture.isCanvasTexture) {
           const canvasTexture = this._context.getCurrentTexture();
@@ -320,6 +346,8 @@ export class RecorderData {
     } else if (method === "__getQueue") {
       this._objectMap.set(command.result, object.queue);
       return;
+    } else if (method === "createTexture") {
+      args[0].usage |= GPUTextureUsage.TEXTURE_BINDING;
     }
     
     if (command.async) {

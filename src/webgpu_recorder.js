@@ -496,12 +496,16 @@ class WebGPURecorder {
       const size = bytesPerRow * rowsPerImage;
       const copySize = args[2];
 
+      this._gpuWrapper.skipRecord++;
+
       const device = queue.__device;
       const buffer = device.createBuffer({ size, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
 
       const commandEncoder = device.createCommandEncoder();
       commandEncoder.copyTextureToBuffer({ texture: args[1].texture }, { buffer, bytesPerRow, rowsPerImage }, copySize);
       queue.submit([commandEncoder.finish()]);
+
+      this._gpuWrapper.skipRecord--;
 
       let cacheIndex = -1;
       try {
@@ -515,12 +519,14 @@ class WebGPURecorder {
 
       const self = this;
       const promise = new Promise((resolve) => {
+        self._gpuWrapper.skipRecord++;
         buffer.mapAsync(GPUMapMode.READ).then(() => {
           const range = buffer.getMappedRange();
           const bufferData = new Uint8Array(range);
           self._replaceDataCache(cacheIndex, bufferData, 0, bufferData.length);
           resolve();
         });
+        this._gpuWrapper.skipRecord--;
       });
       this._externalImageBufferPromises.push(promise);
     } else {
@@ -1118,6 +1124,7 @@ class GPUObjectWrapper {
     this.onPostCall = null;
     this.onPromise = null;
     this.onPromiseResolve = null;
+    this.skipRecord = 0;
     this._wrapGPUTypes();
   }
 
@@ -1220,35 +1227,39 @@ class GPUObjectWrapper {
 
       const args = [...arguments];
 
-      // Allow the arguments to be modified before the method is called.
-      if (self.onPreCall) {
-        self.onPreCall(object, method, args);
+      if (self.skipRecord == 0) {
+        // Allow the arguments to be modified before the method is called.
+        if (self.onPreCall) {
+          self.onPreCall(object, method, args);
+        }
       }
 
       // Call the original method
       const result = origMethod.call(object, ...args);
 
       // If it was an async method it will have returned a Promise
-      if (result instanceof Promise) {
-        const id = self._idGenerator.getNextId(object);
-        if (self.onPromise) {
-          self.onPromise(object, method, args, id);
-        }
-        const promise = result;
-        const wrappedPromise = new Promise((resolve) => {
-          promise.then((result) => {
-            if (self.onPromiseResolve) {
-              self.onPromiseResolve(object, method, args, id, result);
-            }
-            resolve(result);
+      if (self.skipRecord == 0) {
+        if (result instanceof Promise) {
+          const id = self._idGenerator.getNextId(object);
+          if (self.onPromise) {
+            self.onPromise(object, method, args, id);
+          }
+          const promise = result;
+          const wrappedPromise = new Promise((resolve) => {
+            promise.then((result) => {
+              if (self.onPromiseResolve) {
+                self.onPromiseResolve(object, method, args, id, result);
+              }
+              resolve(result);
+            });
           });
-        });
-        return wrappedPromise;
-      }
+          return wrappedPromise;
+        }
 
-      // Otherwise it"s a synchronous method
-      if (self.onPostCall) {
-        self.onPostCall(object, method, args, result);
+        // Otherwise it"s a synchronous method
+        if (self.onPostCall) {
+          self.onPostCall(object, method, args, result);
+        }
       }
 
       return result;
