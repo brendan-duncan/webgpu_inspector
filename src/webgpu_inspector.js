@@ -1135,7 +1135,7 @@ import { alignTo } from "./utils/align.js";
         newArgs.push(binding);
         newArgs.push(bindGroup);
         // handle dynamic offsets data, converting buffer views to Uint32Array
-        if (a.length > 2) {
+        if (a.length > 2 && a[2]?.length) {
           const array = a[2];
           if (array.length > 0) {
             if (array instanceof Uint32Array) {
