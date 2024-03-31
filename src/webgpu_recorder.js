@@ -64,7 +64,7 @@ class WebGPURecorder {
     const __createElement = document.createElement;
     document.createElement = function (type) {
       const element = __createElement.call(document, type);
-      if (type == "canvas") {
+      if (type === "canvas") {
         self._wrapCanvas(element);
       }
       return element;
@@ -108,7 +108,7 @@ class WebGPURecorder {
   }
 
   _frameEnd() {
-    if (this._frameIndex == this.config.maxFrameCount) {
+    if (this._frameIndex === this.config.maxFrameCount) {
       this.generateOutput();
     }
   }
@@ -152,11 +152,11 @@ class WebGPURecorder {
           let dataObj = this._dataCacheObjects[di];
           if (dataObj) {
             for (let li = dataObj.length - 1; li >= 0; --li) {
-              if (dataObj[li].__id == obj) {
+              if (dataObj[li].__id === obj) {
                 dataObj.splice(li, 1);
               }
             }
-            if (dataObj.length == 0) {
+            if (dataObj.length === 0) {
               this._arrayCache[di].length = 0;
               this._arrayCache[di].type = "Uint8Array";
               this._arrayCache[di].array = new Uint8Array(0);
@@ -351,7 +351,7 @@ class WebGPURecorder {
     let __getContext = c.getContext;
     c.getContext = function (a1, a2) {
       let ret = __getContext.call(c, a1, a2);
-      if (a1 == "webgpu") {
+      if (a1 === "webgpu") {
         if (ret) {
           self._wrapContext(ret);
         }
@@ -474,7 +474,7 @@ class WebGPURecorder {
       return;
     }
 
-    if (method == "copyExternalImageToTexture") {
+    if (method === "copyExternalImageToTexture") {
       const queue = object;
 
       // copyExternalImageToTexture uses ImageBitmap (or canvas or offscreenCanvas) as
@@ -533,14 +533,14 @@ class WebGPURecorder {
       this._recordCommand(false, object, method, result, args);
     }
 
-    if (method == "getMappedRange") {
+    if (method === "getMappedRange") {
       // Keep track of the mapped ranges for the buffer object. The recording will set their
       // data when unmap is called.
       if (!object.__mappedRanges) {
         object.__mappedRanges = [];
       }
       object.__mappedRanges.push(result);
-    } else if (method == "submit") {
+    } else if (method === "submit") {
       // just to give the file some structure
       this._recordLine("", null);
     }
@@ -549,8 +549,14 @@ class WebGPURecorder {
   _stringifyObject(method, object, toJson) {
     let s = "";
     let first = true;
-    for (let key in object) {
+    for (const key in object) {
       let value = object[key];
+      if (key.startsWith("_")) {
+        continue;
+      }
+      if (value instanceof Function) {
+        continue;
+      }
       if (value === undefined) {
         continue;
       }
@@ -559,24 +565,24 @@ class WebGPURecorder {
       }
       first = false;
       s += `"${key}":`;
-      if (method == "requestDevice") {
-        if (key == "requiredFeatures") {
+      if (method === "requestDevice") {
+        if (key === "requiredFeatures") {
           s += "requiredFeatures";
           continue;
-        } else if (key == "requiredLimits") {
+        } else if (key === "requiredLimits") {
           s += "requiredLimits";
           continue;
         }
       }
-      if (method == "createBindGroup") {
-        if (key == "resource") {
+      if (method === "createBindGroup") {
+        if (key === "resource") {
           if (this._unusedTextureViews.has(value.__id)) {
             const texture = this._unusedTextureViews.get(value.__id);
             this._unusedTextures.delete(texture);
           }
         }
-      } else if (method == "beginRenderPass") {
-        if (key == "colorAttachments") {
+      } else if (method === "beginRenderPass") {
+        if (key === "colorAttachments") {
           for (const desc of value) {
             if (desc["view"]) {
               const view = desc["view"];
@@ -609,7 +615,7 @@ class WebGPURecorder {
         } else {
           s += `D[${value.__data}]`;
         }
-      } else if (value.constructor == Array) {
+      } else if (value.constructor === Array) {
         s += this._stringifyArray(value, toJson);
       } else if (typeof (value) === "object") {
         s += this._stringifyObject(method, value, toJson);
@@ -676,7 +682,7 @@ class WebGPURecorder {
 
       for (let ai = 0; ai < self._arrayCache.length; ++ai) {
         const c = self._arrayCache[ai];
-        if (c.length == length) {
+        if (c.length === length) {
           if (this._compareCacheData(this._arrayCache[ai].array, view)) {
             cacheIndex = ai;
             break;
@@ -684,7 +690,7 @@ class WebGPURecorder {
         }
       }
 
-      if (cacheIndex == -1) {
+      if (cacheIndex === -1) {
         cacheIndex = self._arrayCache.length;
         const arrayCopy = Uint8Array.from(view);
         self._arrayCache.push({
@@ -719,14 +725,14 @@ class WebGPURecorder {
     // In order to capture buffer data, we need to know the offset and size of the data,
     // which are arguments of specific methods. So we need to special case those methods to
     // properly capture the buffer data passed to them.
-    if (method == "writeBuffer") {
+    if (method === "writeBuffer") {
       const buffer = args[2];
       const offset = args[3];
       const size = args[4];
       const cacheIndex = this._getDataCache(buffer, offset, size, buffer);
       args[2] = { __data: cacheIndex };
       args[3] = 0;
-    } else if (method == "writeTexture") {
+    } else if (method === "writeTexture") {
       const texture = args[0].texture;
       const buffer = args[1];
       const bytesPerRow = args[2].bytesPerRow;
@@ -746,21 +752,21 @@ class WebGPURecorder {
       const cacheIndex = this._getDataCache(new Uint8Array(buffer.buffer || buffer, buffer.byteOffset, buffer.byteLength), offset, size, texture);
       args[1] = { __data: cacheIndex };
       args[2] = { offset: 0, bytesPerRow: args[2].bytesPerRow, rowsPerImage: args[2].rowsPerImage };
-    } else if (method == "setBindGroup") {
-      if (args.length == 5) {
+    } else if (method === "setBindGroup") {
+      if (args.length === 5) {
         const buffer = args[2];
         const offset = args[3];
         const size = args[4];
         const offsets = this._getDataCache(buffer, offset, size, buffer);
         args[2] = { __data: offsets };
         args.length = 3;
-      } else if (args.length == 3 && args[2]?.length) {
+      } else if (args.length === 3 && args[2]?.length) {
         const buffer = args[2];
         const offsets = this._getDataCache(buffer, 0, buffer.length, buffer);
         args[2] = { __data: offsets };
         args.length = 3;
       }
-    } else if (method == "createBindGroup") {
+    } else if (method === "createBindGroup") {
       if (args[0]["entries"]) {
         const entries = args[0]["entries"];
         for (const entry of entries) {
@@ -788,16 +794,16 @@ class WebGPURecorder {
       this._unusedTextures.delete(texture.__id);
       const buffer = args[1].buffer;
       this._unusedBuffers.delete(buffer.__id);
-    } else if (method == "copyBufferToBuffer") {
+    } else if (method === "copyBufferToBuffer") {
       this._unusedBuffers.delete(args[0].__id);
       this._unusedBuffers.delete(args[2].__id);
-    } else if (method == "setVertexBuffer") {
+    } else if (method === "setVertexBuffer") {
       const buffer = args[1];
       this._unusedBuffers.delete(buffer.__id);
-    } else if (method == "setIndexBuffer") {
+    } else if (method === "setIndexBuffer") {
       const buffer = args[0];
       this._unusedBuffers.delete(buffer.__id);
-    } else if (method == "beginRenderPass") {
+    } else if (method === "beginRenderPass") {
       if (args[0]["colorAttachments"]) {
         const value = args[0]["colorAttachments"];
         for (const desc of value) {
@@ -827,7 +833,7 @@ class WebGPURecorder {
   }
 
   _stringifyArgs(method, args, toJson) {
-    if (args.length == 0 || (args.length == 1 && args[0] === undefined)) {
+    if (args.length === 0 || (args.length === 1 && args[0] === undefined)) {
       return "";
     }
 
@@ -872,7 +878,7 @@ class WebGPURecorder {
 
   _recordLine(line, object) {
     if (this._isRecording) {
-      if (this._frameIndex == -1) {
+      if (this._frameIndex === -1) {
         this._initializeCommands.push(line);
         this._initializeObjects.push(object);
       } else {
@@ -902,7 +908,7 @@ class WebGPURecorder {
     let obj = object;
     const hasAdapter = !!this._adapter;
 
-    if (!hasAdapter && method == "requestAdapter") {
+    if (!hasAdapter && method === "requestAdapter") {
       this._adapter = result;
     } else if (method === "createTexture") {
       this._unusedTextures.add(result.__id);
@@ -914,13 +920,13 @@ class WebGPURecorder {
     } else if (method === "createBuffer") {
       this._unusedBuffers.add(result.__id);
       obj = result;
-    } else if (method == "writeBuffer") {
+    } else if (method === "writeBuffer") {
       obj = args[0];
     }
 
     const newArgs = `[${this._stringifyArgs(method, args, true)}]`;
     const commandObj = { "object": this._getObjectVariable(object), method, "result": this._getObjectVariable(result), args: newArgs, async };
-    if (this._frameIndex == -1) {
+    if (this._frameIndex === -1) {
       this._initializeCommandObjects.push(commandObj);
       this.__initializeObjects.push(obj);
     } else {
@@ -934,7 +940,7 @@ class WebGPURecorder {
 
     // Add a blank line before render and compute passes to make them easier to
     // identify in the recording file.
-    if (method == "beginRenderPass" || method == "beginComputePass") {
+    if (method === "beginRenderPass" || method === "beginComputePass") {
       this._recordLine("\n", null);
     }
 
@@ -946,11 +952,11 @@ class WebGPURecorder {
 
     // Add a blank line after ending render and compute passes to make them easier
     // to identify in the recording file.
-    if (method == "end") {
+    if (method === "end") {
       this._recordLine("\n", null);
     }
 
-    if (!hasAdapter && method == "requestAdapter") {
+    if (!hasAdapter && method === "requestAdapter") {
       const adapter = this._getObjectVariable(result);
       this._recordLine(`const requiredFeatures = [];
         for (const x of ${adapter}.features) {
@@ -1229,7 +1235,7 @@ class GPUObjectWrapper {
 
       const args = [...arguments];
 
-      if (self.skipRecord == 0) {
+      if (self.skipRecord === 0) {
         // Allow the arguments to be modified before the method is called.
         if (self.onPreCall) {
           self.onPreCall(object, method, args);
@@ -1240,7 +1246,7 @@ class GPUObjectWrapper {
       const result = origMethod.call(object, ...args);
 
       // If it was an async method it will have returned a Promise
-      if (self.skipRecord == 0) {
+      if (self.skipRecord === 0) {
         if (result instanceof Promise) {
           const id = self._idGenerator.getNextId(object);
           if (self.onPromise) {
@@ -1285,7 +1291,7 @@ function main() {
         "export": filename,
         "removeUnusedResources": !!removeUnusedResources,
         "messageRecording": !!messageRecording,
-        "download": download === null ? true : download == "false" ? false : download === "true" ? true : download
+        "download": download === null ? true : download === "false" ? false : download === "true" ? true : download
       });
     }
   }

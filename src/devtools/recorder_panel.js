@@ -97,8 +97,10 @@ export class RecorderPanel {
     this._captureFrameResults(grp.body, this._recorderData.initiazeCommands, canvas, -1);
 
     for (let i = 0; i < this._recorderData.frames.length; ++i) {
-      grp = new Collapsable(commands, { label: `Frame ${i}`, collapsed: true });
-      this._captureFrameResults(grp.body, this._recorderData.frames[i], canvas, i);
+      if (this._recorderData.frames[i]) {
+        grp = new Collapsable(commands, { label: `Frame ${i}`, collapsed: true });
+        this._captureFrameResults(grp.body, this._recorderData.frames[i], canvas, i);
+      }
     }
 
     this._recorderData.executeCommands(canvas, lastFrame);
@@ -131,6 +133,10 @@ export class RecorderPanel {
 
   _captureFrameResults(_frameContents, commands, canvas, frameIndex) {
     const self = this;
+
+    if (commands === undefined) {
+      return;
+    }
 
     this._passEncoderCommands = new Map();
 

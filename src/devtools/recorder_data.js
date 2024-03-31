@@ -169,6 +169,9 @@ export class RecorderData {
 
     for (let fi = 0; fi <= frameIndex; ++fi) {
       const frame = this.frames[fi];
+      if (!frame) {
+        continue;
+      }
       ci = 0;
       const hasFrameCommandIndex = hasCommandIndex && fi === frameIndex;
       for (const command of frame) {
