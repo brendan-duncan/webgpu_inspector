@@ -7,7 +7,6 @@ export const GPUObjectTypes = new Set([
   GPUBuffer,
   GPUTexture,
   GPUTextureView,
-  //GPUExternalTexture,
   GPUSampler,
   GPUBindGroupLayout,
   GPUBindGroup,
@@ -42,9 +41,6 @@ export const GPUCreateMethods = new Set([
   "createRenderBundleEncoder",
   "createQuerySet",
   "createView",
-
-  //"beginRenderPass",
-  //"setBindGroup",
 ]);
 
 export class GPUObjectWrapper {

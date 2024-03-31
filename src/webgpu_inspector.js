@@ -502,6 +502,9 @@ import { alignTo } from "./utils/align.js";
         case "createComputePipelineAsync":
           this._sendAddObjectMessage(id, object.__id, "ComputePipeline", this._stringifyDescriptor(args[0]), stacktrace, true);
           break;
+        default:
+          this._postMethodCall(object, method, args, id, stacktrace);
+          break;
       }
     }
 

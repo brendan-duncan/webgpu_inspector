@@ -179,15 +179,15 @@ async function main() {
   });
 
   async function frame() {
-    /*const memoryLeakBuffer = device.createBuffer({
+    const memoryLeakBuffer = device.createBuffer({
       label: "memory leak buffer",
       size: 16,
       usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.MAP_WRITE,
     });
 
     await memoryLeakBuffer.mapAsync(GPUMapMode.WRITE);
-    new Float32Array(memoryLeakBuffer.getMappedRange()).set([110, 220, 330, 440]);
-    memoryLeakBuffer.unmap();*/
+    //new Float32Array(memoryLeakBuffer.getMappedRange()).set([110, 220, 330, 440]);
+    memoryLeakBuffer.unmap();
 
     const commandEncoder = device.createCommandEncoder();
 

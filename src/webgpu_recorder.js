@@ -754,7 +754,7 @@ class WebGPURecorder {
         const offsets = this._getDataCache(buffer, offset, size, buffer);
         args[2] = { __data: offsets };
         args.length = 3;
-      } else if (args.length == 3) {
+      } else if (args.length == 3 && args[2]?.length) {
         const buffer = args[2];
         const offsets = this._getDataCache(buffer, 0, buffer.length, buffer);
         args[2] = { __data: offsets };
