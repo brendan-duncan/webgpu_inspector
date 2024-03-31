@@ -319,7 +319,6 @@ class WebGPURecorder {
 
       for (frame = 0; frame < this._frameCommandObjects.length; ++frame) {
         const commands = this._frameCommandObjects[frame];
-        console.log("    @@@@ Frame Commands", frame, commands.length);
         for (let j = 0; j < commands.length; ++j) {
           const command = commands[j];
           window.postMessage({ action, command, commandIndex: j, frame, index, count });
