@@ -79,10 +79,10 @@ class WebGPURecorder {
     // duration.
     const __requestAnimationFrame = window.requestAnimationFrame;
     window.requestAnimationFrame = function (cb) {
-      function callback() {
-        self._frameStart();
-        cb(performance.now());
-        self._frameEnd();
+      function callback(timestamp) {
+        self._frameStart(timestamp);
+        cb(timestamp);
+        self._frameEnd(timestamp);
       }
       __requestAnimationFrame(callback);
     };
@@ -319,6 +319,7 @@ class WebGPURecorder {
 
       for (frame = 0; frame < this._frameCommandObjects.length; ++frame) {
         const commands = this._frameCommandObjects[frame];
+        console.log("    @@@@ Frame Commands", frame, commands.length);
         for (let j = 0; j < commands.length; ++j) {
           const command = commands[j];
           window.postMessage({ action, command, commandIndex: j, frame, index, count });
@@ -836,7 +837,9 @@ class WebGPURecorder {
     const argStrings = [];
     for (const a of args) {
       if (a === undefined) {
-        argStrings.push("undefined");
+        if (!toJson) {
+          argStrings.push("undefined");
+        }
       } else if (a === null) {
         argStrings.push("null");
       } else if (a.__data !== undefined) {
