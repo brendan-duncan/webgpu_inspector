@@ -140,12 +140,23 @@ import { alignTo } from "./utils/align.js";
       // Wrap requestAnimationFrame so it can keep track of framerates and frame captures.
       // This requires that the page uses requestAnimationFrame to drive the rendering loop.
       const __requestAnimationFrame = window.requestAnimationFrame;
-      window.requestAnimationFrame = function (cb) {
-        function callback() {
-          const time = performance.now();
-          self._frameStart(time);
-          cb(time);
-          self._frameEnd();
+      this._currentFrameTime = 0.0;
+      window.requestAnimationFrame = async function (cb) {
+        function callback(timestamp) {
+          if (!self._currentFrameTime) {
+            self._currentFrameTime = timestamp;
+            self._frameStart(timestamp);
+            const result = cb(timestamp);
+            if (result instanceof Promise) {
+              result.then(() => {
+                self._frameEnd(timestamp);
+                self._currentFrameTime = 0.0;
+              });
+            } else {
+              self._frameEnd(timestamp);
+              self._currentFrameTime = 0.0;
+            }
+          }
         }
         __requestAnimationFrame(callback);
       };
@@ -891,7 +902,7 @@ import { alignTo } from "./utils/align.js";
       this._inspectingStatusFrame.textContent = `Frame: ${this._frameIndex} : ${this._frameRate.average.toFixed(2)}ms`;
     }
 
-    _frameEnd() {
+    _frameEnd(time) {
       if (this._captureFrameCommands.length) {
         const maxFrameCount = 2000;
         const batches = Math.ceil(this._captureFrameCommands.length / maxFrameCount);

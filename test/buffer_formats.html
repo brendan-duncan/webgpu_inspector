@@ -178,7 +178,7 @@ async function main() {
     ],
   });
 
-  async function frame() {
+  async function frame(timestamp) {
     const memoryLeakBuffer = device.createBuffer({
       label: "memory leak buffer",
       size: 16,
@@ -186,7 +186,7 @@ async function main() {
     });
 
     await memoryLeakBuffer.mapAsync(GPUMapMode.WRITE);
-    //new Float32Array(memoryLeakBuffer.getMappedRange()).set([110, 220, 330, 440]);
+    new Float32Array(memoryLeakBuffer.getMappedRange()).set([110, 220, 330, 440]);
     memoryLeakBuffer.unmap();
 
     const commandEncoder = device.createCommandEncoder();
