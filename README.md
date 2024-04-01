@@ -16,7 +16,7 @@
 
 ## Introduction
 
-**Version: 0.1.0**
+**Version: 0.1.1**
 
 Inspection, profiling, and graphics debugging browser extension for WebGPU. It can be installed from the [Chrome Web Store](https://chromewebstore.google.com/detail/webgpu-inspector/holcbbnljhkpkjkhgkagjkhhpeochfal), or from [source](#from-source).
 
