@@ -49,23 +49,25 @@ import { alignTo } from "./utils/align.js";
         return;
       }
 
-      const statusContainer = document.createElement("div");
-      statusContainer.style = "position: absolute; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt;";
-      document.body.insertBefore(statusContainer, document.body.firstChild);
+      if (document.body) {
+        const statusContainer = document.createElement("div");
+        statusContainer.style = "position: absolute; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt;";
+        document.body.insertBefore(statusContainer, document.body.firstChild);
 
-      this._inspectingStatus = document.createElement("div");
-      this._inspectingStatus.title = "WebGPU Inspector Running";
-      this._inspectingStatus.style = "height: 10px; width: 10px; display: inline-block; margin-right: 5px; background-color: #ff0; border-radius: 50%; border: 1px solid #000; box-shadow: inset -4px -4px 4px -3px rgb(255,100,0), 2px 2px 3px rgba(0,0,0,0.8);";
-      statusContainer.appendChild(this._inspectingStatus);
+        this._inspectingStatus = document.createElement("div");
+        this._inspectingStatus.title = "WebGPU Inspector Running";
+        this._inspectingStatus.style = "height: 10px; width: 10px; display: inline-block; margin-right: 5px; background-color: #ff0; border-radius: 50%; border: 1px solid #000; box-shadow: inset -4px -4px 4px -3px rgb(255,100,0), 2px 2px 3px rgba(0,0,0,0.8);";
+        statusContainer.appendChild(this._inspectingStatus);
 
-      this._inspectingStatusFrame = document.createElement("div");
-      this._inspectingStatusFrame.style = "display: inline-block;";
-      this._inspectingStatusFrame.textContent = "Frame: 0";
-      statusContainer.appendChild(this._inspectingStatusFrame);
+        this._inspectingStatusFrame = document.createElement("div");
+        this._inspectingStatusFrame.style = "display: inline-block;";
+        this._inspectingStatusFrame.textContent = "Frame: 0";
+        statusContainer.appendChild(this._inspectingStatusFrame);
 
-      this._inspectingStatusText = document.createElement("div");
-      this._inspectingStatusText.style = "display: inline-block; margin-left: 10px;";
-      statusContainer.appendChild(this._inspectingStatusText);
+        this._inspectingStatusText = document.createElement("div");
+        this._inspectingStatusText.style = "display: inline-block; margin-left: 10px;";
+        statusContainer.appendChild(this._inspectingStatusText);
+      }
 
       this._gpuWrapper = new GPUObjectWrapper(this);
 
@@ -370,18 +372,21 @@ import { alignTo } from "./utils/align.js";
           });
         }
 
-        if (this._captureTempBuffers.length) {
-          this._sendCapturedBuffers();
-        }
+        object.onSubmittedWorkDone().then(() => {
+          this.disableRecording();
+          if (this._captureTempBuffers.length) {
+            this._sendCapturedBuffers();
+          }
+          if (this._captureTexturedBuffers.length) {
+            this._sendCaptureTextureBuffers();
+          }
+          for (const obj of this._toDestroy) {
+            obj.destroy();
+          }
+          this._toDestroy.length = 0;
+          this.enableRecording();
+        });
 
-        if (this._captureTexturedBuffers.length) {
-          this._sendCaptureTextureBuffers();
-        }
-
-        for (const obj of this._toDestroy) {
-          obj.destroy();
-        }
-        this._toDestroy.length = 0;
 
         this.enableRecording();
       }
@@ -1501,7 +1506,6 @@ import { alignTo } from "./utils/align.js";
           commandEncoder.copyBufferToBuffer(buffer, offset, tempBuffer, 0, size);
 
           this._captureTempBuffers.push({ commandId, entryIndex, tempBuffer });
-          
         } catch (e) {
           console.log(e);
         }
