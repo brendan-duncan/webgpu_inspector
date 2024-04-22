@@ -588,7 +588,7 @@ export class InspectPanel {
         new Div(errorsGrp.body, { text: error.message, class: "inspect_info_error" });
 
         const errorRegEx = /.+ :([0-9]+):([0-9]+) error: (.+)/.exec(error.message);
-        if (errorRegEx.length == 4) {
+        if (errorRegEx?.length == 4) {
           const line = errorRegEx[1];
           const message = errorRegEx[3];
           errorLines.push({ line, message });
