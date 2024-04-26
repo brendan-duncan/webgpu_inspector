@@ -81,10 +81,16 @@ class WebGPURecorder {
     window.requestAnimationFrame = function (cb) {
       function callback(timestamp) {
         self._frameStart(timestamp);
-        cb(timestamp);
-        self._frameEnd(timestamp);
+        const result = cb(timestamp);
+        if (result instanceof Promise) {
+          Promise.all([result]).then(() => {
+            self._frameEnd(timestamp);
+          });
+        } else {
+          self._frameEnd(timestamp);
+        }
       }
-      __requestAnimationFrame(callback);
+      return __requestAnimationFrame(callback);
     };
   }
 

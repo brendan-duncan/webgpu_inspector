@@ -143,14 +143,14 @@ import { alignTo } from "./utils/align.js";
       // This requires that the page uses requestAnimationFrame to drive the rendering loop.
       const __requestAnimationFrame = window.requestAnimationFrame;
       this._currentFrameTime = 0.0;
-      window.requestAnimationFrame = async function (cb) {
+      window.requestAnimationFrame = function (cb) {
         function callback(timestamp) {
           if (!self._currentFrameTime) {
             self._currentFrameTime = timestamp;
             self._frameStart(timestamp);
             const result = cb(timestamp);
             if (result instanceof Promise) {
-              result.then(() => {
+              Promise.all([result]).then(() => {
                 self._frameEnd(timestamp);
                 self._currentFrameTime = 0.0;
               });
@@ -160,7 +160,7 @@ import { alignTo } from "./utils/align.js";
             }
           }
         }
-        __requestAnimationFrame(callback);
+        return __requestAnimationFrame(callback);
       };
 
       // Listen for messages from the content-script.
