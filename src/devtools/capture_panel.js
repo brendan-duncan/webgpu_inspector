@@ -95,6 +95,8 @@ export class CapturePanel {
     this._frameImageList = [];
     this._gpuTextureMap = new Map();
     this._passEncoderCommands = new Map();
+    this._pendingCommandBufferData = new Map();
+    this._pendingBufferData = [];
 
     port.addListener((message) => {
       switch (message.action) {
@@ -127,6 +129,15 @@ export class CapturePanel {
           const index = message.index;
           const count = message.count;
           const frame = message.frame;
+          const pendingCommandBuffers = this._pendingCommandBufferData;
+          for (const ci in pendingCommandBuffers) {
+            const cmdData = pendingCommandBuffers[ci];
+            const cmd = commands[ci];
+            for (const m in cmdData) {
+              cmd[m] = cmdData[m];
+            }
+          }
+          this._pendingCommandBufferData.clear();
           for (let i = 0, j = index; i < count; ++i, ++j) {
             self._captureCommands[j] = commands[i];
           }
@@ -166,13 +177,10 @@ export class CapturePanel {
   }
 
   _captureBufferData(id, entryIndex, offset, size, index, count, chunk) {
-    if (id < 0 || id > this._captureCommands.length || id?.constructor !== Number) {
-      return;
-    }
-
-    const command = this._captureCommands[id];
+    let command = this._captureCommands[id];
     if (!command) {
-      return;
+      command = this._pendingCommandBufferData[id] ?? {};
+      this._pendingCommandBufferData[id] = command;
     }
 
     if (!command.bufferData) {
@@ -188,11 +196,11 @@ export class CapturePanel {
       command.dataPending[entryIndex] = true;
     }
 
-    const bufferData = command.bufferData[entryIndex];
-    
+    /*const bufferData = command.bufferData[entryIndex];
     if (bufferData.length != size) {
+      console.log("!!!!!!!!!!!!!!! INVALID BUFFER SIZE", bufferData.length, size);
       return;
-    }
+    }*/
 
     if (!command.loadedDataChunks) {
       command.loadedDataChunks = [];
@@ -212,6 +220,7 @@ export class CapturePanel {
 
     const self = this;
     decodeDataUrl(chunk).then((chunkData) => {
+      const command = self._captureCommands[id] ?? self._pendingCommandBufferData[id];
       self._loadedDataChunks--;
       try {
         command.bufferData[entryIndex].set(chunkData, offset);
@@ -231,6 +240,23 @@ export class CapturePanel {
       }
       command.isBufferDataLoaded[entryIndex] = loaded;
 
+      if (command.isBufferDataLoaded[entryIndex]) {     
+        self._loadingBuffers--;
+        command.loadedDataChunks[entryIndex].length = 0;
+      }
+      self._updateCaptureStatus();
+    }).catch((error) => {
+      console.error(error);
+      self._loadedDataChunks--;
+      command.loadedDataChunks[entryIndex][index] = true;
+      let loaded = true;
+      for (let i = 0; i < count; ++i) {
+        if (!command.loadedDataChunks[entryIndex][i]) {
+          loaded = false;
+          break;
+        }
+      }
+      command.isBufferDataLoaded[entryIndex] = loaded;
       if (command.isBufferDataLoaded[entryIndex]) {     
         self._loadingBuffers--;
         command.loadedDataChunks[entryIndex].length = 0;
@@ -324,6 +350,7 @@ export class CapturePanel {
     contents.html = "";
 
     this._captureCommands = commands;
+
     this.database.capturedObjects.clear();
     this._frameImageList.length = 0;
     this._passEncoderCommands.clear();

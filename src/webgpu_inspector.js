@@ -356,8 +356,9 @@ import { alignTo } from "./utils/align.js";
       if (method === "submit") {
         this.disableRecording();
 
+        const self = this;
+
         if (this._captureTextureRequest.size > 0) {
-          const self = this;
           const commandBuffers = args[0];
           let rendersToCanvas = false;
           for (const commandBuffer of commandBuffers) {
@@ -372,21 +373,28 @@ import { alignTo } from "./utils/align.js";
           });
         }
 
+        const captureBuffers = [...this._captureTempBuffers];
+        this._captureTempBuffers.length = 0;
+
+        const captureTextures = [...this._captureTexturedBuffers];
+        this._captureTexturedBuffers.length = 0;
+
+        const toDestroy = [...this._toDestroy];
+        this._toDestroy.length = 0;
+
         object.onSubmittedWorkDone().then(() => {
-          this.disableRecording();
-          if (this._captureTempBuffers.length) {
-            this._sendCapturedBuffers();
+          self.disableRecording();
+          if (captureBuffers.length) {
+            self._sendCapturedBuffers(captureBuffers);
           }
-          if (this._captureTexturedBuffers.length) {
-            this._sendCaptureTextureBuffers();
+          if (captureTextures.length) {
+            self._sendCaptureTextureBuffers(captureTextures);
           }
-          for (const obj of this._toDestroy) {
+          for (const obj of toDestroy) {
             obj.destroy();
           }
-          this._toDestroy.length = 0;
-          this.enableRecording();
+          self.enableRecording();
         });
-
 
         this.enableRecording();
       }
@@ -1326,14 +1334,14 @@ import { alignTo } from "./utils/align.js";
       }
     }
 
-    _sendCaptureTextureBuffers() {
+    _sendCaptureTextureBuffers(buffers) {
       const textures = [];
-      for (const textureBuffer of this._captureTexturedBuffers) {
+      for (const textureBuffer of buffers) {
         textures.push(textureBuffer.id);
       }
 
       let totalChunks = 0;
-      for (const textureBuffer of this._captureTexturedBuffers) {
+      for (const textureBuffer of buffers) {
         const size = textureBuffer.tempBuffer.size;
         const numChunks = Math.ceil(size / maxDataChunkSize);
         totalChunks += numChunks;
@@ -1342,10 +1350,10 @@ import { alignTo } from "./utils/align.js";
       window.postMessage({
         "action": Actions.CaptureTextureFrames, 
         "chunkCount": totalChunks,
-        "count": this._captureTexturedBuffers.length,
+        "count": buffers.length,
         textures }, "*");
      
-      for (const textureBuffer of this._captureTexturedBuffers) {
+      for (const textureBuffer of buffers) {
         const { id, tempBuffer, passId } = textureBuffer;
 
         this._mappedTextureBufferCount++;
@@ -1361,7 +1369,6 @@ import { alignTo } from "./utils/align.js";
           console.error(e);
         });
       }
-      this._captureTexturedBuffers.length = 0;
       this._updateStatusMessage();
     }
 
@@ -1414,6 +1421,7 @@ import { alignTo } from "./utils/align.js";
       const numChunks = Math.ceil(size / maxDataChunkSize);
       const self = this;
 
+      let count = numChunks;
       for (let i = 0; i < numChunks; ++i) {
         const offset = i * maxDataChunkSize;
         const chunkSize = Math.min(maxDataChunkSize, size - offset);
@@ -1434,14 +1442,15 @@ import { alignTo } from "./utils/align.js";
           }, "*");
           self._encodingBufferChunkCount--;
           self._updateStatusMessage();
+        }).catch((error) => {
+          console.error(error.message);
         });
       }
     }
 
     // Buffers associated with a command are recorded and then sent to the inspector server.
     // The data is sent in chunks since the message pipe can't handle very much data at a time.
-    _sendCapturedBuffers() {
-      const buffers = this._captureTempBuffers;
+    _sendCapturedBuffers(buffers) {
       if (buffers.length > 0) {
         let totalChunks = 0;
         for (const bufferInfo of buffers) {
@@ -1456,6 +1465,7 @@ import { alignTo } from "./utils/align.js";
           "chunkCount": totalChunks }, "*");
       }
 
+      let count = buffers.length;
       for (const bufferInfo of buffers) {
         const tempBuffer = bufferInfo.tempBuffer;
         const commandId = bufferInfo.commandId;
@@ -1470,9 +1480,10 @@ import { alignTo } from "./utils/align.js";
           const data = new Uint8Array(range);
           self._sendBufferData(commandId, entryIndex, data);
           tempBuffer.destroy();
+        }).catch((error) => {
+          console.error(error);
         });
       }
-      this._captureTempBuffers.length = 0;
     }
 
     // Buffers associated with a command are recorded and then sent to the inspector server.
