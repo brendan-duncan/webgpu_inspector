@@ -330,6 +330,9 @@ import { alignTo } from "./utils/align.js";
         // We need to know this so we can capture the canvas texture after the
         // render pass is finished.
         for (const colorAttachment of args[0].colorAttachments) {
+          if (!colorAttachment) {
+            continue;
+          }
           const view = colorAttachment.resolveTarget ?? colorAttachment.view;
           if (view) {
             if (view.__id < 0) {
@@ -1292,6 +1295,9 @@ import { alignTo } from "./utils/align.js";
         if (args[0]?.colorAttachments?.length > 0) {
           result.__captureTextureViews = new Set();
           for (const attachment of args[0].colorAttachments) {
+            if (!attachment) {
+              continue;
+            }
             const captureTextureView = attachment.resolveTarget ?? attachment.view;
             result.__captureTextureViews.add(captureTextureView);
           }

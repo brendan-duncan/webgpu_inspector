@@ -118,6 +118,9 @@ async function main() {
     let commandEncoder = device.createCommandEncoder();
     let commandEncoder2 = device.createCommandEncoder();
 
+    commandEncoder2.pushDebugGroup("frame");
+    commandEncoder2.pushDebugGroup("frame 2");
+
     const canvasTextureView = context.getCurrentTexture().createView();
 
     const passEncoder2 = commandEncoder2.beginRenderPass({
@@ -138,7 +141,10 @@ async function main() {
         },
       ],
     });
+
+    commandEncoder.pushDebugGroup("frame 3");
     passEncoder2.setPipeline(pipeline2);
+    
 
     const passEncoder = commandEncoder.beginRenderPass({
       colorAttachments: [
@@ -161,10 +167,14 @@ async function main() {
     passEncoder.setPipeline(pipeline);
     passEncoder.draw(3);
     passEncoder.end();
+    commandEncoder.popDebugGroup();
     device.queue.submit([commandEncoder.finish()]);
     
     passEncoder2.draw(3);
+    
     passEncoder2.end();
+    commandEncoder2.popDebugGroup();
+    commandEncoder2.popDebugGroup();
     device.queue.submit([commandEncoder2.finish()]);
 
     requestAnimationFrame(frame);

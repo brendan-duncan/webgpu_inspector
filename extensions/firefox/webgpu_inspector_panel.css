@@ -1246,12 +1246,14 @@ ol::-webkit-scrollbar-thumb:hover {
 }
 
 .capture_debugGroup_header {
-  background-color: rgb(26, 72, 110);
+  background-color: rgb(72, 72, 72);
   font-size: 12pt;
   color: #fff;
   padding-left: 10px;
   line-height: 30px;
   border-radius: 5px 5px 0px 0px;
+  border: 1px solid #000;
+  border-bottom: none;
 }
 
 .capture_debugGroup_header:hover {
@@ -1260,11 +1262,37 @@ ol::-webkit-scrollbar-thumb:hover {
 
 .capture_debugGroup {
   padding: 10px;
-  background-color: #115;
+  background-color: rgb(72, 72, 72);
   font-size: 12pt;
   line-height: 20px;
-  border: 1px solid #fff;
-  border-radius: 5px;
+  border: 1px solid #000;
+  border-top: none;
+  border-radius: 0px 0px 5px 5px;
+}
+
+.capture_debugGroup_header2 {
+  background-color: rgb(102, 102, 102);
+  font-size: 12pt;
+  color: #fff;
+  padding-left: 10px;
+  line-height: 30px;
+  border-radius: 5px 5px 0px 0px;
+  border: 1px solid #000;
+  border-bottom: none;
+}
+
+.capture_debugGroup_header2:hover {
+  box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.8) inset;
+}
+
+.capture_debugGroup2 {
+  padding: 10px;
+  background-color: rgb(102, 102, 102);
+  font-size: 12pt;
+  line-height: 20px;
+  border: 1px solid #000;
+  border-top: none;
+  border-radius: 0px 0px 5px 5px;
 }
 
 .capture_commandInfo {

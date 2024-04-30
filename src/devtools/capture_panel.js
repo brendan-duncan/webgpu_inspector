@@ -391,6 +391,8 @@ export class CapturePanel {
 
     const passEncoderMap = new Map();
 
+    let nestedDebugGroup = 0;
+
     // Pass index is based on end, not begin, so we need to prepare the pass index map first.
     let renderPassIndex = 0;
     let computePassIndex = 0;
@@ -554,7 +556,8 @@ export class CapturePanel {
               currentBlock.remove();
             }
             currentBlock = new Div(debugGroup, { class: "capture_renderpass", style: "margin-top: 5px;" });
-            const header = new Div(currentBlock, { id: `RenderPass_${passIndex}`, class: "capture_renderpass_header" });
+            
+            const header = new Div(currentBlock, { id: `RenderPass_${passIndex}`, class: "capture_renderpass_header", style: "display: none;" });
             const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
             new Span(header, { text: `Render Pass ${passIndex}` });
             const extra = new Span(header, { style: "margin-left: 10px;" });
@@ -741,12 +744,19 @@ export class CapturePanel {
       }
 
       if (method === "pushDebugGroup") {
-        const header = new Div(debugGroup, { id: `DebugGroup_${debugGroupIndex}`, class: "capture_debugGroup_header" });
+        nestedDebugGroup++;
+        const grpClass = nestedDebugGroup & 1 ? "capture_debugGroup" : "capture_debugGroup2";
+        const hdrClass = nestedDebugGroup & 1 ? "capture_debugGroup_header" : "capture_debugGroup_header2";
+
+        const header = new Div(debugGroup, { id: `DebugGroup_${debugGroupIndex}`, class: hdrClass });
         const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
         new Span(header, { text: `${args[0]}` });
         const extra = new Span(header, { style: "margin-left: 10px;" });
 
-        const grp = new Div(debugGroup, { class: "capture_debugGroup" });
+        
+        
+
+        const grp = new Div(debugGroup, { class: grpClass });
         debugGroupStack.push(grp);
         debugGroupIndex++;
         debugGroup = grp;
@@ -764,6 +774,10 @@ export class CapturePanel {
           currentBlock.remove();
         }
         currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
+      }
+
+      if (method == "popDebugGroup") {
+        nestedDebugGroup--;
       }
 
       if (method === "end") {
