@@ -748,13 +748,13 @@ export class CapturePanel {
         const hdrClass = nestedDebugGroup & 1 ? "capture_debugGroup_header" : "capture_debugGroup_header2";
 
         const colors = [
-          ["rgba(255, 62, 64, 1)", "rgba(211, 51, 53, 1)", "#fff"],
+          ["rgba(245, 148, 149, 1)", "rgba(203, 126, 127, 1)", "#fff"],
           ["rgba(255, 192, 67, 1)", "rgba(194, 146, 51, 1)", "#000"],
-          ["rgba(142, 255, 67, 1)", "rgba(110, 197, 52, 1)", "#555"],
-          ["rgba(76, 255, 255, 1)", "rgba(60, 201, 201, 1)", "#555"],
-          ["rgba(58, 210, 255, 1)", "rgba(46, 168, 204, 1)", "#555"],
-          ["rgba(223, 65, 255, 1)", "rgba(169, 49, 193, 1)", "#eee"],
-          ["rgba(83, 255, 140, 1)", "rgba(63, 193, 106, 1)", "#555"],
+          ["rgba(203, 245, 174, 1)", "rgba(146, 184, 120, 1)", "#555"],
+          ["rgba(196, 255, 255, 1)", "rgba(167, 205, 205, 1)", "#555"],
+          ["rgba(243, 184, 255, 1)", "rgba(178, 162, 181, 1)", "#000"],
+          //["rgba(223, 65, 255, 1)", "rgba(169, 49, 193, 1)", "#eee"],
+          //["rgba(83, 255, 140, 1)", "rgba(63, 193, 106, 1)", "#555"],
         ];
 
         const header = new Div(debugGroup, { id: `DebugGroup_${debugGroupIndex}`, class: hdrClass });
