@@ -1253,7 +1253,7 @@ ol::-webkit-scrollbar-thumb:hover {
   line-height: 30px;
   border-radius: 5px 5px 0px 0px;
   border: 1px solid #000;
-  border-bottom: none;
+  /*border-bottom: none;*/
 }
 
 .capture_debugGroup_header:hover {
@@ -1278,7 +1278,7 @@ ol::-webkit-scrollbar-thumb:hover {
   line-height: 30px;
   border-radius: 5px 5px 0px 0px;
   border: 1px solid #000;
-  border-bottom: none;
+  /*border-bottom: none;*/
 }
 
 .capture_debugGroup_header2:hover {

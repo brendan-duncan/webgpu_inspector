@@ -744,19 +744,32 @@ export class CapturePanel {
       }
 
       if (method === "pushDebugGroup") {
-        nestedDebugGroup++;
         const grpClass = nestedDebugGroup & 1 ? "capture_debugGroup" : "capture_debugGroup2";
         const hdrClass = nestedDebugGroup & 1 ? "capture_debugGroup_header" : "capture_debugGroup_header2";
 
+        const colors = [
+          ["rgba(255, 62, 64, 1)", "rgba(211, 51, 53, 1)", "#fff"],
+          ["rgba(255, 192, 67, 1)", "rgba(194, 146, 51, 1)", "#000"],
+          ["rgba(142, 255, 67, 1)", "rgba(110, 197, 52, 1)", "#555"],
+          ["rgba(76, 255, 255, 1)", "rgba(60, 201, 201, 1)", "#555"],
+          ["rgba(58, 210, 255, 1)", "rgba(46, 168, 204, 1)", "#555"],
+          ["rgba(223, 65, 255, 1)", "rgba(169, 49, 193, 1)", "#eee"],
+          ["rgba(83, 255, 140, 1)", "rgba(63, 193, 106, 1)", "#555"],
+        ];
+
         const header = new Div(debugGroup, { id: `DebugGroup_${debugGroupIndex}`, class: hdrClass });
+        header.style.backgroundColor = colors[nestedDebugGroup % colors.length][0];
+        header.style.color = colors[nestedDebugGroup % colors.length][2];
+
         const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
         new Span(header, { text: `${args[0]}` });
         const extra = new Span(header, { style: "margin-left: 10px;" });
 
-        
-        
-
         const grp = new Div(debugGroup, { class: grpClass });
+        grp.style.backgroundColor = colors[nestedDebugGroup % colors.length][1];
+
+        nestedDebugGroup++;
+
         debugGroupStack.push(grp);
         debugGroupIndex++;
         debugGroup = grp;
