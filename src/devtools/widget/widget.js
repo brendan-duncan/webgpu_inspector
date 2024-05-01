@@ -263,7 +263,7 @@ export class Widget {
    * Remove all children from this widget.
    */
   removeAllChildren() {
-    for (const child in this.children) {
+    for (const child of this.children) {
       child._parent = null;
     }
     this.children.length = 0;

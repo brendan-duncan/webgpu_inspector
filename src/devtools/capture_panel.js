@@ -1023,121 +1023,158 @@ export class CapturePanel {
         this._showBufferDataType(l3, m.type, bufferData, offset + m.offset, radix);
       }
     } else if (type.name === "array") {
-      const ul = new Widget("ul", ui);
       let count = type.count ?? 0;
       if (count === 0) {
         // Runtime length array
         count = (bufferData.length - offset) / (type.stride || type.format.size);
       }
-      if (count) {
-        let elementOffset = offset;
-        let stride = type.stride;
-        let format = type.format;
-        const formatName = this._getTypeName(format);
-        for (let i = 0; i < count; ++i) {
-          let value = null;
-          if (formatName === "f32" || formatName === "atomic<f32>") {
-            const data = new Float32Array(bufferData.buffer, elementOffset, 1);
-            value = toString(data[0], radix);
-          } else if (formatName === "i32" || formatName === "atomic<i32>") {
-            const data = new Int32Array(bufferData.buffer, elementOffset, 1);
-            value = toString(data[0], radix);
-          } else if (formatName === "u32" || formatName === "atomic<u32>") {
-            const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
-            value = toString(data[0], radix);
-          } else if (formatName === "bool" || formatName === "atomic<bool>") {
-            const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
-            value = data[0] ? "true" : "false";
-          } else if (formatName === "vec2i" || formatName === "vec2<i32>") {
-            const data = new Int32Array(bufferData.buffer, elementOffset, 2);
-            value = `${toString(data[0], radix)}, ${data[1]}`;
-          } else if (formatName === "vec2u" || formatName === "vec2<u32>") {
-            const data = new Uint32Array(bufferData.buffer, elementOffset, 2);
-            value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
-          } else if (formatName === "vec2f" || formatName === "vec2<f32>") {
-            const data = new Float32Array(bufferData.buffer, elementOffset, 2);
-            value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
-          } else if (formatName === "vec3i" || formatName === "vec3<i32>") {
-            const data = new Int32Array(bufferData.buffer, elementOffset, 3);
-            value = `${data[0]}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
-          } else if (formatName === "vec3u" || formatName === "vec3<u32>") {
-            const data = new Uint32Array(bufferData.buffer, elementOffset, 3);
-            value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
-          } else if (formatName === "vec3f" || formatName === "vec3<f32>") {
-            const data = new Float32Array(bufferData.buffer, elementOffset, 3);
-            value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
-          } else if (formatName === "vec4i" || formatName === "vec4<i32>") {
-            const data = new Int32Array(bufferData.buffer, elementOffset, 4);
-            value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
-          } else if (formatName === "vec4u" || formatName === "vec4<u32>") {
-            const data = new Uint32Array(bufferData.buffer, elementOffset, 4);
-            value = `${data[0]}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
-          } else if (formatName === "vec4f" || formatName === "vec4<f32>") {
-            const data = new Float32Array(bufferData.buffer, elementOffset, 4);
-            value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
-          }
 
-          if (format.isStruct && format.members?.length === 1) {
-            const member = format.members[0];
-            if (member.isArray) {
-              const arrayFormat = member.format;
-              const arrayFormatName = this._getTypeName(arrayFormat);
-              if (arrayFormatName === "u32" || arrayFormatName === "atomic<u32>") {
-                if (member.count === 1) {
-                  const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
-                  value = `${toString(data[0], radix)}`;
-                } else if (member.count === 2) {
-                  const data = new Uint32Array(bufferData.buffer, elementOffset, 2);
-                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
-                } else if (member.count === 3) {
-                  const data = new Uint32Array(bufferData.buffer, elementOffset, 3);
-                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
-                } else if (member.count === 4) {
-                  const data = new Uint32Array(bufferData.buffer, elementOffset, 4);
-                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
-                }
-              } else if (arrayFormatName === "i32" || arrayFormatName === "atomic<i32>") {
-                if (member.count === 1) {
-                  const data = new Int32Array(bufferData.buffer, elementOffset, 1);
-                  value = `${toString(data[0], radix)}`;
-                } else if (member.count === 2) {
-                  const data = new Int32Array(bufferData.buffer, elementOffset, 2);
-                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
-                } else if (member.count === 3) {
-                  const data = new Int32Array(bufferData.buffer, elementOffset, 3);
-                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
-                } else if (member.count === 4) {
-                  const data = new Int32Array(bufferData.buffer, elementOffset, 4);
-                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
-                }
-              } else if (arrayFormatName === "f32" || arrayFormatName === "atomic<f32>") {
-                if (member.count === 1) {
-                  const data = new Float32Array(bufferData.buffer, elementOffset, 1);
-                  value = `${toString(data[0], radix)}`;
-                } else if (member.count === 2) {
-                  const data = new Float32Array(bufferData.buffer, elementOffset, 2);
-                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
-                } else if (member.count === 3) {
-                  const data = new Float32Array(bufferData.buffer, elementOffset, 3);
-                  value = `${data[0]}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
-                } else if (member.count === 4) {
-                  const data = new Float32Array(bufferData.buffer, elementOffset, 4);
-                  value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
+      const arrayUi = new Div(ui);
+      let filter = null;
+      if (count > 100) {
+        filter = new Div(arrayUi, { style: "background-color: #333; padding-left: 20px; padding-top: 2px; padding-bottom: 2px; margin-top: 10px; border-top: 1px solid #000; border-bottom: 1px solid #000;" });
+      }
+      const ul = new Widget("ul", arrayUi);
+      
+
+      if (count) {
+        let subOffset = 0;
+        let maxCount = 100;
+
+        const self = this;
+
+        function showArrayData(ul, subOffset, maxCount) {
+          let stride = type.stride;
+          let elementOffset = offset + (subOffset * stride);
+          let subCount = Math.min(count - subOffset, maxCount);
+          let format = type.format;
+          const formatName = self._getTypeName(format);
+          for (let i = 0; i < subCount; ++i) {
+            let value = null;
+            if (formatName === "f32" || formatName === "atomic<f32>") {
+              const data = new Float32Array(bufferData.buffer, elementOffset, 1);
+              value = toString(data[0], radix);
+            } else if (formatName === "i32" || formatName === "atomic<i32>") {
+              const data = new Int32Array(bufferData.buffer, elementOffset, 1);
+              value = toString(data[0], radix);
+            } else if (formatName === "u32" || formatName === "atomic<u32>") {
+              const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
+              value = toString(data[0], radix);
+            } else if (formatName === "bool" || formatName === "atomic<bool>") {
+              const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
+              value = data[0] ? "true" : "false";
+            } else if (formatName === "vec2i" || formatName === "vec2<i32>") {
+              const data = new Int32Array(bufferData.buffer, elementOffset, 2);
+              value = `${toString(data[0], radix)}, ${data[1]}`;
+            } else if (formatName === "vec2u" || formatName === "vec2<u32>") {
+              const data = new Uint32Array(bufferData.buffer, elementOffset, 2);
+              value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
+            } else if (formatName === "vec2f" || formatName === "vec2<f32>") {
+              const data = new Float32Array(bufferData.buffer, elementOffset, 2);
+              value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
+            } else if (formatName === "vec3i" || formatName === "vec3<i32>") {
+              const data = new Int32Array(bufferData.buffer, elementOffset, 3);
+              value = `${data[0]}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
+            } else if (formatName === "vec3u" || formatName === "vec3<u32>") {
+              const data = new Uint32Array(bufferData.buffer, elementOffset, 3);
+              value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
+            } else if (formatName === "vec3f" || formatName === "vec3<f32>") {
+              const data = new Float32Array(bufferData.buffer, elementOffset, 3);
+              value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
+            } else if (formatName === "vec4i" || formatName === "vec4<i32>") {
+              const data = new Int32Array(bufferData.buffer, elementOffset, 4);
+              value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
+            } else if (formatName === "vec4u" || formatName === "vec4<u32>") {
+              const data = new Uint32Array(bufferData.buffer, elementOffset, 4);
+              value = `${data[0]}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
+            } else if (formatName === "vec4f" || formatName === "vec4<f32>") {
+              const data = new Float32Array(bufferData.buffer, elementOffset, 4);
+              value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
+            }
+
+            if (format.isStruct && format.members?.length === 1) {
+              const member = format.members[0];
+              if (member.isArray) {
+                const arrayFormat = member.format;
+                const arrayFormatName = self._getTypeName(arrayFormat);
+                if (arrayFormatName === "u32" || arrayFormatName === "atomic<u32>") {
+                  if (member.count === 1) {
+                    const data = new Uint32Array(bufferData.buffer, elementOffset, 1);
+                    value = `${toString(data[0], radix)}`;
+                  } else if (member.count === 2) {
+                    const data = new Uint32Array(bufferData.buffer, elementOffset, 2);
+                    value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
+                  } else if (member.count === 3) {
+                    const data = new Uint32Array(bufferData.buffer, elementOffset, 3);
+                    value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
+                  } else if (member.count === 4) {
+                    const data = new Uint32Array(bufferData.buffer, elementOffset, 4);
+                    value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
+                  }
+                } else if (arrayFormatName === "i32" || arrayFormatName === "atomic<i32>") {
+                  if (member.count === 1) {
+                    const data = new Int32Array(bufferData.buffer, elementOffset, 1);
+                    value = `${toString(data[0], radix)}`;
+                  } else if (member.count === 2) {
+                    const data = new Int32Array(bufferData.buffer, elementOffset, 2);
+                    value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
+                  } else if (member.count === 3) {
+                    const data = new Int32Array(bufferData.buffer, elementOffset, 3);
+                    value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
+                  } else if (member.count === 4) {
+                    const data = new Int32Array(bufferData.buffer, elementOffset, 4);
+                    value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
+                  }
+                } else if (arrayFormatName === "f32" || arrayFormatName === "atomic<f32>") {
+                  if (member.count === 1) {
+                    const data = new Float32Array(bufferData.buffer, elementOffset, 1);
+                    value = `${toString(data[0], radix)}`;
+                  } else if (member.count === 2) {
+                    const data = new Float32Array(bufferData.buffer, elementOffset, 2);
+                    value = `${toString(data[0], radix)}, ${toString(data[1], radix)}`;
+                  } else if (member.count === 3) {
+                    const data = new Float32Array(bufferData.buffer, elementOffset, 3);
+                    value = `${data[0]}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`;
+                  } else if (member.count === 4) {
+                    const data = new Float32Array(bufferData.buffer, elementOffset, 4);
+                    value = `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`;
+                  }
                 }
               }
             }
-          }
 
-          if (value !== null) {
-            new Widget("li", ul, { text: `[${i}]: ${value}` });
-          } else {
-            new Widget("li", ul, { text: `[${i}]: ${formatName}` });
-            const ul2 = new Widget("ul", ul);
-            this._showBufferDataType(ul2, format, bufferData, elementOffset);
-          }
+            if (value !== null) {
+              new Widget("li", ul, { text: `[${i + subOffset}]: ${value}` });
+            } else {
+              new Widget("li", ul, { text: `[${i + subOffset}]: ${formatName}` });
+              const ul2 = new Widget("ul", ul);
+              self._showBufferDataType(ul2, format, bufferData, elementOffset);
+            }
 
-          elementOffset += stride;
+            elementOffset += stride;
+          }
         }
+
+        if (count > 100) {
+          new Span(filter, { text: "Offset:" });
+          new NumberInput(filter, { value: 0, min: 0, max: count, precision: 0, step: 1,
+            onChange: (value) => {
+              subOffset = parseInt(value);
+              ul.removeAllChildren();
+              showArrayData(ul, subOffset, maxCount);
+           }, style: "display: inline-block; width: 75px; margin-right: 10px; vertical-align: middle;" });
+
+          new Span(filter, { text: "Count:" });
+          new NumberInput(filter, { value: 100, min: 0, max: 1000, precision: 0, step: 1,
+            onChange: (value) => {
+              maxCount = parseInt(value);
+              ul.removeAllChildren();
+              showArrayData(ul, subOffset, maxCount);
+            }, style: "display: inline-block; width: 75px; margin-right: 10px; vertical-align: middle;" });
+          new Span(filter, { text: `/ ${count}` });
+        }
+
+        showArrayData(ul, subOffset, maxCount);
       }
     }
   }
