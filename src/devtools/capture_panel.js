@@ -32,6 +32,8 @@ export class CapturePanel {
 
     new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => { 
       try {
+        self._captureCommands.length = 0;
+        self._pendingCommandBufferData.clear();
         const frame = self.captureMode === 0 ? -1 : self.captureSpecificFrame;
         self.port.postMessage({ action: PanelActions.Capture, maxBufferSize: self.maxBufferSize, frame });
       } catch (e) {}
@@ -176,13 +178,7 @@ export class CapturePanel {
     return this.database.getObject(id);
   }
 
-  _captureBufferData(id, entryIndex, offset, size, index, count, chunk) {
-    let command = this._captureCommands[id];
-    if (!command) {
-      command = this._pendingCommandBufferData[id] ?? {};
-      this._pendingCommandBufferData[id] = command;
-    }
-
+  _addDataMembersToCommand(command, entryIndex, size, count) {
     if (!command.bufferData) {
       command.bufferData = [];
     }
@@ -217,10 +213,19 @@ export class CapturePanel {
     if (!command.isBufferDataLoaded) {
       command.isBufferDataLoaded = [];
     }
+  }
+
+  _captureBufferData(id, entryIndex, offset, size, index, count, chunk) {
+    let command = this._captureCommands[id];
+    if (!command) {
+      command = this._pendingCommandBufferData[id] ?? {};
+      this._pendingCommandBufferData[id] = command;
+    }
 
     const self = this;
     decodeDataUrl(chunk).then((chunkData) => {
       const command = self._captureCommands[id] ?? self._pendingCommandBufferData[id];
+      self._addDataMembersToCommand(command, entryIndex, size, count);
       self._loadedDataChunks--;
       try {
         command.bufferData[entryIndex].set(chunkData, offset);
