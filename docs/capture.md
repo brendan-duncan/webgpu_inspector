@@ -79,11 +79,25 @@ If you select a Draw or Dispatch command, it will inspect the BindGroups and Pip
 <img src="images/buffer_data_inspection.png" style="width:512px">
 </a>
 
+### Array Data
+
+Array data can be quite large. To improve performance and readability, if the array has more than 100 elements, only a subset of array data is viewed. 
+
+**Offset** is the starting index of the array to view.
+
+**Count** is the number of elements of the array to view.
+
+<a href="images/buffer_array_inspection.png">
+<img src="images/buffer_array_inspection.png" style="width:512px">
+</a>
+
 ## Debug Groups
 
-If the page pushes/pops Debug Groups, they will be be used to group commands in the capture.
+If the page pushes/pops Debug Groups, they will be be used to group commands in the capture. This is useful for organizing rendering commands to make it easier to identify what the commands are contributing to the render.
 
-![Debug Groups](images/capture_debug_groups.png)
+<a href="images/capture_debug_groups.png">
+<img src="images/capture_debug_groups.png" style="width:512px">
+</a>
 
 ## Frame Stats
 ###### [Back to top](#capture)

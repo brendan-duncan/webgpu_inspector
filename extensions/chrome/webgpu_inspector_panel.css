@@ -1240,6 +1240,7 @@ ol::-webkit-scrollbar-thumb:hover {
 .capture_array_view {
   background-color: #344;
   box-shadow: #000 -3px 5px 10px;
+  margin-bottom: 5px;
 }
 
 .capture_array_view_filter {
