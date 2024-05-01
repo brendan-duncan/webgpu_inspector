@@ -1265,6 +1265,7 @@ ol::-webkit-scrollbar-thumb:hover {
   border: 1px solid #000;
   border-top: none;
   border-radius: 0px 0px 5px 5px;
+  box-shadow: rgba(0,0,0,0.5) 3px 3px 3px
 }
 
 .capture_debugGroup_header1 {
@@ -1357,6 +1358,8 @@ ol::-webkit-scrollbar-thumb:hover {
 .capture_renderpass {
   margin-left: 10px;
   background: #353;
+  border-radius: 5px;
+  box-shadow: rgba(0,0,0,0.5) 5px 5px 5px;
 }
 
 .capture_drawcall {
