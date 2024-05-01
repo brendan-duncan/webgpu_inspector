@@ -1029,10 +1029,10 @@ export class CapturePanel {
         count = (bufferData.length - offset) / (type.stride || type.format.size);
       }
 
-      const arrayUi = new Div(ui);
+      const arrayUi = new Div(ui, { class: "capture_array_view" });
       let filter = null;
       if (count > 100) {
-        filter = new Div(arrayUi, { style: "background-color: #333; padding-left: 20px; padding-top: 2px; padding-bottom: 2px; margin-top: 10px; border-top: 1px solid #000; border-bottom: 1px solid #000;" });
+        filter = new Div(arrayUi, { class: "capture_array_view_filter" });
       }
       const ul = new Widget("ul", arrayUi);
       
@@ -1157,17 +1157,27 @@ export class CapturePanel {
 
         if (count > 100) {
           new Span(filter, { text: "Offset:" });
-          new NumberInput(filter, { value: 0, min: 0, max: count, precision: 0, step: 1,
+          new NumberInput(filter, { value: 0, min: 0, max: count, precision: 0, step: 1, tooltip: "Starting element of the array to display",
             onChange: (value) => {
-              subOffset = parseInt(value);
+              try {
+                subOffset = Math.max(parseInt(value), 0);
+              } catch (e) {
+                console.log(e.message);
+                subOffset = 0;
+              }
               ul.removeAllChildren();
               showArrayData(ul, subOffset, maxCount);
            }, style: "display: inline-block; width: 75px; margin-right: 10px; vertical-align: middle;" });
 
           new Span(filter, { text: "Count:" });
-          new NumberInput(filter, { value: 100, min: 0, max: 1000, precision: 0, step: 1,
+          new NumberInput(filter, { value: 100, min: 1, max: 1000, precision: 0, step: 1, tooltip: "Number of elements to display",
             onChange: (value) => {
-              maxCount = parseInt(value);
+              try {
+                maxCount = Math.max(parseInt(value), 1);
+              } catch (e) {
+                console.log(e.message);
+                maxCount = 100;
+              }
               ul.removeAllChildren();
               showArrayData(ul, subOffset, maxCount);
             }, style: "display: inline-block; width: 75px; margin-right: 10px; vertical-align: middle;" });

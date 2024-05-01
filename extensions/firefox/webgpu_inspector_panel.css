@@ -1237,6 +1237,21 @@ ol::-webkit-scrollbar-thumb:hover {
   background-color: #444;
 }
 
+.capture_array_view {
+  background-color: #344;
+  box-shadow: #000 -3px 5px 10px;
+}
+
+.capture_array_view_filter {
+  background-color: #333;
+  padding-left: 20px;
+  padding-right: 20px;
+  margin-top: 5px;
+  border-top: 1px solid #000;
+  border-bottom: 1px solid #000;
+  font-size: 9pt;
+} 
+
 .capture_frame {
   overflow: auto;
   height: calc(100% - 35px);
