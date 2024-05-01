@@ -1246,14 +1246,12 @@ ol::-webkit-scrollbar-thumb:hover {
 }
 
 .capture_debugGroup_header {
-  background-color: rgb(72, 72, 72);
+  color: #000;
   font-size: 12pt;
-  color: #fff;
   padding-left: 10px;
   line-height: 30px;
   border-radius: 5px 5px 0px 0px;
   border: 1px solid #000;
-  /*border-bottom: none;*/
 }
 
 .capture_debugGroup_header:hover {
@@ -1262,38 +1260,53 @@ ol::-webkit-scrollbar-thumb:hover {
 
 .capture_debugGroup {
   padding: 10px;
-  background-color: rgb(72, 72, 72);
   font-size: 12pt;
   line-height: 20px;
   border: 1px solid #000;
   border-top: none;
   border-radius: 0px 0px 5px 5px;
+}
+
+.capture_debugGroup_header1 {
+  background-color: rgba(245, 148, 149, 1);
+}
+
+.capture_debugGroup1 {
+  background-color: rgb(177, 104, 106);
 }
 
 .capture_debugGroup_header2 {
-  background-color: rgb(102, 102, 102);
-  font-size: 12pt;
-  color: #fff;
-  padding-left: 10px;
-  line-height: 30px;
-  border-radius: 5px 5px 0px 0px;
-  border: 1px solid #000;
-  /*border-bottom: none;*/
-}
-
-.capture_debugGroup_header2:hover {
-  box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.8) inset;
+  background-color: rgba(255, 192, 67, 1);
 }
 
 .capture_debugGroup2 {
-  padding: 10px;
-  background-color: rgb(102, 102, 102);
-  font-size: 12pt;
-  line-height: 20px;
-  border: 1px solid #000;
-  border-top: none;
-  border-radius: 0px 0px 5px 5px;
+  background-color: rgb(194, 145, 46);
 }
+
+.capture_debugGroup_header3 {
+  background-color: rgba(203, 245, 174, 1);
+}
+
+.capture_debugGroup3 {
+  background-color: rgb(148, 179, 126);
+}
+
+.capture_debugGroup_header4 {
+  background-color: rgba(196, 255, 255, 1);
+}
+
+.capture_debugGroup4 {
+  background-color: rgb(138, 182, 182);
+}
+
+.capture_debugGroup_header5 {
+  background-color: rgba(243, 184, 255, 1);
+}
+
+.capture_debugGroup5 {
+  background-color: rgb(180, 135, 189);
+}
+
 
 .capture_commandInfo {
   overflow: auto;

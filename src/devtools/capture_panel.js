@@ -744,29 +744,24 @@ export class CapturePanel {
       }
 
       if (method === "pushDebugGroup") {
-        const grpClass = nestedDebugGroup & 1 ? "capture_debugGroup" : "capture_debugGroup2";
-        const hdrClass = nestedDebugGroup & 1 ? "capture_debugGroup_header" : "capture_debugGroup_header2";
-
         const colors = [
-          ["rgba(245, 148, 149, 1)", "rgba(203, 126, 127, 1)", "#000"],
-          ["rgba(255, 192, 67, 1)", "rgba(194, 146, 51, 1)", "#000"],
-          ["rgba(203, 245, 174, 1)", "rgba(146, 184, 120, 1)", "#000"],
-          ["rgba(196, 255, 255, 1)", "rgba(167, 205, 205, 1)", "#000"],
-          ["rgba(243, 184, 255, 1)", "rgba(178, 162, 181, 1)", "#000"],
-          //["rgba(223, 65, 255, 1)", "rgba(169, 49, 193, 1)", "#eee"],
-          //["rgba(83, 255, 140, 1)", "rgba(63, 193, 106, 1)", "#555"],
+          ["capture_debugGroup_header1", "capture_debugGroup1"],
+          ["capture_debugGroup_header2", "capture_debugGroup2"],
+          ["capture_debugGroup_header3", "capture_debugGroup3"],
+          ["capture_debugGroup_header4", "capture_debugGroup4"],
+          ["capture_debugGroup_header5", "capture_debugGroup5"],
         ];
+        const grpIndex = colors[nestedDebugGroup % 5];
+        const grpClass = ["capture_debugGroup", grpIndex[1]];
+        const hdrClass = ["capture_debugGroup_header", grpIndex[0]];
 
         const header = new Div(debugGroup, { id: `DebugGroup_${debugGroupIndex}`, class: hdrClass });
-        header.style.backgroundColor = colors[nestedDebugGroup % colors.length][0];
-        header.style.color = colors[nestedDebugGroup % colors.length][2];
 
         const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
         new Span(header, { text: `${args[0]}` });
         const extra = new Span(header, { style: "margin-left: 10px;" });
 
         const grp = new Div(debugGroup, { class: grpClass });
-        grp.style.backgroundColor = colors[nestedDebugGroup % colors.length][1];
 
         nestedDebugGroup++;
 
