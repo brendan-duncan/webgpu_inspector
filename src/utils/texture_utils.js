@@ -20,7 +20,7 @@ export class TextureUtils {
     });
 
     this.displayUniformBuffer = device.createBuffer({
-      size: 16,
+      size: 4 * 8,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -160,10 +160,10 @@ export class TextureUtils {
 
     if (display) {
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
-        new Float32Array([display.exposure, display.channels, numChannels, 0]));
+        new Float32Array([display.exposure, display.channels, numChannels, display.minRange, display.maxRange, 0, 0, 0]));
     } else {
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
-        new Float32Array([1, 0, numChannels, 0]));
+        new Float32Array([1, 0, numChannels, 0, 1, 0, 0, 0]));
     }
 
     const passEncoder = commandEncoder.beginRenderPass(passDesc);
@@ -316,7 +316,11 @@ TextureUtils.blitShader = `
     exposure: f32,
     channels: f32,
     numChannels: f32,
-    _pad: f32
+    minRange: f32,
+    maxRange: f32,
+    _pad1: f32,
+    _pad2: f32,
+    _pad3: f32
   };
   @group(1) @binding(0) var<uniform> display: Display; 
   @fragment
@@ -324,6 +328,15 @@ TextureUtils.blitShader = `
     var color = textureSample(texture, texSampler, input.uv);
 
     if (display.numChannels == 1.0) {
+      if (display.minRange != display.maxRange) {
+        if (color.r < display.minRange) {
+          color = vec4f(0.0, 0.0, 0.0, 1);
+        } else if (color.r > display.maxRange) {
+          color = vec4f(1.0, 0.0, 0.0, 1);
+        } else {
+          color = vec4f((color.r - display.minRange) / (display.maxRange - display.minRange), 0.0, 0.0, 1);
+        }
+      }
       color = vec4f(color.r, color.r, color.r, 1.0);
     } else if (display.numChannels == 2.0) {
       color = vec4f(color.r, color.g, 0.0, 1.0);
@@ -373,13 +386,33 @@ TextureUtils.multisampleBlitShader = `
   @group(0) @binding(1) var texture: texture_multisampled_2d<f32>;
   struct Display {
     exposure: f32,
-    channels: f32
+    channels: f32,
+    numChannels: f32,
+    minRange: f32,
+    maxRange: f32,
+    _pad1: f32,
+    _pad2: f32,
+    _pad3: f32
   };
   @group(1) @binding(0) var<uniform> display: Display; 
   @fragment
   fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     var coords = vec2i(input.uv * vec2f(textureDimensions(texture)));
     var color = textureLoad(texture, coords, 0);
+    if (display.numChannels == 1.0) {
+      if (display.minRange != display.maxRange) {
+        if (color.r < display.minRange) {
+          color = vec4f(0.0, 0.0, 0.0, color.a);
+        } else if (color.r > display.maxRange) {
+          color = vec4f(1.0, 1.0, 1.0, color.a);
+        } else {
+          color = vec4f((color.r - display.minRange) / (display.maxRange - display.minRange), 0.0, 0.0, color.a);
+        }
+      }
+      color = vec4f(color.r, color.r, color.r, 1.0);
+    } else if (display.numChannels == 2.0) {
+      color = vec4f(color.r, color.g, 0.0, 1.0);
+    }
     if (display.channels == 1.0) { // R
       var rgb = color.rgb * display.exposure;
       return vec4f(rgb.r, 0.0, 0.0, color.a);

@@ -23,6 +23,7 @@ import {
   ValidationError } from "./gpu_objects/index.js";
 import { getFlagString } from "../utils/flags.js";
 import { PanelActions } from "../utils/actions.js";
+import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import { Plot } from "./widget/plot.js";
 import { Split } from "./widget/split.js";
 import { EditorView } from "codemirror";
@@ -895,6 +896,9 @@ export class InspectPanel {
     width ??= texture.width;
     height ??= texture.height;
 
+    const numLayers = texture.depthOrArrayLayers;
+    const layerRanges = texture.layerRanges;
+
     const container = new Div(parent, { style: "margin-bottom: 5px; margin-top: 10px;" });
 
     const displayChanged = new Signal();
@@ -906,7 +910,6 @@ export class InspectPanel {
       texture.display.exposure = value;
       displayChanged.emit();
     }, style: "width: 100px; display: inline-block;" });
-
 
     const channels = ["RGB", "Red", "Green", "Blue", "Alpha", "Luminance"];
     new Select(controls, {
@@ -946,7 +949,6 @@ export class InspectPanel {
       return str;
     }
 
-    const numLayers = texture.depthOrArrayLayers;
     for (let layer = 0; layer < numLayers; ++layer) {
       const canvas = new Widget("canvas", new Div(container), { style: "box-shadow: 5px 5px 5px rgba(0,0,0,0.5);" });
       canvas.element.addEventListener("mouseenter", (event) => {
@@ -980,6 +982,11 @@ export class InspectPanel {
         layerArrayCount: 1 };
       
       const srcView = texture.gpuTexture.object.createView(viewDesc);
+
+      if (layerRanges) {
+        texture.display.minRange = layerRanges[layer].min;
+        texture.display.maxRange = layerRanges[layer].max;
+      }
 
       this.textureUtils.blitTexture(srcView, texture.format, 1, canvasTexture.createView(), format, texture.display);
 

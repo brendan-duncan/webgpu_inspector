@@ -854,6 +854,8 @@ export class CapturePanel {
     }
 
     const container = new Div(parent);
+
+    const layerRanges = texture.layerRanges;
     
     const numLayers = texture.depthOrArrayLayers;
     for (let layer = 0; layer < numLayers; ++layer) {
@@ -872,11 +874,21 @@ export class CapturePanel {
         layerArrayCount: 1
       });
 
+      let display = null;
+      if (layerRanges) {
+        display = {
+          exposure: 1.0,
+          channels: 0,
+          minRange: layerRanges[layer].min,
+          maxRange: layerRanges[layer].max
+        };
+      }
+
       const context = canvas.element.getContext("webgpu");
       const dstFormat = navigator.gpu.getPreferredCanvasFormat();
       context.configure({ "device": this.window.device, "format": navigator.gpu.getPreferredCanvasFormat() });
       const canvasTexture = context.getCurrentTexture();
-      this.textureUtils.blitTexture(layerView, texture.format, 1, canvasTexture.createView(), dstFormat);
+      this.textureUtils.blitTexture(layerView, texture.format, 1, canvasTexture.createView(), dstFormat, display);
     }
 
     return container;

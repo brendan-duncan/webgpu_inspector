@@ -29,17 +29,16 @@ async function main() {
           vec2(0.0, 0.5),
           vec2(-0.5, -0.5),
           vec2(0.5, -0.5));
-        return vec4<f32>(pos[VertexIndex], 0.0, 1.0);
+        return vec4<f32>(pos[VertexIndex], 0.5, 1.0);
       }
 
       struct Out {
         @location(0) color1 : vec4<f32>,
-        @location(1) color2 : vec4<f32>
       };
 
       @fragment
       fn fragmentMain() -> Out {
-        return Out(vec4<f32>(1.0, 0.0, 0.0, 1.0), vec4<f32>(0.0, 0.0, 1.0, 1.0));
+        return Out(vec4<f32>(0.0, 0.0, 1.0, 1.0));
       }`,
   });
 
@@ -52,32 +51,18 @@ async function main() {
     fragment: {
       module: redTriangleShader,
       entryPoint: "fragmentMain",
-      targets: [{ format: presentationFormat }, { format: presentationFormat } ]
+      targets: [{ format: presentationFormat } ]
     },
     primitive: { topology: "triangle-list" },
     multisample: {
       count: 4,
-    }
+    },
+    depthStencil: {
+      depthWriteEnabled: true,
+      depthCompare: 'less',
+      format: 'depth24plus',
+    },
   });
-
-  const texture1 = device.createTexture({
-    size: [canvas.width, canvas.height],
-    sampleCount: 4,
-    format: presentationFormat,
-    usage: GPUTextureUsage.RENDER_ATTACHMENT,
-  });
-  const view1 = texture1.createView();
-  view1.__texture = texture1;
-
-  const texture2 = device.createTexture({
-    size: [canvas.width, canvas.height],
-    sampleCount: 1,
-    format: presentationFormat,
-    usage: GPUTextureUsage.RENDER_ATTACHMENT,
-  });
-  const view2 = texture2.createView();
-  view2.__texture = texture2;
-
 
   const texture = device.createTexture({
     size: [canvas.width, canvas.height],
@@ -88,26 +73,21 @@ async function main() {
   const view = texture.createView();
   view.__texture = texture;
 
-  function frame() {
-    {
-      // Empty command encoder to make sure the capture can handle it.
-      const commandEncoder = device.createCommandEncoder();
-      device.queue.submit([commandEncoder.finish()]);
-    }
+  const depthTexture = device.createTexture({
+    size: [canvas.width, canvas.height],
+    format: "depth24plus",
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    sampleCount: 4
+  });
+  const depthTextureView = depthTexture.createView();
 
+  function frame() {
     let commandEncoder = device.createCommandEncoder();
 
     const canvasTextureView = context.getCurrentTexture().createView();
 
     const passEncoder = commandEncoder.beginRenderPass({
       colorAttachments: [
-        {
-          view: view1,
-          resolveTarget: view2,
-          clearValue: { r: 0.0, g: 0.0, b: 1.0, a: 1.0 },
-          loadOp: "clear",
-          storeOp: "discard",
-        },
         {
           view: view,
           resolveTarget: canvasTextureView,
@@ -116,38 +96,16 @@ async function main() {
           storeOp: "store",
         },
       ],
+      depthStencilAttachment: {
+        view: depthTextureView,
+        depthClearValue: 1.0,
+        depthLoadOp: "clear",
+        depthStoreOp: "store",
+      }
     });
     passEncoder.setPipeline(pipeline);
     passEncoder.draw(3);
     passEncoder.end();
-
-    device.queue.submit([commandEncoder.finish()]);
-
-    commandEncoder = device.createCommandEncoder();
-
-    const canvasTextureView2 = context.getCurrentTexture().createView();
-
-    const passEncoder2 = commandEncoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: view1,
-          resolveTarget: view2,
-          clearValue: { r: 0.0, g: 1.0, b: 1.0, a: 1.0 },
-          loadOp: "clear",
-          storeOp: "discard",
-        },
-        {
-          view: view,
-          resolveTarget: canvasTextureView2,
-          clearValue: { r: 1.0, g: 1.0, b: 0.0, a: 1.0 },
-          loadOp: "clear",
-          storeOp: "store",
-        },
-      ],
-    });
-    passEncoder2.setPipeline(pipeline);
-    passEncoder2.draw(3);
-    passEncoder2.end();
 
     device.queue.submit([commandEncoder.finish()]);
 

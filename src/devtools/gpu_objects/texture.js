@@ -11,11 +11,44 @@ export class Texture extends GPUObject {
     this.imageDataPending = false;
     this.isImageDataLoaded = false;
     this.gpuTexture = null;
+    this._layerRanges = null;
 
     this.display = {
       exposure: 1,
-      channels: 0
+      channels: 0,
+      minRnage: 0,
+      maxRange: 1
     };
+  }
+
+  get layerRanges() {
+    if (this._layerRanges === null) {
+      const formatInfo = TextureFormatInfo[this.format];
+      if (formatInfo.isDepthStencil) {
+        const lr = [];
+        const numLayers = this.depthOrArrayLayers;
+        const width = this.width;
+          const height = this.height;
+        for (let layer = 0; layer < numLayers; ++layer) {
+          let min = null;
+          let max = null;
+          for (let y = 0; y < height; ++y) {
+            for (let x = 0; x < width; ++x) {
+              const pixel = this.getPixel(x, y, layer);
+              if (min === null || pixel.r < min) {
+                min = pixel.r;
+              }
+              if (max === null || pixel.r > max) {
+                max = pixel.r;
+              }
+            }
+          }
+          lr.push({ min, max });
+        }
+        this._layerRanges = lr;
+      }
+    }
+    return this._layerRanges
   }
 
   getPixel(x, y, z) {

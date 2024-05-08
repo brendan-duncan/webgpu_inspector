@@ -21,6 +21,15 @@ async function main() {
 
   context.configure({ device: device, format: presentationFormat });
 
+  const depthTexture = device.createTexture({
+    size: [canvas.width, canvas.height],
+    sampleCount: 1,
+    format: "depth24plus",
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
+
+  const depthTextureView = depthTexture.createView();
+
   const redTriangleShader = device.createShaderModule({
     code: `
       @vertex
@@ -29,7 +38,7 @@ async function main() {
           vec2(0.0, 0.5),
           vec2(-0.5, -0.5),
           vec2(0.5, -0.5));
-        return vec4<f32>(pos[VertexIndex], 0.0, 1.0);
+        return vec4<f32>(pos[VertexIndex], 0.5, 1.0);
       }
 
       @fragment
@@ -49,7 +58,12 @@ async function main() {
       entryPoint: "fragmentMain",
       targets: [{ format: presentationFormat } ]
     },
-    primitive: { topology: "triangle-list" }
+    primitive: { topology: "triangle-list" },
+    depthStencil: {
+      depthWriteEnabled: true,
+      depthCompare: 'less',
+      format: 'depth24plus',
+    },
   });
 
   function frame() {
@@ -61,11 +75,17 @@ async function main() {
       colorAttachments: [
         {
           view: canvasTextureView,
-          clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+          clearValue: { r: 0.5, g: 0.5, b: 0.5, a: 1.0 },
           loadOp: "clear",
           storeOp: "store",
         },
       ],
+      depthStencilAttachment: {
+        view: depthTextureView,
+        depthClearValue: 1.0,
+        depthLoadOp: "clear",
+        depthStoreOp: "store",
+      }
     });
     passEncoder.setPipeline(pipeline);
     passEncoder.draw(3);
