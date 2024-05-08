@@ -1,3 +1,7 @@
+## v0.3.0
+
+* Normalized depth texture preview, so depth textures can be visualized even if they are in compressed ranges.
+
 ## v0.2.0
 
 * Use colors to improve readability of nested debug groups in a capture.
