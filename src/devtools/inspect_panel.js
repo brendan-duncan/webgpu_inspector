@@ -950,6 +950,12 @@ export class InspectPanel {
     }
 
     for (let layer = 0; layer < numLayers; ++layer) {
+      const layerInfo = new Div(container);
+      if (layerRanges) {
+        new Span(layerInfo, { text: `Layer ${layer} Min Value: ${layerRanges[layer].min} Max Value: ${layerRanges[layer].max}`, class: 'inspect_texture_layer_info' });
+      } else {
+        new Span(layerInfo, { text: `Layer ${layer}`, class: 'inspect_texture_layer_info' });
+      }
       const canvas = new Widget("canvas", new Div(container), { style: "box-shadow: 5px 5px 5px rgba(0,0,0,0.5);" });
       canvas.element.addEventListener("mouseenter", (event) => {
         this._tooltip.style.display = 'block';

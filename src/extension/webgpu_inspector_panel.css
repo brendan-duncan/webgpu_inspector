@@ -198,6 +198,17 @@ li:hover {
   -moz-user-select: text;
 }
 
+.inspect_texture_layer_info {
+  background-color: #444;
+  width: 100%;
+  font-size: 11pt;
+  color: #ddd;
+  padding-top: 5px;
+  padding-left: 5px;
+  border-radius: 5px 5px 0px 0px;
+  border: 1px solid #000;
+}
+
 .error {
   color: #f55;
 }
