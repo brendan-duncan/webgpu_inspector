@@ -1794,8 +1794,8 @@ export class CapturePanel {
       if (vertexId !== undefined && vertexId === fragmentId) {
         const module = this._getObject(vertexId);
         if (module) {
-          const vertexEntry = desc.vertex?.entryPoint;
-          const fragmentEntry = desc.fragment?.entryPoint;
+          const vertexEntry = desc.vertex?.entryPoint ?? "@vertex";
+          const fragmentEntry = desc.fragment?.entryPoint ?? "@fragment";
           const grp = new Collapsable(commandInfo, { collapsed: true, label: `Module ID:${vertexId} Vertex: ${vertexEntry} Fragment: ${fragmentEntry}` });
           new Button(grp.body, { label: "Inspect", callback: () => {
             self.window.inspectObject(module);
@@ -1809,7 +1809,7 @@ export class CapturePanel {
         if (vertexId !== undefined) {
           const vertexModule = this._getObject(vertexId);
           if (vertexModule) {
-            const vertexEntry = desc.vertex?.entryPoint;
+            const vertexEntry = desc.vertex?.entryPoint ?? "@vertex";
             const vertexGrp = new Collapsable(commandInfo, { collapsed: true, label: `Vertex Module ID:${vertexId} Entry: ${vertexEntry}` });
             new Button(vertexGrp.body, { label: "Inspect", callback: () => {
               self.window.inspectObject(vertexModule);
@@ -1824,7 +1824,7 @@ export class CapturePanel {
         if (fragmentId !== undefined) {
           const fragmentModule = this._getObject(fragmentId);
           if (fragmentModule) {
-            const fragmentEntry = desc.fragment?.entryPoint;
+            const fragmentEntry = desc.fragment?.entryPoint ?? "@fragment";
             const fragmentGrp = new Collapsable(commandInfo, { collapsed: true, label: `Fragment Module ID:${fragmentId} Entry: ${fragmentEntry}` });
             new Button(fragmentGrp.body, { label: "Inspect", callback: () => {
               self.window.inspectObject(fragmentModule);
