@@ -9,7 +9,7 @@ export class RecorderData {
     this.frames = [];
     this._dataCount = 0;
     this._commandCount = 0;
-    this._dataReady = false;
+    this.dataReady = false;
     this._commandsReady = false;
     this.onReady = new Signal();
 
@@ -21,7 +21,7 @@ export class RecorderData {
   }
 
   get ready() {
-    return this._dataReady && this._commandsReady;
+    return this.dataReady && this._commandsReady;
   }
 
   clear() {
@@ -30,7 +30,7 @@ export class RecorderData {
     this.frames = [];
     this._dataCount = 0;
     this._commandCount = 0;
-    this._dataReady = false;
+    this.dataReady = false;
     this._commandsReady = false;
   }
 
@@ -39,12 +39,12 @@ export class RecorderData {
       this.data[index] = new Uint8Array(count);
       this._dataCount++;
       if (this._dataCount >= count) {
-        this._dataReady = true;
+        this.dataReady = true;
         if (this.ready) {
           this.onReady.emit();
         }
       } else {
-        this._dataReady = false;
+        this.dataReady = false;
       }
       return;
     }
@@ -67,12 +67,12 @@ export class RecorderData {
       self.data[index] = x;
       self._dataCount++;
       if (self._dataCount >= count) {
-        self._dataReady = true;
+        self.dataReady = true;
         if (self.ready) {
           self.onReady.emit();
         }
       } else {
-        self._dataReady = false;
+        self.dataReady = false;
       }
     });
   }
@@ -110,7 +110,7 @@ export class RecorderData {
       this._commandCount++;
       if (this._commandCount >= count) {
         this._commandsReady = true;
-        if (self.ready) {
+        if (this.ready) {
           this.onReady.emit();
         }
       } else {

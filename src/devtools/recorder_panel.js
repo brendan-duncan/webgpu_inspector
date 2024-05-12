@@ -43,6 +43,12 @@ export class RecorderPanel {
 
     port.addListener((message) => {
       switch (message.action) {
+        case Actions.RecordingDataCount: {
+          if (message.count === 0) {
+            self._recorderData.dataReady = true;
+          }
+          break;
+        }
         case Actions.RecordingData: {
           const data = message.data;
           const type = message.type;
@@ -175,6 +181,8 @@ export class RecorderPanel {
         }
       }
     }
+
+    let nestedDebugGroup = 0;
 
     let first = true;
     for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
@@ -510,12 +518,24 @@ export class RecorderPanel {
       }
 
       if (method === "pushDebugGroup") {
-        const header = new Div(debugGroup, { id: `DebugGroup_${debugGroupIndex}`, class: "capture_debugGroup_header" });
+        const colors = [
+          ["capture_debugGroup_header1", "capture_debugGroup1"],
+          ["capture_debugGroup_header2", "capture_debugGroup2"],
+          ["capture_debugGroup_header3", "capture_debugGroup3"],
+          ["capture_debugGroup_header4", "capture_debugGroup4"],
+          ["capture_debugGroup_header5", "capture_debugGroup5"],
+        ];
+        const grpIndex = colors[nestedDebugGroup % 5];
+        const grpClass = ["capture_debugGroup", grpIndex[1]];
+        const hdrClass = ["capture_debugGroup_header", grpIndex[0]];
+        nestedDebugGroup++;
+
+        const header = new Div(debugGroup, { id: `DebugGroup_${debugGroupIndex}`, class: hdrClass });
         const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
         new Span(header, { text: `${args[0]}` });
         const extra = new Span(header, { style: "margin-left: 10px;" });
 
-        const grp = new Div(debugGroup, { class: "capture_debugGroup" });
+        const grp = new Div(debugGroup, { class: grpClass });
         debugGroupStack.push(grp);
         debugGroupIndex++;
         debugGroup = grp;
@@ -533,6 +553,10 @@ export class RecorderPanel {
           currentBlock.remove();
         }
         currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
+      }
+
+      if (method == "popDebugGroup") {
+        nestedDebugGroup--;
       }
 
       if (method === "end") {
