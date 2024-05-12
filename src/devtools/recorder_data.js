@@ -370,7 +370,9 @@ export class RecorderData {
           if (error) {
             console.log(`ERROR frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${error.message}`);
           }
-        });
+        }).catch((e) => {
+          console.log(`ERROR frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${e.message}`)
+        });;
       }
 
       if (command.result) {
