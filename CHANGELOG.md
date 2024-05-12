@@ -1,3 +1,8 @@
+## v0.4.0
+
+* Fix Record for pages that use no buffer or texture data.
+* Display depth texture min and max range values in Inspector
+
 ## v0.3.0
 
 * Normalized depth texture preview, so depth textures can be visualized even if they are in compressed ranges.
