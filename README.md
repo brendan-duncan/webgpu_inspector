@@ -135,3 +135,15 @@ Building the project requires an installation of [Node.js](https://nodejs.org/en
 After the project is built:
 
 - If you have the DevTools open, right-click on the WebGPU Inspector DevTools panel, select `Reload frame`.
+
+## External Dependencies
+
+##### [Back to top](#webgpu-inspector)
+
+* WGSL Reflect
+  * Used for parsing and getting reflection information from WGSL shaders.
+  * https://github.com/brendan-duncan/wgsl_reflect
+* WebGPU Recorder
+  * Used for generating recordings of WebGPU content.
+  * https://github.com/brendan-duncan/webgpu_recorder
+
