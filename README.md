@@ -140,10 +140,8 @@ After the project is built:
 
 ##### [Back to top](#webgpu-inspector)
 
-* WGSL Reflect
+* [WGSL Reflect](https://github.com/brendan-duncan/wgsl_reflect)
   * Used for parsing and getting reflection information from WGSL shaders.
-  * https://github.com/brendan-duncan/wgsl_reflect
-* WebGPU Recorder
+* [WebGPU Recorder](https://github.com/brendan-duncan/webgpu_recorder)
   * Used for generating recordings of WebGPU content.
-  * https://github.com/brendan-duncan/webgpu_recorder
 
