@@ -43,6 +43,11 @@ import { alignTo } from "./utils/align.js";
       this._encodingBufferChunkCount = 0;
       this._captureData = null;
       this._frameRate = new RollingAverage(60);
+      this._captureTimestamps = false;
+      this._timestampQuerySet = null;
+      this._timestampBuffer = null;
+      this._timestampIndex = 0;
+      this._maxTimestamps = 2000;
 
       if (!window.navigator.gpu) {
         // No WebGPU support
@@ -294,6 +299,27 @@ import { alignTo } from "./utils/align.js";
       }
 
       if (method === "beginRenderPass") {
+        if (this._captureTimestamps && this._captureFrameRequest) {
+          if (!this._timestampQuerySet && object.__device) {
+            this._timestampQuerySet = object.__device.createQuerySet({
+              type: "timestamp",
+              count: this._maxTimestamps
+            });
+            this._timestampBuffer = object.__device.createBuffer({
+              size: this._maxTimestamps * 8,
+              usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
+            });
+          }
+
+          if (!args[0].timestampWrites && this._timestampIndex < this._maxTimestamps) {
+            args[0].timestampWrites = {
+              querySet: this._timestampQuerySet,
+              beginningOfPassWriteIndex: this._timestampIndex,
+              endOfPassWriteIndex: this._timestampIndex + 1
+            };
+            this._timestampIndex += 2;
+          }
+        }
         /*if (this._errorChecking > 0) {
           if (object.__device) {
             this.disableRecording();
@@ -359,6 +385,20 @@ import { alignTo } from "./utils/align.js";
       if (method === "submit") {
         this.disableRecording();
 
+        let timestampDstBuffer = null;
+        if (this._timestampIndex > 0) {
+          const commandEncoder = object.__device.createCommandEncoder();
+          commandEncoder.resolveQuerySet(this._timestampQuerySet, 0, 2, this._timestampBuffer, 0);
+          timestampDstBuffer = object.__device.createBuffer({
+            size: this._timestampIndex * 8,
+            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+          });
+          timestampDstBuffer.__count = this._timestampIndex;
+          commandEncoder.copyBufferToBuffer(this._timestampBuffer, 0, timestampDstBuffer, 0, this._timestampIndex * 8);
+          object.__device.queue.submit([commandEncoder.finish()]);
+          this._timestampIndex = 0;
+        }
+  
         const self = this;
 
         if (this._captureTextureRequest.size > 0) {
@@ -385,8 +425,13 @@ import { alignTo } from "./utils/align.js";
         const toDestroy = [...this._toDestroy];
         this._toDestroy.length = 0;
 
-        object.onSubmittedWorkDone().then(() => {
+        object.onSubmittedWorkDone().then( async () => {
           self.disableRecording();
+
+          if (timestampDstBuffer) {
+            self._sendTimestampBuffer(timestampDstBuffer.__count, timestampDstBuffer);
+          }
+          
           if (captureBuffers.length) {
             self._sendCapturedBuffers(captureBuffers);
           }
@@ -1452,6 +1497,18 @@ import { alignTo } from "./utils/align.js";
           console.error(error.message);
         });
       }
+    }
+
+    _sendTimestampBuffer(count, buffer) {
+      const self = this;
+      buffer.mapAsync(GPUMapMode.READ).then(() => {
+        const range = buffer.getMappedRange();
+        const data = new Uint8Array(range);
+        self._sendBufferData(-1000, -1000, data);
+        buffer.destroy();
+      }).catch((error) => {
+        console.error(error);
+      });
     }
 
     // Buffers associated with a command are recorded and then sent to the inspector server.

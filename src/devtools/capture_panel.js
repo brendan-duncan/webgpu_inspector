@@ -99,6 +99,7 @@ export class CapturePanel {
     this._passEncoderCommands = new Map();
     this._pendingCommandBufferData = new Map();
     this._pendingBufferData = [];
+    this._timestampBuffer = null;
 
     port.addListener((message) => {
       switch (message.action) {
@@ -216,6 +217,36 @@ export class CapturePanel {
   }
 
   _captureBufferData(id, entryIndex, offset, size, index, count, chunk) {
+    if (id === -1000) {
+      // Timestamp buffer
+      if (this._timestampBuffer == null) {
+        this._timestampBuffer = new Uint8Array(size);
+        this._timestampChunkCount = count;
+      }
+      decodeDataUrl(chunk).then((chunkData) => {
+        this._timestampBuffer.set(chunkData, offset);
+        this._timestampChunkCount--;
+        if (this._timestampChunkCount === 0) {
+          const timestampData = new BigInt64Array(self._timestampBuffer.buffer);
+          for (let i = 0, j = 0, k = 0; i < timestampData.length; i += 2, j++) {
+            const start = timestampData[i];
+            const end = timestampData[i + 1];
+            const duration = Number(end - start) / 1000000.0; // convert ns to ms
+            for (; k < self._captureCommands.length; k++) {
+              if (self._captureCommands[k].method === "beginRenderPass") {
+                self._captureCommands[k].duration = duration;
+                k++;
+                break;
+              }
+            }
+          }
+          console.log("!!!! TIMESTAMP BUFFER LOADED", this._timestampBuffer);
+        }
+      }).catch((error) => {
+
+      });
+    }
+
     let command = this._captureCommands[id];
     if (!command) {
       command = this._pendingCommandBufferData[id] ?? {};
@@ -476,7 +507,11 @@ export class CapturePanel {
 
         const header = new Div(currentBlock, { id: `RenderPass_${passIndex}`, class: "capture_renderpass_header" });
         const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
-        new Span(header, { text: `Render Pass ${passIndex}` });
+        let headerText = `Render Pass ${passIndex}`;
+        if (command.duration !== undefined) {
+          headerText += ` Duration:${command.duration}ms`;
+        }
+        new Span(header, { text: headerText });
         const extra = new Span(header, { style: "margin-left: 10px;" });
         const block = new Div(currentBlock, { class: "capture_renderpass_block" });
         header.element.onclick = () => {
