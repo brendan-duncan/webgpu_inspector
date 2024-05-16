@@ -223,19 +223,36 @@ export class CapturePanel {
         this._timestampBuffer = new Uint8Array(size);
         this._timestampChunkCount = count;
       }
+      const self = this;
       decodeDataUrl(chunk).then((chunkData) => {
-        this._timestampBuffer.set(chunkData, offset);
-        this._timestampChunkCount--;
-        if (this._timestampChunkCount === 0) {
+        self._timestampBuffer.set(chunkData, offset);
+        self._timestampChunkCount--;
+        if (self._timestampChunkCount === 0) {
           const timestampData = new BigInt64Array(self._timestampBuffer.buffer);
           for (let i = 0, j = 0, k = 0; i < timestampData.length; i += 2, j++) {
             const start = timestampData[i];
             const end = timestampData[i + 1];
             const duration = Number(end - start) / 1000000.0; // convert ns to ms
+            let renderPassIndex = 0;
+            let computePassIndex = 0;
             for (; k < self._captureCommands.length; k++) {
-              if (self._captureCommands[k].method === "beginRenderPass" ||
-                  self._captureCommands[k].method === "beginComputePass") {
-                self._captureCommands[k].duration = duration;
+              const command = self._captureCommands[k];
+              if (command.method === "beginRenderPass" ||
+              command.method === "beginComputePass") {
+                command.duration = duration;
+
+                if (command.header) {
+                  if (command.method === "beginRenderPass") {
+                    const headerText = `Render Pass ${renderPassIndex} Duration: ${command.duration}ms`;
+                    command.header.text = headerText;
+                    renderPassIndex++;
+                  } else {
+                    const headerText = `Compute Pass ${computePassIndex} Duration: ${command.duration}ms`;
+                    command.header.text = headerText;
+                    computePassIndex++;
+                  }
+                }
+
                 k++;
                 break;
               }
@@ -245,6 +262,7 @@ export class CapturePanel {
       }).catch((error) => {
 
       });
+      return;
     }
 
     let command = this._captureCommands[id];
@@ -511,7 +529,7 @@ export class CapturePanel {
         if (command.duration !== undefined) {
           headerText += ` Duration:${command.duration}ms`;
         }
-        new Span(header, { text: headerText });
+        command.header = new Span(header, { text: headerText });
         const extra = new Span(header, { style: "margin-left: 10px;" });
         const block = new Div(currentBlock, { class: "capture_renderpass_block" });
         header.element.onclick = () => {
@@ -560,7 +578,7 @@ export class CapturePanel {
         currentBlock = new Div(debugGroup, { class: "capture_computepass" });
         const header = new Div(currentBlock, { id: `ComputePass_${passIndex}`, class: "capture_computepass_header" });
         const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
-        new Span(header, { text: `Compute Pass ${passIndex}` });
+        command.header = new Span(header, { text: `Compute Pass ${passIndex}` });
         const extra = new Span(header, { style: "margin-left: 10px;" });
         const block = new Div(currentBlock);
         header.element.onclick = () => {

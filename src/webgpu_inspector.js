@@ -262,6 +262,18 @@ import { alignTo } from "./utils/align.js";
     // Called before a GPU method is called, allowing the inspector to modify
     // the arguments or the object before the method is called.
     _preMethodCall(object, method, args) {
+      if (method === "requestDevice") {
+        // Make sure we enable timestamp queries so we can capture them.
+        if (args.length === 0) {
+          args[0] = {};
+        }
+        if (!args[0].requiredFeatures) {
+          args[0].requiredFeatures = ["timestamp-query"];
+        } else {
+          args[0].requiredFeatures.push("timestamp-query");
+        }
+      }
+
       if (method === "setPipeline") {
         // If a shader has been recompiled, that means the pipelines that
         // used that shader were also re-created. Patch in the replacement
