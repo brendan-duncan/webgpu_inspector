@@ -233,14 +233,14 @@ export class CapturePanel {
             const end = timestampData[i + 1];
             const duration = Number(end - start) / 1000000.0; // convert ns to ms
             for (; k < self._captureCommands.length; k++) {
-              if (self._captureCommands[k].method === "beginRenderPass") {
+              if (self._captureCommands[k].method === "beginRenderPass" ||
+                  self._captureCommands[k].method === "beginComputePass") {
                 self._captureCommands[k].duration = duration;
                 k++;
                 break;
               }
             }
           }
-          console.log("!!!! TIMESTAMP BUFFER LOADED", this._timestampBuffer);
         }
       }).catch((error) => {
 

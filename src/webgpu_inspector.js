@@ -320,13 +320,30 @@ import { alignTo } from "./utils/align.js";
             this._timestampIndex += 2;
           }
         }
-        /*if (this._errorChecking > 0) {
-          if (object.__device) {
-            this.disableRecording();
-            object.__device.pushErrorScope("validation");
-            this.enableRecording();
+      }
+
+      if (method === "beginComputePass") {
+        if (this._captureTimestamps && this._captureFrameRequest) {
+          if (!this._timestampQuerySet && object.__device) {
+            this._timestampQuerySet = object.__device.createQuerySet({
+              type: "timestamp",
+              count: this._maxTimestamps
+            });
+            this._timestampBuffer = object.__device.createBuffer({
+              size: this._maxTimestamps * 8,
+              usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
+            });
           }
-        }*/
+
+          if (!args[0].timestampWrites && this._timestampIndex < this._maxTimestamps) {
+            args[0].timestampWrites = {
+              querySet: this._timestampQuerySet,
+              beginningOfPassWriteIndex: this._timestampIndex,
+              endOfPassWriteIndex: this._timestampIndex + 1
+            };
+            this._timestampIndex += 2;
+          }
+        }
       }
 
       // We want to be able to capture canvas textures, so we need to add COPY_SRC to
