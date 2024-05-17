@@ -310,31 +310,7 @@ import { alignTo } from "./utils/align.js";
         }
       }
 
-      if (method === "beginRenderPass") {
-        if (this._captureTimestamps && this._captureFrameRequest) {
-          if (!this._timestampQuerySet && object.__device) {
-            this._timestampQuerySet = object.__device.createQuerySet({
-              type: "timestamp",
-              count: this._maxTimestamps
-            });
-            this._timestampBuffer = object.__device.createBuffer({
-              size: this._maxTimestamps * 8,
-              usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
-            });
-          }
-
-          if (!args[0].timestampWrites && this._timestampIndex < this._maxTimestamps) {
-            args[0].timestampWrites = {
-              querySet: this._timestampQuerySet,
-              beginningOfPassWriteIndex: this._timestampIndex,
-              endOfPassWriteIndex: this._timestampIndex + 1
-            };
-            this._timestampIndex += 2;
-          }
-        }
-      }
-
-      if (method === "beginComputePass") {
+      if (method === "beginRenderPass" || method === "beginComputePass") {
         if (this._captureTimestamps && this._captureFrameRequest) {
           if (!this._timestampQuerySet && object.__device) {
             this._timestampQuerySet = object.__device.createQuerySet({
@@ -417,7 +393,9 @@ import { alignTo } from "./utils/align.js";
         let timestampDstBuffer = null;
         if (this._timestampIndex > 0) {
           const commandEncoder = object.__device.createCommandEncoder();
-          commandEncoder.resolveQuerySet(this._timestampQuerySet, 0, 2, this._timestampBuffer, 0);
+
+          commandEncoder.resolveQuerySet(this._timestampQuerySet, 0, this._timestampIndex, this._timestampBuffer, 0);
+
           timestampDstBuffer = object.__device.createBuffer({
             size: this._timestampIndex * 8,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
@@ -669,6 +647,8 @@ import { alignTo } from "./utils/align.js";
         this._trackObject(deviceId, device);
         this._sendAddObjectMessage(id, adapterId, "Device", JSON.stringify(descriptor), stacktrace);
         device.__adapter = adapter; // prevent adapter from being garbage collected
+
+        this._device = device;
       }
     }
 
@@ -980,6 +960,35 @@ import { alignTo } from "./utils/align.js";
           this._captureFrameRequest = true;
           this._gpuWrapper.recordStacktraces = true;
           this._captureData = null;
+
+          if (this._captureTimestamps) {
+            this.disableRecording();
+            if (this._device) {
+              if (!this._timestampQuerySet) {
+                this._timestampQuerySet = this._device.createQuerySet({
+                  type: "timestamp",
+                  count: this._maxTimestamps
+                });
+                this._timestampBuffer = this._device.createBuffer({
+                  size: this._maxTimestamps * 8,
+                  usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
+                });
+              }
+
+              const commandEncoder = this._device.createCommandEncoder();
+              const pass = commandEncoder.beginComputePass({
+                timestampWrites:  {
+                  querySet: this._timestampQuerySet,
+                  beginningOfPassWriteIndex: 0,
+                  endOfPassWriteIndex: 1
+                }
+              });
+              pass.end();
+              this._device.queue.submit([commandEncoder.finish()]);
+              this._timestampIndex = 2;
+            }
+            this.enableRecording();
+          }
         }
       }
 
@@ -1121,6 +1130,9 @@ import { alignTo } from "./utils/align.js";
       const parent = object?.__id ?? 0;
 
       if (method === "destroy") {
+        if (object === this._device) {
+          this._device = null;
+        }
         const id = object.__id;
         object.__destroyed = true;
         // Don't remove canvas textures from the tracked objects, which have negative id's.

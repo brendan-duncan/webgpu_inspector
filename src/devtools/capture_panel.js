@@ -69,7 +69,7 @@ export class CapturePanel {
       this.captureFrameEdit.style.display = "none";
     }
 
-    this.maxBufferSize = (1024 * 1024) / 4;
+    this.maxBufferSize = (1024 * 1024) / 2;
     new Span(controlBar, { text: "Max Buffer Size (Bytes):", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });
     new NumberInput(controlBar, { value: this.maxBufferSize, min: 1, step: 1, precision: 0, style: "display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;", onChange: (value) => {
       self.maxBufferSize = Math.max(value, 1);
@@ -228,18 +228,29 @@ export class CapturePanel {
         self._timestampBuffer.set(chunkData, offset);
         self._timestampChunkCount--;
         if (self._timestampChunkCount === 0) {
+          let renderPassIndex = 0;
+          let computePassIndex = 0;
+
+          const timestampMap = new Array();
+
           const timestampData = new BigInt64Array(self._timestampBuffer.buffer);
-          for (let i = 0, j = 0, k = 0; i < timestampData.length; i += 2, j++) {
+          console.log(timestampData.length / 2);
+
+          const firstTime = Number(timestampData[0]) / 1000000.0;
+
+          for (let i = 2, k = 0; i < timestampData.length; i += 2) {
             const start = timestampData[i];
             const end = timestampData[i + 1];
             const duration = Number(end - start) / 1000000.0; // convert ns to ms
-            let renderPassIndex = 0;
-            let computePassIndex = 0;
             for (; k < self._captureCommands.length; k++) {
               const command = self._captureCommands[k];
               if (command.method === "beginRenderPass" ||
-              command.method === "beginComputePass") {
+                  command.method === "beginComputePass") {
                 command.duration = duration;
+                command.startTime = Number(start) / 1000000.0;
+                command.endTime = Number(end) / 1000000.0;
+
+                timestampMap.push(command);
 
                 if (command.header) {
                   if (command.method === "beginRenderPass") {
@@ -257,6 +268,12 @@ export class CapturePanel {
                 break;
               }
             }
+          }
+
+          timestampMap.sort((a, b) => { return a.startTime - b.startTime; });
+
+          for (const command of timestampMap) {
+            console.log(`${command.startTime - firstTime}: [${command.id}]: ${command.method} -> ${command.duration}ms`);
           }
         }
       }).catch((error) => {
