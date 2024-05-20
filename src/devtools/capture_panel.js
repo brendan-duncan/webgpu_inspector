@@ -15,9 +15,9 @@ import { Widget } from "./widget/widget.js";
 import { getFlagString } from "../utils/flags.js";
 import { Select } from "./widget/select.js";
 import { Actions, PanelActions } from "../utils/actions.js";
-import { decodeDataUrl } from "../utils/base64.js";
 import { getFormatFromReflection } from "../utils/reflection_format.js";
 import { ResourceType, WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
+import { CaptureData } from "./capture_data.js";
 
 export class CapturePanel {
   constructor(window, parent) {
@@ -28,15 +28,20 @@ export class CapturePanel {
 
     this.statistics = new CaptureStatistics();
 
+    this._captureData = null;
+
     const controlBar = new Div(parent, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
 
     new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => { 
       try {
-        self._captureCommands.length = 0;
-        self._pendingCommandBufferData.clear();
+        this._captureData = new CaptureData(this.database);
+        this._captureData.onCaptureFrameResults.addListener(self._captureFrameResults, self);
+
         const frame = self.captureMode === 0 ? -1 : self.captureSpecificFrame;
         self.port.postMessage({ action: PanelActions.Capture, maxBufferSize: self.maxBufferSize, frame });
-      } catch (e) {}
+      } catch (e) {
+        console.error(e.message);
+      }
     } });
 
     this.captureMode = 0;
@@ -86,85 +91,33 @@ export class CapturePanel {
     window.onTextureLoaded.addListener(this._textureLoaded, this);
     window.onTextureDataChunkLoaded.addListener(this._textureDataChunkLoaded, this);
 
-    this._loadingImages = 0;
-    this._loadingBuffers = 0;
-    this._loadedDataChunks = 0;
-
-    this._captureCommands = [];
-    this._catpureFrameIndex = 0;
-    this._captureCount = 0;
-    this._lastSelectedCommand = null;
     this._frameImageList = [];
+    this._lastSelectedCommand = null;
     this._gpuTextureMap = new Map();
     this._passEncoderCommands = new Map();
-    this._pendingCommandBufferData = new Map();
-    this._pendingBufferData = [];
-    this._timestampBuffer = null;
 
     port.addListener((message) => {
       switch (message.action) {
         case Actions.CaptureTextureFrames: {
-          self._loadedDataChunks += message.chunkCount;
-          self._loadingImages += message.count ?? 0;
-          const textures = message.textures;
-          if (textures) {
-            for (const textureId of textures) {
-              const texture = self._getObject(textureId);
-              if (texture) {
-                texture.imageDataPending = true;
-              }
-            }
-          }
+          self._captureData.captureTextureFrames(message);
           self._updateCaptureStatus();
           break;
         }
         case Actions.CaptureFrameResults: {
-          const frame = message.frame;
-          const count = message.count;
-          const batches = message.batches;
-          self._captureCommands.length = count;
-          self._catpureFrameIndex = frame;
-          self._captureCount = batches;
+          self._captureData.captureFrameResults(message);
           break;
         }
         case Actions.CaptureFrameCommands: {
-          const commands = message.commands;
-          const index = message.index;
-          const count = message.count;
-          const frame = message.frame;
-          const pendingCommandBuffers = this._pendingCommandBufferData;
-          for (const ci in pendingCommandBuffers) {
-            const cmdData = pendingCommandBuffers[ci];
-            const cmd = commands[ci];
-            for (const m in cmdData) {
-              cmd[m] = cmdData[m];
-            }
-          }
-          this._pendingCommandBufferData.clear();
-          for (let i = 0, j = index; i < count; ++i, ++j) {
-            self._captureCommands[j] = commands[i];
-          }
-          self._captureCount--;
-          if (self._captureCount === 0) {
-            self._captureFrameResults(frame, self._captureCommands);
-          }
+          self._captureData.captureFrameCommands(message);
           break;
         }
         case Actions.CaptureBuffers: {
-          self._loadingBuffers += message.count ?? 0;
-          self._loadedDataChunks += message.chunkCount;
+          self._captureData.captureBuffers(message);
           self._updateCaptureStatus();
           break;
         }
         case Actions.CaptureBufferData: {
-          const id = message.commandId;
-          const entryIndex = message.entryIndex;
-          const offset = message.offset;
-          const size = message.size;
-          const index = message.index;
-          const count = message.count;
-          const chunk = message.chunk;
-          self._captureBufferData(id, entryIndex, offset, size, index, count, chunk);
+          self._captureData.captureBufferData(message);
           break;
         }
       }
@@ -179,178 +132,8 @@ export class CapturePanel {
     return this.database.getObject(id);
   }
 
-  _addDataMembersToCommand(command, entryIndex, size, count) {
-    if (!command.bufferData) {
-      command.bufferData = [];
-    }
-
-    if (!command.dataPending) {
-      command.dataPending = [];
-    }
-
-    if (!command.bufferData[entryIndex]) {
-      command.bufferData[entryIndex] = new Uint8Array(size);
-      command.dataPending[entryIndex] = true;
-    }
-
-    /*const bufferData = command.bufferData[entryIndex];
-    if (bufferData.length != size) {
-      console.log("!!!!!!!!!!!!!!! INVALID BUFFER SIZE", bufferData.length, size);
-      return;
-    }*/
-
-    if (!command.loadedDataChunks) {
-      command.loadedDataChunks = [];
-    }
-
-    if (!command.loadedDataChunks[entryIndex]) {
-      command.loadedDataChunks[entryIndex] = [];
-    }
-
-    if (command.loadedDataChunks[entryIndex].length !== count) {
-      command.loadedDataChunks[entryIndex].length = count;
-    }
-
-    if (!command.isBufferDataLoaded) {
-      command.isBufferDataLoaded = [];
-    }
-  }
-
-  _captureBufferData(id, entryIndex, offset, size, index, count, chunk) {
-    if (id === -1000) {
-      // Timestamp buffer
-      if (this._timestampBuffer == null) {
-        this._timestampBuffer = new Uint8Array(size);
-        this._timestampChunkCount = count;
-      }
-      const self = this;
-      decodeDataUrl(chunk).then((chunkData) => {
-        self._timestampBuffer.set(chunkData, offset);
-        self._timestampChunkCount--;
-        if (self._timestampChunkCount === 0) {
-          let renderPassIndex = 0;
-          let computePassIndex = 0;
-
-          const timestampMap = new Array();
-
-          const timestampData = new BigInt64Array(self._timestampBuffer.buffer);
-          console.log(timestampData.length / 2);
-
-          const firstTime = Number(timestampData[0]) / 1000000.0;
-
-          for (let i = 2, k = 0; i < timestampData.length; i += 2) {
-            const start = timestampData[i];
-            const end = timestampData[i + 1];
-            const duration = Number(end - start) / 1000000.0; // convert ns to ms
-            for (; k < self._captureCommands.length; k++) {
-              const command = self._captureCommands[k];
-              if (command.method === "beginRenderPass" ||
-                  command.method === "beginComputePass") {
-                command.duration = duration;
-                command.startTime = Number(start) / 1000000.0;
-                command.endTime = Number(end) / 1000000.0;
-
-                timestampMap.push(command);
-
-                if (command.header) {
-                  if (command.method === "beginRenderPass") {
-                    const headerText = `Render Pass ${renderPassIndex} Duration: ${command.duration}ms`;
-                    command.header.text = headerText;
-                    renderPassIndex++;
-                  } else {
-                    const headerText = `Compute Pass ${computePassIndex} Duration: ${command.duration}ms`;
-                    command.header.text = headerText;
-                    computePassIndex++;
-                  }
-                }
-
-                k++;
-                break;
-              }
-            }
-          }
-
-          timestampMap.sort((a, b) => { return a.startTime - b.startTime; });
-
-          for (const command of timestampMap) {
-            console.log(`${command.startTime - firstTime}: [${command.id}]: ${command.method} -> ${command.duration}ms`);
-          }
-        }
-      }).catch((error) => {
-
-      });
-      return;
-    }
-
-    let command = this._captureCommands[id];
-    if (!command) {
-      command = this._pendingCommandBufferData[id] ?? {};
-      this._pendingCommandBufferData[id] = command;
-    }
-
-    const self = this;
-    decodeDataUrl(chunk).then((chunkData) => {
-      const command = self._captureCommands[id] ?? self._pendingCommandBufferData[id];
-      self._addDataMembersToCommand(command, entryIndex, size, count);
-      self._loadedDataChunks--;
-      try {
-        command.bufferData[entryIndex].set(chunkData, offset);
-        command.loadedDataChunks[entryIndex][index] = true;
-      } catch (e) {
-        console.log(e);
-        command.loadedDataChunks[entryIndex].length = 0;
-        command.isBufferDataLoaded[entryIndex] = false;
-      }
-
-      let loaded = true;
-      for (let i = 0; i < count; ++i) {
-        if (!command.loadedDataChunks[entryIndex][i]) {
-          loaded = false;
-          break;
-        }
-      }
-      command.isBufferDataLoaded[entryIndex] = loaded;
-
-      if (command.isBufferDataLoaded[entryIndex]) {     
-        self._loadingBuffers--;
-        command.loadedDataChunks[entryIndex].length = 0;
-      }
-      self._updateCaptureStatus();
-    }).catch((error) => {
-      console.error(error);
-      self._loadedDataChunks--;
-      command.loadedDataChunks[entryIndex][index] = true;
-      let loaded = true;
-      for (let i = 0; i < count; ++i) {
-        if (!command.loadedDataChunks[entryIndex][i]) {
-          loaded = false;
-          break;
-        }
-      }
-      command.isBufferDataLoaded[entryIndex] = loaded;
-      if (command.isBufferDataLoaded[entryIndex]) {     
-        self._loadingBuffers--;
-        command.loadedDataChunks[entryIndex].length = 0;
-      }
-      self._updateCaptureStatus();
-    });
-  }
-
   _updateCaptureStatus() {
-    let text = "";
-    if (this._loadingImages || this._loadingBuffers || this._loadedDataChunks) {
-      text = "Loading ";
-
-      if (this._loadingImages) {
-        text += `Images: ${this._loadingImages} `;
-      }
-      if (this._loadingBuffers) {
-        text += `Buffers: ${this._loadingBuffers} `;
-      }
-      if (this._loadedDataChunks) {
-        text += `Data Chunks: ${this._loadedDataChunks} `;
-      }
-    }
+    let text = this._captureData?.getCaptureStatus() ?? "";
     this._captureStatus.text = text;
   }
 
@@ -2600,7 +2383,7 @@ export class CapturePanel {
   }
 
   _textureDataChunkLoaded() {
-    this._loadedDataChunks--;
+    this._captureData.captureTextureDataChunk();
     this._updateCaptureStatus();
   }
 
@@ -2630,11 +2413,12 @@ export class CapturePanel {
   }
 
   _textureLoaded(texture, passId) {
+    this._captureData.captureTextureLoaded();
+
     if (this._lastSelectedCommand) {
       this._lastSelectedCommand.element.click();
     }
 
-    this._loadingImages--;
     this._updateCaptureStatus();
 
     const frameImages = this._frameImages;
