@@ -1,3 +1,5 @@
+
+import { decodeDataUrl } from "../utils/base64.js";
 import { Signal } from "../utils/signal.js";
 
 export class CaptureData {
