@@ -36,6 +36,7 @@ export class CapturePanel {
       try {
         this._captureData = new CaptureData(this.database);
         this._captureData.onCaptureFrameResults.addListener(self._captureFrameResults, self);
+        this._captureData.onUpdateCaptureStatus.addListener(self._updateCaptureStatus, self);
 
         const frame = self.captureMode === 0 ? -1 : self.captureSpecificFrame;
         self.port.postMessage({ action: PanelActions.Capture, maxBufferSize: self.maxBufferSize, frame });
@@ -2134,7 +2135,7 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_indirectBuffer(command, indirectBuffer, indirectOffset, commandInfo, collapsed, isCompute = false) {
+  _showCaptureCommandInfo_indirectBuffer(command, indirectBuffer, indirectOffset, commandInfo, collapsed) {
     const id = indirectBuffer.__id;
     const buffer = this._getObject(id);
     if (buffer) {
@@ -2153,17 +2154,22 @@ export class CapturePanel {
       if (command.isBufferDataLoaded && command.bufferData) {
         const bufferData = command.bufferData[0];
         if (bufferData) {
-          const u32Array = new Uint32Array(bufferData.buffer);
-          if (isCompute) {
+          const u32Array = new Uint32Array(bufferData.buffer, indirectOffset);
+          if (command.method === "dispatchWorkgroupsIndirect") {
             new Div(bufferGrp.body, { text: `Workgroup Count X: ${u32Array[0]}` });
             new Div(bufferGrp.body, { text: `Workgroup Count Y: ${u32Array[1]}` });
             new Div(bufferGrp.body, { text: `Workgroup Count Z: ${u32Array[2]}` });
-          } else {
+          } else if (command.method === "drawIndexedIndirect") {
             new Div(bufferGrp.body, { text: `Index Count: ${u32Array[0]}` });
             new Div(bufferGrp.body, { text: `Instance Count: ${u32Array[1]}` });
             new Div(bufferGrp.body, { text: `First Index: ${u32Array[2]}` });
             new Div(bufferGrp.body, { text: `Base Vertex: ${u32Array[3]}` });
             new Div(bufferGrp.body, { text: `First Instance: ${u32Array[4]}` });
+          } else if (command.method === "drawIndirect") {
+            new Div(bufferGrp.body, { text: `Vertex Count: ${u32Array[0]}` });
+            new Div(bufferGrp.body, { text: `Instance Count: ${u32Array[1]}` });
+            new Div(bufferGrp.body, { text: `First Index: ${u32Array[2]}` });
+            new Div(bufferGrp.body, { text: `First Instance: ${u32Array[3]}` });
           }
         }
       }

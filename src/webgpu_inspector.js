@@ -1367,8 +1367,8 @@ import { alignTo } from "./utils/align.js";
 
       if (method === "drawIndirect" || method === "drawIndexedIndirect" || method === "dispatchWorkgroupsIndirect") {
         const buffer = args[0];
-        const offset = args[1];
-        const size = 32;
+        const offset = 0;
+        const size = buffer.size;
         if (!object.__captureBuffers) {
           object.__captureBuffers = [];
         }

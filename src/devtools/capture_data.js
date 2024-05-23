@@ -11,6 +11,7 @@ export class CaptureData {
     this.frameImageList = [];
 
     this.onCaptureFrameResults = new Signal();
+    this.onUpdateCaptureStatus = new Signal();
     
     this._loadedDataChunks = 0;
     this._loadingImages = 0;
@@ -172,9 +173,12 @@ export class CaptureData {
           for (const command of timestampMap) {
             console.log(`${command.startTime - firstTime}: [${command.id}]: ${command.method} -> ${command.duration}ms`);
           }
+
+          self.onUpdateCaptureStatus.emit();
         }
       }).catch((error) => {
         console.error(error.message);
+        self.onUpdateCaptureStatus.emit();
       });
       return;
     }
@@ -212,7 +216,8 @@ export class CaptureData {
         self._loadingBuffers--;
         command.loadedDataChunks[entryIndex].length = 0;
       }
-      self._updateCaptureStatus();
+
+      self.onUpdateCaptureStatus.emit();
     }).catch((error) => {
       console.error(error);
       self._loadedDataChunks--;
@@ -229,7 +234,8 @@ export class CaptureData {
         self._loadingBuffers--;
         command.loadedDataChunks[entryIndex].length = 0;
       }
-      self._updateCaptureStatus();
+
+      self.onUpdateCaptureStatus.emit();
     });
   }
 
