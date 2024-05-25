@@ -2,7 +2,7 @@
     <body>
         <canvas id="webgpu_canvas" width="960" height="600"></canvas>
         <script type="module">
-            import { webgpuInspectorWorker } from 'https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@0.4/src/webgpu_inspector_worker.js';
+            import { webgpuInspectorWorker } from 'https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector/src/webgpu_inspector_worker.js';
             const canvas = document.getElementById("webgpu_canvas");
             const worker = new Worker(new URL('./webgpu_worker.js', import.meta.url), { type: 'module' });
             const offscreenCanvas = canvas.transferControlToOffscreen();
