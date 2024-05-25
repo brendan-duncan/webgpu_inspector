@@ -5,8 +5,17 @@ import { TextureUtils } from "./utils/texture_utils.js";
 import { Actions, PanelActions } from "./utils/actions.js";
 import { RollingAverage } from "./utils/rolling_average.js";
 import { alignTo } from "./utils/align.js";
+import { webgpuInspectorHandler } from "./webgpu_inspector_handler.js";
+
+export let webgpuInspector = null;
 
 (() => {
+  const _self = self;
+  const _window = self.window;
+  const _document = self.document;
+  const _sessionStorage = self.sessionStorage;
+  const _postMessage = self.postMessage;
+
   const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 
   // How much data should we send to the panel via message as a chunk.
@@ -49,27 +58,27 @@ import { alignTo } from "./utils/align.js";
       this._timestampIndex = 0;
       this._maxTimestamps = 2000;
 
-      if (!window.navigator.gpu) {
+      if (!navigator.gpu) {
         // No WebGPU support
         return;
       }
 
-      if (document.body) {
-        const statusContainer = document.createElement("div");
+      if (_document?.body) {
+        const statusContainer = _document.createElement("div");
         statusContainer.style = "position: absolute; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt;";
-        document.body.insertBefore(statusContainer, document.body.firstChild);
+        _document.body.insertBefore(statusContainer, _document.body.firstChild);
 
-        this._inspectingStatus = document.createElement("div");
+        this._inspectingStatus = _document.createElement("div");
         this._inspectingStatus.title = "WebGPU Inspector Running";
         this._inspectingStatus.style = "height: 10px; width: 10px; display: inline-block; margin-right: 5px; background-color: #ff0; border-radius: 50%; border: 1px solid #000; box-shadow: inset -4px -4px 4px -3px rgb(255,100,0), 2px 2px 3px rgba(0,0,0,0.8);";
         statusContainer.appendChild(this._inspectingStatus);
 
-        this._inspectingStatusFrame = document.createElement("div");
+        this._inspectingStatusFrame = _document.createElement("div");
         this._inspectingStatusFrame.style = "display: inline-block;";
         this._inspectingStatusFrame.textContent = "Frame: 0";
         statusContainer.appendChild(this._inspectingStatusFrame);
 
-        this._inspectingStatusText = document.createElement("div");
+        this._inspectingStatusText = _document.createElement("div");
         this._inspectingStatusText.style = "display: inline-block; margin-left: 10px;";
         statusContainer.appendChild(this._inspectingStatusText);
       }
@@ -106,7 +115,7 @@ import { alignTo } from "./utils/align.js";
           }
 
           if (self._garbageCollectectedObjects.length > 100) {
-            window.postMessage({ "action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects }, "*");
+            self._postMessage({ "action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects });
             self._garbageCollectectedObjects.length = 0;
           }
         }
@@ -123,32 +132,35 @@ import { alignTo } from "./utils/align.js";
       const garbageCollectionInterval = 200;
       setInterval(() => {
         if (self._garbageCollectectedObjects.length > 0) {
-          window.postMessage({ "action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects }, "*");
+          self._postMessage({ "action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects });
           self._garbageCollectectedObjects.length = 0;
         }
       }, garbageCollectionInterval);
 
       // Wrap the canvas elements so we can capture when their context is created.
-      const canvases = document.getElementsByTagName("canvas");
-      for (const canvas of canvases) {
-        this._wrapCanvas(canvas);
-      }
-
-      // Capture any dynamically created canvases.
-      const __createElement = document.createElement;
-      document.createElement = function (type) {
-        const element = __createElement.call(document, type);
-        if (type === "canvas") {
-          self._wrapCanvas(element);
+      if (_document) {
+        const canvases = _document.getElementsByTagName("canvas");
+        for (const canvas of canvases) {
+          this._wrapCanvas(canvas);
         }
-        return element;
-      };
+
+        // Capture any dynamically created canvases.
+        const __createElement = _document.createElement;
+        _document.createElement = function (type) {
+          const element = __createElement.call(_document, type);
+          if (type === "canvas") {
+            self._wrapCanvas(element);
+          }
+          return element;
+        };
+      }
 
       // Wrap requestAnimationFrame so it can keep track of framerates and frame captures.
       // This requires that the page uses requestAnimationFrame to drive the rendering loop.
-      const __requestAnimationFrame = window.requestAnimationFrame;
+      const __requestAnimationFrame = requestAnimationFrame;
       this._currentFrameTime = 0.0;
-      window.requestAnimationFrame = function (cb) {
+
+      requestAnimationFrame = function (cb) {
         function callback(timestamp) {
           if (!self._currentFrameTime) {
             self._currentFrameTime = timestamp;
@@ -169,15 +181,20 @@ import { alignTo } from "./utils/align.js";
       };
 
       // Listen for messages from the content-script.
-      window.addEventListener("message", (event) => {
-        if (event.source !== window) {
+      _self.addEventListener("message", (event) => {
+        if (_window && event.source !== _window) {
           return;
         }
         const message = event.data;
-        if (typeof message !== "object" || message === null) {
+        if (typeof message !== "object" || !message.__webgpuInspector) {
           return;
         }
-        if (message.action === PanelActions.RequestTexture) {
+
+        if (message.action === Actions.DeltaTime) {
+          if (message.__webgpuInspectorWorker) {
+            this._updateFrameRate(message.deltaTime);
+          }
+        } else if (message.action === PanelActions.RequestTexture) {
           const textureId = message.id;
           self._requestTexture(textureId);
         } else if (message.action === PanelActions.CompileShader) {
@@ -187,8 +204,19 @@ import { alignTo } from "./utils/align.js";
         } else if (message.action === PanelActions.RevertShader) {
           const shaderId = message.id;
           self._revertShader(shaderId);
+        } else if (message.action === PanelActions.Capture) {
+          if (_window == null) {
+            if (message.data.constructor.name === "String") {
+              message.data = JSON.parse(message.data);
+            }
+            self._captureData = message.data;
+          }
         }
       });
+    }
+
+    captureWorker(canvas) {
+      this._wrapCanvas(canvas);
     }
 
     disableRecording() {
@@ -197,6 +225,13 @@ import { alignTo } from "./utils/align.js";
 
     enableRecording() {
       this._gpuWrapper.enableRecording();
+    }
+
+    _postMessage(message) {
+      message.__webgpuInspector = true;
+      message.__webgpuInspectorPage = true;
+      message.__webgpuInspectorWorker = !_window;
+      _postMessage(message);
     }
 
     _updateCanvasAttachment(attachment) {
@@ -371,7 +406,7 @@ import { alignTo } from "./utils/align.js";
               const texture = view.__texture;
               if (texture.__frameIndex < this._frameIndex) {
                 const message = "An expired canvas texture is being used as an attachment for a RenderPass.";
-                window.postMessage({ "action": Actions.ValidationError, id: 0, message, stacktrace }, "*");
+                this._postMessage({ "action": Actions.ValidationError, id: 0, message, stacktrace });
               }
               break;
             }
@@ -464,7 +499,7 @@ import { alignTo } from "./utils/align.js";
             if (error) {
               console.error(error.message);
               const id = result?.__id ?? 0;
-              window.postMessage({ "action": Actions.ValidationError, id, "message": error.message, stacktrace }, "*");
+              self._postMessage({ "action": Actions.ValidationError, id, "message": error.message, stacktrace });
             }
           });
           this.enableRecording();
@@ -479,7 +514,7 @@ import { alignTo } from "./utils/align.js";
             device.popErrorScope().then((error) => {
               if (error) {
                 console.error(error.message);
-                window.postMessage({ "action": Actions.ValidationError, "message": error.message, stacktrace }, "*");
+                self._postMessage({ "action": Actions.ValidationError, "message": error.message, stacktrace });
               }
             });
             this.enableRecording();
@@ -561,7 +596,7 @@ import { alignTo } from "./utils/align.js";
                 const texture = entry.resource.__texture;
                 if (texture.__frameIndex < this._frameIndex) {
                   const message = `A BindGroup(${object.__id}) with an expired canvs texture is being used.`;
-                  window.postMessage({ "action": Actions.ValidationError, id: 0, message, stacktrace }, "*");
+                  this._postMessage({ "action": Actions.ValidationError, id: 0, message, stacktrace });
                 }
               }
             }
@@ -602,7 +637,7 @@ import { alignTo } from "./utils/align.js";
         }
       } else if (result) {
         this._wrapObject(result, id);
-        window.postMessage({ action: Actions.ResolveAsyncObject, id: result.__id });
+        this._postMessage({ action: Actions.ResolveAsyncObject, id: result.__id });
       }
     }
 
@@ -633,8 +668,9 @@ import { alignTo } from "./utils/align.js";
       if (device && device.__id === undefined) {
         device.queue.__device = device;
 
+        const self = this;
         device.addEventListener('uncapturederror', (event) => {
-          window.postMessage({ "action": Actions.ValidationError, id: 0, "message": event.error.message }, "*");
+          self._postMessage({ "action": Actions.ValidationError, id: 0, "message": event.error.message });
         });
 
         args ??= [];
@@ -674,7 +710,7 @@ import { alignTo } from "./utils/align.js";
       if (object) {
         const type = object.name;
         const message = `${type} was garbage collected without being explicitly destroyed. These objects should explicitly destroyed to avoid GPU memory leaks.`;
-        window.postMessage({"action": Actions.ValidationError, id: 0, "message": message}, "*");
+        this._postMessage({"action": Actions.ValidationError, id: 0, "message": message});
       }
     }
 
@@ -811,11 +847,12 @@ import { alignTo } from "./utils/align.js";
       device.pushErrorScope('validation');
       descriptor.__replacement = shaderId;
       const newShaderModule = device.createShaderModule(descriptor);
+      const self = this;
       device.popErrorScope().then((error) => {
         if (error) {
           console.error(error.message);
           const id = shaderId ?? 0;
-          window.postMessage({ "action": Actions.ValidationError, id, "message": error.message }, "*");
+          self._postMessage({ "action": Actions.ValidationError, id, "message": error.message });
         }
       });
       this._errorChecking++;
@@ -870,11 +907,12 @@ import { alignTo } from "./utils/align.js";
             const newPipeline = isRenderPipeline ?
                 device.createRenderPipeline(newDescriptor) :
                 device.createComputePipeline(newDescriptor);
+            const self = this;
             device.popErrorScope().then((error) => {
               if (error) {
                 console.error(error.message);
                 const id = objectRef.id ?? 0;
-                window.postMessage({ "action": Actions.ValidationError, id, "message": error.message }, "*");
+                self._postMessage({ "action": Actions.ValidationError, id, "message": error.message });
               }
             });
             this._errorChecking++;
@@ -929,7 +967,17 @@ import { alignTo } from "./utils/align.js";
         status = `Capturing: ${status} `;
       }
 
-      this._inspectingStatusText.textContent = status;
+      if (this._inspectingStatusFrame) {
+        this._inspectingStatusText.textContent = status;
+      }
+    }
+
+    _updateFrameRate(deltaTime) {
+      this._frameRate.add(deltaTime);
+      this._frameIndex++;
+      if (this._inspectingStatusFrame) {
+        this._inspectingStatusFrame.textContent = `Frame: ${this._frameIndex} : ${this._frameRate.average.toFixed(2)}ms`;
+      }
     }
 
     _frameStart(time) {
@@ -938,20 +986,22 @@ import { alignTo } from "./utils/align.js";
         this._lastFrameTime = time;
       } else {
         deltaTime = time - this._lastFrameTime;
-        window.postMessage({ "action": Actions.DeltaTime, deltaTime }, "*");
+        this._postMessage({ "action": Actions.DeltaTime, deltaTime });
         this._lastFrameTime = time;
 
         this._frameRate.add(deltaTime);
       }
 
-      const captureData = sessionStorage.getItem(webgpuInspectorCaptureFrameKey);
-      if (captureData) {
-        try {
-          this._captureData = JSON.parse(captureData);
-        } catch (e) {
-          this._captureData = null;
+      if (_sessionStorage) {
+        const captureData = _sessionStorage.getItem(webgpuInspectorCaptureFrameKey);
+        if (captureData) {
+          try {
+            this._captureData = JSON.parse(captureData);
+          } catch (e) {
+            this._captureData = null;
+          }
+          _sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
         }
-        sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
       }
 
       if (this._captureData) {
@@ -998,25 +1048,28 @@ import { alignTo } from "./utils/align.js";
       this._frameIndex++;
       this._frameCommandCount = 0;
 
-      this._inspectingStatusFrame.textContent = `Frame: ${this._frameIndex} : ${this._frameRate.average.toFixed(2)}ms`;
+
+      if (this._inspectingStatusFrame) {
+        this._inspectingStatusFrame.textContent = `Frame: ${this._frameIndex} : ${this._frameRate.average.toFixed(2)}ms`;
+      }
     }
 
     _frameEnd(time) {
       if (this._captureFrameCommands.length) {
         const maxFrameCount = 2000;
         const batches = Math.ceil(this._captureFrameCommands.length / maxFrameCount);
-        window.postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": this._captureFrameCommands.length, "batches": batches }, "*");
+        this._postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": this._captureFrameCommands.length, "batches": batches });
 
         for (let i = 0; i < this._captureFrameCommands.length; i += maxFrameCount) {
           const length = Math.min(maxFrameCount, this._captureFrameCommands.length - i);
           const commands = this._captureFrameCommands.slice(i, i + length);
-          window.postMessage({
+          this._postMessage({
               "action": Actions.CaptureFrameCommands,
               "frame": this._frameIndex - 1,
               "commands": commands,
               "index": i,
               "count": length
-            }, "*");
+            });
         }
         this._captureFrameCommands.length = 0;
         this._captureFrameRequest = false;
@@ -1067,6 +1120,7 @@ import { alignTo } from "./utils/align.js";
         // Capture chaning of the GPUObjectBase label
         const l = object.label;
         object._label = l;
+        const self = this;
         Object.defineProperty(object, "label", {
           enumerable: true,
           configurable: true,
@@ -1077,7 +1131,7 @@ import { alignTo } from "./utils/align.js";
             if (label !== this._label) {
               this._label = label;
               const id = this.__id;
-              window.postMessage({ "action": Actions.ObjectSetLabel, id, label }, "*");
+              self._postMessage({ "action": Actions.ObjectSetLabel, id, label });
             }
           }
         });
@@ -1123,7 +1177,7 @@ import { alignTo } from "./utils/align.js";
     }
 
     _sendAddObjectMessage(id, parent, type, descriptor, stacktrace, pending) {
-      window.postMessage({ "action": Actions.AddObject, id, parent, type, descriptor, stacktrace, pending }, "*");
+      this._postMessage({ "action": Actions.AddObject, id, parent, type, descriptor, stacktrace, pending });
     }
 
     _recordCommand(object, method, result, args, stacktrace) {
@@ -1147,7 +1201,7 @@ import { alignTo } from "./utils/align.js";
         }
         if (id >= 0) {
           this._captureTextureRequest.delete(id);
-          window.postMessage({"action": Actions.DeleteObject, id}, "*");
+          this._postMessage({"action": Actions.DeleteObject, id});
         }
       } else if (method === "createShaderModule") {
         const id = result.__id;
@@ -1439,12 +1493,12 @@ import { alignTo } from "./utils/align.js";
         totalChunks += numChunks;
       }
 
-      window.postMessage({
+      this._postMessage({
         "action": Actions.CaptureTextureFrames, 
         "chunkCount": totalChunks,
         "count": buffers.length,
-        textures }, "*");
-     
+        textures });
+
       for (const textureBuffer of buffers) {
         const { id, tempBuffer, passId } = textureBuffer;
 
@@ -1477,7 +1531,7 @@ import { alignTo } from "./utils/align.js";
         this._encodingTextureChunkCount++;
         this._updateStatusMessage();
         encodeDataUrl(chunk).then((chunkData) => {
-          window.postMessage({
+          self._postMessage({
             "action": Actions.CaptureTextureData,
             id,
             passId,
@@ -1486,7 +1540,7 @@ import { alignTo } from "./utils/align.js";
             index: i,
             count: numChunks,
             chunk: chunkData
-          }, "*");
+          });
           self._encodingTextureChunkCount--;
           self._updateStatusMessage();
         }).catch((e) => {
@@ -1522,7 +1576,7 @@ import { alignTo } from "./utils/align.js";
         this._encodingBufferChunkCount++;
         this._updateStatusMessage();
         encodeDataUrl(chunk).then((chunkData) => {
-          window.postMessage({
+          self._postMessage({
             "action": Actions.CaptureBufferData,
             commandId,
             entryIndex,
@@ -1531,7 +1585,7 @@ import { alignTo } from "./utils/align.js";
             index: i,
             count: numChunks,
             chunk: chunkData
-          }, "*");
+          });
           self._encodingBufferChunkCount--;
           self._updateStatusMessage();
         }).catch((error) => {
@@ -1563,10 +1617,10 @@ import { alignTo } from "./utils/align.js";
           totalChunks += numChunks;
         }
 
-        window.postMessage({
+        this._postMessage({
           "action": Actions.CaptureBuffers,
           "count": buffers.length,
-          "chunkCount": totalChunks }, "*");
+          "chunkCount": totalChunks });
       }
 
       let count = buffers.length;
@@ -1740,6 +1794,15 @@ import { alignTo } from "./utils/align.js";
       return -1;
     }
 
+    _isHTMLImageElement(object) {
+      if (!_window) {
+        return false;
+      }
+      return object instanceof HTMLImageElement ||
+        object instanceof HTMLCanvasElement ||
+        object instanceof HTMLVideoElement;
+    }
+
     // Convert any objects to a string representation that can be sent to the inspector server.
     _processCommandArgs(object) {
       if (!object || object.constructor === Number || object.constructor === String || object.constructor === Boolean) {
@@ -1750,11 +1813,9 @@ import { alignTo } from "./utils/align.js";
       }
       if (object instanceof ImageBitmap ||
         object instanceof ImageData ||
-        object instanceof HTMLImageElement ||
-        object instanceof HTMLCanvasElement ||
-        object instanceof HTMLVideoElement ||
         object instanceof OffscreenCanvas ||
-        object instanceof VideoFrame) {
+        object instanceof VideoFrame ||
+        this._isHTMLImageElement(object)) {
         return `@-1 ${object.constructor.name} ${object.width} ${object.height}`;
       }
       if (object instanceof Array || object.buffer !== undefined) {
@@ -1784,5 +1845,25 @@ import { alignTo } from "./utils/align.js";
     }
   }
 
-  new WebGPUInspector();
+  webgpuInspector = new WebGPUInspector();
+
+  // Intercept Worker creation to wrap the worker with the inspector handler.
+  const _OrigWorker = Worker;
+  class _Worker {
+    constructor() {
+      this._worker = new _OrigWorker(...arguments);
+      webgpuInspectorHandler(this._worker);
+    }
+  };
+
+  for (const m in _OrigWorker.prototype) {
+    if (m === "constructor") {
+      continue;
+    }
+    _Worker.prototype[m] = function() {
+      return this._worker[m].apply(this._worker, arguments);
+    }
+  }
+
+  Worker = _Worker;
 })();

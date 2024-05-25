@@ -36,6 +36,8 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
       inspectMessage = messageString;
     } else {
       sessionStorage.setItem(webgpuInspectorCaptureFrameKey, messageString);
+      window.postMessage({ __webgpuInspector: true, __webgpuInspectorPanel: true, action: PanelActions.Capture,
+        data: messageString }, "*");
     }
   }
   

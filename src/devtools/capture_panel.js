@@ -98,6 +98,9 @@ export class CapturePanel {
     this._passEncoderCommands = new Map();
 
     port.addListener((message) => {
+      if (!self._captureData) {
+        return;
+      }
       switch (message.action) {
         case Actions.CaptureTextureFrames: {
           self._captureData.captureTextureFrames(message);
@@ -1063,7 +1066,7 @@ export class CapturePanel {
           if (struct.name === typeName) {
             type.replacement = struct;
             type.replacement.radix = radix;
-            console.log("REPLACEMENT RADIX", type.replacement.radix);
+            //console.log("REPLACEMENT RADIX", type.replacement.radix);
             return;
           }
         }
@@ -1071,7 +1074,7 @@ export class CapturePanel {
         if (reflect.structs.length > 0) {
           type.replacement = reflect.structs[reflect.structs.length - 1];
           type.replacement.radix = radix;
-          console.log("REPLACEMENT RADIX", type.replacement.radix);
+          //console.log("REPLACEMENT RADIX", type.replacement.radix);
           return;
         
         }
@@ -2389,8 +2392,10 @@ export class CapturePanel {
   }
 
   _textureDataChunkLoaded() {
-    this._captureData.captureTextureDataChunk();
-    this._updateCaptureStatus();
+    if (this._captureData) {
+      this._captureData.captureTextureDataChunk();
+      this._updateCaptureStatus();
+    }
   }
 
   _findCanvas(widget) {
@@ -2419,6 +2424,10 @@ export class CapturePanel {
   }
 
   _textureLoaded(texture, passId) {
+    if (!this._captureData) {
+      return;
+    }
+
     this._captureData.captureTextureLoaded();
 
     if (this._lastSelectedCommand) {

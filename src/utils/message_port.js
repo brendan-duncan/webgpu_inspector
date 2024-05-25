@@ -28,6 +28,7 @@ export class MessagePort {
   }
 
   postMessage(message) {
+    message.__webgpuInspector = true;
     if (this.tabId) {
       message.tabId = this.tabId;
     }

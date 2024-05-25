@@ -1,0 +1,16 @@
+<html>
+    <body>
+        <canvas id="webgpu_canvas" width="960" height="600"></canvas>
+        <script type="module">
+            import {webgpuInspectorHandler} from '../src/webgpu_inspector_handler.js';
+            const canvas = document.getElementById("webgpu_canvas");
+            const worker = new Worker(new URL('./webgpu_worker.js', import.meta.url), { type: 'module' });
+            const offscreenCanvas = canvas.transferControlToOffscreen();
+
+            const devicePixelRatio = window.devicePixelRatio;
+            offscreenCanvas.width = canvas.clientWidth * devicePixelRatio;
+            offscreenCanvas.height = canvas.clientHeight * devicePixelRatio;
+            worker.postMessage({ type: 'init', offscreenCanvas }, [offscreenCanvas]);
+        </script>
+    </body>
+</html>
