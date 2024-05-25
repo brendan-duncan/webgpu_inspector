@@ -1,4 +1,4 @@
-import { webgpuInspector } from 'https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector/extensions/chrome/webgpu_inspector.js';
+import { webgpuInspector } from 'https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@0.4/src/webgpu_inspector.js';
 
 self.addEventListener('message', (ev) => {
   switch (ev.data.type) {
@@ -19,7 +19,6 @@ async function init(canvas) {
     }
 
     webgpuInspector.captureWorker(canvas);
-
     
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) {
