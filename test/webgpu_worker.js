@@ -1,4 +1,4 @@
-import { webgpuInspector } from '../src/webgpu_inspector.js';
+import { webgpuInspector } from 'https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector/extensions/chrome/webgpu_inspector.js';
 
 self.addEventListener('message', (ev) => {
   switch (ev.data.type) {

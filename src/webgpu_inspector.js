@@ -5,7 +5,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
 import { Actions, PanelActions } from "./utils/actions.js";
 import { RollingAverage } from "./utils/rolling_average.js";
 import { alignTo } from "./utils/align.js";
-import { webgpuInspectorHandler } from "./webgpu_inspector_handler.js";
+import { webgpuInspectorWorker } from "./webgpu_inspector_worker.js";
 
 export let webgpuInspector = null;
 
@@ -1852,7 +1852,7 @@ export let webgpuInspector = null;
   class _Worker {
     constructor() {
       this._worker = new _OrigWorker(...arguments);
-      webgpuInspectorHandler(this._worker);
+      webgpuInspectorWorker(this._worker);
     }
   };
 

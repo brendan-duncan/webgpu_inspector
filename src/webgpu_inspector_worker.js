@@ -1,4 +1,4 @@
-export function webgpuInspectorHandler(worker) {
+export function webgpuInspectorWorker(worker) {
   if (worker.__webgpuInspector) {
     return;
   }

@@ -1,0 +1,2 @@
+var exports;(exports={}).webgpuInspectorWorker=e=>{if(!e.__webgpuInspector){if(e.__webgpuInspector=!0,e.terminate){const t=e.terminate;e.terminate=function(){const s=t.call(e,...arguments);return e.__webgpuInspector=!1,s}}e.addEventListener('message',(e=>{e.data.__webgpuInspector&&window.postMessage(e.data,'*')})),window.addEventListener('message',(t=>{e.__webgpuInspector&&t.data.__webgpuInspector&&!t.data.__webgpuInspectorPage&&e.postMessage(t.data)}))}},Object.defineProperty(exports,'__esModule',{value:!0});
+//# sourceMappingURL=webgpu_inspector_worker.js.map

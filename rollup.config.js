@@ -65,6 +65,7 @@ for (const version of versions) {
 
   builds.push(
     build("__webgpu_inspector", 'src/webgpu_inspector.js', `extensions/${version}/webgpu_inspector.js`),
+    build("__webgpu_inspector_worker", 'src/webgpu_inspector_worker.js', `extensions/${version}/webgpu_inspector_worker.js`),
     build("__webgpu_recorder", 'webgpu_recorder/webgpu_recorder.js', `extensions/${version}/webgpu_recorder.js`),
     build("__webgpu_inspector_window", 'src/devtools/inspector_window.js', `extensions/${version}/webgpu_inspector_window.js`),
     build("__background", 'src/extension/background.js', `extensions/${version}/background.js`),
