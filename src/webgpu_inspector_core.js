@@ -1872,23 +1872,72 @@ export let webgpuInspector = null;
 
   webgpuInspector = new WebGPUInspector();
 
-  // Intercept Worker creation to wrap the worker with the inspector handler.
-  const _OrigWorker = Worker;
-  class _Worker {
-    constructor() {
-      this._worker = new _OrigWorker(...arguments);
-      webgpuInspectorWorker(this._worker);
-    }
-  };
+  // Intercept Worker creation to inject inspector
+  Worker = new Proxy(Worker, {
+    construct(target, args, newTarget) {
+      args[0] = URL.createObjectURL(new Blob([
+        `self.__webgpu_src = ${JSON.stringify(self.__webgpu_src )};eval(self.__webgpu_src);importScripts(${JSON.stringify(args[0])});`
+      ]));
 
-  for (const m in _OrigWorker.prototype) {
-    if (m === "constructor") {
-      continue;
-    }
-    _Worker.prototype[m] = function() {
-      return this._worker[m].apply(this._worker, arguments);
-    }
-  }
+      let backing = new target(...args);
+      backing.__webgpuInspector = true;
 
-  Worker = _Worker;
+      window.addEventListener("__WebGPUInspector", (event) => {
+        // Forward messages from the page to the worker, if the worker hasn't been terminated,
+        // the message is from the inspector, and the message is not from the worker.
+        if (backing.__webgpuInspector && event.detail.__webgpuInspector &&
+          !event.detail.__webgpuInspectorPage) {
+          backing.postMessage(event.detail);
+        }
+      });
+
+      backing.addEventListener("message", (event) => {
+        if (event.data.__webgpuInspector) {
+          window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: event.data }));
+        }
+      });
+
+      return new Proxy(backing, {
+        get(target, prop, receiver) {
+          // Intercept event handlers to hide the inspectors messages
+          if (prop === 'addEventListener') {
+            return function () {
+              if (arguments[0] === 'message') {
+                const origHandler = arguments[1];
+                arguments[1] = function () {
+                  if (!arguments[0].data.__webgpuInspector) {
+                    origHandler(...arguments);
+                  }
+                };
+              }
+
+              return target.addEventListener(...arguments);
+            };
+          }
+
+          // Intercept worker termination and remove it from list so we don't send
+          // messages to a terminated worker.
+          if (prop === 'terminate') {
+            return function () {
+              const result = target.terminate(...arguments);
+              target.__webgpuInspector = false;
+              return result;
+            };
+          }
+
+          if (prop in target) {
+            if (typeof target[prop] === 'function') {
+              return target[prop].bind(target);
+            } else {
+              return target[prop];
+            }
+          }
+        },
+        set(target, prop, newValue, receiver) {
+          target[prop] = newValue;
+          return true;
+        }
+      })
+    },
+  });
 })();
