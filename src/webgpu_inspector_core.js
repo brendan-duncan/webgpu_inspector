@@ -64,29 +64,22 @@ export let webgpuInspector = null;
         return;
       }
 
+      const self = this;
+
       if (_document?.body) {
-        const statusContainer = _document.createElement("div");
-        statusContainer.style = "position: absolute; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt;";
-        _document.body.insertBefore(statusContainer, _document.body.firstChild);
+        this.createStatusElements();
+      } else if (_document) {
+        _document.addEventListener('DOMContentLoaded', () => {
+          self.createStatusElements();
 
-        this._inspectingStatus = _document.createElement("div");
-        this._inspectingStatus.title = "WebGPU Inspector Running";
-        this._inspectingStatus.style = "height: 10px; width: 10px; display: inline-block; margin-right: 5px; background-color: #ff0; border-radius: 50%; border: 1px solid #000; box-shadow: inset -4px -4px 4px -3px rgb(255,100,0), 2px 2px 3px rgba(0,0,0,0.8);";
-        statusContainer.appendChild(this._inspectingStatus);
-
-        this._inspectingStatusFrame = _document.createElement("div");
-        this._inspectingStatusFrame.style = "display: inline-block;";
-        this._inspectingStatusFrame.textContent = "Frame: 0";
-        statusContainer.appendChild(this._inspectingStatusFrame);
-
-        this._inspectingStatusText = _document.createElement("div");
-        this._inspectingStatusText.style = "display: inline-block; margin-left: 10px;";
-        statusContainer.appendChild(this._inspectingStatusText);
+          const canvases = _document.getElementsByTagName("canvas");
+          for (const canvas of canvases) {
+            self._wrapCanvas(canvas);
+          }
+        });
       }
 
       this._gpuWrapper = new GPUObjectWrapper(this);
-
-      const self = this;
       this._gpuWrapper.onPromise.addListener(this._onAsyncPromise, this);
       this._gpuWrapper.onPromiseResolve.addListener(this._onAsyncResolve, this);
       this._gpuWrapper.onPreCall.addListener(this._preMethodCall, this);
@@ -218,6 +211,26 @@ export let webgpuInspector = null;
       } else {
         _self.addEventListener("__WebGPUInspector", eventCallback);
       }
+    }
+
+    createStatusElements() {
+      const statusContainer = _document.createElement("div");
+      statusContainer.style = "position: absolute; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt;";
+      _document.body.insertBefore(statusContainer, _document.body.firstChild);
+
+      this._inspectingStatus = _document.createElement("div");
+      this._inspectingStatus.title = "WebGPU Inspector Running";
+      this._inspectingStatus.style = "height: 10px; width: 10px; display: inline-block; margin-right: 5px; background-color: #ff0; border-radius: 50%; border: 1px solid #000; box-shadow: inset -4px -4px 4px -3px rgb(255,100,0), 2px 2px 3px rgba(0,0,0,0.8);";
+      statusContainer.appendChild(this._inspectingStatus);
+
+      this._inspectingStatusFrame = _document.createElement("div");
+      this._inspectingStatusFrame.style = "display: inline-block;";
+      this._inspectingStatusFrame.textContent = "Frame: 0";
+      statusContainer.appendChild(this._inspectingStatusFrame);
+
+      this._inspectingStatusText = _document.createElement("div");
+      this._inspectingStatusText.style = "display: inline-block; margin-left: 10px;";
+      statusContainer.appendChild(this._inspectingStatusText);
     }
 
     captureWorker(canvas) {
