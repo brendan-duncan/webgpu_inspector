@@ -1,4 +1,5 @@
 import { webgpuInspector } from 'https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@0.4/src/webgpu_inspector.js';
+//import { webgpuInspector } from '../src/webgpu_inspector.js';
 
 self.addEventListener('message', (ev) => {
   switch (ev.data.type) {

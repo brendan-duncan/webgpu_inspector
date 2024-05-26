@@ -12,7 +12,7 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
   }
 
   if (action === PanelActions.RequestTexture || action === PanelActions.CompileShader || action === PanelActions.RevertShader) {
-    window.postMessage(message, "*");
+    window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: message }))
     return;
   }
 
@@ -36,8 +36,9 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
       inspectMessage = messageString;
     } else {
       sessionStorage.setItem(webgpuInspectorCaptureFrameKey, messageString);
-      window.postMessage({ __webgpuInspector: true, __webgpuInspectorPanel: true, action: PanelActions.Capture,
-        data: messageString }, "*");
+      const message = { __webgpuInspector: true, __webgpuInspectorPanel: true, action: PanelActions.Capture,
+        data: messageString };
+      window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: message }))
     }
   }
   
@@ -59,11 +60,8 @@ window.addEventListener('pageshow', (event) => {
 });
 
 // Listen for messages from the page
-window.addEventListener('message', (event) => {
-  if (event.source !== window) {
-    return;
-  }
-  const message = event.data;
+window.addEventListener("__WebGPUInspector", (event) => {
+  const message = event.detail;
   if (typeof message !== 'object' || message === null) {
     return;
   }
@@ -119,7 +117,6 @@ if (recordMessage) {
     removeUnusedResources: 1,
     messageRecording: 1
   });
-  
 }
 
 port.postMessage({action: "PageLoaded"});

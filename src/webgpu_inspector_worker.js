@@ -18,16 +18,16 @@ export function webgpuInspectorWorker(worker) {
 
   worker.addEventListener("message", (event) => {
     if (event.data.__webgpuInspector) {
-      window.postMessage(event.data, "*");
+      window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: event.data }));
     }
   });
 
-  window.addEventListener("message", (event) => {
+  window.addEventListener("__WebGPUInspector", (event) => {
     // Forward messages from the page to the worker, if the worker hasn't been terminated,
     // the message is from the inspector, and the message is not from the worker.
-    if (worker.__webgpuInspector && event.data.__webgpuInspector &&
-      !event.data.__webgpuInspectorPage) {
-      worker.postMessage(event.data);
+    if (worker.__webgpuInspector && event.detail.__webgpuInspector &&
+      !event.detail.__webgpuInspectorPage) {
+      worker.postMessage(event.detail);
     }
   });
 }

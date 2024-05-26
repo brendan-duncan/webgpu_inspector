@@ -15,6 +15,7 @@ export let webgpuInspector = null;
   const _document = self.document;
   const _sessionStorage = self.sessionStorage;
   const _postMessage = self.postMessage;
+  const _dispatchEvent = self.dispatchEvent;
 
   const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 
@@ -181,18 +182,16 @@ export let webgpuInspector = null;
       };
 
       // Listen for messages from the content-script.
-      _self.addEventListener("message", (event) => {
-        if (_window && event.source !== _window) {
-          return;
-        }
-        const message = event.data;
+      
+      function eventCallback(event) {
+        const message = event.detail || event.data;
         if (typeof message !== "object" || !message.__webgpuInspector) {
           return;
         }
 
         if (message.action === Actions.DeltaTime) {
           if (message.__webgpuInspectorWorker) {
-            this._updateFrameRate(message.deltaTime);
+            self._updateFrameRate(message.deltaTime);
           }
         } else if (message.action === PanelActions.RequestTexture) {
           const textureId = message.id;
@@ -212,7 +211,13 @@ export let webgpuInspector = null;
             self._captureData = message.data;
           }
         }
-      });
+      }
+
+      if (!_window) {
+        _self.addEventListener("message", eventCallback);
+      } else {
+        _self.addEventListener("__WebGPUInspector", eventCallback);
+      }
     }
 
     captureWorker(canvas) {
@@ -231,7 +236,11 @@ export let webgpuInspector = null;
       message.__webgpuInspector = true;
       message.__webgpuInspectorPage = true;
       message.__webgpuInspectorWorker = !_window;
-      _postMessage(message);
+      if (!_window) {
+        _postMessage(message);
+      } else {
+        _dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: message }));
+      }
     }
 
     _updateCanvasAttachment(attachment) {
