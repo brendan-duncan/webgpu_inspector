@@ -21,6 +21,7 @@ export class ObjectDatabase {
     this.pipelineLayouts = new Map();
     this.renderPipelines = new Map();
     this.computePipelines = new Map();
+    this.renderBundles = new Map();
     this.pendingRenderPipelines = new Map();
     this.pendingComputePipelines = new Map();
     this.validationErrors = new Map();
@@ -194,6 +195,12 @@ export class ObjectDatabase {
               self._addObject(obj, parent, pending);
               break;
             }
+            case "RenderBundle": {
+              const obj = new GPU.RenderBundle(id, descriptor, stacktrace);
+              self._addObject(obj, parent, pending);
+              break;
+            
+            }
           }
           break;
         }
@@ -257,6 +264,7 @@ export class ObjectDatabase {
     this.pipelineLayouts = new Map();
     this.renderPipelines = new Map();
     this.computePipelines = new Map();
+    this.renderBundles = new Map();
     this.pendingRenderPipelines = new Map();
     this.pendingComputePipelines = new Map();
     this.frameTime = 0;
@@ -371,6 +379,8 @@ export class ObjectDatabase {
       }
     } else if (object instanceof GPU.ComputePipeline) {
       this.computePipelines.set(id, object);
+    } else if (object instanceof GPU.RenderBundle) {
+      this.renderBundles.set(id, object);
     }
 
     this.onAddObject.emit(object, pending);
@@ -423,6 +433,8 @@ export class ObjectDatabase {
       this.bindGroupLayouts.delete(id, object);
     } else if (object instanceof GPU.PipelineLayout) {
       this.pipelineLayouts.delete(id, object);
+    } else if (object instanceof GPU.RenderBundle) {
+      this.renderBundles.delete(id, object);
     } else if (object instanceof GPU.ShaderModule) {
       object.isDestroyed = true;
       if (object.pipelineCount == 0) {

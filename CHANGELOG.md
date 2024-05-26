@@ -1,7 +1,8 @@
 ## v0.4.0
 
 * Fix Record for pages that use no buffer or texture data.
-* Display depth texture min and max range values in Inspector
+* Display depth texture min and max range values in Inspector.
+* Recorder updates.
 
 ## v0.3.0
 

@@ -12,3 +12,4 @@ export { ShaderModule } from "./shader_module.js";
 export { TextureView } from "./texture_view.js";
 export { Texture } from "./texture.js";
 export { ValidationError } from "./validation_error.js";
+export { RenderBundle } from "./render_bundle.js";

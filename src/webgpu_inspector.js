@@ -423,7 +423,7 @@ export let webgpuInspector = null;
         }
       }
 
-      if (method === "finish") {
+      if (method === "finish" && object instanceof GPUCommandEncoder) {
         // Renders to canvas tracks whether the render pass encoder renders to a canvas.
         // We only want to capture canvas textures if it's been immediatley rendered to,
         // otherwise it will be black. Store the value in the command buffer so we can
@@ -579,6 +579,9 @@ export let webgpuInspector = null;
           result.__descriptor = args[0];
           result.__device = object;
           this._objectReplacementMap.set(result.__id, { id: result.__id, object: new WeakRef(result), replacement: null });
+        } else if (method === "createRenderBundleEncoder") {
+          result.__descriptor = args[0];
+          result.__device = object;
         } else if (method === "getCurrentTexture") {
           result.__context = object;
           this._trackObject(result.__id, result);
@@ -1281,6 +1284,10 @@ export let webgpuInspector = null;
       } else if (method === "createCommandEncoder") {
         // We'll need the CommandEncoder's device for capturing textures
         result.__device = object;
+      } else if (result instanceof GPURenderBundle) {
+        const id = result.__id;
+        const desc = object.__descriptor;
+        this._sendAddObjectMessage(id, parent, "RenderBundle", this._stringifyDescriptor(desc), stacktrace);
       }
 
       if (this._captureFrameRequest) {
@@ -1296,13 +1303,9 @@ export let webgpuInspector = null;
         a.length = 0;
       }
 
-      if (method === "beginRenderPass") {
-        result.__id = `_${commandId}`;
-      } else if (method === "beginComputePass") {
-        result.__id = `_${commandId}`;
-      } else if (method === "createCommandEncoder") {
-        result.__id = `_${commandId}`;
-      } else if (method === "finish") {
+      if (method === "beginRenderPass" || method === "beginComputePass" ||
+          method === "createCommandEncoder" || method === "createRenderPassEncoder" ||
+          method === "finish") {
         result.__id = `_${commandId}`;
       }
 

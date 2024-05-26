@@ -18,12 +18,12 @@ import {
   BindGroupLayout,
   PipelineLayout,
   BindGroup,
+  RenderBundle,
   RenderPipeline,
   ComputePipeline,
   ValidationError } from "./gpu_objects/index.js";
 import { getFlagString } from "../utils/flags.js";
 import { PanelActions } from "../utils/actions.js";
-import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import { Plot } from "./widget/plot.js";
 import { Split } from "./widget/split.js";
 import { EditorView } from "codemirror";
@@ -249,6 +249,7 @@ export class InspectPanel {
     this.uiBindGroups = this._createObjectListUI(objectsPanel, "BindGroups");
     this.uiBindGroupLayouts = this._createObjectListUI(objectsPanel, "Bind Group Layouts");
     this.uiPipelineLayouts = this._createObjectListUI(objectsPanel, "Pipeline Layouts");
+    this.uiRenderBundles = this._createObjectListUI(objectsPanel, "Render Bundles");
     this.uiPendingAsyncRenderPipelines = this._createObjectListUI(objectsPanel, "Pending Async Render Pipelines");
     this.uiPendingAsyncComputePipelines = this._createObjectListUI(objectsPanel, "Pending Async Compute Pipelines");
     this.uiValidationErrors = this._createObjectListUI(objectsPanel, "Validation Errors");
@@ -375,6 +376,8 @@ export class InspectPanel {
       this.uiComputePipelines.label.text = `Compute Pipelines ${this.database.computePipelines.size}`;
     } else if (object instanceof ValidationError) {
       this.uiValidationErrors.label.text = `Validation Errors ${this.database.validationErrors.size}`;
+    } else if (object instanceof RenderBundle) {
+      this.uiRenderBundles.label.text = `Render Bundles ${this.database.renderBundles.size}`;
     }
   }
 
@@ -406,6 +409,8 @@ export class InspectPanel {
       this._addObjectToUI(object, pending ? this.uiPendingAsyncComputePipelines : this.uiComputePipelines);
     } else if (object instanceof ValidationError) {
       this._addObjectToUI(object, this.uiValidationErrors);
+    } else if (object instanceof RenderBundle) {
+      this._addObjectToUI(object, this.uiRenderBundles);
     }
   }
 
