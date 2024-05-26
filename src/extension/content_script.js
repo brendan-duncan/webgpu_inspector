@@ -31,7 +31,7 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
   let inspectMessage = "true";
   if (action === PanelActions.Capture) {
     const messageString = JSON.stringify(message);
-    if (!inspectorInitialized || message.frame >= 0) {
+    if (/*!inspectorInitialized ||*/ message.frame >= 0) {
       action = PanelActions.InitializeInspector;
       inspectMessage = messageString;
     } else {
@@ -79,44 +79,44 @@ window.addEventListener("__WebGPUInspector", (event) => {
   }
 });
 
-function injectScriptNode(name, url, attributes) {
-  const script = document.createElement("script");
-  script.id = name;
-  script.src = url;
+// function injectScriptNode(name, url, attributes) {
+//   const script = document.createElement("script");
+//   script.id = name;
+//   script.src = url;
+//
+//   if (attributes) {
+//     for (const key in attributes) {
+//       script.setAttribute(key, attributes[key]);
+//     }
+//   }
+//
+//   (document.head || document.documentElement).appendChild(script);
+// }
+//
+// const inspectMessage = sessionStorage.getItem(webgpuInspectorLoadedKey);
+// if (inspectMessage) {
+//   sessionStorage.removeItem(webgpuInspectorLoadedKey);
+//
+//   if (inspectMessage !== "true") {
+//     sessionStorage.setItem(webgpuInspectorCaptureFrameKey, inspectMessage);
+//   }
+//
+//   injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.js"));
+//
+//   inspectorInitialized = true;
+// }
 
-  if (attributes) {
-    for (const key in attributes) {
-      script.setAttribute(key, attributes[key]);
-    }
-  }
-
-  (document.head || document.documentElement).appendChild(script);
-}
-
-const inspectMessage = sessionStorage.getItem(webgpuInspectorLoadedKey);
-if (inspectMessage) {
-  sessionStorage.removeItem(webgpuInspectorLoadedKey);
-
-  if (inspectMessage !== "true") {
-    sessionStorage.setItem(webgpuInspectorCaptureFrameKey, inspectMessage);
-  }
-
-  injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.js"));
-  
-  inspectorInitialized = true;
-}
-
-const recordMessage = sessionStorage.getItem(webgpuRecorderLoadedKey);
-if (recordMessage) {
-  sessionStorage.removeItem(webgpuRecorderLoadedKey);
-  const data = recordMessage.split("%");
-  injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder.js"), {
-    filename: data[1],
-    frames: data[0],
-    download: data[2],
-    removeUnusedResources: 1,
-    messageRecording: 1
-  });
-}
+// const recordMessage = sessionStorage.getItem(webgpuRecorderLoadedKey);
+// if (recordMessage) {
+//   sessionStorage.removeItem(webgpuRecorderLoadedKey);
+//   const data = recordMessage.split("%");
+//   injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder.js"), {
+//     filename: data[1],
+//     frames: data[0],
+//     download: data[2],
+//     removeUnusedResources: 1,
+//     messageRecording: 1
+//   });
+// }
 
 port.postMessage({action: "PageLoaded"});
