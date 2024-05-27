@@ -4,6 +4,7 @@ import { nodeResolve } from "@rollup/plugin-node-resolve";
 import { terser } from "rollup-plugin-terser";
 import copy from "rollup-plugin-copy";
 import fg from 'fast-glob';
+import {SourceMapConsumer, SourceNode} from 'source-map'
 
 function build(name, input, dst, file, copyFiles, watchInclude) {
   const format = "iife";
@@ -19,16 +20,37 @@ function build(name, input, dst, file, copyFiles, watchInclude) {
       {
         name: "stringer",
         resolveId(id, importer) {
-          if (id === "webgpu_inspector_core_string") {
+          if (id === "webgpu_inspector_core_func") {
             return id;
           }
         },
-        load(id) {
-          if (id === "webgpu_inspector_core_string") {
+        async load(id) {
+          if (id === "webgpu_inspector_core_func") {
             const corePath = path.join(dst, 'webgpu_inspector_core.js');
-            const code = readFileSync(corePath, 'utf-8');
+
             this.addWatchFile(corePath);
-            return `export default ${JSON.stringify(code)};`
+            this.addWatchFile(corePath + ".map");
+
+            let code = readFileSync(corePath, 'utf-8');
+            let codeMap = JSON.parse(readFileSync(corePath + ".map", 'utf-8'));
+
+            const consumer = await new SourceMapConsumer(codeMap);
+            const originalSrc = SourceNode.fromStringWithSourceMap(code, consumer);
+
+            const newSrc = new SourceNode(1, 1, "webgpu_inspector_core_func", [
+              new SourceNode(1, 1, "webgpu_inspector_core_func",  "export default function() { "),
+              originalSrc,
+              new SourceNode(1, 36, "webgpu_inspector_core_func", " };")
+            ]);
+
+            newSrc.setSourceContent("webgpu_inspector_core_func", "export default function() { ${code} };");
+
+            const generated = newSrc.toStringWithSourceMap({ file: "webgpu_inspector_core_func" });
+
+            return {
+              code: generated.code,
+              map: JSON.parse(generated.map.toString()),
+            };
           }
         }
       },

@@ -1876,7 +1876,7 @@ export let webgpuInspector = null;
   Worker = new Proxy(Worker, {
     construct(target, args, newTarget) {
       // Inject inspector before the worker loads
-      let src = `self.__webgpu_src = ${JSON.stringify(self.__webgpu_src )};eval(self.__webgpu_src);`;
+      let src = `self.__webgpu_src = ${self.__webgpu_src.toString()};self.__webgpu_src();`;
 
       if (args.length > 1 && args[1].type === 'module') {
         src += `import ${JSON.stringify(args[0])};`;
@@ -1885,7 +1885,7 @@ export let webgpuInspector = null;
       }
 
       let blob = new Blob([src]);
-      blob = blob.slice(0, blob.size, "text/javascript")
+      blob = blob.slice(0, blob.size, "text/javascript");
       args[0] = URL.createObjectURL(blob);
 
       let backing = new target(...args);

@@ -1,4 +1,4 @@
-import src from "webgpu_inspector_core_string";
+import coreLoader from "webgpu_inspector_core_func";
 
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
@@ -11,6 +11,6 @@ if (inspectMessage) {
     sessionStorage.setItem(webgpuInspectorCaptureFrameKey, inspectMessage);
   }
 
-  self.__webgpu_src = src;
-  eval(self.__webgpu_src);
+  self.__webgpu_src = coreLoader;
+  self.__webgpu_src();
 }
