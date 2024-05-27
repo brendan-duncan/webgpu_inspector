@@ -37,15 +37,17 @@ function build(name, input, dst, file, copyFiles, watchInclude) {
             const consumer = await new SourceMapConsumer(codeMap);
             const originalSrc = SourceNode.fromStringWithSourceMap(code, consumer);
 
-            const newSrc = new SourceNode(1, 1, "webgpu_inspector_core_func", [
-              new SourceNode(1, 1, "webgpu_inspector_core_func",  "export default function() { "),
+            const srcPath = "src/webgpu_inspector_core_func";
+
+            const newSrc = new SourceNode(1, 1, srcPath, [
+              new SourceNode(1, 1, srcPath,  "export default function() { "),
               originalSrc,
-              new SourceNode(1, 36, "webgpu_inspector_core_func", " };")
+              new SourceNode(1, 36, srcPath, " };")
             ]);
 
-            newSrc.setSourceContent("webgpu_inspector_core_func", "export default function() { ${code} };");
+            newSrc.setSourceContent(srcPath, "export default function() { ${code} };");
 
-            const generated = newSrc.toStringWithSourceMap({ file: "webgpu_inspector_core_func" });
+            const generated = newSrc.toStringWithSourceMap({ file: srcPath });
 
             return {
               code: generated.code,
