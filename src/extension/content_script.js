@@ -79,32 +79,32 @@ window.addEventListener("__WebGPUInspector", (event) => {
   }
 });
 
-// function injectScriptNode(name, url, attributes) {
-//   const script = document.createElement("script");
-//   script.id = name;
-//   script.src = url;
-//
-//   if (attributes) {
-//     for (const key in attributes) {
-//       script.setAttribute(key, attributes[key]);
-//     }
-//   }
-//
-//   (document.head || document.documentElement).appendChild(script);
-// }
-//
-// const inspectMessage = sessionStorage.getItem(webgpuInspectorLoadedKey);
-// if (inspectMessage) {
-//   sessionStorage.removeItem(webgpuInspectorLoadedKey);
-//
-//   if (inspectMessage !== "true") {
-//     sessionStorage.setItem(webgpuInspectorCaptureFrameKey, inspectMessage);
-//   }
-//
-//   injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.js"));
-//
-//   inspectorInitialized = true;
-// }
+function injectScriptNode(name, url, attributes) {
+  const script = document.createElement("script");
+  script.id = name;
+  script.src = url;
+
+  if (attributes) {
+    for (const key in attributes) {
+      script.setAttribute(key, attributes[key]);
+    }
+  }
+
+  (document.head || document.documentElement).appendChild(script);
+}
+
+// Fallback for browsers which don't support the "world" property on content_scripts
+if (
+  navigator.userAgent.indexOf("Chrom") === -1 && (
+    navigator.userAgent.indexOf("Safari") !== -1 || navigator.userAgent.indexOf("Firefox") !== -1
+  )
+) {
+  if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
+    console.log("[WebGPU Inspector] Fallback injection")
+
+    injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.js"));
+  }
+}
 
 // const recordMessage = sessionStorage.getItem(webgpuRecorderLoadedKey);
 // if (recordMessage) {
