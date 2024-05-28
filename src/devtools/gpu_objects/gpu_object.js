@@ -30,6 +30,12 @@ export class GPUObject {
     return this._referenceCount;
   }
 
+  addDependency(dependency) {
+    if (dependency) {
+      this.dependencies.push(dependency);
+    }
+  }
+
   incrementDepenencyReferenceCount() {
     for (const dependency of this.dependencies) {
       dependency._referenceCount++;
@@ -41,9 +47,9 @@ export class GPUObject {
     this._referenceCount--;
     if (this._referenceCount <= 0) {
       deleteCallback(this);
-      for (const dependency of this.dependencies) {
-        dependency.decrementReferenceCount(deleteCallback);
-      }
+    }
+    for (const dependency of this.dependencies) {
+      dependency.decrementReferenceCount(deleteCallback);
     }
   }
 }

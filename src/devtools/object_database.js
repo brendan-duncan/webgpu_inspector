@@ -343,10 +343,21 @@ export class ObjectDatabase {
       this.textures.set(id, object);
     } else if (object instanceof GPU.TextureView) {
       this.textureViews.set(id, object);
+      object.addDependency(this.getObject(object.texture.__id));
+      object.incrementDepenencyReferenceCount();
     } else if (object instanceof GPU.Buffer) {
       this.buffers.set(id, object);
     } else if (object instanceof GPU.BindGroup) {
       this.bindGroups.set(id, object);
+      object.addDependency(this.getObject(object.descriptor.layout.__id ));
+      for (const entry of object.descriptor.entries) {
+        if (entry.resource?.buffer) {
+          object.addDependency(this.getObject(entry.resource.buffer.__id));
+        } else {
+          object.addDependency(this.getObject(entry.resource.__id));
+        }
+      }
+      object.incrementDepenencyReferenceCount();
     } else if (object instanceof GPU.BindGroupLayout) {
       this.bindGroupLayouts.set(id, object);
     } else if (object instanceof GPU.PipelineLayout) {
@@ -359,30 +370,13 @@ export class ObjectDatabase {
       } else {
         this.renderPipelines.set(id, object);
       }
-      const vertexModule = object.descriptor.vertex?.module;
-      if (vertexModule) {
-        const module = this.getObject(vertexModule.__id);
-        if (module) {
-          object.dependencies.push(module);
-        }
-      }
-      const fragmentModule = object.descriptor.fragment?.module;
-      if (fragmentModule) {
-        const module = this.getObject(fragmentModule.__id);
-        if (module) {
-          object.dependencies.push(module);
-        }
-      }
+      object.addDependency(this.getObject(object.descriptor.layout.__id));
+      object.addDependency(this.getObject(object.descriptor.vertex?.module?.__id));
+      object.addDependency(this.getObject(object.descriptor.fragment?.module?.__id));
       object.incrementDepenencyReferenceCount();
     } else if (object instanceof GPU.ComputePipeline) {
       this.computePipelines.set(id, object);
-      const module = object.descriptor.compute?.module;
-      if (module) {
-        const moduleObj = this.getObject(module.__id);
-        if (moduleObj) {
-          object.dependencies.push(moduleObj);
-        }
-      }
+      object.addDependency(this.getObject(object.descriptor.compute?.module?.__id));
       object.incrementDepenencyReferenceCount();
     } else if (object instanceof GPU.RenderBundle) {
       this.renderBundles.set(id, object);
@@ -391,11 +385,14 @@ export class ObjectDatabase {
         delete object.descriptor.commands;
       }
       for (const command of object.commands) {
-        if (command.method === "setPipeline") {
-          const pipeline = this.getObject(command.args[0].__id);
-          if (pipeline) {
-            object.dependencies.push(pipeline);
-          }
+        if (command.method === "setPipeline" ||
+            command.method === "setVertexBuffer" ||
+            command.method === "setIndexBuffer" ||
+            command.method === "drawIndirect" ||
+            command.method === "drawIndexedIndirect") {
+          object.addDependency(this.getObject(command.args[0].__id));
+        } else if (command.method === "setBindGroup") {
+          object.addDependency(this.getObject(command.args[1].__id));
         }
       }
       object.incrementDepenencyReferenceCount();
@@ -433,13 +430,6 @@ export class ObjectDatabase {
 
     if (object.referenceCount > 0) {
       return;
-    }
-
-    for (const dependency of object.dependencies) {
-      dependency.referenceCount--;
-      if (dependency.referenceCount <= 0) {
-        this._deleteObject(dependency.id);
-      }
     }
 
     object._deletionTime = performance.now();
