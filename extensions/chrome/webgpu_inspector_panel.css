@@ -1393,6 +1393,29 @@ ol::-webkit-scrollbar-thumb:hover {
   color: #ff0;
 }
 
+.capture_renderbundle {
+  margin-top: 20px;
+  margin-left: 10px;
+  background: #606;
+}
+
+.capture_renderbundle_header {
+  padding-left: 20px;
+  font-size: 12pt;
+  color: #ddd;
+  margin-bottom: 5px;
+  background-color: #535;
+  line-height: 30px;
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.capture_renderbundle_header:hover {
+  box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.8) inset;
+}
+
 .capture_computepass {
   margin-top: 20px;
   margin-left: 10px;

@@ -396,6 +396,14 @@ export let webgpuInspector = null;
     _postMethodCall(object, method, args, result, stacktrace) {
       this._frameCommandCount++;
 
+      if (object instanceof GPURenderBundleEncoder && method !== "finish") {
+        if (object._commands === undefined) {
+          object._commands = [];
+        }
+        const newArgs = this._processCommandArgs(args);
+        object._commands.push({ method, args: newArgs, result });
+      }
+
       if (method === "beginRenderPass") {
         // object is a GPUCommandEncoder
         // result is a GPURenderPassEncoder
@@ -421,6 +429,10 @@ export let webgpuInspector = null;
             }
           }
         }
+      }
+
+      if (method === "finish" && object instanceof GPURenderBundleEncoder) {
+        result._commands = object._commands;
       }
 
       if (method === "finish" && object instanceof GPUCommandEncoder) {
@@ -1287,7 +1299,9 @@ export let webgpuInspector = null;
       } else if (result instanceof GPURenderBundle) {
         const id = result.__id;
         const desc = object.__descriptor;
+        desc.commands = result._commands;
         this._sendAddObjectMessage(id, parent, "RenderBundle", this._stringifyDescriptor(desc), stacktrace);
+        delete desc.commands;
       }
 
       if (this._captureFrameRequest) {

@@ -45,7 +45,7 @@ export class ObjectDatabase {
     this.deltaFrameTime = -1;
 
     const self = this;
-   
+
     port.addListener((message) => {
       switch (message.action) {
         case Actions.DeltaTime:
@@ -165,29 +165,11 @@ export class ObjectDatabase {
             case "RenderPipeline": {
               const obj = new GPU.RenderPipeline(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
-              if (descriptor.vertex?.module?.__id) {
-                const vertexModule = self.getObject(descriptor.vertex.module.__id);
-                if (vertexModule) {
-                  vertexModule.pipelineCount++;
-                }
-              }
-              if (descriptor.fragment?.module?.__id) {
-                const fragmentModule = self.getObject(descriptor.fragment.module.__id);
-                if (fragmentModule) {
-                  fragmentModule.pipelineCount++;
-                }
-              }
               break;
             }
             case "ComputePipeline": {
               const obj = new GPU.ComputePipeline(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
-              if (descriptor.compute?.module?.__id) {
-                const computeModule = self.getObject(descriptor.compute.module.__id);
-                if (computeModule) {
-                  computeModule.pipelineCount++;
-                }
-              }
               break;
             }
             case "PipelineLayout": {
@@ -377,10 +359,46 @@ export class ObjectDatabase {
       } else {
         this.renderPipelines.set(id, object);
       }
+      const vertexModule = object.descriptor.vertex?.module;
+      if (vertexModule) {
+        const module = this.getObject(vertexModule.__id);
+        if (module) {
+          object.dependencies.push(module);
+        }
+      }
+      const fragmentModule = object.descriptor.fragment?.module;
+      if (fragmentModule) {
+        const module = this.getObject(fragmentModule.__id);
+        if (module) {
+          object.dependencies.push(module);
+        }
+      }
+      object.incrementDepenencyReferenceCount();
     } else if (object instanceof GPU.ComputePipeline) {
       this.computePipelines.set(id, object);
+      const module = object.descriptor.compute?.module;
+      if (module) {
+        const moduleObj = this.getObject(module.__id);
+        if (moduleObj) {
+          object.dependencies.push(moduleObj);
+        }
+      }
+      object.incrementDepenencyReferenceCount();
     } else if (object instanceof GPU.RenderBundle) {
       this.renderBundles.set(id, object);
+      object.commands = object.descriptor?.commands ?? [];
+      if (object.descriptor?.commands) {
+        delete object.descriptor.commands;
+      }
+      for (const command of object.commands) {
+        if (command.method === "setPipeline") {
+          const pipeline = this.getObject(command.args[0].__id);
+          if (pipeline) {
+            object.dependencies.push(pipeline);
+          }
+        }
+      }
+      object.incrementDepenencyReferenceCount();
     }
 
     this.onAddObject.emit(object, pending);
@@ -403,6 +421,25 @@ export class ObjectDatabase {
     const object = this.allObjects.get(id);
     if (!object) {
       return;
+    }
+
+    const self = this;
+    object.decrementReferenceCount((obj) => {
+      if (obj === object) {
+        return;
+      }
+      self._deleteObject(obj.id);
+    });
+
+    if (object.referenceCount > 0) {
+      return;
+    }
+
+    for (const dependency of object.dependencies) {
+      dependency.referenceCount--;
+      if (dependency.referenceCount <= 0) {
+        this._deleteObject(dependency.id);
+      }
     }
 
     object._deletionTime = performance.now();
@@ -437,50 +474,13 @@ export class ObjectDatabase {
       this.renderBundles.delete(id, object);
     } else if (object instanceof GPU.ShaderModule) {
       object.isDestroyed = true;
-      if (object.pipelineCount == 0) {
-        this.shaderModules.delete(id, object);
-      } else {
-        doDelete = false;
-      }
+      this.shaderModules.delete(id, object);
     } else if (object instanceof GPU.RenderPipeline) {
       this.pendingRenderPipelines.delete(id, object);
       this.renderPipelines.delete(id, object);
-      if (object.descriptor.vertex?.module?.__id) {
-        const vertexModule = this.getObject(object.descriptor.vertex.module.__id);
-        if (vertexModule) {
-          vertexModule.pipelineCount--;
-          if (vertexModule.pipelineCount <= 0 && vertexModule.isDestroyed) {
-            this.shaderModules.delete(vertexModule.id);
-            this.allObjects.delete(vertexModule.id);
-            this.onDeleteObject.emit(vertexModule.id, vertexModule);
-          }
-        }
-      }
-      if (object.descriptor.fragment?.module?.__id) {
-        const fragmentModule = this.getObject(object.descriptor.fragment.module.__id);
-        if (fragmentModule) {
-          fragmentModule.pipelineCount--;
-          if (fragmentModule.pipelineCount <= 0 && fragmentModule.isDestroyed) {
-            this.shaderModules.delete(fragmentModule.id);
-            this.allObjects.delete(fragmentModule.id);
-            this.onDeleteObject.emit(fragmentModule.id, fragmentModule);
-          }
-        }
-      }
     } else if (object instanceof GPU.ComputePipeline) {
       this.computePipelines.set(id, object);
       this.pendingComputePipelines.delete(id, object);
-      if (object.descriptor.compute?.module?.__id) {
-        const computeModule = this.getObject(object.descriptor.compute.module.__id);
-        if (computeModule) {
-          computeModule.pipelineCount--;
-          if (computeModule.pipelineCount <= 0 && computeModule.isDestroyed) {
-            this.shaderModules.delete(computeModule.id);
-            this.allObjects.delete(computeModule.id);
-            this.onDeleteObject.emit(computeModule.id, computeModule);
-          }
-        }
-      }
     }
 
     if (doDelete) {

@@ -98,7 +98,7 @@ export class InspectPanel {
     this._objectCountObject = null;
 
     new Select(this.plots, {
-      options: ["GPU Objects", "Buffer", "BindGroup", "TextureView", "Texture", "Sampler", "PipelineLayout", "BindGroupLayout", "ShaderModule", "ComputePipeline", "RenderPipeline"],
+      options: ["GPU Objects", "Buffer", "BindGroup", "TextureView", "Texture", "Sampler", "PipelineLayout", "BindGroupLayout", "ShaderModule", "ComputePipeline", "RenderPipeline", "RenderBundle"],
       index: 0,
       style: "color: #ccc; padding-top: 5px; margin-right: 10px; font-size: 10pt;",
       onChange: (value) => {
@@ -203,6 +203,9 @@ export class InspectPanel {
         break;
       case "RenderPipeline":
         this._objectCountObject = this.database.renderPipelines;
+        break;
+      case "RenderBundle":
+        this._objectCountObject = this.database.renderBundles;
         break;
     }
     this.objectCountPlot.reset();
@@ -575,7 +578,7 @@ export class InspectPanel {
     }
 
     const dependencies = this.database.getObjectDependencies(object);
-    new Div(infoBox, { text: `Used By: ${dependencies.length} Objects`, style: "font-size: 10pt; color: #aaa;"});
+    new Div(infoBox, { text: `Reference Count: ${object.referenceCount}`, style: "font-size: 10pt; color: #aaa;"});
     const depGrp = new Div(infoBox, { style: "font-size: 10pt; color: #aaa; padding-left: 20px; max-height: 50px; overflow: auto;" })
     for (const dep of dependencies) {
       new Div(depGrp, { text: `${dep.name} ${dep.idName}` });
@@ -825,7 +828,13 @@ export class InspectPanel {
       new Widget("pre", grp.body, { text });
     }
 
-    if (object instanceof Texture) {
+    if (object instanceof RenderBundle) {
+      const grp = new Collapsable(descriptionBox, { label: "Commands", collapsed: true });
+      const ol = new Widget("ol", grp.body);
+      for (const command of object.commands) {
+        new Widget("li", ol, { text: command.method });
+      }
+    } else if (object instanceof Texture) {
       const self = this;
       const loadButton = new Button(descriptionBox, { label: "Load", callback: () => {
         self.database.requestTextureData(object);

@@ -254,6 +254,7 @@ export class CapturePanel {
     // Pass index is based on end, not begin, so we need to prepare the pass index map first.
     let renderPassIndex = 0;
     let computePassIndex = 0;
+    let renderBundleIndex = 0;
     for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
       const command = commands[commandIndex];
       command.id = commandIndex;
@@ -268,6 +269,13 @@ export class CapturePanel {
           passEncoderMap.set(command.object, renderPassIndex++);
         } else if (type === -2) {
           passEncoderMap.set(command.object, computePassIndex++);
+        }
+      } else if (method === "createRenderBundleEncoder") {
+        passEncoderMap.set(command.result, -3);
+      } else if (method === "finish") {
+        const type = passEncoderMap.get(command.object);
+        if (type === -3) {
+          passEncoderMap.set(command.object, renderBundleIndex++);
         }
       }
     }
@@ -404,6 +412,41 @@ export class CapturePanel {
           currentBlock.remove();
         }
         currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
+      } else if (method === "createRenderBundleEncoder") {
+        const passIndex = command.result.__id ?? passEncoderMap.get(command.result);
+
+        this._passEncoderCommands.set(command.result, [command]);
+
+        command._passIndex = passIndex;
+        if (!currentBlock.children.length) {
+          currentBlock.remove();
+        }
+        currentBlock = new Div(debugGroup, { class: "capture_renderbundle" });
+        const header = new Div(currentBlock, { id: `RenderBundle_${passIndex}`, class: "capture_renderbundle_header" });
+        const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
+        command.header = new Span(header, { text: `Render Bundle ${passIndex}` });
+        const extra = new Span(header, { style: "margin-left: 10px;" });
+        const block = new Div(currentBlock);
+        header.element.onclick = () => {
+          block.element.classList.toggle("collapsed");
+          if (block.element.classList.contains("collapsed")) {
+            headerIcon.text = "+";
+            extra.text = "...";
+          } else {
+            headerIcon.text = "-";
+            extra.text = "";
+          }
+        };
+        currentBlock = block;
+        currentBlock._passIndex = passIndex;
+        currentBlock._object = command.result;
+      } else if (method === "popDebugGroup") {
+        debugGroupStack.pop();
+        debugGroup = debugGroupStack[debugGroupStack.length - 1];
+        if (!currentBlock.children.length) {
+          currentBlock.remove();
+        }
+        currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
       } else if (method !== "pushDebugGroup") {
         const object = command.object;
         const commandArray = this._passEncoderCommands.get(object);
@@ -478,7 +521,13 @@ export class CapturePanel {
         
         new Span(cmd, { class: "capture_methodName", text: `${method}` });
 
-        if (method === "createCommandEncoder") {
+        if (method === "executeBundles") {
+          const bundleNames = [];
+          for (const bundle of args[0]) {
+            bundleNames.push(getName(bundle.__id, "GPURenderBundle"));
+          }
+          new Span(cmd, { class: "capture_method_args", text: `bundles:[${bundleNames.join(", ")}]` });
+        } else if (method === "createCommandEncoder") {
           new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUCommandEncoder")}` });
         } else if (method === "finish") {
           new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)} => ${getName(command.result, "GPUCommandBuffer")}` });
@@ -651,6 +700,13 @@ export class CapturePanel {
       }
 
       if (method === "end") {
+        if (!currentBlock.children.length) {
+          currentBlock.remove();
+        }
+        currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
+      }
+
+      if (method === "finish" && command.object === currentBlock._object) {
         if (!currentBlock.children.length) {
           currentBlock.remove();
         }
