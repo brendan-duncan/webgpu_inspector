@@ -100,7 +100,7 @@ async function main() {
       }
     });
 
-    const renderBundleEncoder = device.createRenderBundleEncoder({
+    /*const renderBundleEncoder = device.createRenderBundleEncoder({
       colorFormats: [ presentationFormat ],
       depthStencilFormat: 'depth24plus'
     });
@@ -108,7 +108,7 @@ async function main() {
     for (let i = 0; i < triangleCount; i++) {
       renderBundleEncoder.draw(3);
     }
-    const renderBundle = renderBundleEncoder.finish();
+    const renderBundle = renderBundleEncoder.finish();*/
 
     passEncoder.executeBundles([renderBundle]);
     passEncoder.end();

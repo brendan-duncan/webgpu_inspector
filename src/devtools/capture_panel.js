@@ -382,6 +382,7 @@ export class CapturePanel {
         const passIndex = passEncoderMap.get(command.result);
 
         this._passEncoderCommands.set(command.result, [command]);
+        this._renderBundleCommands = null;
 
         command._passIndex = passIndex;
         if (!currentBlock.children.length) {
@@ -1304,7 +1305,7 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_setBindGroup(command, commandInfo, groupIndex, skipInputs, state) {
+  _showCaptureCommandInfo_setBindGroup(command, commandInfo, groupIndex, skipInputs, state, commands) {
     const args = command.args;
     const id = args[1].__id;
     const bindGroup = this._getObject(id);
@@ -1636,7 +1637,7 @@ export class CapturePanel {
                   affectedByCommands.push(cmd);
                 }
               } else if (cmd.method === "dispatchWorkgroups" || cmd.method === "dispatchWorkgroupsIndirect") {
-                const cmdState = this._getPipelineState(cmd);
+                const cmdState = this._getPipelineState(cmd, commands);
                 if (cmdState) {
                   for (const bindGroupCmd of cmdState.bindGroups) {
                     const groupIndex = bindGroupCmd.args[0];
@@ -1877,7 +1878,10 @@ export class CapturePanel {
   }
 
   _getPipelineState(command) {
-    const commands = this._passEncoderCommands.get(command.object);
+    const commands = this._renderBundleCommands || (this._passEncoderCommands.get(command.object) ?? null);
+    if (commands === null) {
+      return null;
+    }
     const commandIndex = commands.indexOf(command);
     if (commandIndex === -1) {
       return null;
@@ -2317,6 +2321,23 @@ export class CapturePanel {
     }
   }
 
+  _showCaptureCommandInfo_executeBundles(command, commandInfo) {
+    const bundles = command.args[0];
+    for (const bundleId of bundles) {
+      const bundle = this._getObject(bundleId.__id);
+      if (!bundle) {
+        continue;
+      }
+      const commands = bundle.commands;
+      this._renderBundleCommands = commands;
+      for (const cmd of commands) {
+        const bundleCommandInfo = new Collapsable(commandInfo, { collapsed: true, label: `${cmd.method}` });
+        this._showCaptureCommandInfo(cmd, bundle.name, bundleCommandInfo.body, false);
+      }
+      this._renderBundleCommands = null;
+    }
+  }
+
   _inspectStats(commandInfo) {
     commandInfo.html = "";
 
@@ -2329,13 +2350,15 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo(command, name, commandInfo) {
+  _showCaptureCommandInfo(command, name, commandInfo, showHeader = true) {
     commandInfo.html = "";
 
     const method = command.method;
     const args = command.args;
 
-    new Div(commandInfo, { text: `${name} ${method}`, style: "background-color: #575; padding-left: 20px; line-height: 40px;" });
+    if (showHeader) {
+      new Div(commandInfo, { text: `${name} ${method}`, style: "background-color: #575; padding-left: 20px; line-height: 40px;" });
+    }
 
     if (method === "beginRenderPass") {
       const desc = args[0];
@@ -2444,6 +2467,8 @@ export class CapturePanel {
       this._showCaptureCommandInfo_end(command, commandInfo);
     } else if (method === "createView") {
       this._showCaptureCommandInfo_createView(command, commandInfo);
+    } else if (method === "executeBundles") {
+      this._showCaptureCommandInfo_executeBundles(command, commandInfo);
     }
   }
 
