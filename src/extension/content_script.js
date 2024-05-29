@@ -106,17 +106,18 @@ if (
   }
 }
 
-// const recordMessage = sessionStorage.getItem(webgpuRecorderLoadedKey);
-// if (recordMessage) {
-//   sessionStorage.removeItem(webgpuRecorderLoadedKey);
-//   const data = recordMessage.split("%");
-//   injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder.js"), {
-//     filename: data[1],
-//     frames: data[0],
-//     download: data[2],
-//     removeUnusedResources: 1,
-//     messageRecording: 1
-//   });
-// }
+// TODO: Add WebWorker support
+const recordMessage = sessionStorage.getItem(webgpuRecorderLoadedKey);
+if (recordMessage) {
+  sessionStorage.removeItem(webgpuRecorderLoadedKey);
+  const data = recordMessage.split("%");
+  injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder.js"), {
+    filename: data[1],
+    frames: data[0],
+    download: data[2],
+    removeUnusedResources: 1,
+    messageRecording: 1
+  });
+}
 
 port.postMessage({action: "PageLoaded"});
