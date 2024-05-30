@@ -12,7 +12,6 @@ export class ShaderModule extends GPUObject {
     this.replacementCode = null;
 
     this.isDestroyed = false;
-    this.pipelineCount = 0;
   }
 
   get code() {

@@ -66,16 +66,17 @@ async function main() {
     },
   });
 
+  const triangleCount = 10;
+
   const renderBundleEncoder = device.createRenderBundleEncoder({
     colorFormats: [ presentationFormat ],
     depthStencilFormat: 'depth24plus'
   });
   renderBundleEncoder.setPipeline(pipeline);
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < triangleCount; i++) {
     renderBundleEncoder.draw(3);
   }
   const renderBundle = renderBundleEncoder.finish();
-
 
   function frame() {
     const commandEncoder = device.createCommandEncoder();
@@ -98,6 +99,17 @@ async function main() {
         depthStoreOp: "store",
       }
     });
+
+    /*const renderBundleEncoder = device.createRenderBundleEncoder({
+      colorFormats: [ presentationFormat ],
+      depthStencilFormat: 'depth24plus'
+    });
+    renderBundleEncoder.setPipeline(pipeline);
+    for (let i = 0; i < triangleCount; i++) {
+      renderBundleEncoder.draw(3);
+    }
+    const renderBundle = renderBundleEncoder.finish();*/
+
     passEncoder.executeBundles([renderBundle]);
     passEncoder.end();
 

@@ -6,6 +6,8 @@ export class GPUObject {
     this.label = descriptor?.label ?? "";
     this._stacktrace = StacktraceCache.setStacktrace(stacktrace ?? "");
     this._deletionTime = 0;
+    this._referenceCount = 1;
+    this.dependencies = [];
   }
 
   get name() {
@@ -22,5 +24,32 @@ export class GPUObject {
 
   get idName() {
     return this.id < 0 ? "CANVAS" : this.id;
+  }
+
+  get referenceCount() {
+    return this._referenceCount;
+  }
+
+  addDependency(dependency) {
+    if (dependency) {
+      this.dependencies.push(dependency);
+    }
+  }
+
+  incrementDepenencyReferenceCount() {
+    for (const dependency of this.dependencies) {
+      dependency._referenceCount++;
+      dependency.incrementDepenencyReferenceCount();
+    }
+  }
+
+  decrementReferenceCount(deleteCallback) {
+    this._referenceCount--;
+    if (this._referenceCount <= 0) {
+      deleteCallback(this);
+    }
+    for (const dependency of this.dependencies) {
+      dependency.decrementReferenceCount(deleteCallback);
+    }
   }
 }

@@ -254,6 +254,7 @@ export class CapturePanel {
     // Pass index is based on end, not begin, so we need to prepare the pass index map first.
     let renderPassIndex = 0;
     let computePassIndex = 0;
+    let renderBundleIndex = 0;
     for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
       const command = commands[commandIndex];
       command.id = commandIndex;
@@ -268,6 +269,13 @@ export class CapturePanel {
           passEncoderMap.set(command.object, renderPassIndex++);
         } else if (type === -2) {
           passEncoderMap.set(command.object, computePassIndex++);
+        }
+      } else if (method === "createRenderBundleEncoder") {
+        passEncoderMap.set(command.result, -3);
+      } else if (method === "finish") {
+        const type = passEncoderMap.get(command.object);
+        if (type === -3) {
+          passEncoderMap.set(command.object, renderBundleIndex++);
         }
       }
     }
@@ -374,6 +382,7 @@ export class CapturePanel {
         const passIndex = passEncoderMap.get(command.result);
 
         this._passEncoderCommands.set(command.result, [command]);
+        this._renderBundleCommands = null;
 
         command._passIndex = passIndex;
         if (!currentBlock.children.length) {
@@ -397,6 +406,41 @@ export class CapturePanel {
         };
         currentBlock = block;
         currentBlock._passIndex = passIndex;
+      } else if (method === "popDebugGroup") {
+        debugGroupStack.pop();
+        debugGroup = debugGroupStack[debugGroupStack.length - 1];
+        if (!currentBlock.children.length) {
+          currentBlock.remove();
+        }
+        currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
+      } else if (method === "createRenderBundleEncoder") {
+        const passIndex = command.result.__id ?? passEncoderMap.get(command.result);
+
+        this._passEncoderCommands.set(command.result, [command]);
+
+        command._passIndex = passIndex;
+        if (!currentBlock.children.length) {
+          currentBlock.remove();
+        }
+        currentBlock = new Div(debugGroup, { class: "capture_renderbundle" });
+        const header = new Div(currentBlock, { id: `RenderBundle_${passIndex}`, class: "capture_renderbundle_header" });
+        const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
+        command.header = new Span(header, { text: `Render Bundle ${passIndex}` });
+        const extra = new Span(header, { style: "margin-left: 10px;" });
+        const block = new Div(currentBlock);
+        header.element.onclick = () => {
+          block.element.classList.toggle("collapsed");
+          if (block.element.classList.contains("collapsed")) {
+            headerIcon.text = "+";
+            extra.text = "...";
+          } else {
+            headerIcon.text = "-";
+            extra.text = "";
+          }
+        };
+        currentBlock = block;
+        currentBlock._passIndex = passIndex;
+        currentBlock._object = command.result;
       } else if (method === "popDebugGroup") {
         debugGroupStack.pop();
         debugGroup = debugGroupStack[debugGroupStack.length - 1];
@@ -478,7 +522,13 @@ export class CapturePanel {
         
         new Span(cmd, { class: "capture_methodName", text: `${method}` });
 
-        if (method === "createCommandEncoder") {
+        if (method === "executeBundles") {
+          const bundleNames = [];
+          for (const bundle of args[0]) {
+            bundleNames.push(getName(bundle.__id, "GPURenderBundle"));
+          }
+          new Span(cmd, { class: "capture_method_args", text: `bundles:[${bundleNames.join(", ")}]` });
+        } else if (method === "createCommandEncoder") {
           new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUCommandEncoder")}` });
         } else if (method === "finish") {
           new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)} => ${getName(command.result, "GPUCommandBuffer")}` });
@@ -651,6 +701,13 @@ export class CapturePanel {
       }
 
       if (method === "end") {
+        if (!currentBlock.children.length) {
+          currentBlock.remove();
+        }
+        currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
+      }
+
+      if (method === "finish" && command.object === currentBlock._object) {
         if (!currentBlock.children.length) {
           currentBlock.remove();
         }
@@ -1248,7 +1305,7 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_setBindGroup(command, commandInfo, groupIndex, skipInputs, state) {
+  _showCaptureCommandInfo_setBindGroup(command, commandInfo, groupIndex, skipInputs, state, commands) {
     const args = command.args;
     const id = args[1].__id;
     const bindGroup = this._getObject(id);
@@ -1580,7 +1637,7 @@ export class CapturePanel {
                   affectedByCommands.push(cmd);
                 }
               } else if (cmd.method === "dispatchWorkgroups" || cmd.method === "dispatchWorkgroupsIndirect") {
-                const cmdState = this._getPipelineState(cmd);
+                const cmdState = this._getPipelineState(cmd, commands);
                 if (cmdState) {
                   for (const bindGroupCmd of cmdState.bindGroups) {
                     const groupIndex = bindGroupCmd.args[0];
@@ -1821,7 +1878,10 @@ export class CapturePanel {
   }
 
   _getPipelineState(command) {
-    const commands = this._passEncoderCommands.get(command.object);
+    const commands = this._renderBundleCommands || (this._passEncoderCommands.get(command.object) ?? null);
+    if (commands === null) {
+      return null;
+    }
     const commandIndex = commands.indexOf(command);
     if (commandIndex === -1) {
       return null;
@@ -2261,6 +2321,23 @@ export class CapturePanel {
     }
   }
 
+  _showCaptureCommandInfo_executeBundles(command, commandInfo) {
+    const bundles = command.args[0];
+    for (const bundleId of bundles) {
+      const bundle = this._getObject(bundleId.__id);
+      if (!bundle) {
+        continue;
+      }
+      const commands = bundle.commands;
+      this._renderBundleCommands = commands;
+      for (const cmd of commands) {
+        const bundleCommandInfo = new Collapsable(commandInfo, { collapsed: true, label: `${cmd.method}` });
+        this._showCaptureCommandInfo(cmd, bundle.name, bundleCommandInfo.body, false);
+      }
+      this._renderBundleCommands = null;
+    }
+  }
+
   _inspectStats(commandInfo) {
     commandInfo.html = "";
 
@@ -2273,13 +2350,15 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo(command, name, commandInfo) {
+  _showCaptureCommandInfo(command, name, commandInfo, showHeader = true) {
     commandInfo.html = "";
 
     const method = command.method;
     const args = command.args;
 
-    new Div(commandInfo, { text: `${name} ${method}`, style: "background-color: #575; padding-left: 20px; line-height: 40px;" });
+    if (showHeader) {
+      new Div(commandInfo, { text: `${name} ${method}`, style: "background-color: #575; padding-left: 20px; line-height: 40px;" });
+    }
 
     if (method === "beginRenderPass") {
       const desc = args[0];
@@ -2388,6 +2467,8 @@ export class CapturePanel {
       this._showCaptureCommandInfo_end(command, commandInfo);
     } else if (method === "createView") {
       this._showCaptureCommandInfo_createView(command, commandInfo);
+    } else if (method === "executeBundles") {
+      this._showCaptureCommandInfo_executeBundles(command, commandInfo);
     }
   }
 
