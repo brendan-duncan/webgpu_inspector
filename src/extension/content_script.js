@@ -31,7 +31,7 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
   let inspectMessage = "true";
   if (action === PanelActions.Capture) {
     const messageString = JSON.stringify(message);
-    if (!inspectorInitialized || message.frame >= 0) {
+    if (/*!inspectorInitialized ||*/ message.frame >= 0) {
       action = PanelActions.InitializeInspector;
       inspectMessage = messageString;
     } else {
@@ -93,19 +93,20 @@ function injectScriptNode(name, url, attributes) {
   (document.head || document.documentElement).appendChild(script);
 }
 
-const inspectMessage = sessionStorage.getItem(webgpuInspectorLoadedKey);
-if (inspectMessage) {
-  sessionStorage.removeItem(webgpuInspectorLoadedKey);
+// Fallback for browsers which don't support the "world" property on content_scripts
+if (
+  navigator.userAgent.indexOf("Chrom") === -1 && (
+    navigator.userAgent.indexOf("Safari") !== -1 || navigator.userAgent.indexOf("Firefox") !== -1
+  )
+) {
+  if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
+    console.log("[WebGPU Inspector] Fallback injection")
 
-  if (inspectMessage !== "true") {
-    sessionStorage.setItem(webgpuInspectorCaptureFrameKey, inspectMessage);
+    injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.js"));
   }
-
-  injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.js"));
-  
-  inspectorInitialized = true;
 }
 
+// TODO: Add WebWorker support
 const recordMessage = sessionStorage.getItem(webgpuRecorderLoadedKey);
 if (recordMessage) {
   sessionStorage.removeItem(webgpuRecorderLoadedKey);
