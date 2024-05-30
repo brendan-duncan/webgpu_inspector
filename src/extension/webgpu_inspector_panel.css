@@ -49,6 +49,17 @@ body {
     margin-right: 10px;
 }
 
+.expand_button {
+  padding-left: 10px;
+  padding-right: 10px;
+  font-size: 12pt;
+}
+
+.expand_button:hover {
+  background-color: #777;
+  box-shadow: 0px 0px 10px rgba(255, 255, 0, 0.8) inset;
+}
+
 /* Inspector Panel */
 .debug_panel {
   background-color: rgb(187, 187, 187);
@@ -1391,6 +1402,38 @@ ol::-webkit-scrollbar-thumb:hover {
 
 .capture_drawcall {
   color: #ff0;
+}
+
+.capture_renderbundle {
+  margin-top: 20px;
+  margin-left: 10px;
+  background: #606;
+}
+
+.render_bundle_group {
+  background: #606;
+  margin-left: 20px;
+  margin-bottom: 10px;
+  border-radius: 0px 0px 5px 5px;
+  box-shadow: rgba(0,0,0,0.5) 5px 5px 5px;
+  padding-left: 20px;
+}
+
+.capture_renderbundle_header {
+  padding-left: 20px;
+  font-size: 12pt;
+  color: #ddd;
+  margin-bottom: 5px;
+  background-color: rgb(195 53 195);
+  line-height: 30px;
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.capture_renderbundle_header:hover {
+  box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.8) inset;
 }
 
 .capture_computepass {

@@ -385,6 +385,7 @@ export class ObjectDatabase {
         delete object.descriptor.commands;
       }
       for (const command of object.commands) {
+        command.object = object;
         if (command.method === "setPipeline" ||
             command.method === "setVertexBuffer" ||
             command.method === "setIndexBuffer" ||

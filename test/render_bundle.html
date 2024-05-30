@@ -78,6 +78,16 @@ async function main() {
   }
   const renderBundle = renderBundleEncoder.finish();
 
+  const renderBundleEncoder2 = device.createRenderBundleEncoder({
+    colorFormats: [ presentationFormat ],
+    depthStencilFormat: 'depth24plus'
+  });
+  renderBundleEncoder2.setPipeline(pipeline);
+  for (let i = 0; i < triangleCount; i++) {
+    renderBundleEncoder2.draw(3);
+  }
+  const renderBundle2 = renderBundleEncoder2.finish();
+
   function frame() {
     const commandEncoder = device.createCommandEncoder();
 
@@ -110,7 +120,7 @@ async function main() {
     }
     const renderBundle = renderBundleEncoder.finish();*/
 
-    passEncoder.executeBundles([renderBundle]);
+    passEncoder.executeBundles([renderBundle, renderBundle2]);
     passEncoder.end();
 
     device.queue.submit([commandEncoder.finish()]);

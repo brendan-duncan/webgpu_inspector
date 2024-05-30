@@ -4,7 +4,7 @@ export class RenderBundle extends GPUObject {
   constructor(id, descriptor, stacktrace) {
     super(id, stacktrace);
     this.descriptor = descriptor;
-    this.commmands = [];
+    this.commands = [];
   }
 }
 RenderBundle.className = "RenderBundle";
