@@ -1331,7 +1331,7 @@ export let webgpuInspector = null;
 
       if (method === "beginRenderPass" || method === "beginComputePass" ||
           method === "createCommandEncoder" || method === "createRenderPassEncoder" ||
-          method === "finish") {
+          (method === "finish" && object instanceof GPUCommandEncoder)) {
         result.__id = `_${commandId}`;
       }
 

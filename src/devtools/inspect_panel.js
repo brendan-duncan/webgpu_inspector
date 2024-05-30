@@ -579,10 +579,16 @@ export class InspectPanel {
 
     const dependencies = this.database.getObjectDependencies(object);
     new Div(infoBox, { text: `Reference Count: ${object.referenceCount}`, style: "font-size: 10pt; color: #aaa;"});
+
+    if (object instanceof RenderBundle) {
+      new Div(infoBox, { text: `Bundle Commands: ${object.commands.length}`, style: "font-size: 10pt; color: #aaa;"});
+    }
+
     const depGrp = new Div(infoBox, { style: "font-size: 10pt; color: #aaa; padding-left: 20px; max-height: 50px; overflow: auto;" })
     for (const dep of dependencies) {
       new Div(depGrp, { text: `${dep.name} ${dep.idName}` });
     }
+
     if (object.stacktrace) {
       const stacktraceGrp = new Collapsable(infoBox, { collapsed: true, label: "Stacktrace", collapsed: true });
       new Div(stacktraceGrp.body, { text: object.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" })
@@ -829,11 +835,7 @@ export class InspectPanel {
     }
 
     if (object instanceof RenderBundle) {
-      const grp = new Collapsable(descriptionBox, { label: "Commands", collapsed: true });
-      const ol = new Widget("ol", grp.body);
-      for (const command of object.commands) {
-        new Widget("li", ol, { text: command.method });
-      }
+      
     } else if (object instanceof Texture) {
       const self = this;
       const loadButton = new Button(descriptionBox, { label: "Load", callback: () => {

@@ -133,7 +133,7 @@ export class CaptureData {
           const timestampMap = new Array();
 
           const timestampData = new BigInt64Array(self._timestampBuffer.buffer);
-          console.log(timestampData.length / 2);
+          //console.log(timestampData.length / 2);
 
           const firstTime = Number(timestampData[0]) / 1000000.0;
 

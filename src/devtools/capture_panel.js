@@ -622,6 +622,8 @@ export class CapturePanel {
       let ci = 0;
       for (const bundle of args[0]) {
         const obj = self._getObject(bundle.__id);
+        this.database.capturedObjects.set(bundle.__id, obj);
+
         const name = getName(bundle.__id, "GPURenderBundle");
         const bundleButton = new Div(expandButton.panel, { class: "capture_renderbundle_header", text: `- ${name}`, style: "margin-left: 20px; margin-bottom: 0px; border-radius: 5px 5px 0px 0px; line-height: 20px;" });
         const bundleGrp = new Div(expandButton.panel, { class: ["render_bundle_group"] });
@@ -634,8 +636,10 @@ export class CapturePanel {
           }
         };
 
-        for (const bndCommand of obj?.commands) {
-          this._createCommandWidget(bundleGrp, ci++, bndCommand, ["capture_command"], commandInfo);
+        if (obj?.commands) {
+          for (const bndCommand of obj?.commands) {
+            this._createCommandWidget(bundleGrp, ci++, bndCommand, ["capture_command"], commandInfo);
+          }
         }
       }
 
@@ -2380,13 +2384,6 @@ export class CapturePanel {
       if (!bundle) {
         continue;
       }
-      /*const commands = bundle.commands;
-      this._renderBundleCommands = commands;
-      for (const cmd of commands) {
-        const bundleCommandInfo = new Collapsable(commandInfo, { collapsed: true, label: `${cmd.method}` });
-        this._showCaptureCommandInfo(cmd, bundle.name, bundleCommandInfo.body, false);
-      }
-      this._renderBundleCommands = null;*/
     }
   }
 
