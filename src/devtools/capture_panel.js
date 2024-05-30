@@ -939,43 +939,97 @@ export class CapturePanel {
 
     const typeName = this._getTypeName(type);
 
-    if (typeName === "f32") {
+    if (typeName === "uint8x2") {
+      const data = new Uint8Array(bufferData.buffer, offset, 2);
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}`});
+    } else if (typeName === "uint8x4") {
+      const data = new Uint8Array(bufferData.buffer, offset, 4);
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`});
+    } else if (typeName === "sint8x2") {
+      const data = new Int8Array(bufferData.buffer, offset, 2);
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}`});
+    } else if (typeName === "sint8x4") {
+      const data = new Int8Array(bufferData.buffer, offset, 4);
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`});
+    } else if (typeName === "unorm8x2") {
+      const data = new Uint8Array(bufferData.buffer, offset, 2);
+      new Widget("li", ui, { text: `${data[0] / 255.0}, ${data[1] / 255.0}`});
+    } else if (typeName === "unorm8x4") {
+      const data = new Uint8Array(bufferData.buffer, offset, 4);
+      new Widget("li", ui, { text: `${data[0] / 255.0}, ${data[1] / 255.0}, ${data[2] / 255.0}, ${data[3] / 255.0}`});
+    } else if (typeName === "snorm8x2") {
+      const data = new Int8Array(bufferData.buffer, offset, 2);
+      new Widget("li", ui, { text: `${data[0] / 128}, ${data[1] / 128}`});
+    } else if (typeName === "snorm8x4") {
+      const data = new Int8Array(bufferData.buffer, offset, 4);
+      new Widget("li", ui, { text: `${data[0] / 128}, ${data[1] / 128}, ${data[2] / 128}, ${data[3] / 128}`});
+    } else if (typeName === "uint16x2") {
+      const data = new Uint16Array(bufferData.buffer, offset, 2);
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}`});
+    } else if (typeName === "uint16x4") {
+      const data = new Uint16Array(bufferData.buffer, offset, 4);
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`});
+    } else if (typeName === "sint16x2") {
+      const data = new Int16Array(bufferData.buffer, offset, 2);
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}`});
+    } else if (typeName === "sint16x4") {
+      const data = new Int16Array(bufferData.buffer, offset, 4);
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`});
+    } else if (typeName === "unorm16x2") {
+      const data = new Uint16Array(bufferData.buffer, offset, 2);
+      new Widget("li", ui, { text: `${data[0] / 65535.0}, ${data[1] / 65535.0}`});
+    } else if (typeName === "unorm16x4") {
+      const data = new Uint16Array(bufferData.buffer, offset, 4);
+      new Widget("li", ui, { text: `${data[0] / 65535.0}, ${data[1] / 65535.0}, ${data[2] / 65535.0}, ${data[3] / 65535.0}`});
+    } else if (typeName === "snorm16x2") {
+      const data = new Int16Array(bufferData.buffer, offset, 2);
+      new Widget("li", ui, { text: `${data[0] / 32767.0}, ${data[1] / 32767.0}`});
+    } else if (typeName === "snorm16x4") {
+      const data = new Int16Array(bufferData.buffer, offset, 4);
+      new Widget("li", ui, { text: `${data[0] / 32767.0}, ${data[1] / 32767.0}, ${data[2] / 32767.0}, ${data[3] / 32767.0}`});
+    } else if (typeName === "float16x2") {
+      // TODO
+    } else if (typeName === "float16x4") {
+      // TODO
+    } else if (typeName === "unorm10-10-10-2") {
+      // TODO
+    } else if (typeName === "f32" || typeName === "float32") {
       const data = new Float32Array(bufferData.buffer, offset, 1);
       new Widget("li", ui, { text: `${toString(data[0], radix)}`});
-    } else if (typeName === "i32") {
+    } else if (typeName === "i32" || typeName === "sint32") {
       const data = new Int32Array(bufferData.buffer, offset, 1);
       new Widget("li", ui, { text: `${toString(data[0], radix)}`});
-    } else if (typeName === "u32") {
+    } else if (typeName === "u32" || typeName === "uint32") {
       const data = new Uint32Array(bufferData.buffer, offset, 1);
       new Widget("li", ui, { text: `${toString(data[0], radix)}`});
     } else if (typeName === "bool") {
       const data = new Uint32Array(bufferData.buffer, offset, 1);
       new Widget("li", ui, { text: `${data[0] ? "true" : "false"}`});
-    } else if (typeName === "vec2i" || typeName === "vec2<i32>") {
+    } else if (typeName === "vec2i" || typeName === "vec2<i32>" || typeName === "sint32x2") {
       const data = new Int32Array(bufferData.buffer, offset, 2);
-      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${data[1]}`});
-    } else if (typeName === "vec2u" || typeName === "vec2<u32>") {
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}`});
+    } else if (typeName === "vec2u" || typeName === "vec2<u32>" || typeName === "uint32x2") {
       const data = new Uint32Array(bufferData.buffer, offset, 2);
-      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${data[1]}`});
-    } else if (typeName === "vec2f" || typeName === "vec2<f32>") {
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}`});
+    } else if (typeName === "vec2f" || typeName === "vec2<f32>" || typeName === "float32x2") {
       const data = new Float32Array(bufferData.buffer, offset, 2);
-      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${data[1]}`});
-    } else if (typeName === "vec3i" || typeName === "vec3<i32>") {
+      new Widget("li", ui, { text: `${toString(data[0], radix)},${toString(data[1], radix)}`});
+    } else if (typeName === "vec3i" || typeName === "vec3<i32>" || typeName === "sint32x3") {
       const data = new Int32Array(bufferData.buffer, offset, 3);
-      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${data[1]}, ${data[2]}`});
-    } else if (typeName === "vec3u" || typeName === "vec3<u32>") {
+      new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`});
+    } else if (typeName === "vec3u" || typeName === "vec3<u32>" || typeName === "uint32x3") {
       const data = new Uint32Array(bufferData.buffer, offset, 3);
       new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`});
-    } else if (typeName === "vec3f" || typeName === "vec3<f32>") {
+    } else if (typeName === "vec3f" || typeName === "vec3<f32>" || typeName === "float32x3") {
       const data = new Float32Array(bufferData.buffer, offset, 3);
       new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}`});
-    } else if (typeName === "vec4i" || typeName === "vec4<i32>") {
+    } else if (typeName === "vec4i" || typeName === "vec4<i32>" || typeName === "sint32x4") {
       const data = new Int32Array(bufferData.buffer, offset, 4);
       new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`});
-    } else if (typeName === "vec4u" || typeName === "vec4<u32>") {
+    } else if (typeName === "vec4u" || typeName === "vec4<u32>" || typeName === "uint32x4") {
       const data = new Uint32Array(bufferData.buffer, offset, 4);
       new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`});
-    } else if (typeName === "vec4f" || typeName === "vec4<f32>") {
+    } else if (typeName === "vec4f" || typeName === "vec4<f32>" || typeName === "float32x4") {
       const data = new Float32Array(bufferData.buffer, offset, 4);
       new Widget("li", ui, { text: `${toString(data[0], radix)}, ${toString(data[1], radix)}, ${toString(data[2], radix)}, ${toString(data[3], radix)}`});
     } else if (CapturePanel.matrixTypes[type.name]) {
@@ -1002,7 +1056,7 @@ export class CapturePanel {
       let count = type.count ?? 0;
       if (count === 0) {
         // Runtime length array
-        count = (bufferData.length - offset) / (type.stride || type.format.size);
+        count = Math.floor((bufferData.length - offset) / (type.stride || type.format.size));
       }
 
       const arrayUi = new Div(ui, { class: "capture_array_view" });
@@ -1011,7 +1065,6 @@ export class CapturePanel {
         filter = new Div(arrayUi, { class: "capture_array_view_filter" });
       }
       const ul = new Widget("ul", arrayUi);
-      
 
       if (count) {
         let subOffset = 0;
@@ -1882,21 +1935,18 @@ export class CapturePanel {
     const id = args[1]?.__id;
     const buffer = this._getObject(id);
 
-    let input = null;
+    let inputs = null;
     const pipeline = this._getObject(state?.pipeline?.args[0].__id);
     if (pipeline) {
       const desc = pipeline.descriptor;
       const vertexId = desc?.vertex?.module?.__id;
       const vertexShader = this._getObject(vertexId);
       const reflection = vertexShader?.reflection;
-      const inputs = reflection?.entry.vertex[0]?.inputs;
-      if (inputs) {
-        input = inputs[index];
-      }
+      inputs = reflection?.entry.vertex[0]?.inputs;
     }
 
     if (buffer) {
-      const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Vertex Buffer ${index} ID:${id} ${input?.name ?? ""}` });
+      const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Vertex Buffer ${index} ID:${id}` });
       new Button(bufferGrp.body, { label: "Inspect", callback: () => {
         self.window.inspectObject(buffer);
       } });
@@ -1907,7 +1957,7 @@ export class CapturePanel {
       }
       new Widget("pre", bufferGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
 
-      if (input && command.isBufferDataLoaded && command.bufferData) {
+      if (command.isBufferDataLoaded && command.bufferData) {
         const bufferData = command.bufferData[index];
         if (bufferData) {
           const button = new Button(bufferGrp.body, { label: "Show Data", callback: () => {
@@ -1917,9 +1967,46 @@ export class CapturePanel {
               return;
             }
             button.element.innerText = "Hide Data";
-            const count = bufferData.length / input.type.size;
-            const stride = input.type.size;
-            const type = { name: "array", count, stride, format: input.type };
+
+            let arrayStride = 0;
+
+            const members = [];
+
+            const pipelineBuffers = pipeline?.descriptor?.vertex?.buffers;
+            if (pipelineBuffers) {
+              const bufferDesc = pipelineBuffers[index];
+              if (bufferDesc.stepMode === "vertex") {
+                arrayStride = bufferDesc.arrayStride;
+                const attributes = bufferDesc.attributes;
+                if (attributes) {
+                  for (const attr of attributes) {
+                    const location = attr.shaderLocation;
+                    const offset = attr.offset;
+                    const format = attr.format;
+                    const type = { name: format };
+                    let name = location;
+
+                    if (inputs) {
+                      for (const i of inputs) {
+                        if (i?.location === location && i.name) {
+                          name = i.name;
+                          break;
+                        }
+                      }
+                    }
+
+                    members.push({ name, type, offset });
+                  }
+                }
+              }
+            }
+
+            const type = { name: "array", count: 0, stride: arrayStride, format: {
+              isStruct: true,
+              name: "",
+              members,
+              stride: arrayStride
+            } };
             self._showBufferDataType(bufferGrp.body, type, bufferData);
           } });
         }

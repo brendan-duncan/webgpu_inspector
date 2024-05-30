@@ -1,3 +1,9 @@
+## v0.5.0
+
+* Automatically inject into WebWorkers.
+* Inspect and capture RenderBundles.
+* Improve capture display of vertex buffers.
+
 ## v0.4.0
 
 * Fix Record for pages that use no buffer or texture data.
