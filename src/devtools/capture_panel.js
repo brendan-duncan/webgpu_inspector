@@ -623,7 +623,7 @@ export class CapturePanel {
       for (const bundle of args[0]) {
         const obj = self._getObject(bundle.__id);
         const name = getName(bundle.__id, "GPURenderBundle");
-        const bundleButton = new Div(expandButton.panel, { class: "capture_renderbundle_header", text: `- ${name}`, style: "margin-left: 20px; margin-bottom: 0px; border-radius: 5px 5px 0px 0px;" });
+        const bundleButton = new Div(expandButton.panel, { class: "capture_renderbundle_header", text: `- ${name}`, style: "margin-left: 20px; margin-bottom: 0px; border-radius: 5px 5px 0px 0px; line-height: 20px;" });
         const bundleGrp = new Div(expandButton.panel, { class: ["render_bundle_group"] });
         bundleButton.element.onclick = () => {
           bundleGrp.element.classList.toggle("collapsed");
