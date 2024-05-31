@@ -1885,15 +1885,24 @@ export let webgpuInspector = null;
 
   webgpuInspector = new WebGPUInspector();
 
-  let _webgpuBaseAddress = "";
+  let _webgpuBaseAddress = "<%=_webgpuBaseAddress%>";
   const _origFetch = fetch;
   self.fetch = function (input, init) {
     let url = input instanceof Request ? input.url : input;
-    if (url.startsWith("/")) {
+    if (url.startsWith("/") && !_webgpuBaseAddress.startsWith("<%=")) {
       url = `${_webgpuBaseAddress}${url}`;
     }
     return _origFetch(url, init);
   };
+
+  Request = new Proxy(Request, {
+    construct(target, args, newTarget) {
+      if (args.length > 0 && args[0].startsWith("/") && !_webgpuBaseAddress.startsWith("<%=")) {
+        args[0] = `${_webgpuBaseAddress}${args[0]}`;
+      }
+      return new target(...args);
+    },
+  });
 
   // Intercept Worker creation to inject inspector
   Worker = new Proxy(Worker, {
@@ -1905,7 +1914,7 @@ export let webgpuInspector = null;
       const _url = new URL(url);
       _webgpuBaseAddress = `${_url.protocol}//${_url.host}`;     
 
-      src = src.replace(`let _webgpuBaseAddress = "";`, `let _webgpuBaseAddress = "${_webgpuBaseAddress}";`);
+      src = src.replace(`"<%=_webgpuBaseAddress%>"`, `"${_webgpuBaseAddress}"`);
 
       if (args.length > 1 && args[1].type === 'module') {
         src += `import ${JSON.stringify(args[0])};`;
