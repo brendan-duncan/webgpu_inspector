@@ -91,6 +91,14 @@ Array data can be quite large. To improve performance and readability, if the ar
 <img src="images/buffer_array_inspection.png" style="width:512px">
 </a>
 
+## Vertex Buffer Data
+
+If you select a Draw command, it will inspect any Vertex Buffers bound for the draw call. It will parse the data from the RenderPipeline descriptor, and the shader, to present the data as the shader will see it.
+
+<a href="images/vertex_buffer_capture.png">
+<img src="images/vertex_buffer_capture.png" style="width:512px">
+</a>
+
 ## Debug Groups
 
 If the page pushes/pops Debug Groups, they will be be used to group commands in the capture. This is useful for organizing rendering commands to make it easier to identify what the commands are contributing to the render.
