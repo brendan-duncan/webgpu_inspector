@@ -528,6 +528,7 @@ export let webgpuInspector = null;
           method === "createBindGroup") {
         if (this._errorChecking > 0) {
           this.disableRecording();
+          const self = this;
           object.popErrorScope().then((error) => {
             if (error) {
               console.error(error.message);
@@ -1914,7 +1915,7 @@ export let webgpuInspector = null;
       const _url = new URL(url);
       _webgpuBaseAddress = `${_url.protocol}//${_url.host}`;     
 
-      src = src.replace(`"<%=_webgpuBaseAddress%>"`, `"${_webgpuBaseAddress}"`);
+      src = src.replaceAll(`<%=_webgpuBaseAddress%>`, `${_webgpuBaseAddress}`);
 
       if (args.length > 1 && args[1].type === 'module') {
         src += `import ${JSON.stringify(args[0])};`;
