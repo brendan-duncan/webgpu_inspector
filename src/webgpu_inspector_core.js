@@ -1885,11 +1885,27 @@ export let webgpuInspector = null;
 
   webgpuInspector = new WebGPUInspector();
 
+  let _webgpuBaseAddress = "";
+  const _origFetch = fetch;
+  self.fetch = function (input, init) {
+    let url = input instanceof Request ? input.url : input;
+    if (url.startsWith("/")) {
+      url = `${_webgpuBaseAddress}${url}`;
+    }
+    return _origFetch(url, init);
+  };
+
   // Intercept Worker creation to inject inspector
   Worker = new Proxy(Worker, {
     construct(target, args, newTarget) {
       // Inject inspector before the worker loads
       let src = `self.__webgpu_src = ${self.__webgpu_src.toString()};self.__webgpu_src();`;
+
+      const url = args[0];
+      const _url = new URL(url);
+      _webgpuBaseAddress = `${_url.protocol}//${_url.host}`;     
+
+      src = src.replace(`let _webgpuBaseAddress = "";`, `let _webgpuBaseAddress = "${_webgpuBaseAddress}";`);
 
       if (args.length > 1 && args[1].type === 'module') {
         src += `import ${JSON.stringify(args[0])};`;
@@ -1901,7 +1917,7 @@ export let webgpuInspector = null;
       blob = blob.slice(0, blob.size, "text/javascript");
       args[0] = URL.createObjectURL(blob);
 
-      let backing = new target(...args);
+      const backing = new target(...args);
       backing.__webgpuInspector = true;
 
       window.addEventListener("__WebGPUInspector", (event) => {
