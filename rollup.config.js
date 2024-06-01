@@ -4,7 +4,7 @@ import { nodeResolve } from "@rollup/plugin-node-resolve";
 import { terser } from "rollup-plugin-terser";
 import copy from "rollup-plugin-copy";
 import fg from 'fast-glob';
-import {SourceMapConsumer, SourceNode} from 'source-map'
+import { SourceMapConsumer, SourceNode } from 'source-map'
 
 function build(name, input, dst, file, copyFiles, watchInclude) {
   const format = "iife";
