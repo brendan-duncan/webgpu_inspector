@@ -1886,20 +1886,70 @@ export let webgpuInspector = null;
 
   webgpuInspector = new WebGPUInspector();
 
+  // Because of how WebGPUInspector is injected into WebWorkers, worker scripts lose their local
+  // path context. This code snippet fixes that by prepending the base address to all
+  // fetch, Request, URL, and WebSocket requests.
+  let _webgpuHostAddress = "<%=_webgpuHostAddress%>";
   let _webgpuBaseAddress = "<%=_webgpuBaseAddress%>";
+
+  const _URL = URL;
+
+  function _getFixedUrl(url) {
+    if (_webgpuHostAddress.startsWith("<%=")) {
+      return url;
+    }
+
+    if (url?.constructor === String) {
+      if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("ws://") ||
+          url.startsWith("wss://")|| url.startsWith("blob:") || url.startsWith("data:")){
+        return url;
+      }
+      try {
+        const _url = new _URL(url);
+        if (_url.protocol) {
+          return url;
+        }
+      } catch (e) {
+      }
+
+      if (url.startsWith("/")) {
+        return `${_webgpuHostAddress}/${url}`;
+      } else {
+        return `${_webgpuBaseAddress}/${url}`;
+      }
+    }
+    return url;
+  }
+  
   const _origFetch = fetch;
   self.fetch = function (input, init) {
     let url = input instanceof Request ? input.url : input;
-    if (url.startsWith("/") && !_webgpuBaseAddress.startsWith("<%=")) {
-      url = `${_webgpuBaseAddress}${url}`;
-    }
+    url = _getFixedUrl(url);
     return _origFetch(url, init);
   };
 
+  URL = new Proxy(URL, {
+    construct(target, args, newTarget) {
+      if (args.length > 0) {
+        args[0] = _getFixedUrl(args[0]);
+      }
+      return new target(...args);
+    }
+  });
+
+  WebSocket = new Proxy(WebSocket, {
+    construct(target, args, newTarget) {
+      if (args.length > 0) {
+        args[0] = _getFixedUrl(args[0]);
+      }
+      return new target(...args);
+    }
+  });
+
   Request = new Proxy(Request, {
     construct(target, args, newTarget) {
-      if (args.length > 0 && args[0].startsWith("/") && !_webgpuBaseAddress.startsWith("<%=")) {
-        args[0] = `${_webgpuBaseAddress}${args[0]}`;
+      if (args.length > 0) {
+        args[0] = _getFixedUrl(args[0]);
       }
       return new target(...args);
     },
@@ -1912,9 +1962,12 @@ export let webgpuInspector = null;
       let src = `self.__webgpu_src = ${self.__webgpu_src.toString()};self.__webgpu_src();`;
 
       const url = args[0];
-      const _url = new URL(url);
-      _webgpuBaseAddress = `${_url.protocol}//${_url.host}`;     
+      const _url = new _URL(url);
+      _webgpuHostAddress = `${_url.protocol}//${_url.host}`;
+      const baseDir = _url.pathname.substring(0, _url.pathname.lastIndexOf("/"));
+      _webgpuBaseAddress = `${_webgpuHostAddress}${baseDir}`;
 
+      src = src.replaceAll(`<%=_webgpuHostAddress%>`, `${_webgpuHostAddress}`);
       src = src.replaceAll(`<%=_webgpuBaseAddress%>`, `${_webgpuBaseAddress}`);
 
       if (args.length > 1 && args[1].type === 'module') {

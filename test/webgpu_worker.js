@@ -16,7 +16,7 @@ async function init(canvas) {
       return;
     }
 
-    const response = await fetch('/test/triangle.html');
+    const response = await fetch('triangle.html');
     const text = await response.text();
     console.log(text);
 
