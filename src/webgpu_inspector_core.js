@@ -71,6 +71,17 @@ export let webgpuInspector = null;
         _document.addEventListener('DOMContentLoaded', () => {
           self.createStatusElements();
 
+          const iframes = _document.getElementsByTagName("iframe");
+          if (iframes.length > 0) {
+            for (const iframe of iframes) {
+              iframe.addEventListener('load', () => {
+                iframe.contentWindow.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: {
+                  __webgpuInspector: true,
+                  action: "webgpu_inspector_start_inspection" } }));
+              });
+            }
+          }
+
           const canvases = _document.getElementsByTagName("canvas");
           for (const canvas of canvases) {
             self._wrapCanvas(canvas);
