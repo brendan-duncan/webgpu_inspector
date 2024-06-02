@@ -154,6 +154,12 @@ export let webgpuInspector = null;
           const element = __createElement.call(_document, type);
           if (type === "canvas") {
             self._wrapCanvas(element);
+          } else if (type === "iframe") {
+            element.addEventListener('load', () => {
+              element.contentWindow.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: {
+                __webgpuInspector: true,
+                action: "webgpu_inspector_start_inspection" } }));
+            });
           }
           return element;
         };
