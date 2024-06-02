@@ -31,11 +31,21 @@
       "run_at" : "document_start",
       "all_frames" : true,
       "world": "MAIN"
+    },
+    {
+      "js": ["webgpu_recorder_loader.js"],
+      "matches": ["http://*/*",
+        "https://*/*",
+        "file://*/*"],
+      "run_at" : "document_start",
+      "all_frames" : true,
+      "world": "MAIN"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
+        "webgpu_recorder_loader.js",
         "webgpu_recorder.js",
         "webgpu_inspector.js"
        ],

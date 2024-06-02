@@ -18,7 +18,7 @@ async function init(canvas) {
 
     const response = await fetch('triangle.html');
     const text = await response.text();
-    console.log(text);
+    //console.log(text);
 
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) {

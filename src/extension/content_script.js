@@ -31,7 +31,7 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
   let inspectMessage = "true";
   if (action === PanelActions.Capture) {
     const messageString = JSON.stringify(message);
-    if (/*!inspectorInitialized ||*/ message.frame >= 0) {
+    if (message.frame >= 0) {
       action = PanelActions.InitializeInspector;
       inspectMessage = messageString;
     } else {
@@ -49,8 +49,6 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
     }, 50);
   }
 });
-
-let inspectorInitialized = false;
 
 window.addEventListener('pageshow', (event) => {
   if (event.persisted) {
@@ -75,7 +73,26 @@ window.addEventListener("__WebGPUInspector", (event) => {
   try {
     port.postMessage(message);
   } catch (e) {
-    console.log("#### error:", e);
+    //console.log("#### error:", e);
+  }
+});
+
+window.addEventListener("__WebGPURecorder", (event) => {
+  const message = event.detail;
+  if (typeof message !== 'object' || message === null) {
+    return;
+  }
+
+  const action = message.action;
+
+  if (!Actions.values.has(action)) {
+    return;
+  }
+
+  try {
+    port.postMessage(message);
+  } catch (e) {
+    //console.log("#### error:", e);
   }
 });
 
@@ -104,20 +121,19 @@ if (
 
     injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.js"));
   }
-}
 
-// TODO: Add WebWorker support
-const recordMessage = sessionStorage.getItem(webgpuRecorderLoadedKey);
-if (recordMessage) {
-  sessionStorage.removeItem(webgpuRecorderLoadedKey);
-  const data = recordMessage.split("%");
-  injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder.js"), {
-    filename: data[1],
-    frames: data[0],
-    download: data[2],
-    removeUnusedResources: 1,
-    messageRecording: 1
-  });
+  const recordMessage = sessionStorage.getItem(webgpuRecorderLoadedKey);
+  if (recordMessage) {
+    sessionStorage.removeItem(webgpuRecorderLoadedKey);
+    const data = recordMessage.split("%");
+    injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder.js"), {
+      filename: data[1],
+      frames: data[0],
+      download: data[2],
+      removeUnusedResources: 1,
+      messageRecording: 1
+    });
+  }
 }
 
 port.postMessage({action: "PageLoaded"});
