@@ -24,7 +24,7 @@
       "all_frames" : true
     },
     {
-      "js": ["webgpu_inspector.js"],
+      "js": ["webgpu_inspector_loader.js"],
       "matches": ["http://*/*",
         "https://*/*",
         "file://*/*"],
@@ -47,7 +47,7 @@
       "resources": [
         "webgpu_recorder_loader.js",
         "webgpu_recorder.js",
-        "webgpu_inspector.js"
+        "webgpu_inspector_loader.js"
        ],
       "matches": ["http://*/*",
           "https://*/*",

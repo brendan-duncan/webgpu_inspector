@@ -28,7 +28,7 @@ function build(name, input, dst, file, copyFiles, watchInclude) {
         },
         async load(id) {
           if (id === "webgpu_inspector_core_func") {
-            const corePath = path.join(dst, 'webgpu_inspector_core.js');
+            const corePath = path.join(dst, 'webgpu_inspector.js');
 
             this.addWatchFile(corePath);
             this.addWatchFile(corePath + ".map");
@@ -61,11 +61,10 @@ function build(name, input, dst, file, copyFiles, watchInclude) {
             this.addWatchFile(corePath + ".map");
 
             const code = readFileSync(corePath, 'utf-8');
-            //let codeMap = JSON.parse(readFileSync(corePath + ".map", 'utf-8'));
+            let codeMap = JSON.parse(readFileSync(corePath + ".map", 'utf-8'));
 
-            //const consumer = await new SourceMapConsumer(codeMap);
-            //const originalSrc = SourceNode.fromStringWithSourceMap(code, consumer);
-            const originalSrc = new SourceNode(code);
+            const consumer = await new SourceMapConsumer(codeMap);
+            const originalSrc = SourceNode.fromStringWithSourceMap(code, consumer);
 
             const srcPath = "src/webgpu_recorder_core_func";
 
@@ -136,11 +135,11 @@ for (const version of versions) {
   };
 
   builds.push(
-    build("__webgpu_inspector_core", 'src/webgpu_inspector_core.js', `extensions/${version}`, 'webgpu_inspector_core.js'),
-    build("__webgpu_inspector", 'src/webgpu_inspector.js', `extensions/${version}`, '/webgpu_inspector.js'),
-    build("__webgpu_recorder_loader", 'src/webgpu_recorder_loader.js', `extensions/${version}`, '/webgpu_recorder_loader.js'),
-    build("__webgpu_inspector_worker", 'src/webgpu_inspector_worker.js', `extensions/${version}`, '/webgpu_inspector_worker.js'),
     build("__webgpu_recorder", 'webgpu_recorder/webgpu_recorder.js', `extensions/${version}`, '/webgpu_recorder.js'),
+    build("__webgpu_inspector", 'src/webgpu_inspector.js', `extensions/${version}`, '/webgpu_inspector.js'),
+    build("__webgpu_inspector_loader", 'src/webgpu_inspector_loader.js', `extensions/${version}`, '/webgpu_inspector_loader.js'),   
+    build("__webgpu_recorder_loader", 'src/webgpu_recorder_loader.js', `extensions/${version}`, '/webgpu_recorder_loader.js'),
+    build("__webgpu_inspector_worker", 'src/webgpu_inspector_worker.js', `extensions/${version}`, '/webgpu_inspector_worker.js'),   
     build("__webgpu_inspector_window", 'src/devtools/inspector_window.js', `extensions/${version}`, '/webgpu_inspector_window.js'),
     build("__background", 'src/extension/background.js', `extensions/${version}`, '/background.js'),
     build("__content_script", 'src/extension/content_script.js', `extensions/${version}`, 'content_script.js', copyFiles, "src/extension/**/*"),

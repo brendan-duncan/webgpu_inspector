@@ -1,3 +1,5 @@
+// WebGPU Recorder code comes from https://github.com/brendan-duncan/webgpu_recorder.
+// It is injected here by the npm rollup build process.
 import coreLoader from "webgpu_recorder_core_func";
 
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";

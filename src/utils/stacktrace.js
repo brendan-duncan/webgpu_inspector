@@ -11,7 +11,7 @@ export function getStacktrace() {
     .split("\n")
     .map((line) => line.split("at ")[1])
     .slice(2) // Skip the Error line and the GPU.* line.
-    .filter((line) => line && !line.includes("webgpu_inspector.js"));
+    .filter((line) => line && !line.includes("webgpu_inspector_loader.js"));
 
   return stack.join("\n");
 }

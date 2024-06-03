@@ -119,14 +119,14 @@ if (
   if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
     console.log("[WebGPU Inspector] Fallback injection")
 
-    injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector.js"));
+    injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector_loader.js"));
   }
 
   const recordMessage = sessionStorage.getItem(webgpuRecorderLoadedKey);
   if (recordMessage) {
     sessionStorage.removeItem(webgpuRecorderLoadedKey);
     const data = recordMessage.split("%");
-    injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder.js"), {
+    injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder_loader.js"), {
       filename: data[1],
       frames: data[0],
       download: data[2],
