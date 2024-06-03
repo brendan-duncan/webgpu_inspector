@@ -2,6 +2,7 @@
 
 [Inspect](docs/inspect.md) . [Capture](docs/capture.md) . [Record](docs/record.md)
 
+#### Contents
 * [Introduction](#introduction)
 * [Developer Tools Window](#developer-tools-window)
   * [Extension Problem Solving](#problem-solving)
@@ -13,12 +14,11 @@
     * [Safari](#safari-technology-preview)
 * [Development](#development)
 
-
 ## Introduction
 
 **Version: 0.5.0**
 
-Inspection, profiling, and graphics debugging browser extension for WebGPU. It can be installed from the [Chrome Web Store](https://chromewebstore.google.com/detail/webgpu-inspector/holcbbnljhkpkjkhgkagjkhhpeochfal), or from [source](#from-source).
+Inspection, profiling, and graphics debugging browser extension for WebGPU.
 
 WebGPU Inspector is designed to inspect what's happening with WebGPU on the page, independent of the engine.
 
@@ -68,8 +68,6 @@ Some pages will not update if they do not have focus. If Capture is not recordin
 ##### [Back to top](#webgpu-inspector)
 
 ### Chrome Web Store
-
-**WebGPU Inspector is still in active development, expect many frequent changes and the published version will lag behind the source version.**
 
 Install WebGPU Inspector from the [Chrome Web Store](https://chromewebstore.google.com/detail/webgpu-inspector/holcbbnljhkpkjkhgkagjkhhpeochfal).
 
