@@ -1975,28 +1975,26 @@ export class CapturePanel {
             const pipelineBuffers = pipeline?.descriptor?.vertex?.buffers;
             if (pipelineBuffers) {
               const bufferDesc = pipelineBuffers[index];
-              if (bufferDesc.stepMode === "vertex") {
-                arrayStride = bufferDesc.arrayStride;
-                const attributes = bufferDesc.attributes;
-                if (attributes) {
-                  for (const attr of attributes) {
-                    const location = attr.shaderLocation;
-                    const offset = attr.offset;
-                    const format = attr.format;
-                    const type = { name: format };
-                    let name = location;
+              arrayStride = bufferDesc.arrayStride;
+              const attributes = bufferDesc.attributes;
+              if (attributes) {
+                for (const attr of attributes) {
+                  const location = attr.shaderLocation;
+                  const offset = attr.offset;
+                  const format = attr.format;
+                  const type = { name: format };
+                  let name = location;
 
-                    if (inputs) {
-                      for (const i of inputs) {
-                        if (i?.location === location && i.name) {
-                          name = i.name;
-                          break;
-                        }
+                  if (inputs) {
+                    for (const i of inputs) {
+                      if (i?.location === location && i.name) {
+                        name = i.name;
+                        break;
                       }
                     }
-
-                    members.push({ name, type, offset });
                   }
+
+                  members.push({ name, type, offset });
                 }
               }
             }
