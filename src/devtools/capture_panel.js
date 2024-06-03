@@ -493,7 +493,7 @@ export class CapturePanel {
       const skipCommand = method === "pushDebugGroup" || method === "popDebugGroup";
 
       if (!skipCommand) {
-        const cmd = this._createCommandWidget(currentBlock, commandIndex, command, cmdType, commandInfo);
+        const cmd = this._createCommandWidget(currentBlock, commandIndex, command, cmdType, commandInfo, debugGroupLabelStack);
 
         if (first) {
           // Start off selecting the first command.
@@ -563,7 +563,7 @@ export class CapturePanel {
     }
   }
 
-  _createCommandWidget(currentBlock, commandIndex, command, cmdType, commandInfo) {
+  _createCommandWidget(currentBlock, commandIndex, command, cmdType, commandInfo, debugGroupLabelStack) {
     const method = command.method;
     const args = command.args;
     const cmd = new Div(currentBlock, { id: `CaptureCommand_${commandIndex}`, class: cmdType });
@@ -638,7 +638,7 @@ export class CapturePanel {
 
         if (obj?.commands) {
           for (const bndCommand of obj?.commands) {
-            this._createCommandWidget(bundleGrp, ci++, bndCommand, ["capture_command"], commandInfo);
+            this._createCommandWidget(bundleGrp, ci++, bndCommand, ["capture_command"], commandInfo, debugGroupLabelStack);
           }
         }
       }
