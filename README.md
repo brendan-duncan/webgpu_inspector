@@ -2,7 +2,6 @@
 
 [Inspect](docs/inspect.md) . [Capture](docs/capture.md) . [Record](docs/record.md)
 
-#### Contents
 * [Introduction](#introduction)
 * [Developer Tools Window](#developer-tools-window)
   * [Extension Problem Solving](#problem-solving)
