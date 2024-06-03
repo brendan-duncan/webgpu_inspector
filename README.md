@@ -127,11 +127,14 @@ Building the project requires an installation of [Node.js](https://nodejs.org/en
 - Make sure the dependencies are installed: `npm install`
 - Compile the project: `npm run build`.
 - Compile on file changes: `npm run watch`.
-- Sometimes the terser minimizer can make source map debugging problematic. To simplify debugging, edit **rollup.config.js** and comment out the terser entry in plugins.
 
 After the project is built:
 
 - If you have the DevTools open, right-click on the WebGPU Inspector DevTools panel, select `Reload frame`.
+- Some changes require a full reload. Open **chrome://extensions**, press the refresh button for the WebGPU Inspector extension. With DevTools open for the page, right-click on the refresh button for the page and select "Empty Cache and Hard Reload". Then right-click on the WebGPU Inspector DevTools panel and select "Reload frame". This will make sure Chrome's cache has been fully cleared.
+
+**Notes** 
+- Sometimes the terser minimizer can make source map debugging problematic. To simplify debugging, edit **rollup.config.js** and comment out the terser entry in plugins.
 
 ## External Dependencies
 
