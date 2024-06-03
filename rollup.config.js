@@ -61,10 +61,11 @@ function build(name, input, dst, file, copyFiles, watchInclude) {
             this.addWatchFile(corePath + ".map");
 
             const code = readFileSync(corePath, 'utf-8');
-            let codeMap = JSON.parse(readFileSync(corePath + ".map", 'utf-8'));
+            //let codeMap = JSON.parse(readFileSync(corePath + ".map", 'utf-8'));
 
-            const consumer = await new SourceMapConsumer(codeMap);
-            const originalSrc = SourceNode.fromStringWithSourceMap(code, consumer);
+            //const consumer = await new SourceMapConsumer(codeMap);
+            //const originalSrc = SourceNode.fromStringWithSourceMap(code, consumer);
+            const originalSrc = new SourceNode(code);
 
             const srcPath = "src/webgpu_recorder_core_func";
 
