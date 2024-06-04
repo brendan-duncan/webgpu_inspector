@@ -1938,11 +1938,20 @@ export let webgpuInspector = null;
     return url;
   }
   
-  const _origFetch = fetch;
+  const _origFetch = self.fetch;
   self.fetch = function (input, init) {
     let url = input instanceof Request ? input.url : input;
     url = _getFixedUrl(url);
     return _origFetch(url, init);
+  };
+
+  const _origImportScripts = self.importScripts;
+  self.importScripts = function () {
+    const args = [...arguments];
+    for (let i = 0; i < args.length; ++i) {
+      args[i] = _getFixedUrl(args[i]);
+    }
+    return _origImportScripts(...args);
   };
 
   URL = new Proxy(URL, {
