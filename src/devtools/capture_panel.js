@@ -1975,6 +1975,9 @@ export class CapturePanel {
             const pipelineBuffers = pipeline?.descriptor?.vertex?.buffers;
             if (pipelineBuffers) {
               const bufferDesc = pipelineBuffers[index];
+              if (!bufferDesc) {
+                return;
+              }
               arrayStride = bufferDesc.arrayStride;
               const attributes = bufferDesc.attributes;
               if (attributes) {
