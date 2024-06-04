@@ -68,13 +68,13 @@ export let webgpuInspector = null;
       if (_document?.body) {
         this.createStatusElements();
       } else if (_document) {
-        _document.addEventListener('DOMContentLoaded', () => {
+        _document.addEventListener("DOMContentLoaded", () => {
           self.createStatusElements();
 
           const iframes = _document.getElementsByTagName("iframe");
           if (iframes.length > 0) {
             for (const iframe of iframes) {
-              iframe.addEventListener('load', () => {
+              iframe.addEventListener("load", () => {
                 iframe.contentWindow.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: {
                   __webgpuInspector: true,
                   action: "webgpu_inspector_start_inspection" } }));
@@ -155,7 +155,7 @@ export let webgpuInspector = null;
           if (type === "canvas") {
             self._wrapCanvas(element);
           } else if (type === "iframe") {
-            element.addEventListener('load', () => {
+            element.addEventListener("load", () => {
               element.contentWindow.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: {
                 __webgpuInspector: true,
                 action: "webgpu_inspector_start_inspection" } }));
@@ -193,7 +193,10 @@ export let webgpuInspector = null;
       // Listen for messages from the content-script.
       
       function eventCallback(event) {
-        const message = event.detail || event.data;
+        let message = event.detail || event.data;
+        if (message?.__WebGPUInspector) {
+          message = message.__WebGPUInspector;
+        }
         if (typeof message !== "object" || !message.__webgpuInspector) {
           return;
         }
@@ -266,7 +269,7 @@ export let webgpuInspector = null;
       message.__webgpuInspectorPage = true;
       message.__webgpuInspectorWorker = !_window;
       if (!_window) {
-        _postMessage(message);
+        _postMessage({ __WebGPUInspector: message });
       } else {
         _dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: message }));
       }
@@ -723,7 +726,7 @@ export let webgpuInspector = null;
         device.queue.__device = device;
 
         const self = this;
-        device.addEventListener('uncapturederror', (event) => {
+        device.addEventListener("uncapturederror", (event) => {
           self._postMessage({ "action": Actions.ValidationError, id: 0, "message": event.error.message });
         });
 
@@ -764,7 +767,7 @@ export let webgpuInspector = null;
       if (object) {
         const type = object.name;
         const message = `${type} was garbage collected without being explicitly destroyed. These objects should explicitly destroyed to avoid GPU memory leaks.`;
-        this._postMessage({"action": Actions.ValidationError, id: 0, "message": message});
+        this._postMessage({ "action": Actions.ValidationError, id: 0, "message": message });
       }
     }
 
@@ -898,7 +901,7 @@ export let webgpuInspector = null;
 
       this.disableRecording();
       this._errorChecking--;
-      device.pushErrorScope('validation');
+      device.pushErrorScope("validation");
       descriptor.__replacement = shaderId;
       const newShaderModule = device.createShaderModule(descriptor);
       const self = this;
@@ -1255,7 +1258,7 @@ export let webgpuInspector = null;
         }
         if (id >= 0) {
           this._captureTextureRequest.delete(id);
-          this._postMessage({"action": Actions.DeleteObject, id});
+          this._postMessage({ "action": Actions.DeleteObject, id });
         }
       } else if (method === "createShaderModule") {
         const id = result.__id;
@@ -1865,7 +1868,7 @@ export let webgpuInspector = null;
         return object;
       }
       if (object.__id !== undefined) {
-        return {"__id": object.__id, "__class": object.constructor.name };
+        return { "__id": object.__id, "__class": object.constructor.name };
       }
       if (object instanceof ImageBitmap ||
         object instanceof ImageData ||
@@ -1996,7 +1999,7 @@ export let webgpuInspector = null;
       src = src.replaceAll(`<%=_webgpuHostAddress%>`, `${_webgpuHostAddress}`);
       src = src.replaceAll(`<%=_webgpuBaseAddress%>`, `${_webgpuBaseAddress}`);
 
-      if (args.length > 1 && args[1].type === 'module') {
+      if (args.length > 1 && args[1].type === "module") {
         src += `import ${JSON.stringify(args[0])};`;
       } else {
         src += `importScripts(${JSON.stringify(args[0])});`;
@@ -2014,25 +2017,29 @@ export let webgpuInspector = null;
         // the message is from the inspector, and the message is not from the worker.
         if (backing.__webgpuInspector && event.detail.__webgpuInspector &&
           !event.detail.__webgpuInspectorPage) {
-          backing.postMessage(event.detail);
+          backing.postMessage({ __WebGPUInspector: event.detail });
         }
       });
 
       backing.addEventListener("message", (event) => {
-        if (event.data.__webgpuInspector) {
-          window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: event.data }));
+        let message = event.data;
+        if (message.__WebGPUInspector) {
+          message = message.__WebGPUInspector;
+        }
+        if (message.__webgpuInspector) {
+          window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: message }));
         }
       });
 
       return new Proxy(backing, {
         get(target, prop, receiver) {
           // Intercept event handlers to hide the inspectors messages
-          if (prop === 'addEventListener') {
+          if (prop === "addEventListener") {
             return function () {
-              if (arguments[0] === 'message') {
+              if (arguments[0] === "message") {
                 const origHandler = arguments[1];
                 arguments[1] = function () {
-                  if (!arguments[0].data.__webgpuInspector) {
+                  if (!arguments[0].data.__webgpuInspector && !arguments[0].data.__WebGPUInspector) {
                     origHandler(...arguments);
                   }
                 };
@@ -2044,7 +2051,7 @@ export let webgpuInspector = null;
 
           // Intercept worker termination and remove it from list so we don't send
           // messages to a terminated worker.
-          if (prop === 'terminate') {
+          if (prop === "terminate") {
             return function () {
               const result = target.terminate(...arguments);
               target.__webgpuInspector = false;
@@ -2053,7 +2060,7 @@ export let webgpuInspector = null;
           }
 
           if (prop in target) {
-            if (typeof target[prop] === 'function') {
+            if (typeof target[prop] === "function") {
               return target[prop].bind(target);
             } else {
               return target[prop];

@@ -1,3 +1,5 @@
+import { foo } from "./worker_import.js";
+
 self.addEventListener('message', (ev) => {
   switch (ev.data.type) {
     case 'init': {
@@ -18,7 +20,7 @@ async function init(canvas) {
 
     const response = await fetch('triangle.html');
     const text = await response.text();
-    //console.log(text);
+    console.log(foo());
 
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) {
