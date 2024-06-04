@@ -2024,7 +2024,7 @@ export class CapturePanel {
     if (commandIndex === -1) {
       return null;
     }
-    
+
     let pipeline = null;
     let vertexBuffers = [];
     let indexBuffer = null;
@@ -2059,6 +2059,20 @@ export class CapturePanel {
           bindGroups[bindGroupIndex] = cmd;
         }
       }
+    }
+
+    const pipelineObj = this._getObject(pipeline?.args[0].__id);
+    const pipelineBuffers = pipelineObj?.descriptor?.vertex?.buffers;
+    if (pipelineBuffers) {
+      for (let index = 0; index < vertexBuffers.length; ++index) {
+        const bufferDesc = pipelineBuffers[index];
+        if (!bufferDesc) {
+          vertexBuffers.length = index;
+          break;
+        }
+      }
+    } else {
+      vertexBuffers.length = 0;
     }
 
     return { renderPass, computePass, pipeline, vertexBuffers, indexBuffer, bindGroups };
@@ -2311,6 +2325,7 @@ export class CapturePanel {
     if (state.pipeline) {
       this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
     }
+
     for (const vertexBuffer of state.vertexBuffers) {
       this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true, state);
     }
