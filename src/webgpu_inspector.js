@@ -766,7 +766,7 @@ export let webgpuInspector = null;
 
     getNextId(object) {
       // We don't need unique id's for some types of objects
-      // and they get created so frequenty they make the ID's
+      // and they get created so frequently they make the ID's
       // grow too quickly.
       if (object instanceof GPUCommandEncoder ||
           object instanceof GPUComputePassEncoder ||
