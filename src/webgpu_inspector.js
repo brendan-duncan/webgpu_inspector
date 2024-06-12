@@ -702,19 +702,33 @@ export let webgpuInspector = null;
       this._wrapObject(adapter, id);
       id ??= adapter.__id;
       const self = this;
-      adapter.requestAdapterInfo().then((infoObj) => {
+      // When adapter.info becomes ubuquitous, we can remove the requestAdapterInfo check.
+      if (adapter.info) {
         const info = {
-          vendor: infoObj.vendor,
-          architecture: infoObj.architecture,
-          device: infoObj.device,
-          description: infoObj.description,
-          features: self._gpuToArray(adapter.features),
-          limits: self._gpuToObject(adapter.limits),
-          isFallbackAdapter: adapter.isFallbackAdapter,
+          vendor: adapter.info.vendor,
+          device: adapter.info.device,
+          description: adapter.info.description,
+          features: self._gpuToArray(adapter.info.features),
+          limits: self._gpuToObject(adapter.info.limits),
+          isFallbackAdapter: adapter.info.isFallbackAdapter,
           wgslFeatures: self._gpuToArray(navigator.gpu.wgslLanguageFeatures)
         };
         self._sendAddObjectMessage(id, 0, "Adapter", JSON.stringify(info), stacktrace);
-      });
+      } else if (adapter.requestAdapterInfo) {
+        adapter.requestAdapterInfo().then((infoObj) => {
+          const info = {
+            vendor: infoObj.vendor,
+            architecture: infoObj.architecture,
+            device: infoObj.device,
+            description: infoObj.description,
+            features: self._gpuToArray(adapter.features),
+            limits: self._gpuToObject(adapter.limits),
+            isFallbackAdapter: adapter.isFallbackAdapter,
+            wgslFeatures: self._gpuToArray(navigator.gpu.wgslLanguageFeatures)
+          };
+          self._sendAddObjectMessage(id, 0, "Adapter", JSON.stringify(info), stacktrace);
+        });
+      }
     }
 
     _wrapDevice(adapter, device, id, args, stacktrace) {
@@ -752,7 +766,7 @@ export let webgpuInspector = null;
 
     getNextId(object) {
       // We don't need unique id's for some types of objects
-      // and they get created so frequenty they make the ID's
+      // and they get created so frequently they make the ID's
       // grow too quickly.
       if (object instanceof GPUCommandEncoder ||
           object instanceof GPUComputePassEncoder ||
