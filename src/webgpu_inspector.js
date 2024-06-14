@@ -191,7 +191,7 @@ export let webgpuInspector = null;
       };
 
       // Listen for messages from the content-script.
-      
+
       function eventCallback(event) {
         let message = event.detail || event.data;
         if (message?.__WebGPUInspector) {
@@ -1396,8 +1396,8 @@ export let webgpuInspector = null;
 
         const dynamicOffsets = (newArgs.length > 2) ? newArgs[2] : null;
         let dynamicOffsetIndex = 0;
-        const bindGroupDesc = bindGroup.__descriptor;
-        const bindGroupLayoutDesc = bindGroupDesc.layout?.__descriptor;
+        const bindGroupDesc = bindGroup?.__descriptor;
+        const bindGroupLayoutDesc = bindGroupDesc?.layout?.__descriptor;
         if (bindGroupDesc) {
           for (const entryIndex in bindGroupDesc.entries) {
             const entry = bindGroupDesc.entries[entryIndex];

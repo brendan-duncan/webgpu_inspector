@@ -357,7 +357,7 @@ export class CapturePanel {
         currentBlock = block;
         currentBlock._passIndex = passIndex;
 
-        for (const attachment of args[0].colorAttachments) {
+        for (const attachment of args[0]?.colorAttachments) {
           const textureView = this._getTextureViewFromAttachment(attachment);
           if (textureView) {
             this.database.capturedObjects.set(textureView.id, textureView);
@@ -368,8 +368,8 @@ export class CapturePanel {
           }
         }
 
-        if (args[0].depthStencilAttachment) {
-          const textureView = this._getTextureViewFromAttachment(args[0].depthStencilAttachment);
+        if (args[0]?.depthStencilAttachment) {
+          const textureView = this._getTextureViewFromAttachment(args[0]?.depthStencilAttachment);
           if (textureView) {
             this.database.capturedObjects.set(textureView.id, textureView);
             const texture = this.database.getTextureFromView(textureView);
@@ -652,15 +652,15 @@ export class CapturePanel {
     } else if (method === "unmap") {
       new Span(cmd, { class: "capture_method_args", text: getName(command.object) });
     } else if (method === "copyBufferToBuffer") {
-      new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0].__id)} srcOffset:${args[1]} dest:${getName(args[2].__id)} destOffset:${args[3]} size:${args[4]}` });
+      new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.__id)} srcOffset:${args[1]} dest:${getName(args[2]?.__id)} destOffset:${args[3]} size:${args[4]}` });
     } else if (method === "clearBuffer") {
-      new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0].__id)} offset:${args[1]} size:${args[4]}` });
+      new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.__id)} offset:${args[1]} size:${args[4]}` });
     } else if (method === "copyBufferToTexture") {
-      new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0].buffer?.__id)} texture:${getName(args[1].texture?.__id)}` });
+      new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.buffer?.__id)} texture:${getName(args[1]?.texture?.__id)}` });
     } else if (method === "copyTextureToBuffer") {
-      new Span(cmd, { class: "capture_method_args", text: `texture:${getName(args[0].texture?.__id)} buffer:${getName(args[1].buffer?.__id)}` });
+      new Span(cmd, { class: "capture_method_args", text: `texture:${getName(args[0]?.texture?.__id)} buffer:${getName(args[1]?.buffer?.__id)}` });
     } else if (method === "copyTextureToTexture") {
-      new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0].texture.__id)} dest:${getName(args[1].texture.__id)}` });
+      new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.texture.__id)} dest:${getName(args[1]?.texture.__id)}` });
     } else if (method === "setViewport") {
       new Span(cmd, { class: "capture_method_args", text: `x:${args[0]} y:${args[1]} w:${args[2]} h:${args[3]} minZ:${args[4]} maxZ:${args[5]}` });
     } else if (method === "setScissorRect") {
@@ -668,10 +668,10 @@ export class CapturePanel {
     } else if (method === "setStencilReference") {
       new Span(cmd, { class: "capture_method_args", text: `reference:${args[0]}` });
     } else if (method === "setBindGroup") {
-      new Span(cmd, { class: "capture_method_args", text: `index:${args[0]} bindGroup:${getName(args[1].__id)}` });
-      const bg = this._getObject(args[1].__id);
+      new Span(cmd, { class: "capture_method_args", text: `index:${args[0]} bindGroup:${getName(args[1]?.__id)}` });
+      const bg = this._getObject(args[1]?.__id);
       if (bg) {
-        this.database.capturedObjects.set(args[1].__id, bg);
+        this.database.capturedObjects.set(args[1]?.__id, bg);
         for (const entry of bg.descriptor.entries) {
           if (entry.resource?.__id) {
             const obj = this._getObject(entry.resource.__id);
@@ -692,31 +692,31 @@ export class CapturePanel {
       const data = args[2];
       if (data.constructor === String) {
         const s = data.split(" ")[2];
-        new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0].__id)} offset:${args[1]} data:${s} Bytes` });
+        new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id)} offset:${args[1]} data:${s} Bytes` });
       } else {
-        new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0].__id)} offset:${args[1]} data:${args[2].length} Bytes` });
+        new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id)} offset:${args[1]} data:${args[2]?.length} Bytes` });
       }
     } else if (method === "setPipeline") {
-      new Span(cmd, { class: "capture_method_args", text: `renderPipeline:${getName(args[0].__id)}` });
-      this.database.capturedObjects.set(args[0].__id, this._getObject(args[0].__id));
+      new Span(cmd, { class: "capture_method_args", text: `renderPipeline:${getName(args[0]?.__id)}` });
+      this.database.capturedObjects.set(args[0]?.__id, this._getObject(args[0]?.__id));
     } else if (method === "setVertexBuffer") {
-      new Span(cmd, { class: "capture_method_args", text: `slot:${args[0]} buffer:${getName(args[1].__id)} offset:${args[2] ?? 0}` });
-      this.database.capturedObjects.set(args[1].__id, this._getObject(args[1].__id));
+      new Span(cmd, { class: "capture_method_args", text: `slot:${args[0]} buffer:${getName(args[1]?.__id)} offset:${args[2] ?? 0}` });
+      this.database.capturedObjects.set(args[1]?.__id, this._getObject(args[1]?.__id));
     } else if (method === "setIndexBuffer") {
-      new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0].__id)} indexFormat:${args[1]} offset:${args[2] ?? 0}` });
-      this.database.capturedObjects.set(args[0].__id, this._getObject(args[0].__id));
+      new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id)} indexFormat:${args[1]} offset:${args[2] ?? 0}` });
+      this.database.capturedObjects.set(args[0]?.__id, this._getObject(args[0]?.__id));
     } else if (method === "drawIndexed") {
       new Span(cmd, { class: "capture_method_args", text: `indexCount:${args[0]} instanceCount:${args[1] ?? 1} firstIndex:${args[2] ?? 0} baseVertex:${args[3] ?? 0} firstInstance:${args[4] ?? 0}` });
     } else if (method === "draw") {
       new Span(cmd, { class: "capture_method_args", text: `vertexCount:${args[0]} instanceCount:${args[1] ?? 1} firstVertex:${args[2] ?? 0} firstInstance:${args[3] ?? 0}` });
     } else if (method === "drawIndirect") {
-      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0].__id)} offset:${args[1]}` });
+      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id)} offset:${args[1]}` });
     } else if (method === "drawIndexedIndirect") {
-      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0].__id)} offset:${args[1]}` });
+      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id)} offset:${args[1]}` });
     } else if (method === "dispatchWorkgroups") {
       new Span(cmd, { class: "capture_method_args", text: `countX:${args[0]} countY:${args[1] ?? 1} countZ:${args[2] ?? 1}` });
     } else if (method === "dispatchWorkgroupsIndirect") {
-      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0].__id)} offset:${args[1]}` });
+      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id)} offset:${args[1]}` });
     } else if (method === "pushDebugGroup") {
       debugGroupLabelStack.push(args[0]);
       new Span(cmd, { class: "capture_method_args", text: args[0] });
@@ -732,9 +732,9 @@ export class CapturePanel {
     } else if (method === "end") {
       new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)}` });
     } else if (method === "createBuffer") {
-      new Span(cmd, { class: "capture_method_args", text: `size:${args[0].size} usage:${args[0].usage} mappedAtCreation:${args[0].mappedAtCreation ?? false} => ${getName(command.result, "GPUBuffer")}` });
+      new Span(cmd, { class: "capture_method_args", text: `size:${args[0]?.size} usage:${args[0]?.usage} mappedAtCreation:${args[0]?.mappedAtCreation ?? false} => ${getName(command.result, "GPUBuffer")}` });
     } else if (method === "writeTexture") {
-      new Span(cmd, { class: "capture_method_args", text: `dest:${getName(args[0].texture.__id)}` });
+      new Span(cmd, { class: "capture_method_args", text: `dest:${getName(args[0]?.texture.__id)}` });
     } else if (method === "destroy") {
       new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)}` });
     } else if (method === "getCurrentTexture") {
@@ -862,7 +862,7 @@ export class CapturePanel {
     const renderPassIndex = command._passIndex;
     const args = command.args;
     const self = this;
-    const colorAttachments = args[0].colorAttachments;
+    const colorAttachments = args[0]?.colorAttachments;
     for (let i = 0, l = colorAttachments.length; i < l; ++i) {
       const attachment = colorAttachments[i];
       const texture = this._getTextureFromAttachment(attachment);
@@ -890,7 +890,7 @@ export class CapturePanel {
       }
     }
 
-    const depthStencilAttachment = args[0].depthStencilAttachment;
+    const depthStencilAttachment = args[0]?.depthStencilAttachment;
     if (depthStencilAttachment) {
       const texture = this._getTextureFromAttachment(depthStencilAttachment);
       if (texture) {
@@ -1353,7 +1353,7 @@ export class CapturePanel {
       return null;
     }
 
-    const id = state.pipeline?.args[0].__id;
+    const id = state.pipeline?.args[0]?.__id;
     const pipeline = this._getObject(id);
 
     if (pipeline) {
@@ -1410,7 +1410,7 @@ export class CapturePanel {
 
   _showCaptureCommandInfo_setBindGroup(command, commandInfo, groupIndex, skipInputs, state, commands) {
     const args = command.args;
-    const id = args[1].__id;
+    const id = args[1]?.__id;
     const bindGroup = this._getObject(id);
     if (!bindGroup) {
       return;
@@ -1470,7 +1470,7 @@ export class CapturePanel {
 
     function getBindingAccess(state, group, binding) {
       if (state) {
-        const pipelineId = state.pipeline?.args[0].__id;
+        const pipelineId = state.pipeline?.args[0]?.__id;
         const pipeline = self._getObject(pipelineId);
         if (pipeline) {
           const desc = pipeline.descriptor;
@@ -1576,7 +1576,7 @@ export class CapturePanel {
 
       let access = getBindingAccess(state, groupIndex, binding);
       /*if (state) {
-        const pipelineId = state.pipeline?.args[0].__id;
+        const pipelineId = state.pipeline?.args[0]?.__id;
         const pipeline = this._getObject(pipelineId);
         if (pipeline) {
           const desc = pipeline.descriptor;
@@ -1732,7 +1732,7 @@ export class CapturePanel {
             for (; commandIndex >= 0; --commandIndex) {
               const cmd = this._captureCommands[commandIndex];
               if (cmd.method === "writeBuffer") {
-                if (cmd.args[0].__id === bufferId) {
+                if (cmd.args[0]?.__id === bufferId) {
                   affectedByCommands.push(cmd);
                 }
               } else if (cmd.method === "createBuffer") {
@@ -1744,7 +1744,7 @@ export class CapturePanel {
                 if (cmdState) {
                   for (const bindGroupCmd of cmdState.bindGroups) {
                     const groupIndex = bindGroupCmd.args[0];
-                    const bindGroup = this.database.getObject(bindGroupCmd.args[1].__id);
+                    const bindGroup = this.database.getObject(bindGroupCmd.args[1]?.__id);
                     if (bindGroup) {
                       const bindGroupDesc = bindGroup.descriptor;
                       for (const entry of bindGroupDesc.entries) {
@@ -1792,7 +1792,7 @@ export class CapturePanel {
   _showCaptureCommandInfo_setPipeline(command, commandInfo) {
     const args = command.args;
     const self = this;
-    const id = args[0].__id;
+    const id = args[0]?.__id;
     const pipeline = this._getObject(id);
 
     if (pipeline) {
@@ -1874,7 +1874,7 @@ export class CapturePanel {
 
   _showCaptureCommandInfo_writeBuffer(command, commandInfo) {
     const args = command.args;
-    const id = args[0].__id;
+    const id = args[0]?.__id;
     const buffer = this._getObject(id);
 
     if (buffer) {
@@ -1891,7 +1891,7 @@ export class CapturePanel {
   _showCaptureCommandInfo_setIndexBuffer(command, commandInfo, collapsed) {
     const args = command.args;
     const self = this;
-    const id = args[0].__id;
+    const id = args[0]?.__id;
     const buffer = this._getObject(id);
     if (buffer) {
       const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Index Buffer ID:${id}` });
@@ -1936,7 +1936,7 @@ export class CapturePanel {
     const buffer = this._getObject(id);
 
     let inputs = null;
-    const pipeline = this._getObject(state?.pipeline?.args[0].__id);
+    const pipeline = this._getObject(state?.pipeline?.args[0]?.__id);
     if (pipeline) {
       const desc = pipeline.descriptor;
       const vertexId = desc?.vertex?.module?.__id;
@@ -2061,7 +2061,7 @@ export class CapturePanel {
       }
     }
 
-    const pipelineObj = this._getObject(pipeline?.args[0].__id);
+    const pipelineObj = this._getObject(pipeline?.args[0]?.__id);
     const pipelineBuffers = pipelineObj?.descriptor?.vertex?.buffers;
     if (pipelineBuffers) {
       for (let index = 0; index < vertexBuffers.length; ++index) {
@@ -2534,7 +2534,7 @@ export class CapturePanel {
     } else if (method === "draw" || method === "drawIndexed" || method === "drawIndirect" || method === "drawIndexedIndirect") {
       const state = this._getPipelineState(command);
       if (state.pipeline) {
-        const topology = this._getObject(state.pipeline.args[0].__id)?.topology ?? "triangle-list";
+        const topology = this._getObject(state.pipeline.args[0]?.__id)?.topology ?? "triangle-list";
 
         let vertexCount = 0;
         if (method === "drawIndirect" || method === "drawIndexedIndirect") {

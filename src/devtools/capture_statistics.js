@@ -136,7 +136,7 @@ export class CaptureStatistics {
     } else if (method === "setPipeline") {
       this.setPipeline++;
       this._lastPipeline = args[0];
-      const pipeline = database.getObject(args[0].__id);
+      const pipeline = database.getObject(args[0]?.__id);
       if (pipeline) {
         if (pipeline.descriptor.vertex) {
           this.vertexShaders++;
@@ -150,7 +150,7 @@ export class CaptureStatistics {
       }
     } else if (method === "setBindGroup") {
       this.setBindGroup++;
-      const bindgroup = database.getObject(args[1].__id);
+      const bindgroup = database.getObject(args[1]?.__id);
       if (bindgroup) {
         for (const entry of bindgroup.descriptor.entries) {
           if (entry.resource?.buffer) {

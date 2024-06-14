@@ -394,15 +394,15 @@ export class RecorderPanel {
         } else if (method === "unmap") {
           new Span(cmd, { class: "capture_method_args", text: getName(command.object) });
         } else if (method === "copyBufferToBuffer") {
-          new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0].__id)} srcOffset:${args[1]} dest:${getName(args[2].__id)} destOffset:${args[3]} size:${args[4]}` });
+          new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.__id)} srcOffset:${args[1]} dest:${getName(args[2]?.__id)} destOffset:${args[3]} size:${args[4]}` });
         } else if (method === "clearBuffer") {
-          new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0].__id)} offset:${args[1]} size:${args[4]}` });
+          new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.__id)} offset:${args[1]} size:${args[4]}` });
         } else if (method === "copyBufferToTexture") {
-          new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0].buffer?.__id)} texture:${getName(args[1].texture?.__id)}` });
+          new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.buffer?.__id)} texture:${getName(args[1]?.texture?.__id)}` });
         } else if (method === "copyTextureToBuffer") {
-          new Span(cmd, { class: "capture_method_args", text: `texture:${getName(args[0].texture?.__id)} buffer:${getName(args[1].buffer?.__id)}` });
+          new Span(cmd, { class: "capture_method_args", text: `texture:${getName(args[0]?.texture?.__id)} buffer:${getName(args[1]?.buffer?.__id)}` });
         } else if (method === "copyTextureToTexture") {
-          new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0].texture.__id)} dest:${getName(args[1].texture.__id)}` });
+          new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.texture?.__id)} dest:${getName(args[1]?.texture?.__id)}` });
         } else if (method === "setViewport") {
           new Span(cmd, { class: "capture_method_args", text: `x:${args[0]} y:${args[1]} w:${args[2]} h:${args[3]} minZ:${args[4]} maxZ:${args[5]}` });
         } else if (method === "setScissorRect") {
@@ -410,7 +410,7 @@ export class RecorderPanel {
         } else if (method === "setStencilReference") {
           new Span(cmd, { class: "capture_method_args", text: `reference:${args[0]}` });
         } else if (method === "setBindGroup") {
-          new Span(cmd, { class: "capture_method_args", text: `index:${args[0]} bindGroup:${getName(args[1].__id)}` });
+          new Span(cmd, { class: "capture_method_args", text: `index:${args[0]} bindGroup:${getName(args[1]?.__id)}` });
           /*const bg = this._getObject(args[1].__id);
           if (bg) {
             this.database.capturedObjects.set(args[1].__id, bg);
@@ -436,31 +436,31 @@ export class RecorderPanel {
           const data = args[2];
           if (data.constructor === String) {
             const s = data.split(" ")[2];
-            new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0].__id)} offset:${args[1]} data:${s} Bytes` });
+            new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id)} offset:${args[1]} data:${s} Bytes` });
           } else {
-            new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0].__id)} offset:${args[1]} data:${args[2].length} Bytes` });
+            new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id)} offset:${args[1]} data:${args[2]?.length} Bytes` });
           }
         } else if (method === "setPipeline") {
-          new Span(cmd, { class: "capture_method_args", text: `renderPipeline:${getName(args[0].__id)}` });
+          new Span(cmd, { class: "capture_method_args", text: `renderPipeline:${getName(args[0]?.__id)}` });
           //this.database.capturedObjects.set(args[0].__id, this._getObject(args[0].__id));
         } else if (method === "setVertexBuffer") {
-          new Span(cmd, { class: "capture_method_args", text: `slot:${args[0]} buffer:${getName(args[1].__id)} offset:${args[2] ?? 0}` });
+          new Span(cmd, { class: "capture_method_args", text: `slot:${args[0]} buffer:${getName(args[1]?.__id)} offset:${args[2] ?? 0}` });
           //this.database.capturedObjects.set(args[1].__id, this._getObject(args[1].__id));
         } else if (method === "setIndexBuffer") {
-          new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0].__id)} indexFormat:${args[1]} offset:${args[2] ?? 0}` });
+          new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id)} indexFormat:${args[1]} offset:${args[2] ?? 0}` });
           //this.database.capturedObjects.set(args[0].__id, this._getObject(args[0].__id));
         } else if (method === "drawIndexed") {
           new Span(cmd, { class: "capture_method_args", text: `indexCount:${args[0]} instanceCount:${args[1] ?? 1} firstIndex:${args[2] ?? 0} baseVertex:${args[3] ?? 0} firstInstance:${args[4] ?? 0}` });
         } else if (method === "draw") {
           new Span(cmd, { class: "capture_method_args", text: `vertexCount:${args[0]} instanceCount:${args[1] ?? 1} firstVertex:${args[2] ?? 0} firstInstance:${args[3] ?? 0}` });
         } else if (method === "drawIndirect") {
-          new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0].__id)} offset:${args[1]}` });
+          new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id)} offset:${args[1]}` });
         } else if (method === "drawIndexedIndirect") {
-          new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0].__id)} offset:${args[1]}` });
+          new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id)} offset:${args[1]}` });
         } else if (method === "dispatchWorkgroups") {
           new Span(cmd, { class: "capture_method_args", text: `countX:${args[0]} countY:${args[1] ?? 1} countZ:${args[2] ?? 1}` });
         } else if (method === "dispatchWorkgroupsIndirect") {
-          new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0].__id)} offset:${args[1]}` });
+          new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id)} offset:${args[1]}` });
         } else if (method === "pushDebugGroup") {
           debugGroupLabelStack.push(args[0]);
           new Span(cmd, { class: "capture_method_args", text: args[0] });
@@ -476,9 +476,9 @@ export class RecorderPanel {
         } else if (method === "end") {
           new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)}` });
         } else if (method === "createBuffer") {
-          new Span(cmd, { class: "capture_method_args", text: `size:${args[0].size} usage:${args[0].usage} mappedAtCreation:${args[0].mappedAtCreation ?? false} => ${getName(command.result, "GPUBuffer")}` });
+          new Span(cmd, { class: "capture_method_args", text: `size:${args[0]?.size} usage:${args[0]?.usage} mappedAtCreation:${args[0]?.mappedAtCreation ?? false} => ${getName(command.result, "GPUBuffer")}` });
         } else if (method === "writeTexture") {
-          new Span(cmd, { class: "capture_method_args", text: `dest:${getName(args[0].texture.__id)}` });
+          new Span(cmd, { class: "capture_method_args", text: `dest:${getName(args[0]?.texture?.__id)}` });
         } else if (method === "destroy") {
           new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)}` });
         } else if (method === "getCurrentTexture") {
