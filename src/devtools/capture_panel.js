@@ -643,6 +643,20 @@ export class CapturePanel {
         }
       }
 
+    } else if (method === "createRenderPipeline") {
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPURenderPipeline")}` }); 
+    } else if (method === "createBindGroup") {
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUBindGroup")}` }); 
+    } else if (method === "createBindGroupLayout") {
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUBindGroupLayout")}` }); 
+    } else if (method === "createPipelineLayout") {
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUPipelineLayout")}` }); 
+    } else if (method === "createShaderModule") {
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUShaderModule")}` }); 
+    } else if (method === "createTexture") {
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUTexture")}` }); 
+    } else if (method === "createSampler") {
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUSampler")}` }); 
     } else if (method === "createCommandEncoder") {
       new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUCommandEncoder")}` });
     } else if (method === "finish") {
@@ -1594,7 +1608,7 @@ export class CapturePanel {
                     break;
                   }
                 }
-              }
+              }F
             }
           } else if (vertexId !== undefined && vertexId === fragmentId) {
             const module = this._getObject(vertexId);
@@ -2591,7 +2605,15 @@ export class CapturePanel {
       new Widget("pre", argsGroup.body, { text: JSON.stringify(newArgs, undefined, 4) });
     }
 
-    if (method == "beginRenderPass") {
+    if (method === "createRenderPipeline" || method === "createBindGroup" ||
+        method === "createBindGroupLayout" || method === "createShaderModule" ||
+        method === "createPipelineLayout") {
+      const obj = this._getObject(command.result);
+      const self = this;
+      new Button(commandInfo, { label: "Inspect", callback: () => {
+        self.window.inspectObject(obj);
+      } });
+    } else if (method == "beginRenderPass") {
       this._showCaptureCommandInfo_beginRenderPass(command, commandInfo);
     } else if (method === "setBindGroup") {
       this._showCaptureCommandInfo_setBindGroup(command, commandInfo, 0, false);
