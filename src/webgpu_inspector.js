@@ -2013,7 +2013,7 @@ export let webgpuInspector = null;
       src = src.replaceAll(`<%=_webgpuHostAddress%>`, `${_webgpuHostAddress}`);
       src = src.replaceAll(`<%=_webgpuBaseAddress%>`, `${_webgpuBaseAddress}`);
 
-      if (args.length > 1 && args[1].type === "module") {
+      if (args.length > 1 && args[1]?.type === "module") {
         src += `import ${JSON.stringify(args[0])};`;
       } else {
         src += `importScripts(${JSON.stringify(args[0])});`;
