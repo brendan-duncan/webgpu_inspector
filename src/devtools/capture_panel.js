@@ -39,7 +39,7 @@ export class CapturePanel {
         this._captureData.onUpdateCaptureStatus.addListener(self._updateCaptureStatus, self);
 
         const frame = self.captureMode === 0 ? -1 : self.captureSpecificFrame;
-        self.port.postMessage({ action: PanelActions.Capture, maxBufferSize: self.maxBufferSize, frame });
+        self.port.postMessage({ action: PanelActions.Capture, captureFrameCount: this.captureFrameCount, maxBufferSize: self.maxBufferSize, frame });
       } catch (e) {
         console.error(e.message);
       }
@@ -74,6 +74,12 @@ export class CapturePanel {
     if (this.captureMode === 0) {
       this.captureFrameEdit.style.display = "none";
     }
+
+    this.captureFrameCount = 1;
+    new Span(controlBar, { text: "Frames:", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });
+    new NumberInput(controlBar, { value: this.captureFrameCount, min: 1, step: 1, precision: 0, style: "display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;", onChange: (value) => {
+      self.captureFrameCount = Math.max(value, 1);
+    } });
 
     this.maxBufferSize = (1024 * 1024) / 2;
     new Span(controlBar, { text: "Max Buffer Size (Bytes):", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });

@@ -23,6 +23,7 @@ export let webgpuInspector = null;
   const maxDataChunkSize = (1024 * 1024) / 4; // 256KB
   const maxBufferCaptureSize = (1024 * 1024) / 4; // 256KB
   const maxColorAttachments = 10;
+  const captureFrameCount = 1;
 
   class WebGPUInspector {
     constructor() {
@@ -57,6 +58,7 @@ export let webgpuInspector = null;
       this._timestampBuffer = null;
       this._timestampIndex = 0;
       this._maxTimestamps = 2000;
+      this._captureFrameCount = 0;
 
       if (!navigator.gpu) {
         // No WebGPU support
@@ -1078,6 +1080,7 @@ export let webgpuInspector = null;
       if (this._captureData) {
         if (this._captureData.frame < 0 || this._frameIndex >= this._captureData.frame) {
           this._captureMaxBufferSize = this._captureData.maxBufferSize || maxBufferCaptureSize;
+          this._captureFrameCount = this._captureData.captureFrameCount || captureFrameCount;
           this._captureFrameRequest = true;
           this._gpuWrapper.recordStacktraces = true;
           this._captureData = null;
@@ -1113,12 +1116,13 @@ export let webgpuInspector = null;
         }
       }
 
-      this._frameData.length = 0;
-      this._captureFrameCommands.length = 0;
-      this._frameRenderPassCount = 0;
-      this._frameIndex++;
-      this._frameCommandCount = 0;
-
+      if (this._captureFrameCount <= 0) {
+        this._frameData.length = 0;
+        this._captureFrameCommands.length = 0;
+        this._frameRenderPassCount = 0;
+        this._frameIndex++;
+        this._frameCommandCount = 0;
+      }
 
       if (this._inspectingStatusFrame) {
         this._inspectingStatusFrame.textContent = `Frame: ${this._frameIndex} : ${this._frameRate.average.toFixed(2)}ms`;
@@ -1127,24 +1131,27 @@ export let webgpuInspector = null;
 
     _frameEnd(time) {
       if (this._captureFrameCommands.length) {
-        const maxFrameCount = 2000;
-        const batches = Math.ceil(this._captureFrameCommands.length / maxFrameCount);
-        this._postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": this._captureFrameCommands.length, "batches": batches });
+        this._captureFrameCount--;
+        if (this._captureFrameCount <= 0) {
+          const maxFrameCount = 2000;
+          const batches = Math.ceil(this._captureFrameCommands.length / maxFrameCount);
+          this._postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": this._captureFrameCommands.length, "batches": batches });
 
-        for (let i = 0; i < this._captureFrameCommands.length; i += maxFrameCount) {
-          const length = Math.min(maxFrameCount, this._captureFrameCommands.length - i);
-          const commands = this._captureFrameCommands.slice(i, i + length);
-          this._postMessage({
-              "action": Actions.CaptureFrameCommands,
-              "frame": this._frameIndex - 1,
-              "commands": commands,
-              "index": i,
-              "count": length
-            });
+          for (let i = 0; i < this._captureFrameCommands.length; i += maxFrameCount) {
+            const length = Math.min(maxFrameCount, this._captureFrameCommands.length - i);
+            const commands = this._captureFrameCommands.slice(i, i + length);
+            this._postMessage({
+                "action": Actions.CaptureFrameCommands,
+                "frame": this._frameIndex - 1,
+                "commands": commands,
+                "index": i,
+                "count": length
+              });
+          }
+          this._captureFrameCommands.length = 0;
+          this._captureFrameRequest = false;
+          this._gpuWrapper.recordStacktraces = false;
         }
-        this._captureFrameCommands.length = 0;
-        this._captureFrameRequest = false;
-        this._gpuWrapper.recordStacktraces = false;
       }
 
       this._updateStatusMessage();
