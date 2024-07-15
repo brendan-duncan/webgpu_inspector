@@ -2013,9 +2013,9 @@ export let webgpuInspector = null;
 
       const url = args[0];
       const _url = new _URL(url);
-      _webgpuHostAddress = `${_url.protocol}//${_url.host}`;
+      const _webgpuHostAddress = `${_url.protocol}//${_url.host}`;
       const baseDir = _url.pathname.substring(0, _url.pathname.lastIndexOf("/"));
-      _webgpuBaseAddress = `${_webgpuHostAddress}${baseDir}`;
+      const _webgpuBaseAddress = `${_webgpuHostAddress}${baseDir}`;
 
       src = src.replaceAll(`<%=_webgpuHostAddress%>`, `${_webgpuHostAddress}`);
       src = src.replaceAll(`<%=_webgpuBaseAddress%>`, `${_webgpuBaseAddress}`);
