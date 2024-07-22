@@ -17,7 +17,8 @@ export class Texture extends GPUObject {
       exposure: 1,
       channels: 0,
       minRnage: 0,
-      maxRange: 1
+      maxRange: 1,
+      mipLevel: 0
     };
   }
 
@@ -51,7 +52,9 @@ export class Texture extends GPUObject {
     return this._layerRanges
   }
 
-  getPixel(x, y, z) {
+  getPixel(x, y, z, mipLevel) {
+    mipLevel ??= 0;
+    mipLevel = Math.max(Math.min(mipLevel, this.mipLevelCount - 1), 0);
     function pixelValue(imageData, offset, format, numChannels) {
       const value = [null, null, null, null];
       for (let i = 0; i < numChannels; ++i) {
@@ -102,8 +105,9 @@ export class Texture extends GPUObject {
     }
 
     if (this.imageData) {
-      const bytesPerRow = this.bytesPerRow;
-      const offset = (z * bytesPerRow * this.height) + y * bytesPerRow + x * this.texelByteSize;
+      const bytesPerRow = this.bytesPerRow >> mipLevel;
+      const height = this.height >> mipLevel;
+      const offset = (z * bytesPerRow * height) + y * bytesPerRow + x * this.texelByteSize;
       const imageData = this.imageData;
       switch (this.format) {
         case "r8unorm": {
@@ -296,6 +300,19 @@ export class Texture extends GPUObject {
       return size.depthOrArrayLayers ?? 1;
     }
     return 0;
+  }
+
+  get mipLevelCount() {
+    return this.descriptor?.mipLevelCount ?? 1;
+  }
+
+  getMipSize(level) {
+    const mipLevelCount = this.mipLevelCount;
+    level = Math.max(Math.min(level, mipLevelCount - 1), 0);
+    const mipWidth = this.width >> level;
+    const mipHeight = this.height >> level;
+    const mipDepthOrArrayLayers = this.dimension === "3d" ? this.depthOrArrayLayers >> level : this.depthOrArrayLayers;
+    return [mipWidth, mipHeight, mipDepthOrArrayLayers];
   }
 
   get resolutionString() {

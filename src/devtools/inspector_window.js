@@ -51,12 +51,13 @@ export class InspectorWindow extends Window {
         case Actions.CaptureTextureData: {
           const id = message.id;
           const passId = message.passId;
+          const mipLevel = message.mipLevel ?? 0;
           const offset = message.offset;
           const size = message.size;
           const index = message.index;
           const count = message.count;
           const chunk = message.chunk;
-          self._captureTextureData(id, passId, offset, size, index, count, chunk);
+          self._captureTextureData(id, passId, mipLevel, offset, size, index, count, chunk);
           break;
         }
       }
@@ -102,7 +103,7 @@ export class InspectorWindow extends Window {
     this._inspectPanel.inspectObject(object);
   }
 
-  _captureTextureData(id, passId, offset, size, index, count, chunk) {
+  _captureTextureData(id, passId, mipLevel, offset, size, index, count, chunk) {
     const object = this.database.getObject(id);
     if (!object || !(object instanceof Texture)) {
       return;
@@ -127,12 +128,12 @@ export class InspectorWindow extends Window {
       const dt = t2 - t1;
       object.dataLoadTime += dt;
       //console.log(`TEXTURE CHUNK ${dt}ms size:${data.length} chunkSize:${chunk.length}`);
-      self.onTextureDataChunkLoaded.emit(id, passId, offset, size, index, count, chunk);
+      self.onTextureDataChunkLoaded.emit(id, passId, mipLevel, offset, size, index, count, chunk);
       object.loadedImageDataChunks[index] = 1;
       try {
         object.imageData.set(data, offset);
       } catch (e) {
-        console.log("TEXTURE IMAGE DATA SET ERROR", id, passId, offset, data.length, object.imageData.length);
+        console.log("TEXTURE IMAGE DATA SET ERROR", id, passId, mipLevel, offset, data.length, object.imageData.length);
         object.loadedImageDataChunks.length = 0;
         object.isImageDataLoaded = false;
       }
@@ -149,12 +150,12 @@ export class InspectorWindow extends Window {
       if (object.isImageDataLoaded) {
         object.loadedImageDataChunks.length = 0;
         object.imageDataPending = false;
-        this._createTexture(object, passId);
+        this._createTexture(object, passId, mipLevel);
       }
     });
   }
 
-  _createTexture(texture, passId) {
+  _createTexture(texture, passId, mipLevel) {
     if (!this.device) {
       return;
     }
@@ -173,8 +174,8 @@ export class InspectorWindow extends Window {
     texture.descriptor.usage = (usage ?? GPUTextureUsage.RENDER_ATTACHMENT) | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST;
     texture.descriptor.sampleCount = 1;
 
-    const bytesPerRow = texture.bytesPerRow;
-    const rowsPerImage = texture.height;
+    const bytesPerRow = (texture.bytesPerRow) >> mipLevel;
+    const rowsPerImage = (texture.height) >> mipLevel;
 
     const gpuTexture = this.device.createTexture(texture.descriptor);
 
@@ -182,10 +183,13 @@ export class InspectorWindow extends Window {
     texture.descriptor.usage = usage;
     texture.descriptor.format = format;
     texture.descriptor.sampleCount = sampleCount;
+
+    const size = texture.getMipSize(mipLevel);
    
     this.device.queue.writeTexture(
       {
-        texture: texture.gpuTexture.object
+        texture: texture.gpuTexture.object,
+        mipLevel
       },
       texture.imageData,
       {
@@ -193,7 +197,7 @@ export class InspectorWindow extends Window {
         bytesPerRow,
         rowsPerImage
       },
-      texture.descriptor.size);
+      size);
 
     this.onTextureLoaded.emit(texture, passId);
   }

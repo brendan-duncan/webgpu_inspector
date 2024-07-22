@@ -190,12 +190,12 @@ export class ObjectDatabase {
     });
   }
 
-  requestTextureData(texture) {
+  requestTextureData(texture, mipLevel) {
     if (texture.imageDataPending) {
       return;
     }
     texture.imageDataPending = true;
-    this.port.postMessage({ action: PanelActions.RequestTexture, id: texture.id });
+    this.port.postMessage({ action: PanelActions.RequestTexture, id: texture.id, mipLevel: mipLevel ?? 0 });
   }
 
   removeErrorsForObject(id) {

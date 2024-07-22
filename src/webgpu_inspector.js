@@ -209,7 +209,8 @@ export let webgpuInspector = null;
           }
         } else if (message.action === PanelActions.RequestTexture) {
           const textureId = message.id;
-          self._requestTexture(textureId);
+          const mipLevel = message.mipLevel ?? 0;
+          self._requestTexture(textureId, mipLevel);
         } else if (message.action === PanelActions.CompileShader) {
           const shaderId = message.id;
           const code = message.code;
@@ -345,11 +346,11 @@ export let webgpuInspector = null;
         if (args.length === 0) {
           args[0] = {};
         }
-        if (!args[0].requiredFeatures) {
+        /*if (!args[0].requiredFeatures) {
           args[0].requiredFeatures = ["timestamp-query"];
         } else {
           args[0].requiredFeatures.push("timestamp-query");
-        }
+        }*/
       }
 
       if (method === "setPipeline") {
@@ -504,10 +505,12 @@ export let webgpuInspector = null;
           for (const commandBuffer of commandBuffers) {
             rendersToCanvas |= !!commandBuffer.__rendersToCanvas;
           }
-          this._captureTextureRequest.forEach((texture, id) => {
+          this._captureTextureRequest.forEach((tex, textureId) => {
+            const id = textureId;
+            const mipLevel = tex?.mipLevel ?? 0;
             if (id > 0 || rendersToCanvas) {
-              texture = texture || self._trackedObjects.get(id)?.deref();
-              self._captureTextureBuffer(object.__device, null, texture);
+              const texture = tex?.texture || self._trackedObjects.get(id)?.deref();
+              self._captureTextureBuffer(object.__device, null, texture, undefined, mipLevel);
               self._captureTextureRequest.delete(id);
             }
           });
@@ -959,8 +962,7 @@ export let webgpuInspector = null;
             fragmentModule = shader;
             if (!newDescriptor) {
               newDescriptor = this._duplicateObject(descriptor);
-            }
-            found = true;
+            }            found = true;
             newDescriptor.fragment.module = newShaderModule;
           }
           if (descriptor.compute?.module === shader) {
@@ -997,14 +999,15 @@ export let webgpuInspector = null;
       }
     }
 
-    _requestTexture(textureId) {
+    _requestTexture(textureId, mipLevel) {
+      mipLevel = parseInt(mipLevel || 0) || 0;
       if (textureId < 0) {
         this._captureTextureRequest.set(textureId, null);
       } else {
         const ref = this._trackedObjects.get(textureId);
         const texture = ref?.deref();
         if (texture instanceof GPUTexture) {
-          this._captureTextureRequest.set(textureId, texture);
+          this._captureTextureRequest.set(textureId, {texture, mipLevel});
         }
       }
     }
@@ -1019,7 +1022,6 @@ export let webgpuInspector = null;
       if (this._mappedTextureBufferCount > 0) {
         status += `Pending Texture Reads: ${this._mappedTextureBufferCount} `;
       }
-
       if (this._encodingTextureChunkCount > 0) {
         status += `Pending Texture Encoding: ${this._encodingTextureChunkCount} `;
       }
@@ -1080,7 +1082,7 @@ export let webgpuInspector = null;
       if (this._captureData) {
         if (this._captureData.frame < 0 || this._frameIndex >= this._captureData.frame) {
           this._captureMaxBufferSize = this._captureData.maxBufferSize || maxBufferCaptureSize;
-          this._captureFrameCount = this._captureData.captureFrameCount || captureFrameCount;
+         this._captureFrameCount = this._captureData.captureFrameCount || captureFrameCount;
           this._captureFrameRequest = true;
           this._gpuWrapper.recordStacktraces = true;
           this._captureData = null;
@@ -1140,7 +1142,7 @@ export let webgpuInspector = null;
           for (let i = 0; i < this._captureFrameCommands.length; i += maxFrameCount) {
             const length = Math.min(maxFrameCount, this._captureFrameCommands.length - i);
             const commands = this._captureFrameCommands.slice(i, i + length);
-            this._postMessage({
+           this._postMessage({
                 "action": Actions.CaptureFrameCommands,
                 "frame": this._frameIndex - 1,
                 "commands": commands,
@@ -1200,7 +1202,7 @@ export let webgpuInspector = null;
         object._label = l;
         const self = this;
         Object.defineProperty(object, "label", {
-          enumerable: true,
+         enumerable: true,
           configurable: true,
           get() {
             return this._label;
@@ -1260,7 +1262,6 @@ export let webgpuInspector = null;
 
     _recordCommand(object, method, result, args, stacktrace) {
       const parent = object?.__id ?? 0;
-
       if (method === "destroy") {
         if (object === this._device) {
           this._device = null;
@@ -1321,7 +1322,7 @@ export let webgpuInspector = null;
         this._sendAddObjectMessage(id, parent, "BindGroup", this._stringifyDescriptor(args[0]), stacktrace);
       } else if (method === "createBindGroupLayout") {
         const id = result.__id;
-        result.__descriptor = args[0];
+       result.__descriptor = args[0];
         this._sendAddObjectMessage(id, parent, "BindGroupLayout", this._stringifyDescriptor(args[0]), stacktrace);
       } else if (method === "createPipelineLayout") {
         const id = result.__id;
@@ -1381,7 +1382,7 @@ export let webgpuInspector = null;
       if (method === "setBindGroup") {
         newArgs = [];
         const binding = a[0];
-        const bindGroup = a[1];
+       const bindGroup = a[1];
         newArgs.push(binding);
         newArgs.push(bindGroup);
         // handle dynamic offsets data, converting buffer views to Uint32Array
@@ -1441,7 +1442,7 @@ export let webgpuInspector = null;
         let data = a[2];
         if (a.length > 3) {
           const offset = a[3] ?? 0;
-          const size = a[4];
+         const size = a[4];
           const buffer = data instanceof ArrayBuffer ? data : data.buffer;
           if (!buffer) { 
             // It's a []<number>
@@ -1501,7 +1502,7 @@ export let webgpuInspector = null;
 
       if (method === "drawIndirect" || method === "drawIndexedIndirect" || method === "dispatchWorkgroupsIndirect") {
         const buffer = args[0];
-        const offset = 0;
+       const offset = 0;
         const size = buffer.size;
         if (!object.__captureBuffers) {
           object.__captureBuffers = [];
@@ -1561,7 +1562,7 @@ export let webgpuInspector = null;
     }
 
     _sendCaptureTextureBuffers(buffers) {
-      const textures = [];
+     const textures = [];
       for (const textureBuffer of buffers) {
         textures.push(textureBuffer.id);
       }
@@ -1580,7 +1581,7 @@ export let webgpuInspector = null;
         textures });
 
       for (const textureBuffer of buffers) {
-        const { id, tempBuffer, passId } = textureBuffer;
+        const { id, tempBuffer, passId, mipLevel } = textureBuffer;
 
         this._mappedTextureBufferCount++;
         const self = this;
@@ -1589,7 +1590,7 @@ export let webgpuInspector = null;
           self._updateStatusMessage();
           const range = tempBuffer.getMappedRange();
           const data = new Uint8Array(range);
-          self._sendTextureData(id, passId, data);
+          self._sendTextureData(id, passId, data, mipLevel);
           tempBuffer.destroy();
         }).catch((e) => {
           console.error(e);
@@ -1598,7 +1599,7 @@ export let webgpuInspector = null;
       this._updateStatusMessage();
     }
 
-    _sendTextureData(id, passId, data) {
+    _sendTextureData(id, passId, data, mipLevel) {
       const size = data.length;
       const numChunks = Math.ceil(size / maxDataChunkSize);
 
@@ -1615,13 +1616,14 @@ export let webgpuInspector = null;
             "action": Actions.CaptureTextureData,
             id,
             passId,
+            mipLevel,
             offset,
             size,
             index: i,
             count: numChunks,
             chunk: chunkData
           });
-          self._encodingTextureChunkCount--;
+         self._encodingTextureChunkCount--;
           self._updateStatusMessage();
         }).catch((e) => {
           console.log("Error encoding texture data:", e);
@@ -1681,7 +1683,7 @@ export let webgpuInspector = null;
         const data = new Uint8Array(range);
         self._sendBufferData(-1000, -1000, data);
         buffer.destroy();
-      }).catch((error) => {
+     }).catch((error) => {
         console.error(error);
       });
     }
@@ -1741,7 +1743,6 @@ export let webgpuInspector = null;
         if (buffer.__destroyed) {
           continue;
         }
-
         let tempBuffer = null;
         this.disableRecording();
 
@@ -1769,7 +1770,7 @@ export let webgpuInspector = null;
     // Copy the texture to a buffer so we can send it to the inspector server.
     // The texture data is copied to a buffer now, then after the frame has finished
     // the buffer data is sent to the inspector server.
-    _captureTextureBuffer(device, commandEncoder, texture, passId) {
+    _captureTextureBuffer(device, commandEncoder, texture, passId, mipLevel) {
       // can't capture canvas texture
       if (!device) {
         return;
@@ -1778,7 +1779,10 @@ export let webgpuInspector = null;
       const doSubmit = !commandEncoder;
       commandEncoder ??= device.createCommandEncoder();
 
+      mipLevel ??= 0;
       passId ??= -1;
+
+      mipLevel = Math.max(Math.min(mipLevel, (texture?.mipLevelCount ?? 1) - 1), 0);
 
       const id = texture.__id;
       let format = texture.format;
@@ -1799,7 +1803,7 @@ export let webgpuInspector = null;
           this.enableRecording();
           console.log(e);
           return;
-        }
+       }
         this.enableRecording();
         format = texture.format;
         formatInfo = format ? TextureFormatInfo[format] : undefined;
@@ -1820,8 +1824,8 @@ export let webgpuInspector = null;
         this.enableRecording();
       }
 
-      const width = texture.width;
-      const height = texture.height || 1;
+      const width = (texture.width >> mipLevel) || 1;
+      const height = (texture.height >> mipLevel) || 1;
       const depthOrArrayLayers = texture.depthOrArrayLayers || 1;
       const texelByteSize = formatInfo.bytesPerBlock;
       const bytesPerRow = (width * texelByteSize + 255) & ~0xff;
@@ -1844,7 +1848,7 @@ export let webgpuInspector = null;
         const aspect = "all";
 
         commandEncoder.copyTextureToBuffer(
-          { texture, aspect },
+          { texture, aspect, mipLevel },
           { buffer: tempBuffer, bytesPerRow, rowsPerImage: height },
           copySize
         );
@@ -1859,8 +1863,8 @@ export let webgpuInspector = null;
 
       this.enableRecording();
 
-      if (tempBuffer) {
-        this._captureTexturedBuffers.push({ id, tempBuffer, width, height, depthOrArrayLayers, format, passId });
+     if (tempBuffer) {
+        this._captureTexturedBuffers.push({ id, tempBuffer, width, height, depthOrArrayLayers, format, passId, mipLevel });
         this._updateStatusMessage();
       }
     }
@@ -1919,7 +1923,7 @@ export let webgpuInspector = null;
         for (const key in object) {
           newObject[key] = this._processCommandArgs(object[key]);
         }
-        return newObject;
+       return newObject;
       }
       return object;
     }
@@ -1979,7 +1983,7 @@ export let webgpuInspector = null;
   };
 
   URL = new Proxy(URL, {
-    construct(target, args, newTarget) {
+   construct(target, args, newTarget) {
       if (args.length > 0) {
         args[0] = _getFixedUrl(args[0]);
       }
@@ -2039,7 +2043,7 @@ export let webgpuInspector = null;
         if (backing.__webgpuInspector && event.detail.__webgpuInspector &&
           !event.detail.__webgpuInspectorPage) {
           backing.postMessage({ __WebGPUInspector: event.detail });
-        }
+       }
       });
 
       backing.addEventListener("message", (event) => {

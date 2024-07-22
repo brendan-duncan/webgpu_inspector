@@ -1,4 +1,4 @@
-import { foo } from "./worker_import.js";
+import { foo } from "../../worker_import.js";
 
 self.addEventListener('message', (ev) => {
   switch (ev.data.type) {

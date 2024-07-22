@@ -839,7 +839,7 @@ export class InspectPanel {
     } else if (object instanceof Texture) {
       const self = this;
       const loadButton = new Button(descriptionBox, { label: "Load", callback: () => {
-        self.database.requestTextureData(object);
+        self.database.requestTextureData(object, object.display?.mipLevel ?? 0);
       }});
       if (object.dimension !== "2d") {
         loadButton.disabled = true;
@@ -850,7 +850,7 @@ export class InspectPanel {
         this._createTexturePreview(object, descriptionBox);
       } else if (!loadButton.disabled) {
         // Auto-load the texture if it's not a depth-stencil texture
-        this.database.requestTextureData(object);
+        this.database.requestTextureData(object, object.display?.mipLevel ?? 0);
       }
     } else if (object instanceof TextureView) {
       const texture = this.database.getTextureFromView(object);
@@ -909,8 +909,10 @@ export class InspectPanel {
       return;
     }
 
-    width ??= texture.width;
-    height ??= texture.height;
+    const mipLevel = Math.max(Math.min(texture.display.mipLevel || 0, texture.mipLevelCount), 0);
+
+    width ??= (texture.width >> mipLevel) || texture.width;
+    height ??= (texture.height >> mipLevel) || texture.height;
 
     const numLayers = texture.depthOrArrayLayers;
     const layerRanges = texture.layerRanges;
@@ -920,6 +922,26 @@ export class InspectPanel {
     const displayChanged = new Signal();
 
     const controls = new Div(container);
+
+    const mipLevels = Array.from({length: texture.mipLevelCount}, (_,i)=>i.toString());
+
+    const self = this;
+
+    new Span(controls, { text:  "Mip Level", style: "margin-right: 3px; font-size: 9pt; color: #bbb;" });
+    new Select(controls, {
+      options: mipLevels,
+      index: texture.display.mipLevel,
+      style: "color: #fff; margin-left: 10px; font-size: 10pt; width: 100px;",
+      onChange: (value) => {
+        const index = mipLevels.indexOf(value);
+        texture.display.mipLevel = index || 0;
+        if (self._tooltip) {
+          self._tooltip.style.display = 'none';
+          document.body.removeChild(self._tooltip);
+          self._tooltip = null;
+        }
+        self.database.requestTextureData(texture, texture.display.mipLevel || 0);
+      } });
 
     new Span(controls, { text:  "Exposure", style: "margin-right: 3px; font-size: 9pt; color: #bbb;" });
     new NumberInput(controls, { value: texture.display.exposure, step: 0.01, onChange: (value) => {
@@ -974,19 +996,25 @@ export class InspectPanel {
       }
       const canvas = new Widget("canvas", new Div(container), { style: "box-shadow: 5px 5px 5px rgba(0,0,0,0.5);" });
       canvas.element.addEventListener("mouseenter", (event) => {
-        this._tooltip.style.display = 'block';
+        if (this._tooltip) {
+          this._tooltip.style.display = 'block';
+        }
       });
       canvas.element.addEventListener("mouseleave", (event) => {
-        this._tooltip.style.display = 'none';
+        if (this._tooltip) {
+          this._tooltip.style.display = 'none';
+        }
       });
       canvas.element.addEventListener("mousemove", (event) => {
-        const x = event.offsetX;
-        const y = event.offsetY;
-        const pixel = texture.getPixel(x, y, layer);
-        this._tooltip.style.left = `${event.pageX + 10}px`;
-        this._tooltip.style.top = `${event.pageY + 10}px`;
-        const pixelStr = getPixelString(pixel);
-        this._tooltip.innerHTML = `X:${x} Y:${y}\n${pixelStr}`;
+        if (this._tooltip) {
+          const x = event.offsetX;
+          const y = event.offsetY;
+          const pixel = texture.getPixel(x, y, layer, this.display?.mipLevel ?? 0);
+          this._tooltip.style.left = `${event.pageX + 10}px`;
+          this._tooltip.style.top = `${event.pageY + 10}px`;
+          const pixelStr = getPixelString(pixel);
+          this._tooltip.innerHTML = `X:${x} Y:${y}\n${pixelStr}`;
+        }
       });
 
       canvas.element.width = width;
@@ -1001,7 +1029,9 @@ export class InspectPanel {
         aspect: "all",
         dimension: "2d",
         baseArrayLayer: layer,
-        layerArrayCount: 1 };
+        layerArrayCount: 1,
+        baseMipLevel: mipLevel,
+        mipLevelCount: 1 };
       
       const srcView = texture.gpuTexture.object.createView(viewDesc);
 
