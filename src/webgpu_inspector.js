@@ -2015,8 +2015,16 @@ export let webgpuInspector = null;
       // Inject inspector before the worker loads
       let src = `self.__webgpu_src = ${self.__webgpu_src.toString()};self.__webgpu_src();`;
 
-      const url = args[0];
-      const _url = new _URL(url);
+      let url = args[0];
+
+      let _url = null;
+      try {
+        _url = new _URL(url);
+      } catch {
+        const baseUrl = new _URL(import.meta.url);
+        _url = new URL(`${baseUrl.protocol}//${baseUrl.host}${url}`);
+      }
+
       const _webgpuHostAddress = `${_url.protocol}//${_url.host}`;
       const baseDir = _url.pathname.substring(0, _url.pathname.lastIndexOf("/"));
       const _webgpuBaseAddress = `${_webgpuHostAddress}${baseDir}`;
@@ -2025,9 +2033,9 @@ export let webgpuInspector = null;
       src = src.replaceAll(`<%=_webgpuBaseAddress%>`, `${_webgpuBaseAddress}`);
 
       if (args.length > 1 && args[1]?.type === "module") {
-        src += `import ${JSON.stringify(args[0])};`;
+        src += `import ${JSON.stringify(_url.href)};`;
       } else {
-        src += `importScripts(${JSON.stringify(args[0])});`;
+        src += `importScripts(${JSON.stringify(_url.href)});`;
       }
 
       let blob = new Blob([src]);
