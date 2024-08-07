@@ -2022,7 +2022,8 @@ export let webgpuInspector = null;
         _url = new _URL(url);
       } catch {
         const baseUrl = new _URL(import.meta.url);
-        _url = new URL(`${baseUrl.protocol}//${baseUrl.host}${url}`);
+        const sep = url.startsWith("/") ? "" : "/";
+        _url = new URL(`${baseUrl.protocol}//${baseUrl.host}${sep}${url}`);
       }
 
       const _webgpuHostAddress = `${_url.protocol}//${_url.host}`;
