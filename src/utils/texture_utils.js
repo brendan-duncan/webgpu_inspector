@@ -4,6 +4,7 @@ export class TextureUtils {
   constructor(device) {
     this.device = device;
     this.blitShaderModule = device.createShaderModule({ code: TextureUtils.blitShader });
+    this.blit3dShaderModule = device.createShaderModule({ code: TextureUtils.blit3dShader });
     this.multisampleBlitShaderModule = device.createShaderModule({ code: TextureUtils.multisampleBlitShader });
     this.depthToFloatShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatShader });
     this.depthToFloatMultisampleShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatMultisampleShader });
@@ -79,10 +80,12 @@ export class TextureUtils {
     return dst;
   }
 
-  blitTexture(srcView, srcFormat, sampleCount, dstView, dstFormat, display) {
+  blitTexture(srcView, srcFormat, sampleCount, dstView, dstFormat, display, dimension, layer) {
+    layer ??= 0;
+    dimension ??= "2d";
     const sampleType = "unfilterable-float";
 
-    const bgLayoutKey = `${sampleType}#${sampleCount}`;
+    const bgLayoutKey = `${sampleType}#${sampleCount}#${dimension}`;
 
     if (!this.bindGroupLayouts.has(bgLayoutKey)) {
       const bindGroupLayout = this.device.createBindGroupLayout({
@@ -98,6 +101,7 @@ export class TextureUtils {
             binding: 1,
             visibility: GPUShaderStage.FRAGMENT,
             texture: {
+              viewDimension: dimension,
               sampleType: sampleType,
               multisampled: sampleCount > 1
             }
@@ -118,10 +122,10 @@ export class TextureUtils {
     const bindGroupLayout = this.bindGroupLayouts.get(bgLayoutKey);
     const pipelineLayout = this.pipelineLayouts.get(bgLayoutKey);
 
-    const pipelineKey = `${dstFormat}#${sampleType}#${sampleCount}`;
+    const pipelineKey = `${dstFormat}#${sampleType}#${sampleCount}#${dimension}`;
     let pipeline = this.blitPipelines[pipelineKey];
     if (!pipeline) {
-      const module = sampleCount > 1 ? this.multisampleBlitShaderModule : this.blitShaderModule;
+      const module = sampleCount > 1 ? this.multisampleBlitShaderModule : dimension === "3d" ? this.blit3dShaderModule : this.blitShaderModule;
       pipeline = this.device.createRenderPipeline({
         layout: pipelineLayout,
         vertex: {
@@ -160,10 +164,10 @@ export class TextureUtils {
 
     if (display) {
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
-        new Float32Array([display.exposure, display.channels, numChannels, display.minRange, display.maxRange, 0, 0, 0]));
+        new Float32Array([display.exposure, display.channels, numChannels, display.minRange, display.maxRange, layer, 0, 0]));
     } else {
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
-        new Float32Array([1, 0, numChannels, 0, 1, 0, 0, 0]));
+        new Float32Array([1, 0, numChannels, 0, 1, layer, 0, 0]));
     }
 
     const passEncoder = commandEncoder.beginRenderPass(passDesc);
@@ -326,6 +330,78 @@ TextureUtils.blitShader = `
   @fragment
   fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     var color = textureSample(texture, texSampler, input.uv);
+
+    if (display.numChannels == 1.0) {
+      if (display.minRange != display.maxRange) {
+        if (color.r < display.minRange) {
+          color = vec4f(0.0, 0.0, 0.0, 1);
+        } else if (color.r > display.maxRange) {
+          color = vec4f(1.0, 0.0, 0.0, 1);
+        } else {
+          color = vec4f((color.r - display.minRange) / (display.maxRange - display.minRange), 0.0, 0.0, 1);
+        }
+      }
+      color = vec4f(color.r, color.r, color.r, 1.0);
+    } else if (display.numChannels == 2.0) {
+      color = vec4f(color.r, color.g, 0.0, 1.0);
+    }
+
+    if (display.channels == 1.0) { // R
+      var rgb = color.rgb * display.exposure;
+      return vec4f(rgb.r, 0.0, 0.0, 1);
+    } else if (display.channels == 2.0) { // G
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, rgb.g, 0.0, 1);
+    } else if (display.channels == 3.0) { // B
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, 0.0, rgb.b, 1);
+    } else if (display.channels == 4.0) { // A
+      var a = color.a * display.exposure;
+      return vec4f(a, a, a, 1);
+    } else if (display.channels == 5.0) { // Luminance
+      var luminance = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));
+      var rgb = vec3f(luminance) * display.exposure;
+      return vec4f(rgb, 1);
+    }
+
+    // RGB
+    var rgb = color.rgb * display.exposure;
+    return vec4f(rgb, 1);
+  }
+`;
+
+TextureUtils.blit3dShader = `
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
+    vec4f(-1.0, 1.0, 0.0, 0.0),
+    vec4f(3.0, 1.0, 2.0, 0.0),
+    vec4f(-1.0, -3.0, 0.0, 2.0));
+  struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f
+  };
+  @vertex
+  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.uv = posTex[vertexIndex].zw;
+    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
+    return output;;
+  }
+  @group(0) @binding(0) var texSampler: sampler;
+  @group(0) @binding(1) var texture: texture_3d<f32>;
+  struct Display {
+    exposure: f32,
+    channels: f32,
+    numChannels: f32,
+    minRange: f32,
+    maxRange: f32,
+    layer: f32,
+    _pad2: f32,
+    _pad3: f32
+  };
+  @group(1) @binding(0) var<uniform> display: Display; 
+  @fragment
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+    var color = textureSampleLevel(texture, texSampler, vec3f(input.uv, display.layer), 0.0);
 
     if (display.numChannels == 1.0) {
       if (display.minRange != display.maxRange) {

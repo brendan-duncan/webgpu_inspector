@@ -1,3 +1,7 @@
+## v0.8.0
+
+* Inspect 3D textures.
+
 ## v0.5.0
 
 * Automatically inject into WebWorkers.

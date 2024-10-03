@@ -841,11 +841,11 @@ export class InspectPanel {
       const loadButton = new Button(descriptionBox, { label: "Load", callback: () => {
         self.database.requestTextureData(object, object.display?.mipLevel ?? 0);
       }});
-      if (object.dimension !== "2d") {
+      /*if (object.dimension !== "2d") {
         loadButton.disabled = true;
         loadButton.style = "background-color: #733; color: #fff;";
         loadButton.tooltip = "Only 2d textures can currently be previewed.";
-      }
+      }*/
       if (object.gpuTexture) {
         this._createTexturePreview(object, descriptionBox);
       } else if (!loadButton.disabled) {
@@ -905,9 +905,9 @@ export class InspectPanel {
 
   _createTexturePreview(texture, parent, width, height) {
     // Can only preview 2d textures for now
-    if (texture.dimension !== "2d") {
+    /*if (texture.dimension !== "2d") {
       return;
-    }
+    }*/
 
     const mipLevel = Math.max(Math.min(texture.display.mipLevel || 0, texture.mipLevelCount), 0);
 
@@ -987,6 +987,8 @@ export class InspectPanel {
       return str;
     }
 
+    const hl = 0.5 / numLayers;
+
     for (let layer = 0; layer < numLayers; ++layer) {
       const layerInfo = new Div(container);
       if (layerRanges) {
@@ -1027,8 +1029,8 @@ export class InspectPanel {
 
       const viewDesc = {
         aspect: "all",
-        dimension: "2d",
-        baseArrayLayer: layer,
+        dimension: texture.descriptor.dimension,
+        baseArrayLayer: texture.descriptor.dimension == "3d" ? 0 : layer,
         layerArrayCount: 1,
         baseMipLevel: mipLevel,
         mipLevelCount: 1 };
@@ -1040,7 +1042,7 @@ export class InspectPanel {
         texture.display.maxRange = layerRanges[layer].max;
       }
 
-      this.textureUtils.blitTexture(srcView, texture.format, 1, canvasTexture.createView(), format, texture.display);
+      this.textureUtils.blitTexture(srcView, texture.format, 1, canvasTexture.createView(), format, texture.display, texture.descriptor.dimension, (layer / numLayers) + hl);
 
       const self = this;
       displayChanged.addListener(() => {
