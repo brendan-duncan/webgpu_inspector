@@ -868,11 +868,11 @@ export class InspectPanel {
           self.database.requestTextureData(texture);
         }});
 
-        if (texture.dimension !== "2d") {
+        /*if (texture.dimension !== "2d") {
           loadButton.disabled = true;
           loadButton.style = "background-color: #733; color: #fff;";
           loadButton.tooltip = "Only 2d textures can currently be previewed.";
-        }
+        }*/
 
         if (texture.gpuTexture) {
           this._createTexturePreview(texture, textureGrp.body);
