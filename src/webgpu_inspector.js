@@ -1428,7 +1428,7 @@ export let webgpuInspector = null;
         if (bindGroupDesc) {
           for (const entryIndex in bindGroupDesc.entries) {
             const entry = bindGroupDesc.entries[entryIndex];
-            const layoutEntry = bglEntries[entryIndex];
+            const layoutEntry = bglEntries ? bglEntries[entryIndex] : undefined;
             const buffer = entry?.resource?.buffer;
             const usesDynamicOffset = layoutEntry?.buffer?.hasDynamicOffset ?? false;
             if (buffer) {
