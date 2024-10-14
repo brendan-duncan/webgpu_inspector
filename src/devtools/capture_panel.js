@@ -1784,7 +1784,7 @@ export class CapturePanel {
 
             if (affectedByCommands.length) {
               new Div(resourceGrp.body, { text: "Affected by:" });
-              const ul = new Widget("ul", resourceGrp.body);
+              const ul = new Widget("ul", resourceGrp.body, { style: "max-height:150px; overflow:auto; scrollbar-width:thin;" });
               for (const cmd of affectedByCommands) {
                 const li = new Widget("li", ul, { text: `${cmd.id}: ${cmd.method}` });
                 li.element.onclick = () => {
