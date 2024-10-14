@@ -1406,10 +1406,29 @@ export let webgpuInspector = null;
         let dynamicOffsetIndex = 0;
         const bindGroupDesc = bindGroup?.__descriptor;
         const bindGroupLayoutDesc = bindGroupDesc?.layout?.__descriptor;
+        const bglEntries = bindGroupLayoutDesc?.entries;
+        const dynamicOffsetMap = new Map();
+        if (dynamicOffsets && bglEntries) {
+          let dynamicOffsetIndex = 0;
+          for (let i = 0; i < bglEntries.length; i++) {
+            if (bglEntries[i].buffer?.hasDynamicOffset) {
+              const binding = bglEntries[i].binding;
+              dynamicOffsetMap.set(parseInt(binding), dynamicOffsets[dynamicOffsetIndex++]);
+            }
+          }
+        }
+        const sortedEntries = Array.from(dynamicOffsetMap.entries()).sort((a, b) => a[0] - b[0]);
+
+        const mappedDynamicOffsets = new Uint32Array(sortedEntries.length);
+        for (let i = 0; i < sortedEntries.length; i++) {
+          mappedDynamicOffsets[i] = sortedEntries[i][1];
+        }
+
+        dynamicOffsetIndex = 0;
         if (bindGroupDesc) {
           for (const entryIndex in bindGroupDesc.entries) {
             const entry = bindGroupDesc.entries[entryIndex];
-            const layoutEntry = bindGroupLayoutDesc?.entries[entryIndex];
+            const layoutEntry = bglEntries[entryIndex];
             const buffer = entry?.resource?.buffer;
             const usesDynamicOffset = layoutEntry?.buffer?.hasDynamicOffset ?? false;
             if (buffer) {
@@ -1419,7 +1438,7 @@ export let webgpuInspector = null;
 
               if (size < this._captureMaxBufferSize) {
                 if (usesDynamicOffset && dynamicOffsets !== null) {
-                  offset = dynamicOffsets[dynamicOffsetIndex++];
+                  offset = mappedDynamicOffsets[dynamicOffsetIndex++];
                 }
 
                 if (!object.__captureBuffers) {
