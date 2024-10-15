@@ -1,3 +1,7 @@
+## v0.9.0
+
+* Fix issue with capturing dynamic offset uniform buffers.
+
 ## v0.8.0
 
 * Inspect 3D textures.
