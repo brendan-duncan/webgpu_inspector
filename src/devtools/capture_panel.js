@@ -32,7 +32,7 @@ export class CapturePanel {
 
     const controlBar = new Div(parent, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
 
-    new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => { 
+    new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => {
       try {
         this._captureData = new CaptureData(this.database);
         this._captureData.onCaptureFrameResults.addListener(self._captureFrameResults, self);
@@ -468,7 +468,7 @@ export class CapturePanel {
               currentBlock.remove();
             }
             currentBlock = new Div(debugGroup, { class: "capture_renderpass", style: "margin-top: 5px;" });
-            
+
             const header = new Div(currentBlock, { id: `RenderPass_${passIndex}`, class: "capture_renderpass_header", style: "display: none;" });
             const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
             new Span(header, { text: `Render Pass ${passIndex}` });
@@ -614,7 +614,7 @@ export class CapturePanel {
           `${className}(${id})` :
           `${id}`;
     }
-   
+
     new Span(cmd, { class: "capture_methodName", text: `${method}` });
 
     if (method === "executeBundles") {
@@ -650,19 +650,19 @@ export class CapturePanel {
       }
 
     } else if (method === "createRenderPipeline") {
-      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPURenderPipeline")}` }); 
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPURenderPipeline")}` });
     } else if (method === "createBindGroup") {
-      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUBindGroup")}` }); 
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUBindGroup")}` });
     } else if (method === "createBindGroupLayout") {
-      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUBindGroupLayout")}` }); 
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUBindGroupLayout")}` });
     } else if (method === "createPipelineLayout") {
-      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUPipelineLayout")}` }); 
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUPipelineLayout")}` });
     } else if (method === "createShaderModule") {
-      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUShaderModule")}` }); 
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUShaderModule")}` });
     } else if (method === "createTexture") {
-      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUTexture")}` }); 
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUTexture")}` });
     } else if (method === "createSampler") {
-      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUSampler")}` }); 
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUSampler")}` });
     } else if (method === "createCommandEncoder") {
       new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUCommandEncoder")}` });
     } else if (method === "finish") {
@@ -779,7 +779,7 @@ export class CapturePanel {
         cmd.classList.add("capture_command_selected");
         self._lastSelectedCommand = cmd;
       }
-      
+
       self._showCaptureCommandInfo(command, name, commandInfo);
     };
 
@@ -840,7 +840,7 @@ export class CapturePanel {
     const container = new Div(parent);
 
     const layerRanges = texture.layerRanges;
-    
+
     const numLayers = texture.depthOrArrayLayers;
     for (let layer = 0; layer < numLayers; ++layer) {
       const canvas = new Widget("canvas", new Div(container), { style });
@@ -1256,7 +1256,7 @@ export class CapturePanel {
           type.replacement.radix = radix;
           //console.log("REPLACEMENT RADIX", type.replacement.radix);
           return;
-        
+
         }
       }
       if (!skipStructEncapsulation) {
@@ -1284,7 +1284,7 @@ export class CapturePanel {
       });
 
       const format = getFormatFromReflection(resourceType(resource));
-  
+
       const nameEdit = new TextArea(dialog.body, {
         value: format,
         style: 'width: 100%; height: 200px;',
@@ -1301,11 +1301,11 @@ export class CapturePanel {
           radix = radixSelect[index];
         }
       });
-  
+
       const buttonRow = new Div(dialog.body, {
         style: 'width: 100%; margin-top: 20px;',
       });
-  
+
       const self = this;
 
       new Button(buttonRow, {
@@ -1359,7 +1359,7 @@ export class CapturePanel {
     } else if (resource.resourceType === ResourceType.Storage) {
       const typeName = this._getTypeName(resource.type);
       new Div(parentWidget, { text: `STORAGE ${resource.access}: ${resource.name}: ${typeName}` });
-      
+
       const bufferDataUI = new Div(null);
       this._createFormatButton(parentWidget, resource, bufferDataUI, bufferData)
       bufferDataUI.parent = parentWidget;
@@ -1552,7 +1552,7 @@ export class CapturePanel {
     }
 
     if (!skipInputs) {
-      const inputs = [];    
+      const inputs = [];
       if (bindGroup?.entries) {
         for (const entry of bindGroup.entries) {
           if (entry.resource?.__id) {
@@ -1585,7 +1585,7 @@ export class CapturePanel {
       }
     }
 
-    const bindGroupCmd = state?.bindGroups[groupIndex];  
+    const bindGroupCmd = state?.bindGroups[groupIndex];
 
     for (const entryIndex in bindGroupDesc.entries) {
       const entry = bindGroupDesc.entries[entryIndex];
@@ -1682,6 +1682,7 @@ export class CapturePanel {
       }
 
       if (resource.buffer) {
+        this.database.capturedObjects.set(resource.buffer.__id, resource.buffer);
         const binding = this._findBindingResourceFromState(state, groupIndex, entryIndex);
         if (binding) {
           const typeName = this._getTypeName(binding.type);
@@ -1714,7 +1715,7 @@ export class CapturePanel {
                 newDesc.usage = getFlagString(newDesc.usage, GPUTextureUsage);
               }
               new Widget("pre", resourceGrp.body, { text: JSON.stringify(newDesc, undefined, 4) });
-            
+
               if (texture.gpuTexture) {
                 const w = Math.max(Math.min(texture.width, texture.height, 256), 64);
                 this._createTextureWidget(resourceGrp.body, texture, -1, w, "margin-left: 20px; margin-top: 10px; margin-bottom: 10px;");
@@ -1857,7 +1858,7 @@ export class CapturePanel {
             this._shaderInfo("Vertex", vertexModule, commandInfo);
           }
         }
-        
+
         if (fragmentId !== undefined) {
           const fragmentModule = this._getObject(fragmentId);
           if (fragmentModule) {
@@ -2177,7 +2178,7 @@ export class CapturePanel {
           this._shaderInfoEntryFunction(list, s);
         }
       }
-      
+
       if (reflect.uniforms.length) {
         new Div(grp.body, { text: `Uniform Buffers: ${reflect.uniforms.length}` });
         const list = new Widget("ul", grp.body);
@@ -2187,7 +2188,7 @@ export class CapturePanel {
           new Widget("li", l2, { text: `Bind Group: ${s.group}` });
           new Widget("li", l2, { text: `Bind Index: ${s.binding}` });
           new Widget("li", l2, { text: `Size: ${s.type.size || "<runtime>"}` });
-          
+
           this._addShaderTypeInfo(l2, s.type);
         }
       }
@@ -2206,7 +2207,7 @@ export class CapturePanel {
           this._addShaderTypeInfo(l2, s.type);
         }
       }
-      
+
       if (reflect.textures.length) {
         new Div(grp.body, { text: `Textures: ${reflect.textures.length}` });
         const list = new Widget("ul", grp.body);
@@ -2755,7 +2756,7 @@ CapturePanel.matrixTypes = {
   "mat2x3f": { columns: 2, rows: 3 },
   "mat2x4": { columns: 2, rows: 4 },
   "mat2x4f": { columns: 2, rows: 4 },
-  
+
   "mat3x2": { columns: 3, rows: 2 },
   "mat3x2f": { columns: 3, rows: 2 },
   "mat3x3": { columns: 3, rows: 3 },

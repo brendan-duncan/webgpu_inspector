@@ -112,7 +112,10 @@ export class Signal {
       if (s.constructor === Signal) {
         s.emit.apply(o, arguments);
       } else {
-        s.apply(o, arguments);
+        let res = s.apply(o, arguments);
+        if (res) {
+          return res;
+        }
       }
     }
   }

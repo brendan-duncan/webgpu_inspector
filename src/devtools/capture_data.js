@@ -12,7 +12,7 @@ export class CaptureData {
 
     this.onCaptureFrameResults = new Signal();
     this.onUpdateCaptureStatus = new Signal();
-    
+
     this._loadedDataChunks = 0;
     this._loadingImages = 0;
     this._loadingBuffers = 0;
@@ -39,7 +39,7 @@ export class CaptureData {
   captureTextureDataChunk() {
     this._loadedDataChunks--;
   }
-  
+
   captureTextureLoaded() {
     this._loadingImages--;
   }
@@ -212,7 +212,7 @@ export class CaptureData {
       }
       command.isBufferDataLoaded[entryIndex] = loaded;
 
-      if (command.isBufferDataLoaded[entryIndex]) {     
+      if (command.isBufferDataLoaded[entryIndex]) {
         self._loadingBuffers--;
         command.loadedDataChunks[entryIndex].length = 0;
       }
@@ -230,7 +230,7 @@ export class CaptureData {
         }
       }
       command.isBufferDataLoaded[entryIndex] = loaded;
-      if (command.isBufferDataLoaded[entryIndex]) {     
+      if (command.isBufferDataLoaded[entryIndex]) {
         self._loadingBuffers--;
         command.loadedDataChunks[entryIndex].length = 0;
       }
