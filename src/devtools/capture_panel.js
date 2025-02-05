@@ -253,6 +253,8 @@ export class CapturePanel {
     this._gpuTextureMap.clear();
 
     this._frameImages = new Span(contents, { class: "capture_frameImages" });
+    this._frameImages.style.display = "none";
+
     const _frameContents = new Span(contents, { class: "capture_frameContents" });
     const commandInfo = new Span(contents, { class: "capture_commandInfo" });
 
@@ -2710,11 +2712,13 @@ export class CapturePanel {
     this._updateCaptureStatus();
 
     const frameImages = this._frameImages;
+
     if (passId != -1 && frameImages) {
       const passIdValue = passId / 10;
       const passIndex = Math.floor(passIdValue);
       const attachment = passId - (passIndex * 10);
 
+      frameImages.style.display = "block";
       let passFrame = null;
 
       if (passId >= this._frameImageList.length) {
