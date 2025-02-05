@@ -1087,7 +1087,7 @@ export let webgpuInspector = null;
       }
 
       if (this._captureFrameRequest) {
-        status = `RECORDING: ${status}`;
+        status = `Recording (click to stop): ${status}`;
         this._inspectingStatusText.title = "Click to stop recording";
       } else {
         this._inspectingStatusText.title = "";

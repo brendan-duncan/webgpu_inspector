@@ -132,7 +132,11 @@ async function main() {
       log(`${i.toString().padStart(3)}:      ${get3(workgroup, i)}      ${get3(local, i)}   ${get3(global, i)}`);
     }
 
-    device.destroy();
+    // An explicit device.destroy() will tell the webgpu_inspector to stop capturing,
+    // otherwise it will stop capturing when the device is garbage collected.
+    // There isn't a good way to identify that the page is finished executing to know
+    // the capture is finished.
+    //device.destroy();
   }
 
   function log(...args) {
