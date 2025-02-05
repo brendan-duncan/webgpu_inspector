@@ -214,11 +214,13 @@ export class CapturePanel {
             const obj = this._getObject(arg.__id);
             if (obj) {
               this.database.capturedObjects.set(arg.__id, obj);
+              obj.incrementReferenceCount();
 
               if (obj instanceof TextureView) {
                 const texture = this.database.getTextureFromView(obj);
                 if (texture) {
                   this.database.capturedObjects.set(texture.id, texture);
+                  texture.incrementReferenceCount();
                 }
               }
             }
@@ -240,7 +242,8 @@ export class CapturePanel {
 
     this._captureCommands = commands;
 
-    this.database.capturedObjects.clear();
+    this.database.clearCapturedObjects();
+
     this._frameImageList.length = 0;
     this._passEncoderCommands.clear();
 

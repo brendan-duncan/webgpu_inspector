@@ -43,6 +43,10 @@ export class GPUObject {
     }
   }
 
+  incrementReferenceCount() {
+    this._referenceCount++;
+  }
+
   decrementReferenceCount(deleteCallback) {
     this._referenceCount--;
     if (this._referenceCount <= 0) {
