@@ -205,6 +205,31 @@ export class CapturePanel {
     }
   }
 
+  _captureObjectsFromArgs(args) {
+    if (args instanceof Array || args instanceof Object) {
+      for (const m in args) {
+        const arg = args[m];
+        if (arg instanceof Object) {
+          if (arg.__id !== undefined) {
+            const obj = this._getObject(arg.__id);
+            if (obj) {
+              this.database.capturedObjects.set(arg.__id, obj);
+
+              if (obj instanceof TextureView) {
+                const texture = this.database.getTextureFromView(obj);
+                if (texture) {
+                  this.database.capturedObjects.set(texture.id, texture);
+                }
+              }
+            }
+          } else {
+            this._captureObjectsFromArgs(arg);
+          }
+        }
+      }
+    }
+  }
+
   _captureFrameResults(frame, commands) {
     const contents = this._capturePanel;
 
@@ -297,6 +322,8 @@ export class CapturePanel {
       const args = command.args;
       //const name = `${className ?? "__"}`;
 
+      this._captureObjectsFromArgs(args);
+
       stats.updateStats(this.database, command);
 
       // skip empty debug groups
@@ -366,22 +393,14 @@ export class CapturePanel {
         for (const attachment of args[0]?.colorAttachments) {
           const textureView = this._getTextureViewFromAttachment(attachment);
           if (textureView) {
-            this.database.capturedObjects.set(textureView.id, textureView);
             const texture = this.database.getTextureFromView(textureView);
-            if (texture) {
-              this.database.capturedObjects.set(texture.id, texture);
-            }
           }
         }
 
         if (args[0]?.depthStencilAttachment) {
           const textureView = this._getTextureViewFromAttachment(args[0]?.depthStencilAttachment);
           if (textureView) {
-            this.database.capturedObjects.set(textureView.id, textureView);
             const texture = this.database.getTextureFromView(textureView);
-            if (texture) {
-              this.database.capturedObjects.set(texture.id, texture);
-            }
           }
         }
       } else if (method === "beginComputePass") {
@@ -628,7 +647,6 @@ export class CapturePanel {
       let ci = 0;
       for (const bundle of args[0]) {
         const obj = self._getObject(bundle.__id);
-        this.database.capturedObjects.set(bundle.__id, obj);
 
         const name = getName(bundle.__id, "GPURenderBundle");
         const bundleButton = new Div(expandButton.panel, { class: "capture_renderbundle_header", text: `- ${name}`, style: "margin-left: 20px; margin-bottom: 0px; border-radius: 5px 5px 0px 0px; line-height: 20px;" });
@@ -691,20 +709,14 @@ export class CapturePanel {
       new Span(cmd, { class: "capture_method_args", text: `index:${args[0]} bindGroup:${getName(args[1]?.__id)}` });
       const bg = this._getObject(args[1]?.__id);
       if (bg) {
-        this.database.capturedObjects.set(args[1]?.__id, bg);
         for (const entry of bg.descriptor.entries) {
           if (entry.resource?.__id) {
             const obj = this._getObject(entry.resource.__id);
-            this.database.capturedObjects.set(entry.resource.__id, obj);
             if (obj instanceof TextureView) {
               const tex = this._getObject(obj.texture?.id ?? obj.texture);
-              if (tex) {
-                this.database.capturedObjects.set(tex.id, tex);
-              }
             }
           } else if (entry.resource?.buffer?.__id) {
             const obj = this._getObject(entry.resource.buffer.__id);
-            this.database.capturedObjects.set(entry.resource.buffer.__id, obj);
           }
         }
       }
@@ -718,13 +730,10 @@ export class CapturePanel {
       }
     } else if (method === "setPipeline") {
       new Span(cmd, { class: "capture_method_args", text: `renderPipeline:${getName(args[0]?.__id)}` });
-      this.database.capturedObjects.set(args[0]?.__id, this._getObject(args[0]?.__id));
     } else if (method === "setVertexBuffer") {
       new Span(cmd, { class: "capture_method_args", text: `slot:${args[0]} buffer:${getName(args[1]?.__id)} offset:${args[2] ?? 0}` });
-      this.database.capturedObjects.set(args[1]?.__id, this._getObject(args[1]?.__id));
     } else if (method === "setIndexBuffer") {
       new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id)} indexFormat:${args[1]} offset:${args[2] ?? 0}` });
-      this.database.capturedObjects.set(args[0]?.__id, this._getObject(args[0]?.__id));
     } else if (method === "drawIndexed") {
       new Span(cmd, { class: "capture_method_args", text: `indexCount:${args[0]} instanceCount:${args[1] ?? 1} firstIndex:${args[2] ?? 0} baseVertex:${args[3] ?? 0} firstInstance:${args[4] ?? 0}` });
     } else if (method === "draw") {
@@ -1682,7 +1691,6 @@ export class CapturePanel {
       }
 
       if (resource.buffer) {
-        this.database.capturedObjects.set(resource.buffer.__id, resource.buffer);
         const binding = this._findBindingResourceFromState(state, groupIndex, entryIndex);
         if (binding) {
           const typeName = this._getTypeName(binding.type);
