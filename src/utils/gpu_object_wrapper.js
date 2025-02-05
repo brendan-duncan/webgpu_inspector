@@ -188,7 +188,10 @@ export class GPUObjectWrapper {
       }
 
       // Allow the arguments to be modified before the method is called.
-      self.onPreCall.emit(object, method, args);
+      const res = self.onPreCall.emit(object, method, args);
+      if (res) {
+        return undefined;
+      }
 
       // Call the original method
       const result = origMethod.call(object, ...args);

@@ -59,6 +59,8 @@ export let webgpuInspector = null;
       this._timestampIndex = 0;
       this._maxTimestamps = 2000;
       this._captureFrameCount = 0;
+      this._pendingMapCount = 0; // Number of pending async map requests
+      this._hasPendingDeviceDestroy = false;
 
       if (!navigator.gpu) {
         // No WebGPU support
@@ -98,7 +100,7 @@ export let webgpuInspector = null;
       this._gpuWrapper.onPostCall.addListener(this._postMethodCall, this);
 
       this._garbageCollectectedObjects = [];
-     
+
       // Track garbage collected WebGPU objects
       this._garbageCollectionRegistry = new FinalizationRegistry((id) => {
         if (id > 0) {
@@ -117,6 +119,12 @@ export let webgpuInspector = null;
             // leak. Notify the user of this.
             if (objectClass === GPUBuffer || objectClass === GPUTexture || objectClass === GPUDevice) {
               self._memoryLeakWarning(id, objectClass);
+            }
+
+            if (objectClass === GPUDevice) {
+              if (self._captureFrameCommands.length) {
+                self._sendCapturedCommands();
+              }
             }
           }
 
@@ -233,6 +241,21 @@ export let webgpuInspector = null;
       } else {
         _self.addEventListener("__WebGPUInspector", eventCallback);
       }
+
+      if (_sessionStorage) {
+        const captureData = _sessionStorage.getItem(webgpuInspectorCaptureFrameKey);
+        if (captureData) {
+          try {
+            this._captureData = JSON.parse(captureData);
+          } catch (e) {
+            this._captureData = null;
+          }
+          _sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
+          if (this._captureData) {
+            this._initCaptureData();
+          }
+        }
+      }
     }
 
     createStatusElements() {
@@ -246,13 +269,20 @@ export let webgpuInspector = null;
       statusContainer.appendChild(this._inspectingStatus);
 
       this._inspectingStatusFrame = _document.createElement("div");
-      this._inspectingStatusFrame.style = "display: inline-block;";
+      this._inspectingStatusFrame.style = "display: inline-block; cursor: pointer;";
       this._inspectingStatusFrame.textContent = "Frame: 0";
       statusContainer.appendChild(this._inspectingStatusFrame);
 
       this._inspectingStatusText = _document.createElement("div");
-      this._inspectingStatusText.style = "display: inline-block; margin-left: 10px;";
+      this._inspectingStatusText.style = "display: inline-block; margin-left: 10px; cursor: pointer;";
       statusContainer.appendChild(this._inspectingStatusText);
+
+      const self = this;
+      statusContainer.addEventListener("click", () => {
+        if (self._captureFrameRequest) {
+          self._sendCapturedCommands();
+        }
+      });
     }
 
     captureWorker(canvas) {
@@ -341,6 +371,15 @@ export let webgpuInspector = null;
     // Called before a GPU method is called, allowing the inspector to modify
     // the arguments or the object before the method is called.
     _preMethodCall(object, method, args) {
+      if (method === "destroy") {
+        if (object === this._device?.deref()) {
+          if (this._pendingMapCount) {
+            this._hasPendingDeviceDestroy = true;
+            return true;
+          }
+        }
+      }
+
       if (method === "requestDevice") {
         // Make sure we enable timestamp queries so we can capture them.
         if (args.length === 0) {
@@ -496,7 +535,7 @@ export let webgpuInspector = null;
           object.__device.queue.submit([commandEncoder.finish()]);
           this._timestampIndex = 0;
         }
-  
+
         const self = this;
 
         if (this._captureTextureRequest.size > 0) {
@@ -531,7 +570,7 @@ export let webgpuInspector = null;
           if (timestampDstBuffer) {
             self._sendTimestampBuffer(timestampDstBuffer.__count, timestampDstBuffer);
           }
-          
+
           if (captureBuffers.length) {
             self._sendCapturedBuffers(captureBuffers);
           }
@@ -617,7 +656,7 @@ export let webgpuInspector = null;
           });
         }
       }
-      
+
       if (result) {
         // Wrap GPU objects
         if (GPUObjectTypes.has(result.constructor)) {
@@ -760,7 +799,8 @@ export let webgpuInspector = null;
         this._sendAddObjectMessage(id, adapterId, "Device", JSON.stringify(descriptor), stacktrace);
         device.__adapter = adapter; // prevent adapter from being garbage collected
 
-        this._device = device;
+        //this._device = device;
+        this._device = new WeakRef(device);
       }
     }
 
@@ -878,7 +918,7 @@ export let webgpuInspector = null;
         const isComputePipeline = object instanceof GPUComputePipeline;
         if (isRenderPipeline || isComputePipeline) {
           const descriptor = object.__descriptor;
-          
+
           let found = false;
           let vertexModule = null;
           let fragmentModule = null;
@@ -943,7 +983,7 @@ export let webgpuInspector = null;
         const isComputePipeline = object instanceof GPUComputePipeline;
         if (isRenderPipeline || isComputePipeline) {
           const descriptor = object.__descriptor;
-          
+
           let found = false;
           let newDescriptor = null;
           let vertexModule = null;
@@ -1013,6 +1053,10 @@ export let webgpuInspector = null;
     }
 
     _updateStatusMessage() {
+      if (!this._inspectingStatusFrame) {
+        return;
+      }
+
       let status = "";
 
       if (this._captureTexturedBuffers.length > 0) {
@@ -1042,16 +1086,73 @@ export let webgpuInspector = null;
         status = `Capturing: ${status} `;
       }
 
-      if (this._inspectingStatusFrame) {
-        this._inspectingStatusText.textContent = status;
+      if (this._captureFrameRequest) {
+        status = `Recording (click to stop): ${status}`;
+        this._inspectingStatusText.title = "Click to stop recording";
+      } else {
+        this._inspectingStatusText.title = "";
       }
+
+      this._inspectingStatusText.textContent = status;
     }
 
     _updateFrameRate(deltaTime) {
       this._frameRate.add(deltaTime);
       this._frameIndex++;
       if (this._inspectingStatusFrame) {
-        this._inspectingStatusFrame.textContent = `Frame: ${this._frameIndex} : ${this._frameRate.average.toFixed(2)}ms`;
+        this._updateFrameStatus();
+      }
+    }
+
+    _updateFrameStatus() {
+      if (this._inspectingStatusFrame) {
+        let statusMessage = `Frame: ${this._frameIndex}`;
+        const frameRate = this._frameRate.average;
+        if (frameRate !== 0) {
+          statusMessage += ` : ${frameRate.toFixed(2)}ms`;
+        }
+        this._inspectingStatusFrame.textContent = statusMessage;
+      }
+    }
+
+    _initCaptureData() {
+      if (this._captureData.frame < 0 || this._frameIndex >= this._captureData.frame) {
+        this._captureMaxBufferSize = this._captureData.maxBufferSize || maxBufferCaptureSize;
+        this._captureFrameCount = this._captureData.captureFrameCount || captureFrameCount;
+        this._captureFrameRequest = true;
+        this._gpuWrapper.recordStacktraces = true;
+        this._captureData = null;
+        this._updateStatusMessage();
+
+        if (this._captureTimestamps) {
+          this.disableRecording();
+          const device = this._device?.deref();
+          if (device) {
+            if (!this._timestampQuerySet) {
+              this._timestampQuerySet = device.createQuerySet({
+                type: "timestamp",
+                count: this._maxTimestamps
+              });
+              this._timestampBuffer = device.createBuffer({
+                size: this._maxTimestamps * 8,
+                usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
+              });
+            }
+
+            const commandEncoder = device.createCommandEncoder();
+            const pass = commandEncoder.beginComputePass({
+              timestampWrites:  {
+                querySet: this._timestampQuerySet,
+                beginningOfPassWriteIndex: 0,
+                endOfPassWriteIndex: 1
+              }
+            });
+            pass.end();
+            device.queue.submit([commandEncoder.finish()]);
+            this._timestampIndex = 2;
+          }
+          this.enableRecording();
+        }
       }
     }
 
@@ -1076,44 +1177,9 @@ export let webgpuInspector = null;
             this._captureData = null;
           }
           _sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
-        }
-      }
 
-      if (this._captureData) {
-        if (this._captureData.frame < 0 || this._frameIndex >= this._captureData.frame) {
-          this._captureMaxBufferSize = this._captureData.maxBufferSize || maxBufferCaptureSize;
-         this._captureFrameCount = this._captureData.captureFrameCount || captureFrameCount;
-          this._captureFrameRequest = true;
-          this._gpuWrapper.recordStacktraces = true;
-          this._captureData = null;
-
-          if (this._captureTimestamps) {
-            this.disableRecording();
-            if (this._device) {
-              if (!this._timestampQuerySet) {
-                this._timestampQuerySet = this._device.createQuerySet({
-                  type: "timestamp",
-                  count: this._maxTimestamps
-                });
-                this._timestampBuffer = this._device.createBuffer({
-                  size: this._maxTimestamps * 8,
-                  usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
-                });
-              }
-
-              const commandEncoder = this._device.createCommandEncoder();
-              const pass = commandEncoder.beginComputePass({
-                timestampWrites:  {
-                  querySet: this._timestampQuerySet,
-                  beginningOfPassWriteIndex: 0,
-                  endOfPassWriteIndex: 1
-                }
-              });
-              pass.end();
-              this._device.queue.submit([commandEncoder.finish()]);
-              this._timestampIndex = 2;
-            }
-            this.enableRecording();
+          if (this._captureData) {
+            this._initCaptureData();
           }
         }
       }
@@ -1127,32 +1193,38 @@ export let webgpuInspector = null;
       }
 
       if (this._inspectingStatusFrame) {
-        this._inspectingStatusFrame.textContent = `Frame: ${this._frameIndex} : ${this._frameRate.average.toFixed(2)}ms`;
+        this._updateFrameStatus();
+        this._updateStatusMessage();
       }
+    }
+
+    _sendCapturedCommands() {
+      const maxFrameCount = 2000;
+      const batches = Math.ceil(this._captureFrameCommands.length / maxFrameCount);
+      this._postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": this._captureFrameCommands.length, "batches": batches });
+
+      for (let i = 0; i < this._captureFrameCommands.length; i += maxFrameCount) {
+        const length = Math.min(maxFrameCount, this._captureFrameCommands.length - i);
+        const commands = this._captureFrameCommands.slice(i, i + length);
+        this._postMessage({
+            "action": Actions.CaptureFrameCommands,
+            "frame": this._frameIndex - 1,
+            "commands": commands,
+            "index": i,
+            "count": length
+          });
+      }
+      this._captureFrameCommands.length = 0;
+      this._captureFrameRequest = false;
+      this._gpuWrapper.recordStacktraces = false;
+      this._updateStatusMessage();
     }
 
     _frameEnd(time) {
       if (this._captureFrameCommands.length) {
         this._captureFrameCount--;
         if (this._captureFrameCount <= 0) {
-          const maxFrameCount = 2000;
-          const batches = Math.ceil(this._captureFrameCommands.length / maxFrameCount);
-          this._postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": this._captureFrameCommands.length, "batches": batches });
-
-          for (let i = 0; i < this._captureFrameCommands.length; i += maxFrameCount) {
-            const length = Math.min(maxFrameCount, this._captureFrameCommands.length - i);
-            const commands = this._captureFrameCommands.slice(i, i + length);
-           this._postMessage({
-                "action": Actions.CaptureFrameCommands,
-                "frame": this._frameIndex - 1,
-                "commands": commands,
-                "index": i,
-                "count": length
-              });
-          }
-          this._captureFrameCommands.length = 0;
-          this._captureFrameRequest = false;
-          this._gpuWrapper.recordStacktraces = false;
+          this._sendCapturedCommands();
         }
       }
 
@@ -1190,7 +1262,7 @@ export let webgpuInspector = null;
       if (!object || object.__id !== undefined) {
         return;
       }
-      
+
       object.__id = id ?? this.getNextId(object);
 
       // Track garbage collected objects
@@ -1260,10 +1332,37 @@ export let webgpuInspector = null;
       this._postMessage({ "action": Actions.AddObject, id, parent, type, descriptor, stacktrace, pending });
     }
 
+    _detroyDevice() {
+      this._device.deref()?.destroy();
+      /*if (this._captureFrameCommands.length) {
+        this._sendCapturedCommands();
+      }
+      this._device = null;
+      const id = object.__id;
+        object.__destroyed = true;
+        // Don't remove canvas textures from the tracked objects, which have negative id's.
+        // These are frequently created and destroyed via getCurrentTexture.
+        if (id > 0) {
+          this._trackedObjects.delete(id);
+          this._trackedObjectInfo.delete(id);
+          this._objectReplacementMap.delete(id);
+        }
+        if (object instanceof GPUBindGroup) {
+          this._bindGroupCount--;
+        }
+        if (id >= 0) {
+          this._captureTextureRequest.delete(id);
+          this._postMessage({ "action": Actions.DeleteObject, id });
+        }*/
+    }
+
     _recordCommand(object, method, result, args, stacktrace) {
       const parent = object?.__id ?? 0;
       if (method === "destroy") {
-        if (object === this._device) {
+        if (object === this._device?.deref()) {
+          if (this._captureFrameCommands.length) {
+            this._sendCapturedCommands();
+          }
           this._device = null;
         }
         const id = object.__id;
@@ -1444,7 +1543,7 @@ export let webgpuInspector = null;
                 if (!object.__captureBuffers) {
                   object.__captureBuffers = [];
                 }
-                
+
                 object.__captureBuffers.push({ commandId, entryIndex, buffer, offset, size });
                 this._captureBuffersCount++;
                 this._updateStatusMessage();
@@ -1463,7 +1562,7 @@ export let webgpuInspector = null;
           const offset = a[3] ?? 0;
          const size = a[4];
           const buffer = data instanceof ArrayBuffer ? data : data.buffer;
-          if (!buffer) { 
+          if (!buffer) {
             // It's a []<number>
           } else if (size > 0) {
             data = new Uint8Array(buffer, offset, size);
@@ -1580,6 +1679,16 @@ export let webgpuInspector = null;
       }
     }
 
+    _pendingMapFinished() {
+      this._pendingMapCount--;
+      if (this._pendingMapCount === 0) {
+        if (this._hasPendingDeviceDestroy) {
+          this._hasPendingDeviceDestroy = false;
+          this._detroyDevice();
+        }
+      }
+    }
+
     _sendCaptureTextureBuffers(buffers) {
      const textures = [];
       for (const textureBuffer of buffers) {
@@ -1594,7 +1703,7 @@ export let webgpuInspector = null;
       }
 
       this._postMessage({
-        "action": Actions.CaptureTextureFrames, 
+        "action": Actions.CaptureTextureFrames,
         "chunkCount": totalChunks,
         "count": buffers.length,
         textures });
@@ -1604,6 +1713,7 @@ export let webgpuInspector = null;
 
         this._mappedTextureBufferCount++;
         const self = this;
+        this._pendingMapCount++;
         tempBuffer.mapAsync(GPUMapMode.READ).then(() => {
           self._mappedTextureBufferCount--;
           self._updateStatusMessage();
@@ -1611,6 +1721,7 @@ export let webgpuInspector = null;
           const data = new Uint8Array(range);
           self._sendTextureData(id, passId, data, mipLevel);
           tempBuffer.destroy();
+          self._pendingMapFinished();
         }).catch((e) => {
           console.error(e);
         });
@@ -1697,11 +1808,13 @@ export let webgpuInspector = null;
 
     _sendTimestampBuffer(count, buffer) {
       const self = this;
+      this._pendingMapCount++;
       buffer.mapAsync(GPUMapMode.READ).then(() => {
         const range = buffer.getMappedRange();
         const data = new Uint8Array(range);
         self._sendBufferData(-1000, -1000, data);
         buffer.destroy();
+        self._pendingMapFinished();
      }).catch((error) => {
         console.error(error);
       });
@@ -1732,6 +1845,7 @@ export let webgpuInspector = null;
         const self = this;
         this._mappedBufferCount++;
         this._updateStatusMessage();
+        this._pendingMapCount++;
         tempBuffer.mapAsync(GPUMapMode.READ).then(() => {
           self._mappedBufferCount--;
           self._updateStatusMessage();
@@ -1739,6 +1853,7 @@ export let webgpuInspector = null;
           const data = new Uint8Array(range);
           self._sendBufferData(commandId, entryIndex, data);
           tempBuffer.destroy();
+          self._pendingMapFinished();
         }).catch((error) => {
           console.error(error);
         });
@@ -1984,7 +2099,7 @@ export let webgpuInspector = null;
     }
     return url;
   }
-  
+
   const _origFetch = self.fetch;
   self.fetch = function (input, init) {
     let url = input instanceof Request ? input.url : input;

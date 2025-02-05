@@ -322,6 +322,13 @@ export class ObjectDatabase {
     return view.__texture;
   }
 
+  clearCapturedObjects() {
+    this.capturedObjects.forEach((obj) => {
+      obj.decrementReferenceCount();
+    });
+    this.capturedObjects.clear();
+  }
+
   _setObjectLabel(id, label) {
     const object = this.getObject(id);
     if (object) {

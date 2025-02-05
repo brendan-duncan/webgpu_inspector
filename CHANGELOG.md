@@ -1,3 +1,8 @@
+## v0.10.0
+
+* Fix shader parse issue with literal values like "-1f".
+* Capture can now record commands for compute-only programs, and for programs that do not use requestAnimationFrame.
+
 ## v0.9.0
 
 * Fix issue with capturing dynamic offset uniform buffers.
