@@ -1128,12 +1128,16 @@ ol::-webkit-scrollbar-thumb:hover {
 
 .tab-handle-close-button {
   margin-top: 0px;
-  margin-right: 6px;
+  /*margin-right: 6px;*/
+  margin-left: 10px;
   float: right;
+  font-weight: bold;
 }
 
 .tab-handle-close-button:hover {
   color: #fff;
+  font-weight: bold;
+  text-shadow: 0px 0px 5px #aaa;
 }
 
 .tab-handle-list-container {
@@ -1229,6 +1233,12 @@ ol::-webkit-scrollbar-thumb:hover {
 }
 
 /* ---------------------------------------- */
+
+.shader-debugger {
+  overflow: auto;
+  font-size: 11pt;
+  height: calc(-110px + 100vh);
+}
 
 .capture_commandList {
   padding-left: 20px;

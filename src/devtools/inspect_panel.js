@@ -26,8 +26,8 @@ import { getFlagString } from "../utils/flags.js";
 import { PanelActions } from "../utils/actions.js";
 import { Plot } from "./widget/plot.js";
 import { Split } from "./widget/split.js";
-import { EditorView } from "codemirror";
 
+import { EditorView } from "codemirror";
 import { keymap, highlightSpecialChars, drawSelection, dropCursor,
   crosshairCursor, lineNumbers, highlightActiveLineGutter } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
@@ -39,7 +39,6 @@ import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } 
 import { lintKeymap } from "@codemirror/lint";
 import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
 import { cobalt } from 'thememirror';
-
 
 const shaderEditorSetup = (() => [
   lineNumbers(),

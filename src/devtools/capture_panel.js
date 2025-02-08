@@ -19,6 +19,7 @@ import { Actions, PanelActions } from "../utils/actions.js";
 import { getFormatFromReflection } from "../utils/reflection_format.js";
 import { ResourceType, WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
 import { CaptureData } from "./capture_data.js";
+import { ShaderDebugger } from "./shader_debugger.js";
 
 export class CapturePanel {
   constructor(window, parent) {
@@ -241,9 +242,9 @@ export class CapturePanel {
 
     contents.html = "";
 
-    const captureTab = new TabWidget(contents, { style: "width: 100%;" });
+    this._captureTab = new TabWidget(contents, { displayCloseButton: true, style: "width: 100%;" });
     const captureContents = new Div(null, { style: "overflow: hidden; white-space: nowrap; height: calc(-100px + 100vh); display: flex;" });
-    captureTab.addTab(`Frame ${frame}`, captureContents);
+    this._captureTab.addTab(`Frame ${frame}`, captureContents);
 
     this._captureCommands = commands;
 
@@ -1904,7 +1905,7 @@ export class CapturePanel {
             self.window.inspectObject(computeModule);
           } });
           new Button(computeGrp.body, { label: "Debug", style: "background-color: #755;", callback: () => {
-            self.window.inspectObject(computeModule);
+            self._debugShader(command);
           } });
           const code = computeModule.descriptor.code;
           new Widget("pre", computeGrp.body, { text: code });
@@ -1913,6 +1914,17 @@ export class CapturePanel {
         }
       }
     }
+  }
+
+  _debugShader(command) {
+    const args = command.args;
+    const id = args[0]?.__id;
+    const pipeline = this._getObject(id);
+    const desc = pipeline.descriptor;
+    const computeId = desc.compute?.module?.__id;
+    const editor = new ShaderDebugger(command, this._captureData, this.database);
+    this._captureTab.addTab(`Compute Module ID:${computeId}`, editor);
+    this._captureTab.setActivePanel(editor);
   }
 
   _showCaptureCommandInfo_writeBuffer(command, commandInfo) {

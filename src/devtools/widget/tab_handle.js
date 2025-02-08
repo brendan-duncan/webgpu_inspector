@@ -1,4 +1,4 @@
-import { Div } from './div.js';
+import { Div } from "./div.js";
 import { Widget } from "./widget.js";
 
 /**
@@ -12,10 +12,10 @@ export class TabHandle extends Div {
     this.page = page;
     this.parentWidget = parentWidget;
 
-    this.classList.add('tab-handle', 'disable-selection');
+    this.classList.add("tab-handle", "disable-selection");
 
     this.textElement = new Div(this, {
-      class: 'tab-handle-text',
+      class: "tab-handle-text",
       text: title,
     });
 
@@ -38,57 +38,63 @@ export class TabHandle extends Div {
   }
 
   dragOverEvent(e) {
-    if (!TabHandle.DragWidget) return;
+    if (!TabHandle.DragWidget) {
+      return;
+    }
 
-    if (
-      e.srcElement.classList.contains('tab-handle') &&
-      this !== TabHandle.DragWidget
-    ) {
+    if (e.srcElement.classList.contains("tab-handle") &&
+      this !== TabHandle.DragWidget) {
       if (e.layerX < this.width * 0.5) {
         e.preventDefault();
-        this.style.borderRight = '';
-        this.style.borderLeft = '4px solid #fff';
+        this.style.borderRight = "";
+        this.style.borderLeft = "4px solid #fff";
       } else {
         e.preventDefault();
-        this.style.borderLeft = '';
-        this.style.borderRight = '4px solid #fff';
+        this.style.borderLeft = "";
+        this.style.borderRight = "4px solid #fff";
       }
     }
   }
 
   dropEvent(e) {
-    this.style.borderLeft = '';
-    this.style.borderRight = '';
-    if (e.srcElement.classList.contains('tab-handle')) {
+    this.style.borderLeft = "";
+    this.style.borderRight = "";
+    if (e.srcElement.classList.contains("tab-handle")) {
       if (e.layerX < this.width * 0.5) {
-        console.log('Insert Before');
+        console.log("Insert Before");
       } else {
-        console.log('Insert After');
+        console.log("Insert After");
       }
     }
   }
 
   dragEnterEvent() {
-    this.style.borderLeft = '';
-    this.style.borderRight = '';
+    this.style.borderLeft = "";
+    this.style.borderRight = "";
   }
 
   dragLeaveEvent() {
-    this.style.borderLeft = '';
-    this.style.borderRight = '';
+    this.style.borderLeft = "";
+    this.style.borderRight = "";
   }
 
   configure(options) {
-    if (!options) return;
+    if (!options) {
+      return;
+    }
     super.configure(options);
     if (options.displayCloseButton) {
       this.closeButton = new Div(this, {
-        class: 'tab-handle-close-button',
+        class: "tab-handle-close-button",
       });
+      this.closeButton.title = "Close Tab";
 
       // Set the close button text
-      const closeIcon = 'icon-remove-sign';
-      this.closeButton.element.innerHTML = `<i class="${closeIcon}">x</i>`;
+      const closeIcon = "icon-remove-sign";
+      this.closeButton.element.innerHTML = `<span class="${closeIcon}">x</span>`;
+      this.closeButton.addEventListener("click", () => {
+        this.parentWidget.closeTabHandle(this);
+      });
     }
   }
 
@@ -96,7 +102,7 @@ export class TabHandle extends Div {
    * Is this tab currently active?
    */
   get isActive() {
-    return this.classList.contains('tab-handle-selected');
+    return this.classList.contains("tab-handle-selected");
   }
 
   /**
@@ -109,13 +115,13 @@ export class TabHandle extends Div {
     }
 
     if (a) {
-      this.classList.add('tab-handle-selected');
-      this.page.style.display = 'block';
-      this.style.zIndex = '10';
+      this.classList.add("tab-handle-selected");
+      this.page.style.display = "block";
+      this.style.zIndex = "10";
     } else {
-      this.classList.remove('tab-handle-selected');
-      this.page.style.display = 'none';
-      this.style.zIndex = '0';
+      this.classList.remove("tab-handle-selected");
+      this.page.style.display = "none";
+      this.style.zIndex = "0";
     }
   }
 
@@ -124,12 +130,12 @@ export class TabHandle extends Div {
   }
 
   doubleClickEvent() {
-    this.maximizePanel();
+    //this.maximizePanel();
   }
 
   maximizePanel() {
-    Widget.window.maximizePanelToggle(this.title, this.page.panel);
+    //Widget.window.maximizePanelToggle(this.title, this.page.panel);
   }
 }
 
-TabHandle._idPrefix = 'TAB';
+TabHandle._idPrefix = "TAB";

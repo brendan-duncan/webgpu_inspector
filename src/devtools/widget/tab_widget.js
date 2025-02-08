@@ -78,6 +78,33 @@ export class TabWidget extends Div {
   }
 
   /**
+   * Close a tab.
+   * @param {TabHandle} handle
+   */
+  closeTabHandle(handle) {
+    const index = this.tabListElement.children.indexOf(handle);
+    if (index == -1) {
+      return;
+    }
+
+    const page = this.contentElement.children[index];
+    /*if (page) {
+      page.children[0].close();
+    }*/
+
+    this.tabListElement.removeChild(handle);
+    this.contentElement.removeChild(page);
+
+    if (this._activeTab == index) {
+      this._activeTab = -1;
+    }
+
+    if (this._activeTab == -1 && this.numTabs > 0) {
+      this.activeTab = 0;
+    }
+  }
+
+  /**
    * @property {number} numTabs Return the number of tabs.
    */
   get numTabs() {
