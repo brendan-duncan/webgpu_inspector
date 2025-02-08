@@ -7,7 +7,7 @@ import { Widget } from "./widget/widget.js";
 import { NumberInput } from "./widget/number_input.js";
 import { Select } from "./widget/select.js";
 import { Signal } from "../utils/signal.js";
-import { 
+import {
   Adapter,
   Device,
   Buffer,
@@ -77,7 +77,7 @@ export class InspectPanel {
     const self = this;
     const controlBar = new Div(parent, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px; font-size: 10pt;" });
 
-    this.inspectButton = new Button(controlBar, { label: "Start", callback: () => { 
+    this.inspectButton = new Button(controlBar, { label: "Start", callback: () => {
       try {
         self._reset();
         self.port.postMessage({ action: PanelActions.InitializeInspector });
@@ -93,7 +93,7 @@ export class InspectPanel {
     new Span(this.plots, { text: "Frame Time", style: "color: #ccc; padding-top: 5px; margin-right: 10px; font-size: 10pt;"});
     this.frameRatePlot = new Plot(this.plots, { precision: 2, suffix: "ms", style: "flex-grow: 1; margin-right: 10px; max-width: 500px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);" });
     this.frameRateData = this.frameRatePlot.addData("Frame Time");
-       
+
     this._objectCountType = null;
     this._objectCountObject = null;
 
@@ -102,7 +102,7 @@ export class InspectPanel {
       index: 0,
       style: "color: #ccc; padding-top: 5px; margin-right: 10px; font-size: 10pt;",
       onChange: (value) => {
-        self._changeObjectCountPlot(value);        
+        self._changeObjectCountPlot(value);
       } });
     this.objectCountPlot = new Plot(this.plots, { style: "flex-grow: 1; max-width: 500px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);" });
     this.objectCountData = this.objectCountPlot.addData("Object Count");
@@ -698,7 +698,7 @@ export class InspectPanel {
             this._shaderInfoEntryFunction(list, s);
           }
         }
-  
+
         if (reflect.entry.fragment.length) {
           new Div(grp.body, { text: `Fragment Entry Functions: ${reflect.entry.fragment.length}` });
           const list = new Widget("ul", grp.body);
@@ -706,7 +706,7 @@ export class InspectPanel {
             this._shaderInfoEntryFunction(list, s);
           }
         }
-  
+
         if (reflect.entry.compute.length) {
           new Div(grp.body, { text: `Compute Entry Functions: ${reflect.entry.compute.length}` });
           const list = new Widget("ul", grp.body);
@@ -714,7 +714,7 @@ export class InspectPanel {
             this._shaderInfoEntryFunction(list, s);
           }
         }
-        
+
         if (reflect.uniforms.length) {
           new Div(grp.body, { text: `Uniform Buffers: ${reflect.uniforms.length}` });
           const list = new Widget("ul", grp.body);
@@ -724,11 +724,11 @@ export class InspectPanel {
             new Widget("li", l2, { text: `Bind Group: ${s.group}` });
             new Widget("li", l2, { text: `Bind Index: ${s.binding}` });
             new Widget("li", l2, { text: `Buffer Size: ${s.type.size || "<runtime>"}` });
-            
+
             this._addShaderTypeInfo(l2, s.type);
           }
         }
-  
+
         if (reflect.storage.length) {
           new Div(grp.body, { text: `Storage Buffers: ${reflect.storage.length}` });
           const list = new Widget("ul", grp.body);
@@ -738,11 +738,11 @@ export class InspectPanel {
             new Widget("li", l2, { text: `Bind Group: ${s.group}` });
             new Widget("li", l2, { text: `Bind Index: ${s.binding}` });
             new Widget("li", l2, { text: `Buffer Size: ${s.type.size || "<runtime>"}` });
-  
+
             this._addShaderTypeInfo(l2, s.type);
           }
         }
-        
+
         if (reflect.textures.length) {
           new Div(grp.body, { text: `Textures: ${reflect.textures.length}` });
           const list = new Widget("ul", grp.body);
@@ -753,7 +753,7 @@ export class InspectPanel {
             new Widget("li", l2, { text: `Bind Index: ${s.binding}` });
           }
         }
-  
+
         if (reflect.samplers.length) {
           new Div(grp.body, { text: `Samplers: ${reflect.samplers.length}` });
           const list = new Widget("ul", grp.body);
@@ -776,7 +776,7 @@ export class InspectPanel {
 
     if (object instanceof ShaderModule) {
       const self = this;
-     
+
       const text = object.replacementCode || object.descriptor.code;
 
       const editor = new EditorView({
@@ -835,7 +835,7 @@ export class InspectPanel {
     }
 
     if (object instanceof RenderBundle) {
-      
+
     } else if (object instanceof Texture) {
       const self = this;
       const loadButton = new Button(descriptionBox, { label: "Load", callback: () => {
@@ -863,7 +863,7 @@ export class InspectPanel {
         new Widget("pre", textureGrp.body, { text });
 
         const self = this;
-        
+
         const loadButton = new Button(textureGrp.body, { label: "Load", callback: () => {
           self.database.requestTextureData(texture);
         }});
@@ -883,7 +883,7 @@ export class InspectPanel {
       }
     }
   }
-  
+
   _revertShader(object) {
     this.port.postMessage({ action: PanelActions.RevertShader, id: object.id });
   }
@@ -1034,7 +1034,7 @@ export class InspectPanel {
         layerArrayCount: 1,
         baseMipLevel: mipLevel,
         mipLevelCount: 1 };
-      
+
       const srcView = texture.gpuTexture.object.createView(viewDesc);
 
       if (layerRanges) {
