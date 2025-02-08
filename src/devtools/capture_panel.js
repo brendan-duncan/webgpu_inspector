@@ -12,6 +12,7 @@ import { Span } from "./widget/span.js";
 import { TextArea } from "./widget/text_area.js";
 import { TextInput } from "./widget/text_input.js";
 import { Widget } from "./widget/widget.js";
+import { TabWidget } from "./widget/tab_widget.js";
 import { getFlagString } from "../utils/flags.js";
 import { Select } from "./widget/select.js";
 import { Actions, PanelActions } from "../utils/actions.js";
@@ -93,7 +94,7 @@ export class CapturePanel {
     this._captureStats = new Button(controlBar, { label: "Frame Stats", style: "display: none;" });
     this._captureStatus = new Span(controlBar, { style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
 
-    this._capturePanel = new Div(parent, { style: "overflow: hidden; white-space: nowrap; height: calc(-100px + 100vh); display: flex;" });
+    this._capturePanel = new Div(parent, { style: "overflow: hidden; white-space: nowrap; height: calc(-85px + 100vh); display: flex;" });
 
     window.onTextureLoaded.addListener(this._textureLoaded, this);
     window.onTextureDataChunkLoaded.addListener(this._textureDataChunkLoaded, this);
@@ -240,6 +241,10 @@ export class CapturePanel {
 
     contents.html = "";
 
+    const captureTab = new TabWidget(contents, { style: "width: 100%;" });
+    const captureContents = new Div(null, { style: "overflow: hidden; white-space: nowrap; height: calc(-100px + 100vh); display: flex;" });
+    captureTab.addTab(`Frame ${frame}`, captureContents);
+
     this._captureCommands = commands;
 
     this.database.clearCapturedObjects();
@@ -252,11 +257,12 @@ export class CapturePanel {
     });
     this._gpuTextureMap.clear();
 
-    this._frameImages = new Span(contents, { class: "capture_frameImages" });
+    this._frameImages = new Span(captureContents, { class: "capture_frameImages", style: "flex: 0 0 auto;" });
     this._frameImages.style.display = "none";
 
-    const _frameContents = new Span(contents, { class: "capture_frameContents" });
-    const commandInfo = new Span(contents, { class: "capture_commandInfo" });
+    const _frameContents = new Span(captureContents, { class: "capture_frameContents", style: "flex: 0 0 auto; width: 590px; height: calc(-105px + 100vh);" });
+    const commandInfo = new Span(captureContents, { class: "capture_commandInfo", style: "flex: 1 1 auto; display: flex;" });
+    const commandInfoContents = new Div(commandInfo, { style: "flex: 1 1 auto;" });
 
     const self = this;
 
@@ -269,7 +275,7 @@ export class CapturePanel {
     const frameContents = new Div(_frameContents, { class: "capture_frame" });
 
     this._captureStats.callback = () => {
-      self._inspectStats(commandInfo);
+      self._inspectStats(commandInfoContents);
     };
 
     const debugGroupStack = [frameContents];
@@ -523,7 +529,7 @@ export class CapturePanel {
       const skipCommand = method === "pushDebugGroup" || method === "popDebugGroup";
 
       if (!skipCommand) {
-        const cmd = this._createCommandWidget(currentBlock, commandIndex, command, cmdType, commandInfo, debugGroupLabelStack);
+        const cmd = this._createCommandWidget(currentBlock, commandIndex, command, cmdType, commandInfoContents, debugGroupLabelStack);
 
         if (first) {
           // Start off selecting the first command.
@@ -794,7 +800,7 @@ export class CapturePanel {
         self._lastSelectedCommand = cmd;
       }
 
-      self._showCaptureCommandInfo(command, name, commandInfo);
+      self._showCaptureCommandInfo(command, ""/*name*/, commandInfo);
     };
 
     return cmd;
@@ -1892,9 +1898,12 @@ export class CapturePanel {
       if (computeId !== undefined) {
         const computeModule = this._getObject(computeId);
         if (computeModule) {
-          const computeEntry = desc.compute?.entryPoint;
+          const computeEntry = desc.compute?.entryPoint ?? "@compute";
           const computeGrp = new Collapsable(commandInfo, { collapsed: true, label: `Compute Module ID:${computeId} Entry: ${computeEntry}` });
           new Button(computeGrp.body, { label: "Inspect", callback: () => {
+            self.window.inspectObject(computeModule);
+          } });
+          new Button(computeGrp.body, { label: "Debug", style: "background-color: #755;", callback: () => {
             self.window.inspectObject(computeModule);
           } });
           const code = computeModule.descriptor.code;
