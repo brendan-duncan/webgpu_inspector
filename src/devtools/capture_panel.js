@@ -4,6 +4,7 @@ import {
   TextureView
 } from "./gpu_objects/index.js";
 import { Button } from "./widget/button.js";
+import { Img } from "./widget/img.js";
 import { Collapsable } from "./widget/collapsable.js";
 import { Dialog } from "./widget/dialog.js";
 import { Div } from "./widget/div.js";
@@ -1905,8 +1906,10 @@ export class CapturePanel {
             self.window.inspectObject(computeModule);
           } });
           if (parentCommand) {
-            new Button(computeGrp.body, { label: "Debug", style: "background-color: rgb(180 26 26);", callback: () => {
-              self._debugShader(command, parentCommand);
+            new Button(computeGrp.body, { 
+              children: [ new Img(null, { title: "Debug Shader", src: "img/debug.svg", style: "width: 15px; height: 15px; filter: invert(1);" }) ],
+              title: "Debug Shadre", style: "background-color: rgb(180 26 26);", callback: () => {
+                self._debugShader(command, parentCommand);
             } });
           }
           const code = computeModule.descriptor.code;

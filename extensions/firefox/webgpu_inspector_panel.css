@@ -1240,6 +1240,15 @@ ol::-webkit-scrollbar-thumb:hover {
   height: calc(-110px + 100vh);
 }
 
+.cm-breakpoint-marker {
+  background: #f00;
+  border: 1px solid #000;
+  border-radius: 50%;
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+}
+
 .capture_commandList {
   padding-left: 20px;
   color: #d3d3d3;

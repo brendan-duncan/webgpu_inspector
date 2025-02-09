@@ -1,6 +1,7 @@
 import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
 import { Split } from "./widget/split.js";
+import { Img } from "./widget/img.js";
 import { WgslDebug } from "wgsl_reflect/wgsl_reflect.module.js";
 
 import { EditorView } from "codemirror";
@@ -22,18 +23,28 @@ const breakpointEffect = StateEffect.define({
     map: (val, mapping) => ({ pos: mapping.mapPos(val.pos), on: val.on })
 });
 
+const debugLineHighlightEffect = StateEffect.define({
+    map: (val, mapping) => ({ lineNo: mapping.mapPos(val.lineNo) })
+});
+
 const breakpointState = StateField.define({
-    create() { return RangeSet.empty; },
+    create() {
+        return RangeSet.empty; 
+    },
     update(set, transaction) {
       set = set.map(transaction.changes);
+      // TODO: include both breakpoint and line highlight effects
       for (let e of transaction.effects) {
         if (e.is(breakpointEffect)) {
           if (e.value.on) {
+            hasBreakpoint = true;
             set = set.update({add: [breakpointMarker.range(e.value.pos)]});
           } else {
             set = set.update({filter: from => from != e.value.pos});
           }
-        }
+        }/* else if (e.is(debugLineHighlightEffect)) {
+          set = set.update({filter: from => from != e.value.lineNo});
+        }*/
       }
       return set;
     }
@@ -49,8 +60,11 @@ function toggleBreakpoint(view, pos) {
 }
 
 const breakpointMarker = new class extends GutterMarker {
-    //toDOM() { return document.createTextNode("🔴") } // TODO: why doesn't this UTF-8 work in devtools?
-    toDOM() { return document.createTextNode("*") }
+    toDOM() {
+        const el = document.createElement("div");
+        el.classList.add("cm-breakpoint-marker");
+        return el;
+    }
 };
 
 const breakpointGutter = [
@@ -76,18 +90,14 @@ const breakpointGutter = [
     })
 ];
 
-const addLineHighlight = StateEffect.define({
-    map: (val, mapping) => ({ lineNo: mapping.mapPos(val.lineNo) })
-});
-
-const lineHighlightField = StateField.define({
+const debugLineHighlight = StateField.define({
     create() {
       return Decoration.none;
     },
     update(lines, tr) {
       lines = lines.map(tr.changes);
       for (let e of tr.effects) {
-        if (e.is(addLineHighlight)) {
+        if (e.is(debugLineHighlightEffect)) {
           lines = Decoration.none;
           if (e.value.lineNo > 0) {
             lines = lines.update({ add: [lineHighlightMark.range(e.value.lineNo)] });
@@ -105,7 +115,7 @@ const lineHighlightMark = Decoration.line({
 
 const shaderEditorSetup = (() => [
     breakpointGutter,
-    lineHighlightField,
+    debugLineHighlight,
     lineNumbers(),
     //highlightActiveLineGutter(),
     highlightSpecialChars(),
@@ -195,7 +205,8 @@ export class ShaderDebugger extends Div {
         });
 
         new Button(this.controls, {
-            text: "Debug",
+            children: [ new Img(null, { title: "Debug Shader", src: "img/debug.svg", style: "width: 15px; height: 15px; filter: invert(1);" }) ],
+            title: "Debug Shader",
             onClick: () => {
                 this.debug();
             }
@@ -204,17 +215,36 @@ export class ShaderDebugger extends Div {
         new Div(this.controls, { style: "flex-grow: 1;" });
 
         new Button(this.controls, {
-            text: "Step Into",
+            children: [new Img(null, { title: "Continue", src: "img/debug-continue-small.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
+            title: "Continue",
+            style: "background-color: #777;",
+            onClick: () => {
+                this.pauseContinue();
+            }
+        });
+
+        new Button(this.controls, {
+            children: [new Img(null, { title: "Step Over", src: "img/debug-step-over.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
+            title: "Step Over",
+            style: "background-color: #777;",
+            onClick: () => {
+                this.stepOver();
+            }
+        });
+        new Button(this.controls, {
+            children: [new Img(null, { title: "Step Into", src: "img/debug-step-into.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
+            title: "Step Into",
             style: "background-color: #777;",
             onClick: () => {
                 this.stepInto();
             }
         });
         new Button(this.controls, {
-            text: "Step Over",
+            children: [new Img(null, { title: "Restart", src: "img/debug-restart.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
+            title: "Restart",
             style: "background-color: #777;",
             onClick: () => {
-                this.stepOver();
+                this.restart();
             }
         });
 
@@ -234,9 +264,23 @@ export class ShaderDebugger extends Div {
             parent: pane1.element,
         });
 
+        // TODO: persistent search panel
         //openSearchPanel(this.editorview);
 
         this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: 100%;" });
+    }
+
+    pauseContinue() {
+        if (!this.debugger) {
+            this.debug();
+            return;
+        }
+
+        //this.debugger.runToBreakpoint();
+    }
+
+    restart() {
+        this.debug();
     }
 
     debug() {
@@ -409,9 +453,14 @@ export class ShaderDebugger extends Div {
     _highlightLine(lineNo) {
         if (lineNo > 0) {
             const docPosition = this.editorView.state.doc.line(lineNo).from;
-            this.editorView.dispatch({ effects: addLineHighlight.of({ lineNo: docPosition }) });
+            this.editorView.dispatch({ effects: debugLineHighlightEffect.of({ lineNo: docPosition }) });
         } else {
-            this.editorView.dispatch({ effects: addLineHighlight.of({ lineNo: 0 }) });
+            this.editorView.dispatch({ effects: debugLineHighlightEffect.of({ lineNo: 0 }) });
         }
+
+        // TODO: figure out how to scroll CM6 so the line is visible
+        /*const t = this.editorView.elementAtHeight(lineNo).from;
+        const middleHeight = this.editorView.scrollDOM.offsetHeight / 2; 
+        this.editorView.scrollDOM.scrollTop = t - middleHeight - 5;*/
     }
 }
