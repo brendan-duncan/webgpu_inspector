@@ -37,7 +37,6 @@ const breakpointState = StateField.define({
       for (let e of transaction.effects) {
         if (e.is(breakpointEffect)) {
           if (e.value.on) {
-            hasBreakpoint = true;
             set = set.update({add: [breakpointMarker.range(e.value.pos)]});
           } else {
             set = set.update({filter: from => from != e.value.pos});
@@ -75,6 +74,7 @@ const breakpointGutter = [
       initialSpacer: () => breakpointMarker,
       domEventHandlers: {
         mousedown(view, line) {
+          //console.log(line);
           toggleBreakpoint(view, line.from)
           return true
         }

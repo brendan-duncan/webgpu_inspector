@@ -40662,7 +40662,6 @@ var __webgpu_inspector_window = (function (exports) {
         for (let e of transaction.effects) {
           if (e.is(breakpointEffect)) {
             if (e.value.on) {
-              hasBreakpoint = true;
               set = set.update({add: [breakpointMarker.range(e.value.pos)]});
             } else {
               set = set.update({filter: from => from != e.value.pos});
@@ -40700,6 +40699,7 @@ var __webgpu_inspector_window = (function (exports) {
         initialSpacer: () => breakpointMarker,
         domEventHandlers: {
           mousedown(view, line) {
+            //console.log(line);
             toggleBreakpoint(view, line.from);
             return true
           }
