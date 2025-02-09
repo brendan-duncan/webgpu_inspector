@@ -1,5 +1,7 @@
 import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
+import { Split } from "./widget/split.js";
+import { WgslDebug } from "wgsl_reflect/wgsl_reflect.module.js";
 
 import { EditorView } from "codemirror";
 import { keymap, highlightSpecialChars, drawSelection, dropCursor, gutter, GutterMarker,
@@ -218,13 +220,21 @@ export class ShaderDebugger extends Div {
 
         new Div(this.controls, { style: "flex-grow: 2;" });
 
+        const editorPanel = new Div(this, { style: "height: 100%;" });
+
+        const split = new Split(editorPanel, { direction: Split.Horizontal, position: 0.7 });
+        const pane1 = new Span(split, { style: "flex-grow: 1; overflow: hidden; height: 100%;" });
+        const pane2 = new Span(split, { style: "flex-grow: 1; overflow: hidden; height: 100%;" });
+
         this.editorView = new EditorView({
             doc: code,
             extensions: [
                 shaderEditorSetup
             ],
-            parent: this.element,
+            parent: pane1.element,
         });
+
+        this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: 100%;" });
     }
 
     debug() {
@@ -280,15 +290,30 @@ export class ShaderDebugger extends Div {
             }
         }
 
-        /*this.debugger = new WgslDebug(code);
-        const buffer = new Float32Array([1, 2, 6, 0]);
-        const bg = {0: {0: buffer}};
-        this.debugger.debugWorkgroup(kernelName, [idx, idy, idz], dispatchCount, bg);
-        this.update();*/
-        console.log("Debug", idx, idy, idz, dispatchCount, workgroupSize);
-        console.log(this.parentCommand);
+        const bindGroups = {};
+
+        this.pipelineState.bindGroups.forEach((bgCmd) => {
+            const index = bgCmd.args[0];
+            //const bg = this.database.getObject(bgCmd.args[1].__id);
+            const bufferData = this.pipelineState.bindGroups[index].bufferData;
+            let binding = 0;
+            const bindgroup = {};
+            for (const buffer of bufferData) {
+                bindgroup[binding++] = buffer;
+            }
+            bindGroups[index] = bindgroup;
+        });
+
+        console.log("Debug", idx, idy, idz, dispatchCount.toString(), workgroupSize.toString());
+        console.log(this.command);
         console.log(this.module?.reflection);
         console.log(this.pipelineState);
+        console.log(bindGroups);
+
+        const code = this.module.descriptor.code;
+        this.debugger = new WgslDebug(code);
+        this.debugger.debugWorkgroup(kernelName, [idx, idy, idz], dispatchCount, bindGroups);
+        this.update();
     }
 
     stepInto() {
@@ -322,73 +347,59 @@ export class ShaderDebugger extends Div {
             this._highlightLine(0);
         }
 
-        while (this.watch.childElementCount > 0) {
-            this.watch.removeChild(this.watch.children[0]);
-        }
+        if (this.watch) {
+            this.watch.removeAllChildren();
 
-        let state = this.debugger.currentState;
-        if (state === null) {
-            const context = this.debugger.context;
-            const currentFunctionName = context.currentFunctionName;
-            const div = document.createElement("div");
-            div.style.fontWeight = "bold";
-            div.innerText = currentFunctionName || "<shader>";
-            this.watch.appendChild(div);
-
-            context.variables.forEach((v, name) => {
-                if (!name.startsWith("@")) {
-                const div = document.createElement("div");
-                div.innerText = `${name} : ${v.value}`;
-                this.watch.appendChild(div);
-                }
-            });
-
-            const globals = document.createElement("div");
-            globals.style.marginTop = "10px";
-            globals.style.border = "1px solid black";
-            this.watch.appendChild(globals);
-            context.variables.forEach((v, name) => {
-                if (name.startsWith("@")) {
-                const div = document.createElement("div");
-                div.innerText = `${name} : ${v.value}`;
-                this.watch.appendChild(div);
-                }
-            });
-        } else {
-            let lastState = state;
-            while (state !== null) {
-                const context = state.context;
+            let state = this.debugger.currentState;
+            if (state === null) {
+                const context = this.debugger.context;
                 const currentFunctionName = context.currentFunctionName;
-                const div = document.createElement("div");
-                div.style.fontWeight = "bold";
-                div.innerText = currentFunctionName || "<shader>";
-                this.watch.appendChild(div);
+                const div = new Div(this.watch, { style: "font-weight: bold;" });
+                div.text = currentFunctionName || "<shader>";
 
                 context.variables.forEach((v, name) => {
                     if (!name.startsWith("@")) {
-                        const div = document.createElement("div");
-                        div.innerText = `${name} : ${v.value}`;
-                        this.watch.appendChild(div);
+                        const div = new Div(this.watch);
+                        div.text = `${name} : ${v.value}`;
                     }
                 });
 
-                lastState = state;
-                state = state.parent;
-            }
-
-            if (lastState) {
-                const context = lastState.context;
-                const globals = document.createElement("div");
-                globals.style.marginTop = "10px";
-                globals.style.border = "1px solid black";
-                this.watch.appendChild(globals);
+                const globals = new Div(this.watch, { style: "margin-top: 10px; border: 1px solid black;" });
                 context.variables.forEach((v, name) => {
-                if (name.startsWith("@")) {
-                    const div = document.createElement("div");
-                    div.innerText = `${name} : ${v.value}`;
-                    this.watch.appendChild(div);
-                }
+                    if (name.startsWith("@")) {
+                        const div = new Div(globals);
+                        div.text = `${name} : ${v.value}`;
+                    }
                 });
+            } else {
+                let lastState = state;
+                while (state !== null) {
+                    const context = state.context;
+                    const currentFunctionName = context.currentFunctionName;
+                    const div = new Div(this.watch, { style: "font-weight: bold;" });
+                    div.text = currentFunctionName || "<shader>";
+
+                    context.variables.forEach((v, name) => {
+                        if (!name.startsWith("@")) {
+                            const div = new Div(this.watch);
+                            div.text = `${name} : ${v.value}`;
+                        }
+                    });
+
+                    lastState = state;
+                    state = state.parent;
+                }
+
+                if (lastState) {
+                    const context = lastState.context;
+                    const globals = new Div(this.watch, { style: "margin-top: 10px; border: 1px solid black;" });
+                    context.variables.forEach((v, name) => {
+                        if (name.startsWith("@")) {
+                            const div = new Div(this.watch);
+                            div.text = `${name} : ${v.value}`;
+                        }
+                    });
+                }
             }
         }
     }

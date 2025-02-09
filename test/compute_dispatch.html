@@ -136,7 +136,7 @@ async function main() {
     // otherwise it will stop capturing when the device is garbage collected.
     // There isn't a good way to identify that the page is finished executing to know
     // the capture is finished.
-    //device.destroy();
+    device.destroy();
   }
 
   function log(...args) {

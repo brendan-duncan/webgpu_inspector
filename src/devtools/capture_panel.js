@@ -1924,7 +1924,7 @@ export class CapturePanel {
     const pipeline = this._getObject(id);
     const desc = pipeline.descriptor;
     const computeId = desc.compute?.module?.__id;
-    const editor = new ShaderDebugger(parentCommand, this._captureData, this.database, this);
+    const editor = new ShaderDebugger(parentCommand, this._captureData, this.database, this, { style: "overflow: hidden;" });
     this._captureTab.addTab(`Compute Module ID:${computeId}`, editor);
     this._captureTab.setActivePanel(editor);
   }

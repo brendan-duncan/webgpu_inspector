@@ -5006,6 +5006,3168 @@ var __webgpu_inspector_window = (function (exports) {
       return t.name;
   });
 
+  class Var {
+      constructor(n, v, node) {
+          this.name = n;
+          this.value = v;
+          this.node = node;
+      }
+      clone() {
+          return new Var(this.name, this.value, this.node);
+      }
+      getValue() {
+          return this.value;
+      }
+  }
+  class Function$2 {
+      constructor(node) {
+          this.name = node.name;
+          this.node = node;
+      }
+      clone() {
+          return new Function$2(this.node);
+      }
+  }
+  class ExecContext {
+      constructor(parent) {
+          this.parent = null;
+          this.variables = new Map();
+          this.functions = new Map();
+          this.currentFunctionName = "";
+          if (parent) {
+              this.parent = parent;
+              this.currentFunctionName = parent.currentFunctionName;
+          }
+      }
+      getVariable(name) {
+          var _a;
+          if (this.variables.has(name)) {
+              return (_a = this.variables.get(name)) !== null && _a !== void 0 ? _a : null;
+          }
+          if (this.parent) {
+              return this.parent.getVariable(name);
+          }
+          return null;
+      }
+      getFunction(name) {
+          var _a;
+          if (this.functions.has(name)) {
+              return (_a = this.functions.get(name)) !== null && _a !== void 0 ? _a : null;
+          }
+          if (this.parent) {
+              return this.parent.getFunction(name);
+          }
+          return null;
+      }
+      createVariable(name, value, node) {
+          this.variables.set(name, new Var(name, value, node !== null && node !== void 0 ? node : null));
+      }
+      setVariable(name, value, node) {
+          const v = this.getVariable(name);
+          if (v !== null) {
+              v.value = value;
+          }
+          else {
+              this.createVariable(name, value, node);
+          }
+      }
+      getVariableValue(name) {
+          var _a;
+          const v = this.getVariable(name);
+          return (_a = v === null || v === void 0 ? void 0 : v.value) !== null && _a !== void 0 ? _a : null;
+      }
+      clone() {
+          return new ExecContext(this);
+      }
+  }
+
+  class ExecInterface {
+      _evalExpression(node, context) {
+          return null;
+      }
+      _getTypeName(type) {
+          return "";
+      }
+  }
+
+  class Data {
+      constructor(typeInfo) {
+          this.typeInfo = typeInfo;
+      }
+      setDataValue(exec, value, postfix, context) {
+          console.error(`SetDataValue: Not implemented`, value, postfix);
+      }
+      getDataValue(exec, postfix, context) {
+          console.error(`GetDataValue: Not implemented`, postfix);
+          return null;
+      }
+  }
+  // Used to store array and struct data
+  class TypedData extends Data {
+      constructor(data, typeInfo, offset = 0, textureSize) {
+          super(typeInfo);
+          this.textureSize = [0, 0, 0];
+          this.buffer = data instanceof ArrayBuffer ? data : data.buffer;
+          this.offset = offset;
+          if (textureSize !== undefined) {
+              this.textureSize = textureSize;
+          }
+      }
+      setDataValue(exec, value, postfix, context) {
+          if (value === null) {
+              console.log("_setDataValue: NULL data");
+              return;
+          }
+          let offset = this.offset;
+          let typeInfo = this.typeInfo;
+          while (postfix) {
+              if (postfix instanceof ArrayIndex) {
+                  if (typeInfo instanceof ArrayInfo) {
+                      const idx = postfix.index;
+                      if (idx instanceof LiteralExpr) {
+                          offset += idx.value * typeInfo.stride;
+                      }
+                      else {
+                          const i = exec._evalExpression(idx, context);
+                          if (i !== null) {
+                              offset += i * typeInfo.stride;
+                          }
+                          else {
+                              console.error(`SetDataValue: Unknown index type`, idx);
+                              return;
+                          }
+                      }
+                      typeInfo = typeInfo.format;
+                  }
+                  else {
+                      console.error(`SetDataValue: Type ${exec._getTypeName(typeInfo)} is not an array`);
+                  }
+              }
+              else if (postfix instanceof StringExpr) {
+                  const member = postfix.value;
+                  if (typeInfo instanceof StructInfo) {
+                      let found = false;
+                      for (const m of typeInfo.members) {
+                          if (m.name === member) {
+                              offset += m.offset;
+                              typeInfo = m.type;
+                              found = true;
+                              break;
+                          }
+                      }
+                      if (!found) {
+                          console.error(`SetDataValue: Member ${member} not found`);
+                          return;
+                      }
+                  }
+                  else if (typeInfo instanceof TypeInfo) {
+                      const typeName = exec._getTypeName(typeInfo);
+                      let element = 0;
+                      if (member === "x" || member === "r") {
+                          element = 0;
+                      }
+                      else if (member === "y" || member === "g") {
+                          element = 1;
+                      }
+                      else if (member === "z" || member === "b") {
+                          element = 2;
+                      }
+                      else if (member === "w" || member === "a") {
+                          element = 3;
+                      }
+                      else {
+                          console.error(`SetDataValue: Unknown member ${member}`);
+                          return;
+                      }
+                      if (typeName === "vec2f") {
+                          new Float32Array(this.buffer, offset, 2)[element] = value;
+                          return;
+                      }
+                      else if (typeName === "vec3f") {
+                          new Float32Array(this.buffer, offset, 3)[element] = value;
+                          return;
+                      }
+                      else if (typeName === "vec4f") {
+                          new Float32Array(this.buffer, offset, 4)[element] = value;
+                          return;
+                      }
+                      else if (typeName === "vec2i") {
+                          new Int32Array(this.buffer, offset, 2)[element] = value;
+                          return;
+                      }
+                      else if (typeName === "vec3i") {
+                          new Int32Array(this.buffer, offset, 3)[element] = value;
+                          return;
+                      }
+                      else if (typeName === "vec4i") {
+                          new Int32Array(this.buffer, offset, 4)[element] = value;
+                          return;
+                      }
+                      else if (typeName === "vec2u") {
+                          new Uint32Array(this.buffer, offset, 2)[element] = value;
+                          return;
+                      }
+                      else if (typeName === "vec3u") {
+                          new Uint32Array(this.buffer, offset, 3)[element] = value;
+                          return;
+                      }
+                      else if (typeName === "vec4u") {
+                          new Uint32Array(this.buffer, offset, 4)[element] = value;
+                          return;
+                      }
+                      console.error(`SetDataValue: Type ${typeName} is not a struct`);
+                      return;
+                  }
+              }
+              else {
+                  console.error(`SetDataValue: Unknown postfix type`, postfix);
+                  return;
+              }
+              postfix = postfix.postfix;
+          }
+          this.setData(exec, value, typeInfo, offset, context);
+      }
+      setData(exec, value, typeInfo, offset, context) {
+          const typeName = exec._getTypeName(typeInfo);
+          if (typeName === "f32") {
+              new Float32Array(this.buffer, offset, 1)[0] = value;
+              return;
+          }
+          else if (typeName === "i32") {
+              new Int32Array(this.buffer, offset, 1)[0] = value;
+              return;
+          }
+          else if (typeName === "u32") {
+              new Uint32Array(this.buffer, offset, 1)[0] = value;
+              return;
+          }
+          else if (typeName === "vec2f") {
+              const x = new Float32Array(this.buffer, offset, 2);
+              x[0] = value[0];
+              x[1] = value[1];
+              return;
+          }
+          else if (typeName === "vec3f") {
+              const x = new Float32Array(this.buffer, offset, 3);
+              x[0] = value[0];
+              x[1] = value[1];
+              x[2] = value[2];
+              return;
+          }
+          else if (typeName === "vec4f") {
+              const x = new Float32Array(this.buffer, offset, 4);
+              x[0] = value[0];
+              x[1] = value[1];
+              x[2] = value[2];
+              x[3] = value[3];
+              return;
+          }
+          else if (typeName === "vec2i") {
+              const x = new Int32Array(this.buffer, offset, 2);
+              x[0] = value[0];
+              x[1] = value[1];
+              return;
+          }
+          else if (typeName === "vec3i") {
+              const x = new Int32Array(this.buffer, offset, 3);
+              x[0] = value[0];
+              x[1] = value[1];
+              x[2] = value[2];
+              return;
+          }
+          else if (typeName === "vec4i") {
+              const x = new Int32Array(this.buffer, offset, 4);
+              x[0] = value[0];
+              x[1] = value[1];
+              x[2] = value[2];
+              x[3] = value[3];
+              return;
+          }
+          else if (typeName === "vec2u") {
+              const x = new Uint32Array(this.buffer, offset, 2);
+              x[0] = value[0];
+              x[1] = value[1];
+              return;
+          }
+          else if (typeName === "vec3u") {
+              const x = new Uint32Array(this.buffer, offset, 3);
+              x[0] = value[0];
+              x[1] = value[1];
+              x[2] = value[2];
+              return;
+          }
+          else if (typeName === "vec4u") {
+              const x = new Uint32Array(this.buffer, offset, 4);
+              x[0] = value[0];
+              x[1] = value[1];
+              x[2] = value[2];
+              x[3] = value[3];
+              return;
+          }
+          if (value instanceof TypedData) {
+              if (typeInfo === value.typeInfo) {
+                  const x = new Uint8Array(this.buffer, offset, value.buffer.byteLength);
+                  x.set(new Uint8Array(value.buffer));
+                  return;
+              }
+              else {
+                  console.error(`SetDataValue: Type mismatch`, typeName, exec._getTypeName(value.typeInfo));
+                  return;
+              }
+          }
+          console.error(`SetDataValue: Unknown type ${typeName}`);
+      }
+      getDataValue(exec, postfix, context) {
+          let offset = this.offset;
+          let typeInfo = this.typeInfo;
+          while (postfix) {
+              if (postfix instanceof ArrayIndex) {
+                  if (typeInfo instanceof ArrayInfo) {
+                      const idx = postfix.index;
+                      if (idx instanceof LiteralExpr) {
+                          offset += idx.value * typeInfo.stride;
+                      }
+                      else {
+                          const i = exec._evalExpression(idx, context);
+                          if (i !== null) {
+                              offset += i * typeInfo.stride;
+                          }
+                          else {
+                              console.error(`GetDataValue: Unknown index type`, idx);
+                              return null;
+                          }
+                      }
+                      typeInfo = typeInfo.format;
+                  }
+                  else {
+                      console.error(`Type ${exec._getTypeName(typeInfo)} is not an array`);
+                  }
+              }
+              else if (postfix instanceof StringExpr) {
+                  const member = postfix.value;
+                  if (typeInfo instanceof StructInfo) {
+                      let found = false;
+                      for (const m of typeInfo.members) {
+                          if (m.name === member) {
+                              offset += m.offset;
+                              typeInfo = m.type;
+                              found = true;
+                              break;
+                          }
+                      }
+                      if (!found) {
+                          console.error(`GetDataValue: Member ${member} not found`);
+                          return null;
+                      }
+                  }
+                  else if (typeInfo instanceof TypeInfo) {
+                      const typeName = exec._getTypeName(typeInfo);
+                      if (typeName === "vec2f" || typeName === "vec3f" || typeName === "vec4f" ||
+                          typeName === "vec2i" || typeName === "vec3i" || typeName === "vec4i" ||
+                          typeName === "vec2u" || typeName === "vec3u" || typeName === "vec4u" ||
+                          typeName === "vec2b" || typeName === "vec3b" || typeName === "vec4b" ||
+                          typeName === "vec2h" || typeName === "vec3h" || typeName === "vec4h" ||
+                          typeName === "vec2" || typeName === "vec3" || typeName === "vec4") {
+                          if (member.length > 0 && member.length < 5) {
+                              const value = [];
+                              for (let i = 0; i < member.length; ++i) {
+                                  const m = member[i].toLocaleLowerCase();
+                                  let element = 0;
+                                  if (m === "x" || m === "r") {
+                                      element = 0;
+                                  }
+                                  else if (m === "y" || m === "g") {
+                                      element = 1;
+                                  }
+                                  else if (m === "z" || m === "b") {
+                                      element = 2;
+                                  }
+                                  else if (m === "w" || m === "a") {
+                                      element = 3;
+                                  }
+                                  else {
+                                      console.error(`Unknown member ${member}`);
+                                      return null;
+                                  }
+                                  if (typeName === "vec2f") {
+                                      value.push(new Float32Array(this.buffer, offset, 2)[element]);
+                                  }
+                                  else if (typeName === "vec3f") {
+                                      if ((offset + 12) >= this.buffer.byteLength) {
+                                          console.log("Insufficient buffer data");
+                                          return null;
+                                      }
+                                      const fa = new Float32Array(this.buffer, offset, 3);
+                                      value.push(fa[element]);
+                                  }
+                                  else if (typeName === "vec4f") {
+                                      value.push(new Float32Array(this.buffer, offset, 4)[element]);
+                                  }
+                                  else if (typeName === "vec2i") {
+                                      value.push(new Int32Array(this.buffer, offset, 2)[element]);
+                                  }
+                                  else if (typeName === "vec3i") {
+                                      value.push(new Int32Array(this.buffer, offset, 3)[element]);
+                                  }
+                                  else if (typeName === "vec4i") {
+                                      value.push(new Int32Array(this.buffer, offset, 4)[element]);
+                                  }
+                                  else if (typeName === "vec2u") {
+                                      const ua = new Uint32Array(this.buffer, offset, 2);
+                                      value.push(ua[element]);
+                                  }
+                                  else if (typeName === "vec3u") {
+                                      value.push(new Uint32Array(this.buffer, offset, 3)[element]);
+                                  }
+                                  else if (typeName === "vec4u") {
+                                      value.push(new Uint32Array(this.buffer, offset, 4)[element]);
+                                  }
+                              }
+                              if (value.length === 1) {
+                                  return value[0];
+                              }
+                              return value;
+                          }
+                          else {
+                              console.error(`GetDataValue: Unknown member ${member}`);
+                              return null;
+                          }
+                      }
+                      console.error(`GetDataValue: Type ${typeName} is not a struct`);
+                      return null;
+                  }
+              }
+              else {
+                  console.error(`GetDataValue: Unknown postfix type`, postfix);
+                  return null;
+              }
+              postfix = postfix.postfix;
+          }
+          const typeName = exec._getTypeName(typeInfo);
+          if (typeName === "f32") {
+              return new Float32Array(this.buffer, offset, 1)[0];
+          }
+          else if (typeName === "i32") {
+              return new Int32Array(this.buffer, offset, 1)[0];
+          }
+          else if (typeName === "u32") {
+              return new Uint32Array(this.buffer, offset, 1)[0];
+          }
+          else if (typeName === "vec2f") {
+              return new Float32Array(this.buffer, offset, 2);
+          }
+          else if (typeName === "vec3f") {
+              return new Float32Array(this.buffer, offset, 3);
+          }
+          else if (typeName === "vec4f") {
+              return new Float32Array(this.buffer, offset, 4);
+          }
+          else if (typeName === "vec2i") {
+              return new Int32Array(this.buffer, offset, 2);
+          }
+          else if (typeName === "vec3i") {
+              return new Int32Array(this.buffer, offset, 3);
+          }
+          else if (typeName === "vec4i") {
+              return new Int32Array(this.buffer, offset, 4);
+          }
+          else if (typeName === "vec2u") {
+              return new Uint32Array(this.buffer, offset, 2);
+          }
+          else if (typeName === "vec3u") {
+              return new Uint32Array(this.buffer, offset, 3);
+          }
+          else if (typeName === "vec4u") {
+              return new Uint32Array(this.buffer, offset, 4);
+          }
+          return new TypedData(this.buffer, typeInfo, offset);
+      }
+  }
+
+  class BuiltinFunctions {
+      constructor(exec) {
+          this.exec = exec;
+      }
+      // Logical Built-in Functions
+      All(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          let isTrue = true;
+          value.forEach((x) => { if (!x)
+              isTrue = false; });
+          return isTrue;
+      }
+      Any(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          return value.some((v) => v);
+      }
+      Select(node, context) {
+          const condition = this.exec._evalExpression(node.args[2], context);
+          if (condition) {
+              return this.exec._evalExpression(node.args[0], context);
+          }
+          else {
+              return this.exec._evalExpression(node.args[1], context);
+          }
+      }
+      // Array Built-in Functions
+      ArrayLength(node, context) {
+          let arrayArg = node.args[0];
+          // TODO: handle "&" operator
+          if (arrayArg instanceof UnaryOperator) {
+              arrayArg = arrayArg.right;
+          }
+          const arrayData = this.exec._evalExpression(arrayArg, context);
+          if (arrayData.typeInfo.size === 0) {
+              const count = arrayData.buffer.byteLength / arrayData.typeInfo.stride;
+              return count;
+          }
+          return arrayData.typeInfo.size;
+      }
+      // Numeric Built-in Functions
+      Abs(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.abs(v));
+          }
+          return Math.abs(value);
+      }
+      Acos(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.acos(v));
+          }
+          return Math.acos(value);
+      }
+      Acosh(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.acosh(v));
+          }
+          return Math.acosh(value);
+      }
+      Asin(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.asin(v));
+          }
+          return Math.asin(value);
+      }
+      Asinh(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.asinh(v));
+          }
+          return Math.asinh(value);
+      }
+      Atan(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.atan(v));
+          }
+          return Math.atan(value);
+      }
+      Atanh(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.atanh(v));
+          }
+          return Math.atanh(value);
+      }
+      Atan2(node, context) {
+          const y = this.exec._evalExpression(node.args[0], context);
+          const x = this.exec._evalExpression(node.args[1], context);
+          if (y.length !== undefined) {
+              return y.map((v, i) => Math.atan2(v, x[i]));
+          }
+          return Math.atan2(y, x);
+      }
+      Ceil(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.ceil(v));
+          }
+          return Math.ceil(value);
+      }
+      _clamp(value, min, max) {
+          return Math.min(Math.max(value, min), max);
+      }
+      Clamp(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          const min = this.exec._evalExpression(node.args[1], context);
+          const max = this.exec._evalExpression(node.args[2], context);
+          if (value instanceof Array) {
+              return value.map((v, i) => this._clamp(v, min[i], max[i]));
+          }
+          return this._clamp(value, min, max);
+      }
+      Cos(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.cos(v));
+          }
+          return Math.cos(value);
+      }
+      Cosh(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.cosh(v));
+          }
+          return Math.cosh(value);
+      }
+      CountLeadingZeros(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.clz32(v));
+          }
+          return Math.clz32(value);
+      }
+      _countOneBits(value) {
+          let count = 0;
+          while (value !== 0) {
+              if (value & 1) {
+                  count++;
+              }
+              value >>= 1;
+          }
+          return count;
+      }
+      CountOneBits(node, context) {
+          let x = this.exec._evalExpression(node.args[0], context);
+          if (x instanceof Array) {
+              return x.map((v) => this._countOneBits(v));
+          }
+          return this._countOneBits(x);
+      }
+      _countTrailingZeros(value) {
+          if (value === 0) {
+              return 32; // Special case for 0
+          }
+          let count = 0;
+          while ((value & 1) === 0) {
+              value >>= 1;
+              count++;
+          }
+          return count;
+      }
+      CountTrailingZeros(node, context) {
+          let x = this.exec._evalExpression(node.args[0], context);
+          if (x instanceof Array) {
+              return x.map((v) => this._countTrailingZeros(v));
+          }
+          this._countTrailingZeros(x);
+      }
+      Cross(node, context) {
+          const l = this.exec._evalExpression(node.args[0], context);
+          const r = this.exec._evalExpression(node.args[1], context);
+          return [
+              l[1] * r[2] - r[1] * l[2],
+              l[2] * r[0] - r[2] * l[0],
+              l[0] * r[1] - r[0] * l[1],
+          ];
+      }
+      Degrees(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          const radToDeg = 180.0 / Math.PI;
+          if (value instanceof Array) {
+              return value.map((v) => v * radToDeg);
+          }
+          return value * radToDeg;
+      }
+      Determinant(node, context) {
+          const m = this.exec._evalExpression(node.args[0], context);
+          // TODO: get the dimensions of the matrix
+          if (m.length === 4) {
+              return m[0] * m[3] - m[1] * m[2];
+          }
+          console.error(`TODO: determinant for matrix. Line ${node.line}`);
+          return null;
+      }
+      Distance(node, context) {
+          const l = this.exec._evalExpression(node.args[0], context);
+          const r = this.exec._evalExpression(node.args[1], context);
+          let sum = 0;
+          for (let i = 0; i < l.length; ++i) {
+              sum += (l[i] - r[i]) * (l[i] - r[i]);
+          }
+          return Math.sqrt(sum);
+      }
+      _dot(e1, e2) {
+          let dot = 0;
+          for (let i = 0; i < e1.length; ++i) {
+              dot += e2[i] * e1[i];
+          }
+          return dot;
+      }
+      Dot(node, context) {
+          const l = this.exec._evalExpression(node.args[0], context);
+          const r = this.exec._evalExpression(node.args[1], context);
+          return this._dot(l, r);
+      }
+      Dot4U8Packed(node, context) {
+          console.error("TODO: dot4U8Packed");
+          return null;
+      }
+      Dot4I8Packed(node, context) {
+          console.error("TODO: dot4I8Packed");
+          return null;
+      }
+      Exp(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.exp(v));
+          }
+          return Math.exp(value);
+      }
+      Exp2(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.pow(2, v));
+          }
+          return Math.pow(2, value);
+      }
+      ExtractBits(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          const offset = this.exec._evalExpression(node.args[1], context);
+          const count = this.exec._evalExpression(node.args[2], context);
+          return (value >> offset) & ((1 << count) - 1);
+      }
+      FaceForward(node, context) {
+          console.error("TODO: faceForward");
+          return null;
+      }
+      FirstLeadingBit(node, context) {
+          console.error("TODO: firstLeadingBit");
+          return null;
+      }
+      FirstTrailingBit(node, context) {
+          console.error("TODO: firstTrailingBit");
+          return null;
+      }
+      Floor(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.floor(v));
+          }
+          return Math.floor(value);
+      }
+      Fma(node, context) {
+          const a = this.exec._evalExpression(node.args[0], context);
+          const b = this.exec._evalExpression(node.args[1], context);
+          const c = this.exec._evalExpression(node.args[2], context);
+          if (a.length !== undefined) {
+              return a.map((v, i) => v * b[i] + c[i]);
+          }
+          return a * b + c;
+      }
+      Fract(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => v - Math.floor(v));
+          }
+          return value - Math.floor(value);
+      }
+      Frexp(node, context) {
+          console.error("TODO: frexp");
+          return null;
+      }
+      InsertBits(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          const insert = this.exec._evalExpression(node.args[1], context);
+          const offset = this.exec._evalExpression(node.args[2], context);
+          const count = this.exec._evalExpression(node.args[3], context);
+          const mask = ((1 << count) - 1) << offset;
+          return (value & ~mask) | ((insert << offset) & mask);
+      }
+      InverseSqrt(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => 1 / Math.sqrt(v));
+          }
+          return 1 / Math.sqrt(value);
+      }
+      Ldexp(node, context) {
+          console.error("TODO: ldexp");
+          return null;
+      }
+      Length(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          let sum = this._dot(value, value);
+          return Math.sqrt(sum);
+      }
+      Log(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.log(v));
+          }
+          return Math.log(value);
+      }
+      Log2(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.log2(v));
+          }
+          return Math.log2(value);
+      }
+      Max(node, context) {
+          const l = this.exec._evalExpression(node.args[0], context);
+          const r = this.exec._evalExpression(node.args[1], context);
+          if (l instanceof Array) {
+              return l.map((v, i) => Math.max(v, r[i]));
+          }
+          return Math.max(l, r);
+      }
+      Min(node, context) {
+          const l = this.exec._evalExpression(node.args[0], context);
+          const r = this.exec._evalExpression(node.args[1], context);
+          if (l instanceof Array) {
+              return l.map((v, i) => Math.min(v, r[i]));
+          }
+          return Math.min(l, r);
+      }
+      Mix(node, context) {
+          const x = this.exec._evalExpression(node.args[0], context);
+          const y = this.exec._evalExpression(node.args[1], context);
+          const a = this.exec._evalExpression(node.args[2], context);
+          if (x instanceof Array) {
+              return x.map((v, i) => x[i] * (1 - a[i]) + y[i] * a[i]);
+          }
+          return x * (1 - a) + y * a;
+      }
+      Modf(node, context) {
+          const x = this.exec._evalExpression(node.args[0], context);
+          const y = this.exec._evalExpression(node.args[1], context);
+          if (x instanceof Array) {
+              return x.map((v, i) => v % y[i]);
+          }
+          return x % y;
+      }
+      Normalize(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          const length = this.Length(node, context);
+          return value.map((v) => v / length);
+      }
+      Pow(node, context) {
+          const x = this.exec._evalExpression(node.args[0], context);
+          const y = this.exec._evalExpression(node.args[1], context);
+          if (x instanceof Array) {
+              return x.map((v, i) => Math.pow(v, y[i]));
+          }
+          return Math.pow(x, y);
+      }
+      QuantizeToF16(node, context) {
+          console.error("TODO: quantizeToF16");
+          return null;
+      }
+      Radians(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => v * Math.PI / 180);
+          }
+          return value * Math.PI / 180;
+      }
+      Reflect(node, context) {
+          // e1 - 2 * dot(e2, e1) * e2
+          let e1 = this.exec._evalExpression(node.args[0], context);
+          let e2 = this.exec._evalExpression(node.args[1], context);
+          let dot = this._dot(e1, e2);
+          return e1.map((v, i) => v - 2 * dot * e2[i]);
+      }
+      Refract(node, context) {
+          let e1 = this.exec._evalExpression(node.args[0], context);
+          let e2 = this.exec._evalExpression(node.args[1], context);
+          let e3 = this.exec._evalExpression(node.args[2], context);
+          let dot = this.Dot(e2, e1);
+          const k = 1.0 - e3 * e3 * (1.0 - dot * dot);
+          if (k < 0) {
+              return e1.map((v) => 0);
+          }
+          const sqrtK = Math.sqrt(k);
+          return e1.map((v, i) => e3 * v - (e3 * dot + sqrtK) * e2[i]);
+      }
+      ReverseBits(node, context) {
+          console.error("TODO: reverseBits");
+          return null;
+      }
+      Round(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.round(v));
+          }
+          return Math.round(value);
+      }
+      Saturate(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.min(Math.max(v, 0), 1));
+          }
+          return Math.min(Math.max(value, 0), 1);
+      }
+      Sign(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.sign(v));
+          }
+          return Math.sign(value);
+      }
+      Sin(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.sin(v));
+          }
+          return Math.sin(value);
+      }
+      Sinh(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.sinh(v));
+          }
+          return Math.sinh(value);
+      }
+      _smoothstep(edge0, edge1, x) {
+          const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
+          return t * t * (3 - 2 * t);
+      }
+      SmoothStep(node, context) {
+          const edge0 = this.exec._evalExpression(node.args[0], context);
+          const edge1 = this.exec._evalExpression(node.args[1], context);
+          const x = this.exec._evalExpression(node.args[2], context);
+          if (x instanceof Array) {
+              return x.map((v, i) => this._smoothstep(edge0[i], edge1[i], v));
+          }
+          return this._smoothstep(edge0, edge1, x);
+      }
+      Sqrt(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.sqrt(v));
+          }
+          return Math.sqrt(value);
+      }
+      Step(node, context) {
+          const edge = this.exec._evalExpression(node.args[0], context);
+          const x = this.exec._evalExpression(node.args[1], context);
+          if (x instanceof Array) {
+              return x.map((v, i) => v < edge[i] ? 0 : 1);
+          }
+          return x < edge ? 0 : 1;
+      }
+      Tan(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.tan(v));
+          }
+          return Math.tan(value);
+      }
+      Tanh(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.tanh(v));
+          }
+          return Math.tanh(value);
+      }
+      Transpose(node, context) {
+          console.error("TODO: transpose");
+          return null;
+      }
+      Trunc(node, context) {
+          const value = this.exec._evalExpression(node.args[0], context);
+          if (value instanceof Array) {
+              return value.map((v) => Math.trunc(v));
+          }
+          return Math.trunc(value);
+      }
+      // Derivative Built-in Functions
+      Dpdx(node, context) {
+          console.error("TODO: dpdx");
+          return null;
+      }
+      DpdxCoarse(node, context) {
+          console.error("TODO: dpdxCoarse");
+          return null;
+      }
+      DpdxFine(node, context) {
+          console.error("TODO: dpdxFine");
+          return null;
+      }
+      Dpdy(node, context) {
+          console.error("TODO: dpdy");
+          return null;
+      }
+      DpdyCoarse(node, context) {
+          console.error("TODO: dpdyCoarse");
+          return null;
+      }
+      DpdyFine(node, context) {
+          console.error("TODO: dpdyFine");
+          return null;
+      }
+      Fwidth(node, context) {
+          console.error("TODO: fwidth");
+          return null;
+      }
+      FwidthCoarse(node, context) {
+          console.error("TODO: fwidthCoarse");
+          return null;
+      }
+      FwidthFine(node, context) {
+          console.error("TODO: fwidthFine");
+          return null;
+      }
+      // Texture Built-in Functions
+      TextureDimensions(node, context) {
+          const textureArg = node.args[0];
+          node.args.length > 1 ? this.exec._evalExpression(node.args[1], context) : 0;
+          if (textureArg instanceof VariableExpr) {
+              const textureName = textureArg.name;
+              const texture = context.getVariableValue(textureName);
+              if (texture instanceof TypedData) {
+                  return texture.textureSize;
+              }
+              else {
+                  console.error(`Texture ${textureName} not found. Line ${node.line}`);
+                  return null;
+              }
+          }
+          console.error(`Invalid texture argument for textureDimensions. Line ${node.line}`);
+          return null;
+      }
+      TextureGather(node, context) {
+          console.error("TODO: textureGather");
+          return null;
+      }
+      TextureGatherCompare(node, context) {
+          console.error("TODO: textureGatherCompare");
+          return null;
+      }
+      TextureLoad(node, context) {
+          const textureArg = node.args[0];
+          const uv = this.exec._evalExpression(node.args[1], context);
+          node.args.length > 2 ? this.exec._evalExpression(node.args[2], context) : 0;
+          if (textureArg instanceof VariableExpr) {
+              const textureName = textureArg.name;
+              const texture = context.getVariableValue(textureName);
+              if (texture instanceof TypedData) {
+                  const textureSize = texture.textureSize;
+                  const x = Math.floor(uv[0]);
+                  const y = Math.floor(uv[1]);
+                  // TODO non RGBA8 textures
+                  const offset = (y * textureSize[0] + x) * 4;
+                  const texel = new Uint8Array(texture.buffer, offset, 4);
+                  // TODO: non-f32 textures
+                  return [texel[0] / 255, texel[1] / 255, texel[2] / 255, texel[3] / 255];
+              }
+              else {
+                  console.error(`Texture ${textureName} not found. Line ${node.line}`);
+                  return null;
+              }
+          }
+          return null;
+      }
+      TextureNumLayers(node, context) {
+          console.error("TODO: textureNumLayers");
+          return null;
+      }
+      TextureNumLevels(node, context) {
+          console.error("TODO: textureNumLevels");
+          return null;
+      }
+      TextureNumSamples(node, context) {
+          console.error("TODO: textureNumSamples");
+          return null;
+      }
+      TextureSample(node, context) {
+          console.error("TODO: textureSample");
+          return null;
+      }
+      TextureSampleBias(node, context) {
+          console.error("TODO: textureSampleBias");
+          return null;
+      }
+      TextureSampleCompare(node, context) {
+          console.error("TODO: textureSampleCompare");
+          return null;
+      }
+      TextureSampleCompareLevel(node, context) {
+          console.error("TODO: textureSampleCompareLevel");
+          return null;
+      }
+      TextureSampleGrad(node, context) {
+          console.error("TODO: textureSampleGrad");
+          return null;
+      }
+      TextureSampleLevel(node, context) {
+          console.error("TODO: textureSampleLevel");
+          return null;
+      }
+      TextureSampleBaseClampToEdge(node, context) {
+          console.error("TODO: textureSampleBaseClampToEdge");
+          return null;
+      }
+      TextureStore(node, context) {
+          console.error("TODO: textureStore");
+          return null;
+      }
+      // Atomic Built-in Functions
+      AtomicLoad(node, context) {
+          console.error("TODO: atomicLoad");
+          return null;
+      }
+      AtomicStore(node, context) {
+          console.error("TODO: atomicStore");
+          return null;
+      }
+      AtomicAdd(node, context) {
+          console.error("TODO: atomicAdd");
+          return null;
+      }
+      AtomicSub(node, context) {
+          console.error("TODO: atomicSub");
+          return null;
+      }
+      AtomicMax(node, context) {
+          console.error("TODO: atomicMax");
+          return null;
+      }
+      AtomicMin(node, context) {
+          console.error("TODO: atomicMin");
+          return null;
+      }
+      AtomicAnd(node, context) {
+          console.error("TODO: atomicAnd");
+          return null;
+      }
+      AtomicOr(node, context) {
+          console.error("TODO: atomicOr");
+          return null;
+      }
+      AtomicXor(node, context) {
+          console.error("TODO: atomicXor");
+          return null;
+      }
+      AtomicExchange(node, context) {
+          console.error("TODO: atomicExchange");
+          return null;
+      }
+      AtomicCompareExchangeWeak(node, context) {
+          console.error("TODO: atomicCompareExchangeWeak");
+          return null;
+      }
+      // Data Packing Built-in Functions
+      Pack4x8snorm(node, context) {
+          console.error("TODO: pack4x8snorm");
+          return null;
+      }
+      Pack4x8unorm(node, context) {
+          console.error("TODO: pack4x8unorm");
+          return null;
+      }
+      Pack4xI8(node, context) {
+          console.error("TODO: pack4xI8");
+          return null;
+      }
+      Pack4xU8(node, context) {
+          console.error("TODO: pack4xU8");
+          return null;
+      }
+      Pack4x8Clamp(node, context) {
+          console.error("TODO: pack4x8Clamp");
+          return null;
+      }
+      Pack4xU8Clamp(node, context) {
+          console.error("TODO: pack4xU8Clamp");
+          return null;
+      }
+      Pack2x16snorm(node, context) {
+          console.error("TODO: pack2x16snorm");
+          return null;
+      }
+      Pack2x16unorm(node, context) {
+          console.error("TODO: pack2x16unorm");
+          return null;
+      }
+      Pack2x16float(node, context) {
+          console.error("TODO: pack2x16float");
+          return null;
+      }
+      // Data Unpacking Built-in Functions
+      Unpack4x8snorm(node, context) {
+          console.error("TODO: unpack4x8snorm");
+          return null;
+      }
+      Unpack4x8unorm(node, context) {
+          console.error("TODO: unpack4x8unorm");
+          return null;
+      }
+      Unpack4xI8(node, context) {
+          console.error("TODO: unpack4xI8");
+          return null;
+      }
+      Unpack4xU8(node, context) {
+          console.error("TODO: unpack4xU8");
+          return null;
+      }
+      Unpack2x16snorm(node, context) {
+          console.error("TODO: unpack2x16snorm");
+          return null;
+      }
+      Unpack2x16unorm(node, context) {
+          console.error("TODO: unpack2x16unorm");
+          return null;
+      }
+      Unpack2x16float(node, context) {
+          console.error("TODO: unpack2x16float");
+          return null;
+      }
+      // Synchronization Functions
+      StorageBarrier(node, context) {
+          // Execution is single threaded, barriers not necessary.
+          return null;
+      }
+      TextureBarrier(node, context) {
+          // Execution is single threaded, barriers not necessary.
+          return null;
+      }
+      WorkgroupBarrier(node, context) {
+          // Execution is single threaded, barriers not necessary.
+          return null;
+      }
+      WorkgroupUniformLoad(node, context) {
+          // Execution is single threaded, barriers not necessary.
+          return null;
+      }
+      // Subgroup Functions
+      SubgroupAdd(node, context) {
+          console.error("TODO: subgroupAdd");
+          return null;
+      }
+      SubgroupExclusiveAdd(node, context) {
+          console.error("TODO: subgroupExclusiveAdd");
+          return null;
+      }
+      SubgroupInclusiveAdd(node, context) {
+          console.error("TODO: subgroupInclusiveAdd");
+          return null;
+      }
+      SubgroupAll(node, context) {
+          console.error("TODO: subgroupAll");
+          return null;
+      }
+      SubgroupAnd(node, context) {
+          console.error("TODO: subgroupAnd");
+          return null;
+      }
+      SubgroupAny(node, context) {
+          console.error("TODO: subgroupAny");
+          return null;
+      }
+      SubgroupBallot(node, context) {
+          console.error("TODO: subgroupBallot");
+          return null;
+      }
+      SubgroupBroadcast(node, context) {
+          console.error("TODO: subgroupBroadcast");
+          return null;
+      }
+      SubgroupBroadcastFirst(node, context) {
+          console.error("TODO: subgroupBroadcastFirst");
+          return null;
+      }
+      SubgroupElect(node, context) {
+          console.error("TODO: subgroupElect");
+          return null;
+      }
+      SubgroupMax(node, context) {
+          console.error("TODO: subgroupMax");
+          return null;
+      }
+      SubgroupMin(node, context) {
+          console.error("TODO: subgroupMin");
+          return null;
+      }
+      SubgroupMul(node, context) {
+          console.error("TODO: subgroupMul");
+          return null;
+      }
+      SubgroupExclusiveMul(node, context) {
+          console.error("TODO: subgroupExclusiveMul");
+          return null;
+      }
+      SubgroupInclusiveMul(node, context) {
+          console.error("TODO: subgroupInclusiveMul");
+          return null;
+      }
+      SubgroupOr(node, context) {
+          console.error("TODO: subgroupOr");
+          return null;
+      }
+      SubgroupShuffle(node, context) {
+          console.error("TODO: subgroupShuffle");
+          return null;
+      }
+      SubgroupShuffleDown(node, context) {
+          console.error("TODO: subgroupShuffleDown");
+          return null;
+      }
+      SubgroupShuffleUp(node, context) {
+          console.error("TODO: subgroupShuffleUp");
+          return null;
+      }
+      SubgroupShuffleXor(node, context) {
+          console.error("TODO: subgroupShuffleXor");
+          return null;
+      }
+      SubgroupXor(node, context) {
+          console.error("TODO: subgroupXor");
+          return null;
+      }
+      // Quad Functions
+      QuadBroadcast(node, context) {
+          console.error("TODO: quadBroadcast");
+          return null;
+      }
+      QuadSwapDiagonal(node, context) {
+          console.error("TODO: quadSwapDiagonal");
+          return null;
+      }
+      QuadSwapX(node, context) {
+          console.error("TODO: quadSwapX");
+          return null;
+      }
+      QuadSwapY(node, context) {
+          console.error("TODO: quadSwapY");
+          return null;
+      }
+  }
+
+  class WgslExec extends ExecInterface {
+      constructor(code, context) {
+          var _a;
+          super();
+          const parser = new WgslParser();
+          this.ast = parser.parse(code);
+          this.reflection = new WgslReflect();
+          this.reflection.updateAST(this.ast);
+          this.context = (_a = context === null || context === void 0 ? void 0 : context.clone()) !== null && _a !== void 0 ? _a : new ExecContext();
+          this.builtins = new BuiltinFunctions(this);
+      }
+      getVariableValue(name) {
+          return this.context.getVariableValue(name);
+      }
+      execute(config) {
+          config = config !== null && config !== void 0 ? config : {};
+          if (config["constants"]) {
+              for (const k in config["constants"]) {
+                  const v = config["constants"][k];
+                  this.context.setVariable(k, v);
+              }
+          }
+          this._execStatements(this.ast, this.context);
+      }
+      dispatchWorkgroups(kernel, dispatchCount, bindGroups, config) {
+          const context = this.context.clone();
+          config = config !== null && config !== void 0 ? config : {};
+          if (config["constants"]) {
+              for (const k in config["constants"]) {
+                  const v = config["constants"][k];
+                  context.setVariable(k, v);
+              }
+          }
+          this._execStatements(this.ast, context);
+          const f = context.functions.get(kernel);
+          if (!f) {
+              console.error(`Function ${kernel} not found`);
+              return;
+          }
+          if (typeof dispatchCount === "number") {
+              dispatchCount = [dispatchCount, 1, 1];
+          }
+          else if (dispatchCount.length === 0) {
+              console.error(`Invalid dispatch count`);
+              return;
+          }
+          else if (dispatchCount.length === 1) {
+              dispatchCount = [dispatchCount[0], 1, 1];
+          }
+          else if (dispatchCount.length === 2) {
+              dispatchCount = [dispatchCount[0], dispatchCount[1], 1];
+          }
+          else if (dispatchCount.length > 3) {
+              dispatchCount = [dispatchCount[0], dispatchCount[1], dispatchCount[2]];
+          }
+          const depth = dispatchCount[2];
+          const height = dispatchCount[1];
+          const width = dispatchCount[0];
+          context.setVariable("@num_workgroups", dispatchCount);
+          for (const set in bindGroups) {
+              for (const binding in bindGroups[set]) {
+                  const entry = bindGroups[set][binding];
+                  context.variables.forEach((v) => {
+                      const node = v.node;
+                      if (node === null || node === void 0 ? void 0 : node.attributes) {
+                          let b = null;
+                          let s = null;
+                          for (const attr of node.attributes) {
+                              if (attr.name === "binding") {
+                                  b = attr.value;
+                              }
+                              else if (attr.name === "group") {
+                                  s = attr.value;
+                              }
+                          }
+                          if (binding == b && set == s) {
+                              if (entry.texture !== undefined && entry.size !== undefined) {
+                                  // Texture
+                                  v.value = new TypedData(entry.texture, this._getTypeInfo(node.type), 0, entry.size);
+                              }
+                              else if (entry.uniform !== undefined) {
+                                  // Uniform buffer
+                                  v.value = new TypedData(entry.uniform, this._getTypeInfo(node.type));
+                              }
+                              else {
+                                  // Storage buffer
+                                  v.value = new TypedData(entry, this._getTypeInfo(node.type));
+                              }
+                          }
+                      }
+                  });
+              }
+          }
+          for (let z = 0; z < depth; ++z) {
+              for (let y = 0; y < height; ++y) {
+                  for (let x = 0; x < width; ++x) {
+                      context.setVariable("@workgroup_id", [x, y, z]);
+                      this._dispatchWorkgroup(f, [x, y, z], context);
+                  }
+              }
+          }
+      }
+      _dispatchWorkgroup(f, workgroup_id, context) {
+          const workgroupSize = [1, 1, 1];
+          for (const attr of f.node.attributes) {
+              if (attr.name === "workgroup_size") {
+                  if (attr.value.length > 0) {
+                      // The value could be an override constant
+                      const v = context.getVariableValue(attr.value[0]);
+                      if (v !== null) {
+                          workgroupSize[0] = v;
+                      }
+                      else {
+                          workgroupSize[0] = parseInt(attr.value[0]);
+                      }
+                  }
+                  if (attr.value.length > 1) {
+                      const v = context.getVariableValue(attr.value[1]);
+                      if (v !== null) {
+                          workgroupSize[1] = v;
+                      }
+                      else {
+                          workgroupSize[1] = parseInt(attr.value[1]);
+                      }
+                  }
+                  if (attr.value.length > 2) {
+                      const v = context.getVariableValue(attr.value[2]);
+                      if (v !== null) {
+                          workgroupSize[2] = v;
+                      }
+                      else {
+                          workgroupSize[2] = parseInt(attr.value[2]);
+                      }
+                  }
+              }
+          }
+          context.setVariable("@workgroup_size", workgroupSize);
+          const width = workgroupSize[0];
+          const height = workgroupSize[1];
+          const depth = workgroupSize[2];
+          for (let z = 0, li = 0; z < depth; ++z) {
+              for (let y = 0; y < height; ++y) {
+                  for (let x = 0; x < width; ++x, ++li) {
+                      const local_invocation_id = [x, y, z];
+                      const global_invocation_id = [
+                          x + workgroup_id[0] * workgroupSize[0],
+                          y + workgroup_id[1] * workgroupSize[1],
+                          z + workgroup_id[2] * workgroupSize[2]
+                      ];
+                      context.setVariable("@local_invocation_id", local_invocation_id);
+                      context.setVariable("@global_invocation_id", global_invocation_id);
+                      context.setVariable("@local_invocation_index", li);
+                      this._dispatchExec(f, context);
+                  }
+              }
+          }
+      }
+      _dispatchExec(f, context) {
+          // Update any built-in input args.
+          // TODO: handle input structs.
+          for (const arg of f.node.args) {
+              for (const attr of arg.attributes) {
+                  if (attr.name === "builtin") {
+                      const globalName = `@${attr.value}`;
+                      const globalVar = context.getVariable(globalName);
+                      if (globalVar !== undefined) {
+                          context.variables.set(arg.name, globalVar);
+                      }
+                  }
+              }
+          }
+          this._execStatements(f.node.body, context);
+      }
+      _getTypeInfo(type) {
+          return this.reflection._types.get(type);
+      }
+      _getTypeName(type) {
+          if (type instanceof Type) {
+              type = this._getTypeInfo(type);
+          }
+          let name = type.name;
+          if (type instanceof TemplateInfo) {
+              if (type.format !== null) {
+                  if (name === "vec2" || name === "vec3" || name === "vec4" ||
+                      name === "mat2x2" || name === "mat2x3" || name === "mat2x4" ||
+                      name === "mat3x2" || name === "mat3x3" || name === "mat3x4" ||
+                      name === "mat4x2" || name === "mat4x3" || name === "mat4x4") {
+                      if (type.format.name === "f32") {
+                          name += "f";
+                          return name;
+                      }
+                      else if (type.format.name === "i32") {
+                          name += "i";
+                          return name;
+                      }
+                      else if (type.format.name === "u32") {
+                          name += "u";
+                          return name;
+                      }
+                  }
+                  name += `<${type.format.name}>`;
+              }
+              else {
+                  if (name === "vec2" || name === "vec3" || name === "vec4") {
+                      return name;
+                  }
+                  console.log("Template format is null.");
+              }
+          }
+          return name;
+      }
+      _getVariableName(node, context) {
+          if (node instanceof VariableExpr) {
+              return node.name;
+          }
+          else {
+              console.error(`Unknown variable type`, node, 'Line', node.line);
+          }
+          return null;
+      }
+      _execStatements(statements, context) {
+          for (const stmt of statements) {
+              // Block statements are declared as arrays of statements.
+              if (stmt instanceof Array) {
+                  const subContext = context.clone();
+                  const res = this._execStatements(stmt, subContext);
+                  if (res) {
+                      return res;
+                  }
+                  continue;
+              }
+              const res = this._execStatement(stmt, context);
+              if (res) {
+                  return res;
+              }
+          }
+          return null;
+      }
+      _execStatement(stmt, context) {
+          if (stmt instanceof Return) {
+              const v = this._evalExpression(stmt.value, context);
+              const f = context.getFunction(context.currentFunctionName);
+              if (f === null || f === void 0 ? void 0 : f.node.returnType) {
+                  if (f.node.returnType.name === "i32" || f.node.returnType.name === "u32") {
+                      return Math.floor(v);
+                  }
+              }
+              return v;
+          }
+          else if (stmt instanceof Break$1) {
+              return stmt;
+          }
+          else if (stmt instanceof Continue) {
+              return stmt;
+          }
+          else if (stmt instanceof Let) {
+              this._let(stmt, context);
+          }
+          else if (stmt instanceof Var$1) {
+              this._var(stmt, context);
+          }
+          else if (stmt instanceof Const) {
+              this._const(stmt, context);
+          }
+          else if (stmt instanceof Function$1) {
+              this._function(stmt, context);
+          }
+          else if (stmt instanceof If) {
+              return this._if(stmt, context);
+          }
+          else if (stmt instanceof For) {
+              return this._for(stmt, context);
+          }
+          else if (stmt instanceof While) {
+              return this._while(stmt, context);
+          }
+          else if (stmt instanceof Assign) {
+              return this._assign(stmt, context);
+          }
+          else if (stmt instanceof Increment) {
+              this._increment(stmt, context);
+          }
+          else if (stmt instanceof Struct) {
+              return null;
+          }
+          else if (stmt instanceof Override) {
+              const name = stmt.name;
+              if (context.getVariable(name) === null) {
+                  console.error(`Override constant ${name} not found. Line ${stmt.line}`);
+                  return null;
+              }
+          }
+          else {
+              console.error(`Unknown statement type.`, stmt, `Line ${stmt.line}`);
+          }
+          return null;
+      }
+      _increment(node, context) {
+          const name = this._getVariableName(node.variable, context);
+          const v = context.getVariable(name);
+          if (!v) {
+              console.error(`Variable ${name} not found. Line ${node.line}`);
+              return;
+          }
+          if (node.operator === "++") {
+              v.value++;
+          }
+          else if (node.operator === "--") {
+              v.value--;
+          }
+          return v.value;
+      }
+      _assign(node, context) {
+          const name = this._getVariableName(node.variable, context);
+          const v = context.getVariable(name);
+          if (!v) {
+              console.error(`Variable ${name} not found. Line ${node.line}`);
+              return null;
+          }
+          let value = this._evalExpression(node.value, context);
+          if (node.operator !== "=") {
+              const currentValue = v.value instanceof TypedData ?
+                  v.value.getDataValue(this, node.variable.postfix, context) :
+                  v.value;
+              if (currentValue instanceof Array && value instanceof Array) {
+                  if (currentValue.length !== value.length) {
+                      console.error(`Vector length mismatch. Line ${node.line}`);
+                      return;
+                  }
+                  if (node.operator === "+=") {
+                      for (let i = 0; i < currentValue.length; ++i) {
+                          value[i] = currentValue[i] + value[i];
+                      }
+                  }
+                  else if (node.operator === "-=") {
+                      for (let i = 0; i < currentValue.length; ++i) {
+                          value[i] = currentValue[i] - value[i];
+                      }
+                  }
+                  else if (node.operator === "*=") {
+                      for (let i = 0; i < currentValue.length; ++i) {
+                          value[i] = currentValue[i] * value[i];
+                      }
+                  }
+                  else if (node.operator === "/=") {
+                      for (let i = 0; i < currentValue.length; ++i) {
+                          value[i] = currentValue[i] / value[i];
+                      }
+                  }
+                  else if (node.operator === "%=") {
+                      for (let i = 0; i < currentValue.length; ++i) {
+                          value[i] = currentValue[i] % value[i];
+                      }
+                  }
+                  else if (node.operator === "&=") {
+                      for (let i = 0; i < currentValue.length; ++i) {
+                          value[i] = currentValue[i] & value[i];
+                      }
+                  }
+                  else if (node.operator === "|=") {
+                      for (let i = 0; i < currentValue.length; ++i) {
+                          value[i] = currentValue[i] | value[i];
+                      }
+                  }
+                  else if (node.operator === "^=") {
+                      for (let i = 0; i < currentValue.length; ++i) {
+                          value[i] = currentValue[i] ^ value[i];
+                      }
+                  }
+                  else if (node.operator === "<<=") {
+                      for (let i = 0; i < currentValue.length; ++i) {
+                          value[i] = currentValue[i] << value[i];
+                      }
+                  }
+                  else if (node.operator === ">>=") {
+                      for (let i = 0; i < currentValue.length; ++i) {
+                          value[i] = currentValue[i] >> value[i];
+                      }
+                  }
+              }
+              else {
+                  if (node.operator === "+=") {
+                      value = currentValue + value;
+                  }
+                  else if (node.operator === "-=") {
+                      value = currentValue - value;
+                  }
+                  else if (node.operator === "*=") {
+                      value = currentValue * value;
+                  }
+                  else if (node.operator === "/=") {
+                      value = currentValue / value;
+                  }
+                  else if (node.operator === "%=") {
+                      value = currentValue % value;
+                  }
+                  else if (node.operator === "&=") {
+                      value = currentValue & value;
+                  }
+                  else if (node.operator === "|=") {
+                      value = currentValue | value;
+                  }
+                  else if (node.operator === "^=") {
+                      value = currentValue - value;
+                  }
+                  else if (node.operator === "<<=") {
+                      value = currentValue << value;
+                  }
+                  else if (node.operator === ">>=") {
+                      value = currentValue >> value;
+                  }
+              }
+          }
+          if (v.value instanceof TypedData) {
+              v.value.setDataValue(this, value, node.variable.postfix, context);
+          }
+          else if (node.variable.postfix) {
+              if (node.variable.postfix instanceof ArrayIndex) {
+                  const idx = this._evalExpression(node.variable.postfix.index, context);
+                  // TODO: use array format to determine how to set the value
+                  if (v.value instanceof Array) {
+                      if (v.node.type.isArray) {
+                          const arrayType = v.node.type;
+                          if (arrayType.format.name === "vec3" ||
+                              arrayType.format.name === "vec3u" ||
+                              arrayType.format.name === "vec3i" ||
+                              arrayType.format.name === "vec3f") {
+                              v.value[idx * 3 + 0] = value[0];
+                              v.value[idx * 3 + 1] = value[1];
+                              v.value[idx * 3 + 2] = value[2];
+                          }
+                          else if (arrayType.format.name === "vec4" ||
+                              arrayType.format.name === "vec4u" ||
+                              arrayType.format.name === "vec4i" ||
+                              arrayType.format.name === "vec4f") {
+                              v.value[idx * 4 + 0] = value[0];
+                              v.value[idx * 4 + 1] = value[1];
+                              v.value[idx * 4 + 2] = value[2];
+                              v.value[idx * 4 + 3] = value[3];
+                          }
+                          else {
+                              v.value[idx] = value;
+                          }
+                      }
+                      else {
+                          v.value[idx] = value;
+                      }
+                  }
+                  else {
+                      console.error(`Variable ${v.name} is not an array. Line ${node.line}`);
+                  }
+              }
+              else if (node.variable.postfix instanceof StringExpr) {
+                  console.error(`TODO Struct member. Line ${node.line}`);
+              }
+          }
+          else {
+              v.value = value;
+          }
+          return null;
+      }
+      _function(node, context) {
+          const f = new Function$2(node);
+          context.functions.set(node.name, f);
+      }
+      _const(node, context) {
+          let value = null;
+          if (node.value != null) {
+              value = this._evalExpression(node.value, context);
+          }
+          context.createVariable(node.name, value, node);
+      }
+      _let(node, context) {
+          let value = null;
+          if (node.value != null) {
+              value = this._evalExpression(node.value, context);
+          }
+          context.createVariable(node.name, value, node);
+      }
+      _var(node, context) {
+          let value = null;
+          if (node.value != null) {
+              value = this._evalExpression(node.value, context);
+          }
+          context.createVariable(node.name, value, node);
+      }
+      _if(node, context) {
+          context = context.clone();
+          const condition = this._evalExpression(node.condition, context);
+          if (condition) {
+              return this._execStatements(node.body, context);
+          }
+          for (const e of node.elseif) {
+              const condition = this._evalExpression(e.condition, context);
+              if (condition) {
+                  return this._execStatements(e.body, context);
+              }
+          }
+          if (node.else) {
+              return this._execStatements(node.else, context);
+          }
+          return null;
+      }
+      _for(node, context) {
+          context = context.clone();
+          this._execStatement(node.init, context);
+          while (this._evalExpression(node.condition, context)) {
+              const res = this._execStatements(node.body, context);
+              if (res) {
+                  return res;
+              }
+              this._execStatement(node.increment, context);
+          }
+          return null;
+      }
+      _while(node, context) {
+          context = context.clone();
+          let condition = this._evalExpression(node.condition, context);
+          while (condition) {
+              const res = this._execStatements(node.body, context);
+              if (res instanceof Break$1) {
+                  break;
+              }
+              else if (res instanceof Continue) {
+                  continue;
+              }
+              else if (res !== null) {
+                  return res;
+              }
+              condition = this._evalExpression(node.condition, context);
+          }
+          return null;
+      }
+      _evalExpression(node, context) {
+          if (node instanceof GroupingExpr) {
+              const grp = node;
+              return this._evalExpression(grp.contents[0], context);
+          }
+          else if (node instanceof BinaryOperator) {
+              return this._evalBinaryOp(node, context);
+          }
+          else if (node instanceof LiteralExpr) {
+              return this._evalLiteral(node, context);
+          }
+          else if (node instanceof StringExpr) {
+              return node.value;
+          }
+          else if (node instanceof VariableExpr) {
+              return this._evalVariable(node, context);
+          }
+          else if (node instanceof CallExpr) {
+              return this._evalCall(node, context);
+          }
+          else if (node instanceof CreateExpr) {
+              return this._evalCreate(node, context);
+          }
+          else if (node instanceof ConstExpr) {
+              return this._evalConst(node, context);
+          }
+          console.error(`Unknown expression type`, node, `Line ${node.line}`);
+          return null;
+      }
+      _evalConst(node, context) {
+          const v = context.getVariableValue(node.name);
+          return v;
+      }
+      _evalCreate(node, context) {
+          const typeName = this._getTypeName(node.type);
+          switch (typeName) {
+              // Constructor Built-in Functions
+              // Value Constructor Built-in Functions
+              case "bool":
+                  this._callConstructorValue(node, context) ? 1 : 0;
+              case "i32":
+              case "u32":
+                  return Math.floor(this._callConstructorValue(node, context));
+              case "f32":
+              case "f16":
+                  return this._callConstructorValue(node, context);
+              case "vec2":
+              case "vec3":
+              case "vec4":
+              case "vec2f":
+              case "vec3f":
+              case "vec4f":
+              case "vec2i":
+              case "vec3i":
+              case "vec4i":
+              case "vec2u":
+              case "vec3u":
+              case "vec4u":
+                  return this._callConstructorVec(node, context);
+              case "mat2x2":
+              case "mat2x2i":
+              case "mat2x2u":
+              case "mat2x2f":
+              case "mat2x3":
+              case "mat2x3i":
+              case "mat2x3u":
+              case "mat2x3f":
+              case "mat2x4":
+              case "mat2x4i":
+              case "mat2x4u":
+              case "mat2x4f":
+              case "mat3x2":
+              case "mat3x2i":
+              case "mat3x2u":
+              case "mat3x2f":
+              case "mat3x3":
+              case "mat3x3i":
+              case "mat3x3u":
+              case "mat3x3f":
+              case "mat3x4":
+              case "mat3x4i":
+              case "mat3x4u":
+              case "mat3x4f":
+              case "mat4x2":
+              case "mat4x2i":
+              case "mat4x2u":
+              case "mat4x2f":
+              case "mat4x3":
+              case "mat4x3i":
+              case "mat4x3u":
+              case "mat4x3f":
+              case "mat4x4":
+              case "mat4x4i":
+              case "mat4x4u":
+              case "mat4x4f":
+                  return this._callConstructorMatrix(node, context);
+              case "array":
+                  return this._callConstructorArray(node, context);
+          }
+          const typeInfo = this._getTypeInfo(node.type);
+          if (typeInfo === null) {
+              console.error(`Unknown type ${typeName}. Line ${node.line}`);
+              return null;
+          }
+          const data = new TypedData(new ArrayBuffer(typeInfo.size), typeInfo, 0);
+          // Assign the values in node.args to the data.
+          if (typeInfo instanceof StructInfo) {
+              for (let i = 0; i < node.args.length; ++i) {
+                  const memberInfo = typeInfo.members[i];
+                  const arg = node.args[i];
+                  const value = this._evalExpression(arg, context);
+                  data.setData(this, value, memberInfo.type, memberInfo.offset, context);
+              }
+          }
+          else {
+              console.error(`Unknown type "${typeName}". Line ${node.line}`);
+          }
+          return data;
+      }
+      _evalLiteral(node, context) {
+          return node.value;
+      }
+      _getArraySwizzle(value, member) {
+          const swizzleIndex = { "x": 0, "y": 1, "z": 2, "w": 3, "r": 0, "g": 1, "b": 2, "a": 3 };
+          const m = member.toLocaleLowerCase();
+          if (member.length === 1) {
+              const idx = swizzleIndex[m];
+              if (idx !== undefined) {
+                  return value[idx];
+              }
+          }
+          else if (member.length === 2) {
+              const idx0 = swizzleIndex[m[0]];
+              const idx1 = swizzleIndex[m[1]];
+              if (idx0 !== undefined && idx1 !== undefined) {
+                  return [value[idx0], value[idx1]];
+              }
+          }
+          else if (member.length === 3) {
+              const idx0 = swizzleIndex[m[0]];
+              const idx1 = swizzleIndex[m[1]];
+              const idx2 = swizzleIndex[m[2]];
+              if (idx0 !== undefined && idx1 !== undefined && idx2 !== undefined) {
+                  return [value[idx0], value[idx1], value[idx2]];
+              }
+          }
+          else if (member.length === 4) {
+              const idx0 = swizzleIndex[m[0]];
+              const idx1 = swizzleIndex[m[1]];
+              const idx2 = swizzleIndex[m[2]];
+              const idx3 = swizzleIndex[m[3]];
+              if (idx0 !== undefined && idx1 !== undefined && idx2 !== undefined && idx3 !== undefined) {
+                  return [value[idx0], value[idx1], value[idx2], value[idx3]];
+              }
+          }
+          console.error(`Unknown member ${member}`);
+          return null;
+      }
+      _evalVariable(node, context) {
+          var _a;
+          const value = context.getVariableValue(node.name);
+          if (value instanceof TypedData) {
+              return value.getDataValue(this, node.postfix, context);
+          }
+          if (node.postfix) {
+              if (node.postfix instanceof ArrayIndex) {
+                  const idx = this._evalExpression(node.postfix.index, context);
+                  if ((value === null || value === void 0 ? void 0 : value.length) !== undefined) {
+                      return value[idx];
+                  }
+                  else {
+                      console.error(`Variable ${node.name} is not an array. Line ${node.line}`);
+                  }
+              }
+              else if (node.postfix instanceof StringExpr) {
+                  const member = node.postfix.value;
+                  if (value instanceof Array) {
+                      return this._getArraySwizzle(value, member);
+                  }
+                  else {
+                      const variable = context.getVariable(node.name);
+                      if (variable) {
+                          if ((_a = variable.node.type) === null || _a === void 0 ? void 0 : _a.isStruct) {
+                              const structInfo = this.reflection.getStructInfo(variable.node.type.name);
+                              for (const m of structInfo.members) {
+                                  if (m.name === member) {
+                                      const v = new Float32Array(variable.value.buffer, m.offset);
+                                      if (node.postfix.postfix) {
+                                          const postfix = this._evalExpression(node.postfix.postfix, context);
+                                          return this._getArraySwizzle(value, postfix);
+                                      }
+                                      return v;
+                                  }
+                              }
+                              console.log(structInfo);
+                          }
+                      }
+                      console.error(`Unknown variable postfix`, node.postfix, `. Line ${node.line}`);
+                  }
+              }
+          }
+          return value;
+      }
+      _evalBinaryOp(node, context) {
+          const l = this._evalExpression(node.left, context);
+          const r = this._evalExpression(node.right, context);
+          switch (node.operator) {
+              case "+":
+                  return l + r;
+              case "-":
+                  return l - r;
+              case "*":
+                  return l * r;
+              case "%":
+                  return l % r;
+              case "/":
+                  return l / r;
+              case ">":
+                  if (l.length !== undefined && r.length !== undefined) {
+                      if (l.length !== r.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      return l.map((x, i) => x > r[i]);
+                  }
+                  return l > r;
+              case "<":
+                  if (l.length !== undefined && r.length !== undefined) {
+                      if (l.length !== r.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      return l.map((x, i) => x < r[i]);
+                  }
+                  return l < r;
+              case "==":
+                  return l === r;
+              case "!=":
+                  return l !== r;
+              case ">=":
+                  return l >= r;
+              case "<=":
+                  return l <= r;
+              case "&&":
+                  return l && r;
+              case "||":
+                  return l || r;
+          }
+          console.error(`Unknown operator ${node.operator}. Line ${node.line}`);
+          return null;
+      }
+      _evalCall(node, context) {
+          if (node.cachedReturnValue) {
+              return node.cachedReturnValue;
+          }
+          const subContext = context.clone();
+          subContext.currentFunctionName = node.name;
+          const f = context.functions.get(node.name);
+          if (!f) {
+              return this._callBuiltinFunction(node, subContext);
+          }
+          for (let ai = 0; ai < f.node.args.length; ++ai) {
+              const arg = f.node.args[ai];
+              const value = this._evalExpression(node.args[ai], subContext);
+              subContext.setVariable(arg.name, value, arg);
+          }
+          const res = this._execStatements(f.node.body, subContext);
+          if (f.node.returnType) {
+              if (f.node.returnType.name === "i32" || f.node.returnType.name === "u32") {
+                  return Math.floor(res);
+              }
+          }
+          return res;
+      }
+      _callBuiltinFunction(node, context) {
+          switch (node.name) {
+              // Logical Built-in Functions
+              case "all":
+                  return this.builtins.All(node, context);
+              case "any":
+                  return this.builtins.Any(node, context);
+              case "select":
+                  return this.builtins.Select(node, context);
+              // Array Built-in Functions
+              case "arrayLength":
+                  return this.builtins.ArrayLength(node, context);
+              // Numeric Built-in Functions
+              case "abs":
+                  return this.builtins.Abs(node, context);
+              case "acos":
+                  return this.builtins.Acos(node, context);
+              case "acosh":
+                  return this.builtins.Acosh(node, context);
+              case "asin":
+                  return this.builtins.Asin(node, context);
+              case "asinh":
+                  return this.builtins.Asinh(node, context);
+              case "atan":
+                  return this.builtins.Atan(node, context);
+              case "atanh":
+                  return this.builtins.Atanh(node, context);
+              case "atan2":
+                  return this.builtins.Atan2(node, context);
+              case "ceil":
+                  return this.builtins.Ceil(node, context);
+              case "clamp":
+                  return this.builtins.Clamp(node, context);
+              case "cos":
+                  return this.builtins.Cos(node, context);
+              case "cosh":
+                  return this.builtins.Cosh(node, context);
+              case "countLeadingZeros":
+                  return this.builtins.CountLeadingZeros(node, context);
+              case "countOneBits":
+                  return this.builtins.CountOneBits(node, context);
+              case "countTrailingZeros":
+                  return this.builtins.CountTrailingZeros(node, context);
+              case "cross":
+                  return this.builtins.Cross(node, context);
+              case "degrees":
+                  return this.builtins.Degrees(node, context);
+              case "determinant":
+                  return this.builtins.Determinant(node, context);
+              case "distance":
+                  return this.builtins.Distance(node, context);
+              case "dot":
+                  return this.builtins.Dot(node, context);
+              case "dot4U8Packed":
+                  return this.builtins.Dot4U8Packed(node, context);
+              case "dot4I8Packed":
+                  return this.builtins.Dot4I8Packed(node, context);
+              case "exp":
+                  return this.builtins.Exp(node, context);
+              case "exp2":
+                  return this.builtins.Exp2(node, context);
+              case "extractBits":
+                  return this.builtins.ExtractBits(node, context);
+              case "faceForward":
+                  return this.builtins.FaceForward(node, context);
+              case "firstLeadingBit":
+                  return this.builtins.FirstLeadingBit(node, context);
+              case "firstTrailingBit":
+                  return this.builtins.FirstTrailingBit(node, context);
+              case "floor":
+                  return this.builtins.Floor(node, context);
+              case "fma":
+                  return this.builtins.Fma(node, context);
+              case "fract":
+                  return this.builtins.Fract(node, context);
+              case "frexp":
+                  return this.builtins.Frexp(node, context);
+              case "insertBits":
+                  return this.builtins.InsertBits(node, context);
+              case "inverseSqrt":
+                  return this.builtins.InverseSqrt(node, context);
+              case "ldexp":
+                  return this.builtins.Ldexp(node, context);
+              case "length":
+                  return this.builtins.Length(node, context);
+              case "log":
+                  return this.builtins.Log(node, context);
+              case "log2":
+                  return this.builtins.Log2(node, context);
+              case "max":
+                  return this.builtins.Max(node, context);
+              case "min":
+                  return this.builtins.Min(node, context);
+              case "mix":
+                  return this.builtins.Mix(node, context);
+              case "modf":
+                  return this.builtins.Modf(node, context);
+              case "normalize":
+                  return this.builtins.Normalize(node, context);
+              case "pow":
+                  return this.builtins.Pow(node, context);
+              case "quantizeToF16":
+                  return this.builtins.QuantizeToF16(node, context);
+              case "radians":
+                  return this.builtins.Radians(node, context);
+              case "reflect":
+                  return this.builtins.Reflect(node, context);
+              case "refract":
+                  return this.builtins.Refract(node, context);
+              case "reverseBits":
+                  return this.builtins.ReverseBits(node, context);
+              case "round":
+                  return this.builtins.Round(node, context);
+              case "saturate":
+                  return this.builtins.Saturate(node, context);
+              case "sign":
+                  return this.builtins.Sign(node, context);
+              case "sin":
+                  return this.builtins.Sin(node, context);
+              case "sinh":
+                  return this.builtins.Sinh(node, context);
+              case "smoothStep":
+                  return this.builtins.SmoothStep(node, context);
+              case "sqrt":
+                  return this.builtins.Sqrt(node, context);
+              case "step":
+                  return this.builtins.Step(node, context);
+              case "tan":
+                  return this.builtins.Tan(node, context);
+              case "tanh":
+                  return this.builtins.Tanh(node, context);
+              case "transpose":
+                  return this.builtins.Transpose(node, context);
+              case "trunc":
+                  return this.builtins.Trunc(node, context);
+              // Derivative Built-in Functions
+              case "dpdx":
+                  return this.builtins.Dpdx(node, context);
+              case "dpdxCoarse":
+                  return this.builtins.DpdxCoarse(node, context);
+              case "dpdxFine":
+                  return this.builtins.DpdxFine(node, context);
+              case "dpdy":
+                  return this.builtins.Dpdy(node, context);
+              case "dpdyCoarse":
+                  return this.builtins.DpdyCoarse(node, context);
+              case "dpdyFine":
+                  return this.builtins.DpdyFine(node, context);
+              case "fwidth":
+                  return this.builtins.Fwidth(node, context);
+              case "fwidthCoarse":
+                  return this.builtins.FwidthCoarse(node, context);
+              case "fwidthFine":
+                  return this.builtins.FwidthFine(node, context);
+              // Texture Built-in Functions
+              case "textureDimensions":
+                  return this.builtins.TextureDimensions(node, context);
+              case "textureGather":
+                  return this.builtins.TextureGather(node, context);
+              case "textureGatherCompare":
+                  return this.builtins.TextureGatherCompare(node, context);
+              case "textureLoad":
+                  return this.builtins.TextureLoad(node, context);
+              case "textureNumLayers":
+                  return this.builtins.TextureNumLayers(node, context);
+              case "textureNumLevels":
+                  return this.builtins.TextureNumLevels(node, context);
+              case "textureNumSamples":
+                  return this.builtins.TextureNumSamples(node, context);
+              case "textureSample":
+                  return this.builtins.TextureSample(node, context);
+              case "textureSampleBias":
+                  return this.builtins.TextureSampleBias(node, context);
+              case "textureSampleCompare":
+                  return this.builtins.TextureSampleCompare(node, context);
+              case "textureSampleCompareLevel":
+                  return this.builtins.TextureSampleCompareLevel(node, context);
+              case "textureSampleGrad":
+                  return this.builtins.TextureSampleGrad(node, context);
+              case "textureSampleLevel":
+                  return this.builtins.TextureSampleLevel(node, context);
+              case "textureSampleBaseClampToEdge":
+                  return this.builtins.TextureSampleBaseClampToEdge(node, context);
+              case "textureStore":
+                  return this.builtins.TextureStore(node, context);
+              // Atomic Built-in Functions
+              case "atomicLoad":
+                  return this.builtins.AtomicLoad(node, context);
+              case "atomicStore":
+                  return this.builtins.AtomicStore(node, context);
+              case "atomicAdd":
+                  return this.builtins.AtomicAdd(node, context);
+              case "atomicSub":
+                  return this.builtins.AtomicSub(node, context);
+              case "atomicMax":
+                  return this.builtins.AtomicMax(node, context);
+              case "atomicMin":
+                  return this.builtins.AtomicMin(node, context);
+              case "atomicAnd":
+                  return this.builtins.AtomicAnd(node, context);
+              case "atomicOr":
+                  return this.builtins.AtomicOr(node, context);
+              case "atomicXor":
+                  return this.builtins.AtomicXor(node, context);
+              case "atomicExchange":
+                  return this.builtins.AtomicExchange(node, context);
+              case "atomicCompareExchangeWeak":
+                  return this.builtins.AtomicCompareExchangeWeak(node, context);
+              // Data Packing Built-in Functions
+              case "pack4x8snorm":
+                  return this.builtins.Pack4x8snorm(node, context);
+              case "pack4x8unorm":
+                  return this.builtins.Pack4x8unorm(node, context);
+              case "pack4xI8":
+                  return this.builtins.Pack4xI8(node, context);
+              case "pack4xU8":
+                  return this.builtins.Pack4xU8(node, context);
+              case "pack4x8Clamp":
+                  return this.builtins.Pack4x8Clamp(node, context);
+              case "pack4xU8Clamp":
+                  return this.builtins.Pack4xU8Clamp(node, context);
+              case "pack2x16snorm":
+                  return this.builtins.Pack2x16snorm(node, context);
+              case "pack2x16unorm":
+                  return this.builtins.Pack2x16unorm(node, context);
+              case "pack2x16float":
+                  return this.builtins.Pack2x16float(node, context);
+              // Data Unpacking Built-in Functions
+              case "unpack4x8snorm":
+                  return this.builtins.Unpack4x8snorm(node, context);
+              case "unpack4x8unorm":
+                  return this.builtins.Unpack4x8unorm(node, context);
+              case "unpack4xI8":
+                  return this.builtins.Unpack4xI8(node, context);
+              case "unpack4xU8":
+                  return this.builtins.Unpack4xU8(node, context);
+              case "unpack2x16snorm":
+                  return this.builtins.Unpack2x16snorm(node, context);
+              case "unpack2x16unorm":
+                  return this.builtins.Unpack2x16unorm(node, context);
+              case "unpack2x16float":
+                  return this.builtins.Unpack2x16float(node, context);
+              // Synchronization Built-in Functions
+              case "storageBarrier":
+                  return this.builtins.StorageBarrier(node, context);
+              case "textureBarrier":
+                  return this.builtins.TextureBarrier(node, context);
+              case "workgroupBarrier":
+                  return this.builtins.WorkgroupBarrier(node, context);
+              case "workgroupUniformLoad":
+                  return this.builtins.WorkgroupUniformLoad(node, context);
+              // Subgroup Built-in Functions
+              case "subgroupAdd":
+                  return this.builtins.SubgroupAdd(node, context);
+              case "subgroupExclusiveAdd":
+                  return this.builtins.SubgroupExclusiveAdd(node, context);
+              case "subgroupInclusiveAdd":
+                  return this.builtins.SubgroupInclusiveAdd(node, context);
+              case "subgroupAll":
+                  return this.builtins.SubgroupAll(node, context);
+              case "subgroupAnd":
+                  return this.builtins.SubgroupAnd(node, context);
+              case "subgroupAny":
+                  return this.builtins.SubgroupAny(node, context);
+              case "subgroupBallot":
+                  return this.builtins.SubgroupBallot(node, context);
+              case "subgroupBroadcast":
+                  return this.builtins.SubgroupBroadcast(node, context);
+              case "subgroupBroadcastFirst":
+                  return this.builtins.SubgroupBroadcastFirst(node, context);
+              case "subgroupElect":
+                  return this.builtins.SubgroupElect(node, context);
+              case "subgroupMax":
+                  return this.builtins.SubgroupMax(node, context);
+              case "subgroupMin":
+                  return this.builtins.SubgroupMin(node, context);
+              case "subgroupMul":
+                  return this.builtins.SubgroupMul(node, context);
+              case "subgroupExclusiveMul":
+                  return this.builtins.SubgroupExclusiveMul(node, context);
+              case "subgroupInclusiveMul":
+                  return this.builtins.SubgroupInclusiveMul(node, context);
+              case "subgroupOr":
+                  return this.builtins.SubgroupOr(node, context);
+              case "subgroupShuffle":
+                  return this.builtins.SubgroupShuffle(node, context);
+              case "subgroupShuffleDown":
+                  return this.builtins.SubgroupShuffleDown(node, context);
+              case "subgroupShuffleUp":
+                  return this.builtins.SubgroupShuffleUp(node, context);
+              case "subgroupShuffleXor":
+                  return this.builtins.SubgroupShuffleXor(node, context);
+              case "subgroupXor":
+                  return this.builtins.SubgroupXor(node, context);
+              // Quad Operations
+              case "quadBroadcast":
+                  return this.builtins.QuadBroadcast(node, context);
+              case "quadSwapDiagonal":
+                  return this.builtins.QuadSwapDiagonal(node, context);
+              case "quadSwapX":
+                  return this.builtins.QuadSwapX(node, context);
+              case "quadSwapY":
+                  return this.builtins.QuadSwapY(node, context);
+          }
+          const f = context.getFunction(node.name);
+          if (f) {
+              const subContext = context.clone();
+              for (let ai = 0; ai < f.node.args.length; ++ai) {
+                  const arg = f.node.args[ai];
+                  const value = this._evalExpression(node.args[ai], subContext);
+                  subContext.setVariable(arg.name, value, arg);
+              }
+              return this._execStatements(f.node.body, subContext);
+          }
+          console.error(`Function ${node.name} not found. Line ${node.line}`);
+          return null;
+      }
+      _callConstructorValue(node, context) {
+          if (node.args.length === 0) {
+              return 0;
+          }
+          return this._evalExpression(node.args[0], context);
+      }
+      _callConstructorArray(node, context) {
+          if (node.args.length === 0) {
+              if (node.type instanceof ArrayType) {
+                  if (node.type.count) {
+                      const format = node.type.format.name;
+                      if (format === "bool" || format === "i32" || format === "u32" || format === "f32" || format === "f16") {
+                          return new Array(node.type.count).fill(0);
+                      }
+                      else if (format === "vec2" || format === "vec2u" || format === "vec2i" || format === "vec2f") {
+                          return new Array(node.type.count).fill([0, 0]);
+                      }
+                      else if (format === "vec3" || format === "vec3u" || format === "vec3i" || format === "vec3f") {
+                          return new Array(node.type.count).fill([0, 0, 0]);
+                      }
+                      else if (format === "vec4" || format === "vec4u" || format === "vec4i" || format === "vec4f") {
+                          return new Array(node.type.count).fill([0, 0, 0, 0]);
+                      }
+                      else if (format === "mat2x2") {
+                          return new Array(node.type.count).fill([0, 0, 0, 0]);
+                      }
+                      else if (format === "mat2x3") {
+                          return new Array(node.type.count).fill([0, 0, 0, 0, 0, 0]);
+                      }
+                      else if (format === "mat2x4") {
+                          return new Array(node.type.count).fill([0, 0, 0, 0, 0, 0, 0, 0]);
+                      }
+                      else if (format === "mat3x2") {
+                          return new Array(node.type.count).fill([0, 0, 0, 0, 0, 0]);
+                      }
+                      else if (format === "mat3x3") {
+                          return new Array(node.type.count).fill([0, 0, 0, 0, 0, 0, 0, 0, 0]);
+                      }
+                      else if (format === "mat3x4") {
+                          return new Array(node.type.count).fill([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+                      }
+                      else if (format === "mat4x2") {
+                          return new Array(node.type.count).fill([0, 0, 0, 0, 0, 0, 0, 0]);
+                      }
+                      else if (format === "mat4x3") {
+                          return new Array(node.type.count).fill([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+                      }
+                      else if (format === "mat4x4") {
+                          return new Array(node.type.count).fill([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+                      }
+                      else {
+                          console.error(`TODO: support array format ${format}. Line ${node.line}`);
+                          return null;
+                      }
+                  }
+              }
+              return [];
+          }
+          const values = [];
+          for (const arg of node.args) {
+              values.push(this._evalExpression(arg, context));
+          }
+          return values;
+      }
+      _callConstructorVec(node, context) {
+          const typeName = node instanceof CallExpr ? node.name : this._getTypeName(node.type);
+          if (node.args.length === 0) {
+              if (typeName === "vec2" || typeName === "vec2f" || typeName === "vec2i" || typeName === "vec2u") {
+                  return [0, 0];
+              }
+              else if (typeName === "vec3" || typeName === "vec3f" || typeName === "vec3i" || typeName === "vec3u") {
+                  return [0, 0, 0];
+              }
+              else if (typeName === "vec4" || typeName === "vec4f" || typeName === "vec4i" || typeName === "vec4u") {
+                  return [0, 0, 0, 0];
+              }
+              console.error(`Invalid vec constructor ${typeName}. Line ${node.line}`);
+              return null;
+          }
+          if (node.type instanceof TemplateType && node.type.format === null) {
+              node.type.format = TemplateType.f32; // TODO: get the format from the type of the arg.
+          }
+          const isInt = typeName.endsWith("i") || typeName.endsWith("u");
+          const values = [];
+          // TODO: make sure the number of args matches the vector length.
+          for (const arg of node.args) {
+              let v = this._evalExpression(arg, context);
+              if (isInt) {
+                  v = Math.floor(v);
+              }
+              values.push(v);
+          }
+          if (typeName === "vec2" || typeName === "vec2f" || typeName === "vec2i" || typeName === "vec2u") {
+              if (values.length === 1) {
+                  values.push(values[0]);
+              }
+          }
+          else if (typeName === "vec3" || typeName === "vec3f" || typeName === "vec3i" || typeName === "vec3u") {
+              if (values.length === 1) {
+                  values.push(values[0], values[0]);
+              }
+              else if (values.length === 2) {
+                  console.error(`Invalid vec3 constructor. Line ${node.line}`);
+              }
+          }
+          else if (typeName === "vec4" || typeName === "vec4f" || typeName === "vec4i" || typeName === "vec4u") {
+              if (values.length === 1) {
+                  values.push(values[0], values[0], values[0]);
+              }
+              else if (values.length < 4) {
+                  console.error(`Invalid vec3 constructor. Line ${node.line}`);
+              }
+          }
+          return values;
+      }
+      _callConstructorMatrix(node, context) {
+          const typeName = node instanceof CallExpr ? node.name : this._getTypeName(node.type);
+          if (node.args.length === 0) {
+              if (typeName === "mat2x2" || typeName === "mat2x2f" || typeName === "mat2x2i" || typeName === "mat2x2u") {
+                  return [0, 0, 0, 0];
+              }
+              else if (typeName === "mat2x3" || typeName === "mat2x3f" || typeName === "mat2x3i" || typeName === "mat2x3u") {
+                  return [0, 0, 0, 0, 0, 0];
+              }
+              else if (typeName === "mat2x4" || typeName === "mat2x4f" || typeName === "mat2x4i" || typeName === "mat2x4u") {
+                  return [0, 0, 0, 0, 0, 0, 0, 0];
+              }
+              else if (typeName === "mat3x2" || typeName === "mat3x2f" || typeName === "mat3x2i" || typeName === "mat3x2u") {
+                  return [0, 0, 0, 0, 0, 0];
+              }
+              else if (typeName === "mat3x3" || typeName === "mat3x3f" || typeName === "mat3x3i" || typeName === "mat3x3u") {
+                  return [0, 0, 0, 0, 0, 0, 0, 0, 0];
+              }
+              else if (typeName === "mat3x4" || typeName === "mat3x4f" || typeName === "mat3x4i" || typeName === "mat3x4u") {
+                  return [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+              }
+              else if (typeName === "mat4x2" || typeName === "mat4x2f" || typeName === "mat4x2i" || typeName === "mat4x2u") {
+                  return [0, 0, 0, 0, 0, 0, 0, 0];
+              }
+              else if (typeName === "mat4x3" || typeName === "mat4x3f" || typeName === "mat4x3i" || typeName === "mat4x3u") {
+                  return [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+              }
+              else if (typeName === "mat4x4" || typeName === "mat4x4f" || typeName === "mat4x4i" || typeName === "mat4x4u") {
+                  return [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+              }
+              console.error(`Invalid matrix constructor ${typeName}. Line ${node.line}`);
+              return null;
+          }
+          const isInt = typeName.endsWith("i") || typeName.endsWith("u");
+          const values = [];
+          // TODO: make sure the number of args matches the matrix size.
+          for (const arg of node.args) {
+              let v = this._evalExpression(arg, context);
+              if (isInt) {
+                  v = Math.floor(v);
+              }
+              values.push(v);
+          }
+          return values;
+      }
+  }
+
+  class Command {
+      get line() { return -1; }
+  }
+  class StatementCommand extends Command {
+      constructor(node) {
+          super();
+          this.node = node;
+      }
+      get line() { return this.node.line; }
+  }
+  class CallExprCommand extends Command {
+      constructor(node, statement) {
+          super();
+          this.node = node;
+          this.statement = statement;
+      }
+      get line() { return this.statement.line; }
+  }
+  class GotoCommand extends Command {
+      constructor(condition, position) {
+          super();
+          this.condition = condition;
+          this.position = position;
+      }
+      get line() {
+          var _a, _b;
+          return (_b = (_a = this.condition) === null || _a === void 0 ? void 0 : _a.line) !== null && _b !== void 0 ? _b : -1;
+      }
+  }
+  class BlockCommand extends Command {
+      constructor(statements) {
+          super();
+          this.statements = [];
+          this.statements = statements;
+      }
+      get line() {
+          return this.statements.length > 0 ? this.statements[0].line : -1;
+      }
+  }
+  class ExecState {
+      constructor(context, parent) {
+          this.parent = null;
+          this.commands = [];
+          this.current = 0;
+          this.parentCallExpr = null;
+          this.context = context;
+          this.parent = parent !== null && parent !== void 0 ? parent : null;
+      }
+      get isAtEnd() { return this.current >= this.commands.length; }
+      getNextCommand() {
+          if (this.current >= this.commands.length) {
+              return null;
+          }
+          const command = this.commands[this.current];
+          this.current++;
+          return command;
+      }
+      getCurrentCommand() {
+          if (this.current >= this.commands.length) {
+              return null;
+          }
+          return this.commands[this.current];
+      }
+  }
+  class ExecStack {
+      constructor() {
+          this.states = [];
+      }
+      get isEmpty() { return this.states.length == 0; }
+      get last() { var _a; return (_a = this.states[this.states.length - 1]) !== null && _a !== void 0 ? _a : null; }
+      pop() {
+          this.states.pop();
+      }
+  }
+  class WgslDebug {
+      constructor(code, context) {
+          this._exec = new WgslExec(code, context);
+      }
+      getVariableValue(name) {
+          return this._exec.context.getVariableValue(name);
+      }
+      startDebug() {
+          this._execStack = new ExecStack();
+          const state = this._createState(this._exec.ast, this._exec.context);
+          this._execStack.states.push(state);
+      }
+      get context() {
+          return this._exec.context;
+      }
+      get currentState() {
+          while (true) {
+              if (this._execStack.isEmpty) {
+                  return null;
+              }
+              let state = this._execStack.last;
+              if (state === null) {
+                  return null;
+              }
+              if (state.isAtEnd) {
+                  this._execStack.pop();
+                  if (this._execStack.isEmpty) {
+                      return null;
+                  }
+                  state = this._execStack.last;
+              }
+              return state;
+          }
+      }
+      get currentCommand() {
+          while (true) {
+              if (this._execStack.isEmpty) {
+                  return null;
+              }
+              let state = this._execStack.last;
+              if (state === null) {
+                  return null;
+              }
+              if (state.isAtEnd) {
+                  this._execStack.pop();
+                  if (this._execStack.isEmpty) {
+                      return null;
+                  }
+                  state = this._execStack.last;
+              }
+              const command = state.getCurrentCommand();
+              if (command === null) {
+                  continue;
+              }
+              return command;
+          }
+      }
+      debugWorkgroup(kernel, dispatchId, dispatchCount, bindGroups, config) {
+          this._execStack = new ExecStack();
+          const context = this._exec.context;
+          context.currentFunctionName = kernel;
+          this._dispatchId = dispatchId;
+          config = config !== null && config !== void 0 ? config : {};
+          if (config["constants"]) {
+              for (const k in config["constants"]) {
+                  const v = config["constants"][k];
+                  context.setVariable(k, v);
+              }
+          }
+          // Use this to debug the top level statements, otherwise call _execStatements.
+          /*const state = new _ExecState(this._exec.context);
+          this._execStack.states.push(state);
+          for (const statement of this._exec.ast) {
+              state.commands.push(new Command(CommandType.Statement, statement));
+          }*/
+          this._exec._execStatements(this._exec.ast, context);
+          const f = context.functions.get(kernel);
+          if (!f) {
+              console.error(`Function ${kernel} not found`);
+              return false;
+          }
+          if (typeof dispatchCount === "number") {
+              dispatchCount = [dispatchCount, 1, 1];
+          }
+          else if (dispatchCount.length === 0) {
+              console.error(`Invalid dispatch count`);
+              return false;
+          }
+          else if (dispatchCount.length === 1) {
+              dispatchCount = [dispatchCount[0], 1, 1];
+          }
+          else if (dispatchCount.length === 2) {
+              dispatchCount = [dispatchCount[0], dispatchCount[1], 1];
+          }
+          else if (dispatchCount.length > 3) {
+              dispatchCount = [dispatchCount[0], dispatchCount[1], dispatchCount[2]];
+          }
+          const depth = dispatchCount[2];
+          const height = dispatchCount[1];
+          const width = dispatchCount[0];
+          context.setVariable("@num_workgroups", dispatchCount);
+          for (const set in bindGroups) {
+              for (const binding in bindGroups[set]) {
+                  const entry = bindGroups[set][binding];
+                  context.variables.forEach((v) => {
+                      const node = v.node;
+                      if (node === null || node === void 0 ? void 0 : node.attributes) {
+                          let b = null;
+                          let s = null;
+                          for (const attr of node.attributes) {
+                              if (attr.name === "binding") {
+                                  b = attr.value;
+                              }
+                              else if (attr.name === "group") {
+                                  s = attr.value;
+                              }
+                          }
+                          if (binding == b && set == s) {
+                              if (entry.texture !== undefined && entry.size !== undefined) {
+                                  // Texture
+                                  v.value = new TypedData(entry.texture, this._exec._getTypeInfo(node.type), 0, entry.size);
+                              }
+                              else if (entry.uniform !== undefined) {
+                                  // Uniform buffer
+                                  v.value = new TypedData(entry.uniform, this._exec._getTypeInfo(node.type));
+                              }
+                              else {
+                                  // Storage buffer
+                                  v.value = new TypedData(entry, this._exec._getTypeInfo(node.type));
+                              }
+                          }
+                      }
+                  });
+              }
+          }
+          let found = false;
+          for (let z = 0; z < depth && !found; ++z) {
+              for (let y = 0; y < height && !found; ++y) {
+                  for (let x = 0; x < width && !found; ++x) {
+                      context.setVariable("@workgroup_id", [x, y, z]);
+                      if (this._dispatchWorkgroup(f, [x, y, z], context)) {
+                          found = true;
+                          break;
+                      }
+                  }
+              }
+          }
+          return found;
+      }
+      _shouldExecuteNectCommand() {
+          const command = this.currentCommand;
+          if (command === null) {
+              return false;
+          }
+          if (command instanceof GotoCommand) {
+              if (command.condition === null) {
+                  return true;
+              }
+          } /* else if (command instanceof StatementCommand) {
+              if (command.node instanceof AST.Assign ||
+                  command.node instanceof AST.Let ||
+                  command.node instanceof AST.Var ||
+                  command.node instanceof AST.Const) {
+                  return true;
+              }
+          }*/
+          return false;
+      }
+      // Returns true if execution is not finished, false if execution is complete.
+      stepNext(stepInto = true) {
+          var _a, _b;
+          if (!this._execStack) {
+              this._execStack = new ExecStack();
+              const state = this._createState(this._exec.ast, this._exec.context);
+              this._execStack.states.push(state);
+          }
+          while (true) {
+              if (this._execStack.isEmpty) {
+                  return false;
+              }
+              let state = this._execStack.last;
+              if (state === null) {
+                  return false;
+              }
+              if (state.isAtEnd) {
+                  this._execStack.pop();
+                  if (this._execStack.isEmpty) {
+                      return false;
+                  }
+                  state = this._execStack.last;
+              }
+              const command = state.getNextCommand();
+              if (command === null) {
+                  continue;
+              }
+              if (stepInto && command instanceof CallExprCommand) {
+                  const node = command.node;
+                  const fn = state.context.functions.get(node.name);
+                  if (!fn) {
+                      continue; // it's not a custom function, step over it
+                  }
+                  const fnState = this._createState(fn.node.body, state.context.clone(), state);
+                  for (let ai = 0; ai < fn.node.args.length; ++ai) {
+                      const arg = fn.node.args[ai];
+                      const value = this._exec._evalExpression(node.args[ai], fnState.context);
+                      fnState.context.setVariable(arg.name, value, arg);
+                  }
+                  fnState.parentCallExpr = node;
+                  this._execStack.states.push(fnState);
+                  fnState.context.currentFunctionName = fn.name;
+                  if (this._shouldExecuteNectCommand()) {
+                      continue;
+                  }
+                  return true;
+              }
+              else if (command instanceof StatementCommand) {
+                  const res = this._exec._execStatement(command.node, state.context);
+                  if (res !== null && res !== undefined) {
+                      (_b = (_a = state.parent) === null || _a === void 0 ? void 0 : _a.parentCallExpr) === null || _b === void 0 ? void 0 : _b.setCachedReturnValue(res);
+                      if (this._shouldExecuteNectCommand()) {
+                          continue;
+                      }
+                      return true;
+                  }
+              }
+              else if (command instanceof GotoCommand) {
+                  if (command.condition) {
+                      const res = this._exec._evalExpression(command.condition, state.context);
+                      if (res) {
+                          if (this._shouldExecuteNectCommand()) {
+                              continue;
+                          }
+                          return true;
+                      }
+                  }
+                  state.current = command.position;
+                  if (this._shouldExecuteNectCommand()) {
+                      continue;
+                  }
+                  return true;
+              }
+              else if (command instanceof BlockCommand) {
+                  const blockState = this._createState(command.statements, state.context.clone(), state);
+                  this._execStack.states.push(blockState);
+                  continue; // step into the first statement of the block
+              }
+              if (state.isAtEnd) {
+                  this._execStack.pop();
+                  if (this._execStack.isEmpty) {
+                      return false;
+                  }
+              }
+              if (this._shouldExecuteNectCommand()) {
+                  continue;
+              }
+              return true;
+          }
+      }
+      _dispatchWorkgroup(f, workgroup_id, context) {
+          const workgroupSize = [1, 1, 1];
+          for (const attr of f.node.attributes) {
+              if (attr.name === "workgroup_size") {
+                  if (attr.value.length > 0) {
+                      // The value could be an override constant
+                      const v = context.getVariableValue(attr.value[0]);
+                      if (v !== null) {
+                          workgroupSize[0] = v;
+                      }
+                      else {
+                          workgroupSize[0] = parseInt(attr.value[0]);
+                      }
+                  }
+                  if (attr.value.length > 1) {
+                      const v = context.getVariableValue(attr.value[1]);
+                      if (v !== null) {
+                          workgroupSize[1] = v;
+                      }
+                      else {
+                          workgroupSize[1] = parseInt(attr.value[1]);
+                      }
+                  }
+                  if (attr.value.length > 2) {
+                      const v = context.getVariableValue(attr.value[2]);
+                      if (v !== null) {
+                          workgroupSize[2] = v;
+                      }
+                      else {
+                          workgroupSize[2] = parseInt(attr.value[2]);
+                      }
+                  }
+              }
+          }
+          context.setVariable("@workgroup_size", workgroupSize);
+          const width = workgroupSize[0];
+          const height = workgroupSize[1];
+          const depth = workgroupSize[2];
+          let found = false;
+          for (let z = 0, li = 0; z < depth && !found; ++z) {
+              for (let y = 0; y < height && !found; ++y) {
+                  for (let x = 0; x < width && !found; ++x, ++li) {
+                      const local_invocation_id = [x, y, z];
+                      const global_invocation_id = [
+                          x + workgroup_id[0] * workgroupSize[0],
+                          y + workgroup_id[1] * workgroupSize[1],
+                          z + workgroup_id[2] * workgroupSize[2]
+                      ];
+                      context.setVariable("@local_invocation_id", local_invocation_id);
+                      context.setVariable("@global_invocation_id", global_invocation_id);
+                      context.setVariable("@local_invocation_index", li);
+                      if (global_invocation_id[0] === this._dispatchId[0] &&
+                          global_invocation_id[1] === this._dispatchId[1] &&
+                          global_invocation_id[2] === this._dispatchId[2]) {
+                          found = true;
+                          break;
+                      }
+                      //this._dispatchExec(f, context);
+                  }
+              }
+          }
+          if (found) {
+              this._dispatchExec(f, context);
+          }
+          return found;
+      }
+      _dispatchExec(f, context) {
+          // Update any built-in input args.
+          // TODO: handle input structs.
+          for (const arg of f.node.args) {
+              for (const attr of arg.attributes) {
+                  if (attr.name === "builtin") {
+                      const globalName = `@${attr.value}`;
+                      const globalVar = context.getVariable(globalName);
+                      if (globalVar !== undefined) {
+                          context.variables.set(arg.name, globalVar);
+                      }
+                  }
+              }
+          }
+          const state = this._createState(f.node.body, context);
+          this._execStack.states.push(state);
+      }
+      _createState(ast, context, parent) {
+          const state = new ExecState(context, parent !== null && parent !== void 0 ? parent : null);
+          for (const statement of ast) {
+              // A statement may have expressions that include function calls.
+              // Gather all of the internal function calls from the statement.
+              // We can then include them as commands to step through, storing their
+              // values with the call node so that when it is evaluated, it uses that
+              // already computed value. This allows us to step into the function
+              if (statement instanceof Let ||
+                  statement instanceof Var$1 ||
+                  statement instanceof Assign) {
+                  const functionCalls = [];
+                  this._collectFunctionCalls(statement.value, functionCalls);
+                  for (const call of functionCalls) {
+                      state.commands.push(new CallExprCommand(call, statement));
+                  }
+                  state.commands.push(new StatementCommand(statement));
+              }
+              else if (statement instanceof Call) {
+                  const functionCalls = [];
+                  for (const arg of statement.args) {
+                      this._collectFunctionCalls(arg, functionCalls);
+                  }
+                  for (const call of functionCalls) {
+                      state.commands.push(new CallExprCommand(call, statement));
+                  }
+                  state.commands.push(new StatementCommand(statement));
+              }
+              else if (statement instanceof Return) {
+                  const functionCalls = [];
+                  this._collectFunctionCalls(statement.value, functionCalls);
+                  for (const call of functionCalls) {
+                      state.commands.push(new CallExprCommand(call, statement));
+                  }
+                  state.commands.push(new StatementCommand(statement));
+              }
+              else if (statement instanceof Function$1) {
+                  const f = new Function$2(statement);
+                  state.context.functions.set(statement.name, f);
+                  continue;
+              }
+              else if (statement instanceof While) {
+                  const functionCalls = [];
+                  this._collectFunctionCalls(statement.condition, functionCalls);
+                  for (const call of functionCalls) {
+                      state.commands.push(new CallExprCommand(call, statement));
+                  }
+                  const conditionCmd = new GotoCommand(statement.condition, 0);
+                  state.commands.push(conditionCmd);
+                  state.commands.push(new BlockCommand(statement.body));
+                  state.commands.push(new GotoCommand(statement.condition, 0));
+                  conditionCmd.position = state.commands.length;
+              }
+              else if (statement instanceof If) {
+                  const functionCalls = [];
+                  this._collectFunctionCalls(statement.condition, functionCalls);
+                  for (const call of functionCalls) {
+                      state.commands.push(new CallExprCommand(call, statement));
+                  }
+                  let conditionCmd = new GotoCommand(statement.condition, 0);
+                  state.commands.push(conditionCmd);
+                  state.commands.push(new BlockCommand(statement.body));
+                  const gotoEnd = new GotoCommand(null, 0);
+                  state.commands.push(gotoEnd);
+                  for (const elseIf of statement.elseif) {
+                      conditionCmd.position = state.commands.length;
+                      const functionCalls = [];
+                      this._collectFunctionCalls(elseIf.condition, functionCalls);
+                      for (const call of functionCalls) {
+                          state.commands.push(new CallExprCommand(call, statement));
+                      }
+                      conditionCmd = new GotoCommand(elseIf.condition, 0);
+                      state.commands.push(conditionCmd);
+                      state.commands.push(new BlockCommand(elseIf.body));
+                      state.commands.push(gotoEnd);
+                  }
+                  conditionCmd.position = state.commands.length;
+                  if (statement.else) {
+                      state.commands.push(new BlockCommand(statement.else));
+                  }
+                  gotoEnd.position = state.commands.length;
+              }
+              else {
+                  console.error(`TODO: statement type ${statement.constructor.name}`);
+              }
+          }
+          return state;
+      }
+      _collectFunctionCalls(node, functionCalls) {
+          if (node instanceof CallExpr) {
+              for (const arg of node.args) {
+                  this._collectFunctionCalls(arg, functionCalls);
+              }
+              // Only collect custom function calls, not built-in functions.
+              if (!node.isBuiltin) {
+                  functionCalls.push(node);
+              }
+          }
+          else if (node instanceof BinaryOperator) {
+              this._collectFunctionCalls(node.left, functionCalls);
+              this._collectFunctionCalls(node.right, functionCalls);
+          }
+          else if (node instanceof UnaryOperator) {
+              this._collectFunctionCalls(node.right, functionCalls);
+          }
+          else if (node instanceof GroupingExpr) {
+              for (const n of node.contents) {
+                  this._collectFunctionCalls(n, functionCalls);
+              }
+          }
+          else if (node instanceof CreateExpr) {
+              for (const arg of node.args) {
+                  this._collectFunctionCalls(arg, functionCalls);
+              }
+          }
+          else if (node instanceof BitcastExpr) {
+              this._collectFunctionCalls(node.value, functionCalls);
+          }
+          else if (node instanceof ArrayIndex) {
+              this._collectFunctionCalls(node.index, functionCalls);
+          }
+          else if (LiteralExpr) ;
+          else {
+              console.error(`TODO: expression type ${node.constructor.name}`);
+          }
+      }
+  }
+
   class ShaderModule extends GPUObject {
     constructor(id, descriptor, stacktrace) {
       super(id, descriptor, stacktrace);
@@ -9861,6 +13023,265 @@ var __webgpu_inspector_window = (function (exports) {
       }
     }
   }
+
+  /**
+   * A draggable bar to adjust sizes of elements in a splitter.
+   */
+  class SplitBar extends Div {
+    constructor(orientation, parent, options) {
+      super(parent, options);
+
+      this.orientation = orientation;
+      this._mousePressed = false;
+      this._mouseX = 0;
+      this._mouseY = 0;
+      this._prevWidget = null;
+      this._nextWidget = null;
+      this._splitIndex = 0;
+
+      this._element.classList.add('splitbar');
+
+      if (this.orientation == SplitBar.Horizontal) {
+        this._element.style.height = `${SplitBar.size}px`;
+        this._element.style.width = '100%';
+        this._element.style.cursor = 'n-resize';
+      } else {
+        this._element.style.width = `${SplitBar.size}px`;
+        this._element.style.height = '100%';
+        this._element.style.cursor = 'e-resize';
+      }
+
+      this.enablePointerEvents();
+    }
+
+    pointerDownEvent(e) {
+      this._mousePressed = true;
+      this._mouseX = e.clientX;
+      this._mouseY = e.clientY;
+      for (let i = 0; i < this.parent.children.length; ++i) {
+        let w = this.parent.children[i];
+        if (w === this) {
+          this._splitIndex = i;
+          this._prevWidget = this.parent.children[i - 1];
+          this._nextWidget = this.parent.children[i + 1];
+          break;
+        }
+      }
+      if (this._prevWidget) {
+        this._prevWidget._startResize();
+      }
+      if (this._nextWidget) {
+        this._nextWidget._startResize();
+      }
+
+      this.element.setPointerCapture(e.pointerId);
+    }
+
+    pointerMoveEvent(e) {
+      if (!this._mousePressed) {
+        return;
+      }
+
+      if (this.orientation === SplitBar.Horizontal) {
+        const dy = e.clientY - this._mouseY;
+        if (dy != 0) {
+          if (this.parent.mode === SplitBar.Percentage) {
+            const pct = dy / this.parent.height;
+            this.parent.position += pct;
+          } else {
+            this.parent.position += dy;
+          }
+        }
+      } else {
+        const dx = e.clientX - this._mouseX;
+        if (dx != 0) {
+          if (this.parent.mode === SplitBar.Percentage) {
+            const pct = dx / this.parent.width;
+            this.parent.position += pct;
+          } else {
+            this.parent.position += dx;
+          }
+        }
+      }
+
+      this._mouseX = e.clientX;
+      this._mouseY = e.clientY;
+
+      return false;
+    }
+
+    pointerUpEvent() {
+      this._prevWidget = null;
+      this._nextWidget = null;
+      this._mousePressed = false;
+      Widget.disablePaintingOnResize = false;
+      for (let w of this.parent.children) {
+        w.repaint(true);
+      }
+      return false;
+    }
+  }
+
+  SplitBar.isSplitBar = true;
+  SplitBar.Horizontal = 0;
+  SplitBar.Vertical = 1;
+  SplitBar.size = 6;
+
+  /**
+   * The children of this widget are arranged horizontally or vertically and separated by a
+   * draggable SplitBar.
+   */
+  class Split extends Div {
+    constructor(parent, options) {
+      super(parent);
+      this.classList.add('split', 'disable-selection');
+
+      this._direction = Split.Horizontal;
+      this._position = 0.5;
+      this.mode = Split.Percentage;
+
+      if (options) {
+        this.configure(options);
+      }
+
+      if (this._direction === Split.Horizontal) {
+        this.classList.add('hsplit');
+      } else {
+        this.classList.add('vsplit');
+      }
+    }
+
+    configure(options) {
+      if (options.direction !== undefined) {
+        this._direction = options.direction;
+      }
+
+      super.configure(options);
+
+      if (options.position !== undefined) {
+        this.position = options.position;
+        if (this.position > 1) {
+          this.mode = Split.Pixel;
+        }
+      }
+    }
+
+    get direction() {
+      return this._direction;
+    }
+
+    get position() {
+      return this._position;
+    }
+
+    set position(pos) {
+      this._position = pos;
+      this.updatePosition();
+    }
+
+    updatePosition() {
+      if (this.children.length < 3) {
+        return;
+      }
+
+      const numSplitBars = this.children.length - 2;
+      const splitBarSize = numSplitBars * SplitBar.size;
+
+      let splitPos;
+      let splitPos2;
+      if (this._position < 1) {
+        const pct = this._position * 100;
+        splitPos = `${pct}%`;
+        splitPos2 = `calc(${100 - pct}% - ${splitBarSize}px)`;
+      } else {
+        splitPos = `${this._position}px`;
+        splitPos2 = `calc(100% - ${this._position}px - ${splitBarSize}px)`;
+      }
+
+      if (this._direction == Split.Horizontal) {
+        this.children[0].style.width = splitPos;
+        this.children[0].element.width = '0';
+
+        this.children[2].style.width = splitPos2;
+        this.children[2].element.width = '0';
+      } else {
+        this.children[0].element.height = '0';
+        this.children[0].style.height = splitPos;
+
+        this.children[2].style.height = splitPos2;
+        this.children[2].element.height = '0';
+      }
+
+      this.onResize();
+    }
+
+    appendChild(child) {
+      if (this.direction == Split.Horizontal)
+        child.style.display = 'inline-block';
+
+      if (this.children.length == 0 || child.constructor.isSplitBar) {
+        if (this.children.length == 0) {
+          child.style.width = '100%';
+          child.style.height = '100%';
+        } else {
+          if (this._direction == Split.Horizontal) {
+            child.style.height = '100%';
+          } else {
+            child.style.width = '100%';
+          }
+        }
+        super.appendChild(child);
+        return;
+      }
+
+      const percent = (1 / (this.children.length + 1)) * 100;
+
+      new SplitBar(
+        this._direction == Split.Horizontal
+          ? SplitBar.Vertical
+          : SplitBar.Horizontal,
+        this
+      );
+
+      super.appendChild(child);
+
+      const numSplitBars = this.children.length - 2;
+      const splitBarSize = numSplitBars * SplitBar.size;
+
+      for (const c of this.children) {
+        if (!c.constructor.isSplitBar) {
+          if (c === this.children[this.children.length - 1]) {
+            if (this._direction == Split.Horizontal) {
+              c.element.width = '0';
+              c.style.height = '100%';
+              c.style.width = `calc(${100 - percent}% - ${splitBarSize}px)`;
+            } else {
+              c.element.height = '0';
+              c.style.width = '100%';
+              c.style.height = `calc(${100 - percent}% - ${splitBarSize}px)`;
+            }
+          } else {
+            if (this._direction == Split.Horizontal) {
+              c.style.width = `${percent}%`;
+            } else {
+              c.style.height = `${percent}%`;
+            }
+          }
+        }
+
+        c.onResize();
+      }
+
+      if (this._position != 0.5) {
+        this.updatePosition();
+      }
+    }
+  }
+
+  Split.Horizontal = 0;
+  Split.Vertical = 1;
+  Split.Percentage = 0;
+  Split.Pixel = 1;
 
   // These are filled with ranges (rangeFrom[i] up to but not including
   // rangeTo[i]) of code points that count as extending characters.
@@ -37306,13 +40727,21 @@ var __webgpu_inspector_window = (function (exports) {
 
           new Div(this.controls, { style: "flex-grow: 2;" });
 
+          const editorPanel = new Div(this, { style: "height: 100%;" });
+
+          const split = new Split(editorPanel, { direction: Split.Horizontal, position: 0.7 });
+          const pane1 = new Span(split, { style: "flex-grow: 1; overflow: hidden; height: 100%;" });
+          const pane2 = new Span(split, { style: "flex-grow: 1; overflow: hidden; height: 100%;" });
+
           this.editorView = new EditorView({
               doc: code,
               extensions: [
                   shaderEditorSetup$1
               ],
-              parent: this.element,
+              parent: pane1.element,
           });
+
+          this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: 100%;" });
       }
 
       debug() {
@@ -37344,7 +40773,7 @@ var __webgpu_inspector_window = (function (exports) {
               return;
           }
 
-          kernel.name;
+          const kernelName = kernel.name;
           const workgroupSize = [1, 1, 1];
           if (kernel.attributes) {
               for (const attr of kernel.attributes) {
@@ -37368,15 +40797,30 @@ var __webgpu_inspector_window = (function (exports) {
               }
           }
 
-          /*this.debugger = new WgslDebug(code);
-          const buffer = new Float32Array([1, 2, 6, 0]);
-          const bg = {0: {0: buffer}};
-          this.debugger.debugWorkgroup(kernelName, [idx, idy, idz], dispatchCount, bg);
-          this.update();*/
-          console.log("Debug", idx, idy, idz, dispatchCount, workgroupSize);
-          console.log(this.parentCommand);
+          const bindGroups = {};
+
+          this.pipelineState.bindGroups.forEach((bgCmd) => {
+              const index = bgCmd.args[0];
+              //const bg = this.database.getObject(bgCmd.args[1].__id);
+              const bufferData = this.pipelineState.bindGroups[index].bufferData;
+              let binding = 0;
+              const bindgroup = {};
+              for (const buffer of bufferData) {
+                  bindgroup[binding++] = buffer;
+              }
+              bindGroups[index] = bindgroup;
+          });
+
+          console.log("Debug", idx, idy, idz, dispatchCount.toString(), workgroupSize.toString());
+          console.log(this.command);
           console.log(this.module?.reflection);
           console.log(this.pipelineState);
+          console.log(bindGroups);
+
+          const code = this.module.descriptor.code;
+          this.debugger = new WgslDebug(code);
+          this.debugger.debugWorkgroup(kernelName, [idx, idy, idz], dispatchCount, bindGroups);
+          this.update();
       }
 
       stepInto() {
@@ -37410,73 +40854,59 @@ var __webgpu_inspector_window = (function (exports) {
               this._highlightLine(0);
           }
 
-          while (this.watch.childElementCount > 0) {
-              this.watch.removeChild(this.watch.children[0]);
-          }
+          if (this.watch) {
+              this.watch.removeAllChildren();
 
-          let state = this.debugger.currentState;
-          if (state === null) {
-              const context = this.debugger.context;
-              const currentFunctionName = context.currentFunctionName;
-              const div = document.createElement("div");
-              div.style.fontWeight = "bold";
-              div.innerText = currentFunctionName || "<shader>";
-              this.watch.appendChild(div);
-
-              context.variables.forEach((v, name) => {
-                  if (!name.startsWith("@")) {
-                  const div = document.createElement("div");
-                  div.innerText = `${name} : ${v.value}`;
-                  this.watch.appendChild(div);
-                  }
-              });
-
-              const globals = document.createElement("div");
-              globals.style.marginTop = "10px";
-              globals.style.border = "1px solid black";
-              this.watch.appendChild(globals);
-              context.variables.forEach((v, name) => {
-                  if (name.startsWith("@")) {
-                  const div = document.createElement("div");
-                  div.innerText = `${name} : ${v.value}`;
-                  this.watch.appendChild(div);
-                  }
-              });
-          } else {
-              let lastState = state;
-              while (state !== null) {
-                  const context = state.context;
+              let state = this.debugger.currentState;
+              if (state === null) {
+                  const context = this.debugger.context;
                   const currentFunctionName = context.currentFunctionName;
-                  const div = document.createElement("div");
-                  div.style.fontWeight = "bold";
-                  div.innerText = currentFunctionName || "<shader>";
-                  this.watch.appendChild(div);
+                  const div = new Div(this.watch, { style: "font-weight: bold;" });
+                  div.text = currentFunctionName || "<shader>";
 
                   context.variables.forEach((v, name) => {
                       if (!name.startsWith("@")) {
-                          const div = document.createElement("div");
-                          div.innerText = `${name} : ${v.value}`;
-                          this.watch.appendChild(div);
+                          const div = new Div(this.watch);
+                          div.text = `${name} : ${v.value}`;
                       }
                   });
 
-                  lastState = state;
-                  state = state.parent;
-              }
-
-              if (lastState) {
-                  const context = lastState.context;
-                  const globals = document.createElement("div");
-                  globals.style.marginTop = "10px";
-                  globals.style.border = "1px solid black";
-                  this.watch.appendChild(globals);
+                  const globals = new Div(this.watch, { style: "margin-top: 10px; border: 1px solid black;" });
                   context.variables.forEach((v, name) => {
-                  if (name.startsWith("@")) {
-                      const div = document.createElement("div");
-                      div.innerText = `${name} : ${v.value}`;
-                      this.watch.appendChild(div);
-                  }
+                      if (name.startsWith("@")) {
+                          const div = new Div(globals);
+                          div.text = `${name} : ${v.value}`;
+                      }
                   });
+              } else {
+                  let lastState = state;
+                  while (state !== null) {
+                      const context = state.context;
+                      const currentFunctionName = context.currentFunctionName;
+                      const div = new Div(this.watch, { style: "font-weight: bold;" });
+                      div.text = currentFunctionName || "<shader>";
+
+                      context.variables.forEach((v, name) => {
+                          if (!name.startsWith("@")) {
+                              const div = new Div(this.watch);
+                              div.text = `${name} : ${v.value}`;
+                          }
+                      });
+
+                      lastState = state;
+                      state = state.parent;
+                  }
+
+                  if (lastState) {
+                      const context = lastState.context;
+                      new Div(this.watch, { style: "margin-top: 10px; border: 1px solid black;" });
+                      context.variables.forEach((v, name) => {
+                          if (name.startsWith("@")) {
+                              const div = new Div(this.watch);
+                              div.text = `${name} : ${v.value}`;
+                          }
+                      });
+                  }
               }
           }
       }
@@ -39386,7 +42816,7 @@ var __webgpu_inspector_window = (function (exports) {
       const pipeline = this._getObject(id);
       const desc = pipeline.descriptor;
       const computeId = desc.compute?.module?.__id;
-      const editor = new ShaderDebugger(parentCommand, this._captureData, this.database, this);
+      const editor = new ShaderDebugger(parentCommand, this._captureData, this.database, this, { style: "overflow: hidden;" });
       this._captureTab.addTab(`Compute Module ID:${computeId}`, editor);
       this._captureTab.setActivePanel(editor);
     }
@@ -40376,265 +43806,6 @@ var __webgpu_inspector_window = (function (exports) {
       this.input.indeterminate = v;
     }
   }
-
-  /**
-   * A draggable bar to adjust sizes of elements in a splitter.
-   */
-  class SplitBar extends Div {
-    constructor(orientation, parent, options) {
-      super(parent, options);
-
-      this.orientation = orientation;
-      this._mousePressed = false;
-      this._mouseX = 0;
-      this._mouseY = 0;
-      this._prevWidget = null;
-      this._nextWidget = null;
-      this._splitIndex = 0;
-
-      this._element.classList.add('splitbar');
-
-      if (this.orientation == SplitBar.Horizontal) {
-        this._element.style.height = `${SplitBar.size}px`;
-        this._element.style.width = '100%';
-        this._element.style.cursor = 'n-resize';
-      } else {
-        this._element.style.width = `${SplitBar.size}px`;
-        this._element.style.height = '100%';
-        this._element.style.cursor = 'e-resize';
-      }
-
-      this.enablePointerEvents();
-    }
-
-    pointerDownEvent(e) {
-      this._mousePressed = true;
-      this._mouseX = e.clientX;
-      this._mouseY = e.clientY;
-      for (let i = 0; i < this.parent.children.length; ++i) {
-        let w = this.parent.children[i];
-        if (w === this) {
-          this._splitIndex = i;
-          this._prevWidget = this.parent.children[i - 1];
-          this._nextWidget = this.parent.children[i + 1];
-          break;
-        }
-      }
-      if (this._prevWidget) {
-        this._prevWidget._startResize();
-      }
-      if (this._nextWidget) {
-        this._nextWidget._startResize();
-      }
-
-      this.element.setPointerCapture(e.pointerId);
-    }
-
-    pointerMoveEvent(e) {
-      if (!this._mousePressed) {
-        return;
-      }
-
-      if (this.orientation === SplitBar.Horizontal) {
-        const dy = e.clientY - this._mouseY;
-        if (dy != 0) {
-          if (this.parent.mode === SplitBar.Percentage) {
-            const pct = dy / this.parent.height;
-            this.parent.position += pct;
-          } else {
-            this.parent.position += dy;
-          }
-        }
-      } else {
-        const dx = e.clientX - this._mouseX;
-        if (dx != 0) {
-          if (this.parent.mode === SplitBar.Percentage) {
-            const pct = dx / this.parent.width;
-            this.parent.position += pct;
-          } else {
-            this.parent.position += dx;
-          }
-        }
-      }
-
-      this._mouseX = e.clientX;
-      this._mouseY = e.clientY;
-
-      return false;
-    }
-
-    pointerUpEvent() {
-      this._prevWidget = null;
-      this._nextWidget = null;
-      this._mousePressed = false;
-      Widget.disablePaintingOnResize = false;
-      for (let w of this.parent.children) {
-        w.repaint(true);
-      }
-      return false;
-    }
-  }
-
-  SplitBar.isSplitBar = true;
-  SplitBar.Horizontal = 0;
-  SplitBar.Vertical = 1;
-  SplitBar.size = 6;
-
-  /**
-   * The children of this widget are arranged horizontally or vertically and separated by a
-   * draggable SplitBar.
-   */
-  class Split extends Div {
-    constructor(parent, options) {
-      super(parent);
-      this.classList.add('split', 'disable-selection');
-
-      this._direction = Split.Horizontal;
-      this._position = 0.5;
-      this.mode = Split.Percentage;
-
-      if (options) {
-        this.configure(options);
-      }
-
-      if (this._direction === Split.Horizontal) {
-        this.classList.add('hsplit');
-      } else {
-        this.classList.add('vsplit');
-      }
-    }
-
-    configure(options) {
-      if (options.direction !== undefined) {
-        this._direction = options.direction;
-      }
-
-      super.configure(options);
-
-      if (options.position !== undefined) {
-        this.position = options.position;
-        if (this.position > 1) {
-          this.mode = Split.Pixel;
-        }
-      }
-    }
-
-    get direction() {
-      return this._direction;
-    }
-
-    get position() {
-      return this._position;
-    }
-
-    set position(pos) {
-      this._position = pos;
-      this.updatePosition();
-    }
-
-    updatePosition() {
-      if (this.children.length < 3) {
-        return;
-      }
-
-      const numSplitBars = this.children.length - 2;
-      const splitBarSize = numSplitBars * SplitBar.size;
-
-      let splitPos;
-      let splitPos2;
-      if (this._position < 1) {
-        const pct = this._position * 100;
-        splitPos = `${pct}%`;
-        splitPos2 = `calc(${100 - pct}% - ${splitBarSize}px)`;
-      } else {
-        splitPos = `${this._position}px`;
-        splitPos2 = `calc(100% - ${this._position}px - ${splitBarSize}px)`;
-      }
-
-      if (this._direction == Split.Horizontal) {
-        this.children[0].style.width = splitPos;
-        this.children[0].element.width = '0';
-
-        this.children[2].style.width = splitPos2;
-        this.children[2].element.width = '0';
-      } else {
-        this.children[0].element.height = '0';
-        this.children[0].style.height = splitPos;
-
-        this.children[2].style.height = splitPos2;
-        this.children[2].element.height = '0';
-      }
-
-      this.onResize();
-    }
-
-    appendChild(child) {
-      if (this.direction == Split.Horizontal)
-        child.style.display = 'inline-block';
-
-      if (this.children.length == 0 || child.constructor.isSplitBar) {
-        if (this.children.length == 0) {
-          child.style.width = '100%';
-          child.style.height = '100%';
-        } else {
-          if (this._direction == Split.Horizontal) {
-            child.style.height = '100%';
-          } else {
-            child.style.width = '100%';
-          }
-        }
-        super.appendChild(child);
-        return;
-      }
-
-      const percent = (1 / (this.children.length + 1)) * 100;
-
-      new SplitBar(
-        this._direction == Split.Horizontal
-          ? SplitBar.Vertical
-          : SplitBar.Horizontal,
-        this
-      );
-
-      super.appendChild(child);
-
-      const numSplitBars = this.children.length - 2;
-      const splitBarSize = numSplitBars * SplitBar.size;
-
-      for (const c of this.children) {
-        if (!c.constructor.isSplitBar) {
-          if (c === this.children[this.children.length - 1]) {
-            if (this._direction == Split.Horizontal) {
-              c.element.width = '0';
-              c.style.height = '100%';
-              c.style.width = `calc(${100 - percent}% - ${splitBarSize}px)`;
-            } else {
-              c.element.height = '0';
-              c.style.width = '100%';
-              c.style.height = `calc(${100 - percent}% - ${splitBarSize}px)`;
-            }
-          } else {
-            if (this._direction == Split.Horizontal) {
-              c.style.width = `${percent}%`;
-            } else {
-              c.style.height = `${percent}%`;
-            }
-          }
-        }
-
-        c.onResize();
-      }
-
-      if (this._position != 0.5) {
-        this.updatePosition();
-      }
-    }
-  }
-
-  Split.Horizontal = 0;
-  Split.Vertical = 1;
-  Split.Percentage = 0;
-  Split.Pixel = 1;
 
   class RecorderData {
     constructor(window) {
