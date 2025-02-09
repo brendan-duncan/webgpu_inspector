@@ -1180,6 +1180,7 @@ var __webgpu_inspector_window = (function (exports) {
   class CallExpr extends Expression {
       constructor(name, args) {
           super();
+          this.cachedReturnValue = null;
           this.name = name;
           this.args = args;
       }
@@ -7124,7 +7125,7 @@ var __webgpu_inspector_window = (function (exports) {
           return null;
       }
       _evalCall(node, context) {
-          if (node.cachedReturnValue) {
+          if (node.cachedReturnValue !== null) {
               return node.cachedReturnValue;
           }
           const subContext = context.clone();
@@ -7654,6 +7655,10 @@ var __webgpu_inspector_window = (function (exports) {
           return (_b = (_a = this.condition) === null || _a === void 0 ? void 0 : _a.line) !== null && _b !== void 0 ? _b : -1;
       }
   }
+  GotoCommand.kContinueTarget = -1;
+  GotoCommand.kBreakTarget = -2;
+  GotoCommand.kContinue = -3;
+  GotoCommand.kBreak = -4;
   class BlockCommand extends Command {
       constructor(statements) {
           super();
@@ -7857,19 +7862,11 @@ var __webgpu_inspector_window = (function (exports) {
               if (command.condition === null) {
                   return true;
               }
-          } /* else if (command instanceof StatementCommand) {
-              if (command.node instanceof AST.Assign ||
-                  command.node instanceof AST.Let ||
-                  command.node instanceof AST.Var ||
-                  command.node instanceof AST.Const) {
-                  return true;
-              }
-          }*/
+          }
           return false;
       }
       // Returns true if execution is not finished, false if execution is complete.
       stepNext(stepInto = true) {
-          var _a, _b;
           if (!this._execStack) {
               this._execStack = new ExecStack();
               const state = this._createState(this._exec.ast, this._exec.context);
@@ -7917,7 +7914,18 @@ var __webgpu_inspector_window = (function (exports) {
               else if (command instanceof StatementCommand) {
                   const res = this._exec._execStatement(command.node, state.context);
                   if (res !== null && res !== undefined) {
-                      (_b = (_a = state.parent) === null || _a === void 0 ? void 0 : _a.parentCallExpr) === null || _b === void 0 ? void 0 : _b.setCachedReturnValue(res);
+                      let s = state;
+                      // Find the CallExpr to store the return value in.
+                      while (s) {
+                          if (s.parentCallExpr) {
+                              s.parentCallExpr.setCachedReturnValue(res);
+                              break;
+                          }
+                          s = s.parent;
+                      }
+                      if (s === null) {
+                          console.error("Could not find CallExpr to store return value in");
+                      }
                       if (this._shouldExecuteNectCommand()) {
                           continue;
                       }
@@ -7925,6 +7933,54 @@ var __webgpu_inspector_window = (function (exports) {
                   }
               }
               else if (command instanceof GotoCommand) {
+                  // kContinueTarget is used as a marker for continue statements, and
+                  // kBreakTarget is used as a marker for break statements. Skip them.
+                  if (command.position === GotoCommand.kContinueTarget ||
+                      command.position === GotoCommand.kBreakTarget) {
+                      continue; // continue to the next command
+                  }
+                  // kContinue is used as a marker for continue statements. If we encounter it,
+                  // then we need to find the nearest proceding GotoCommand with a kContinueTarget.
+                  if (command.position === GotoCommand.kContinue) {
+                      while (!this._execStack.isEmpty) {
+                          state = this._execStack.last;
+                          for (let i = state.current; i >= 0; --i) {
+                              const cmd = state.commands[i];
+                              if (cmd instanceof GotoCommand &&
+                                  cmd.position === GotoCommand.kContinueTarget) {
+                                  state.current = i + 1;
+                                  return true;
+                              }
+                          }
+                          // No Goto -1 found (loop), pop the current state and continue searching.
+                          this._execStack.pop();
+                      }
+                      // If we got here, we've reached the end of the stack and didn't find a -1.
+                      // That means a continue was used outside of a loop, so we're done.
+                      console.error("Continue statement used outside of a loop");
+                      return false;
+                  }
+                  // kBreak is used as a marker for break statements. If we encounter it,
+                  // then we need to find the nearest subsequent GotoCommand with a kBreakTarget.
+                  if (command.position === GotoCommand.kBreak) {
+                      while (!this._execStack.isEmpty) {
+                          state = this._execStack.last;
+                          for (let i = state.current; i < state.commands.length; ++i) {
+                              const cmd = state.commands[i];
+                              if (cmd instanceof GotoCommand &&
+                                  cmd.position === GotoCommand.kBreakTarget) {
+                                  state.current = i + 1;
+                                  return true;
+                              }
+                          }
+                          // No Goto -2 found (loop), pop the current state and continue searching.
+                          this._execStack.pop();
+                      }
+                      // If we got here, we've reached the end of the stack and didn't find a -2.
+                      // That means a break was used outside of a loop, so we're done.
+                      console.error("Break statement used outside of a loop");
+                      return false;
+                  }
                   if (command.condition) {
                       const res = this._exec._evalExpression(command.condition, state.context);
                       if (res) {
@@ -8076,6 +8132,9 @@ var __webgpu_inspector_window = (function (exports) {
                   }
                   state.commands.push(new StatementCommand(statement));
               }
+              else if (statement instanceof Increment) {
+                  state.commands.push(new StatementCommand(statement));
+              }
               else if (statement instanceof Function$1) {
                   const f = new Function$2(statement);
                   state.context.functions.set(statement.name, f);
@@ -8083,6 +8142,7 @@ var __webgpu_inspector_window = (function (exports) {
               }
               else if (statement instanceof While) {
                   const functionCalls = [];
+                  state.commands.push(new GotoCommand(null, GotoCommand.kContinueTarget));
                   this._collectFunctionCalls(statement.condition, functionCalls);
                   for (const call of functionCalls) {
                       state.commands.push(new CallExprCommand(call, statement));
@@ -8091,6 +8151,7 @@ var __webgpu_inspector_window = (function (exports) {
                   state.commands.push(conditionCmd);
                   state.commands.push(new BlockCommand(statement.body));
                   state.commands.push(new GotoCommand(statement.condition, 0));
+                  state.commands.push(new GotoCommand(null, GotoCommand.kBreakTarget));
                   conditionCmd.position = state.commands.length;
               }
               else if (statement instanceof If) {
@@ -8121,6 +8182,39 @@ var __webgpu_inspector_window = (function (exports) {
                       state.commands.push(new BlockCommand(statement.else));
                   }
                   gotoEnd.position = state.commands.length;
+              }
+              else if (statement instanceof For) {
+                  if (statement.init) {
+                      state.commands.push(new StatementCommand(statement.init));
+                  }
+                  let conditionPos = state.commands.length;
+                  if (statement.increment === null) {
+                      state.commands.push(new GotoCommand(null, GotoCommand.kContinueTarget));
+                  }
+                  let conditionCmd = null;
+                  if (statement.condition) {
+                      const functionCalls = [];
+                      this._collectFunctionCalls(statement.condition, functionCalls);
+                      for (const call of functionCalls) {
+                          state.commands.push(new CallExprCommand(call, statement));
+                      }
+                      conditionCmd = new GotoCommand(statement.condition, 0);
+                      state.commands.push(conditionCmd);
+                  }
+                  state.commands.push(new BlockCommand(statement.body));
+                  if (statement.increment) {
+                      state.commands.push(new GotoCommand(null, GotoCommand.kContinueTarget));
+                      state.commands.push(new StatementCommand(statement.increment));
+                  }
+                  state.commands.push(new GotoCommand(null, conditionPos));
+                  state.commands.push(new GotoCommand(null, GotoCommand.kBreakTarget));
+                  conditionCmd.position = state.commands.length;
+              }
+              else if (statement instanceof Continue) {
+                  state.commands.push(new GotoCommand(null, GotoCommand.kContinue));
+              }
+              else if (statement instanceof Break$1) {
+                  state.commands.push(new GotoCommand(null, GotoCommand.kBreak));
               }
               else {
                   console.error(`TODO: statement type ${statement.constructor.name}`);
@@ -40614,7 +40708,7 @@ var __webgpu_inspector_window = (function (exports) {
       breakpointGutter,
       lineHighlightField,
       lineNumbers(),
-      highlightActiveLineGutter(),
+      //highlightActiveLineGutter(),
       highlightSpecialChars(),
       EditorState.readOnly.of(true),
       history(),
@@ -40730,8 +40824,8 @@ var __webgpu_inspector_window = (function (exports) {
           const editorPanel = new Div(this, { style: "height: 100%;" });
 
           const split = new Split(editorPanel, { direction: Split.Horizontal, position: 0.7 });
-          const pane1 = new Span(split, { style: "flex-grow: 1; overflow: hidden; height: 100%;" });
-          const pane2 = new Span(split, { style: "flex-grow: 1; overflow: hidden; height: 100%;" });
+          const pane1 = new Span(split, { style: "flex-grow: 1; height: calc(100% - 35px); overflow: auto;" });
+          const pane2 = new Span(split, { style: "flex-grow: 1; height: calc(100% - 35px); overflow: auto;" });
 
           this.editorView = new EditorView({
               doc: code,
@@ -40740,6 +40834,8 @@ var __webgpu_inspector_window = (function (exports) {
               ],
               parent: pane1.element,
           });
+
+          //openSearchPanel(this.editorview);
 
           this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: 100%;" });
       }
@@ -42797,7 +42893,7 @@ var __webgpu_inspector_window = (function (exports) {
               self.window.inspectObject(computeModule);
             } });
             if (parentCommand) {
-              new Button(computeGrp.body, { label: "Debug", style: "background-color: rgb(211 26 26);", callback: () => {
+              new Button(computeGrp.body, { label: "Debug", style: "background-color: rgb(180 26 26);", callback: () => {
                 self._debugShader(command, parentCommand);
               } });
             }

@@ -1905,7 +1905,7 @@ export class CapturePanel {
             self.window.inspectObject(computeModule);
           } });
           if (parentCommand) {
-            new Button(computeGrp.body, { label: "Debug", style: "background-color: rgb(211 26 26);", callback: () => {
+            new Button(computeGrp.body, { label: "Debug", style: "background-color: rgb(180 26 26);", callback: () => {
               self._debugShader(command, parentCommand);
             } });
           }

@@ -10,7 +10,7 @@ import { EditorState, StateField, StateEffect, RangeSet } from "@codemirror/stat
 import { defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
   foldGutter, foldKeymap } from "@codemirror/language";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { searchKeymap } from "@codemirror/search";
+import { searchKeymap, openSearchPanel  } from "@codemirror/search";
 import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { lintKeymap } from "@codemirror/lint";
 import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
@@ -107,7 +107,7 @@ const shaderEditorSetup = (() => [
     breakpointGutter,
     lineHighlightField,
     lineNumbers(),
-    highlightActiveLineGutter(),
+    //highlightActiveLineGutter(),
     highlightSpecialChars(),
     EditorState.readOnly.of(true),
     history(),
@@ -223,8 +223,8 @@ export class ShaderDebugger extends Div {
         const editorPanel = new Div(this, { style: "height: 100%;" });
 
         const split = new Split(editorPanel, { direction: Split.Horizontal, position: 0.7 });
-        const pane1 = new Span(split, { style: "flex-grow: 1; overflow: hidden; height: 100%;" });
-        const pane2 = new Span(split, { style: "flex-grow: 1; overflow: hidden; height: 100%;" });
+        const pane1 = new Span(split, { style: "flex-grow: 1; height: calc(100% - 35px); overflow: auto;" });
+        const pane2 = new Span(split, { style: "flex-grow: 1; height: calc(100% - 35px); overflow: auto;" });
 
         this.editorView = new EditorView({
             doc: code,
@@ -233,6 +233,8 @@ export class ShaderDebugger extends Div {
             ],
             parent: pane1.element,
         });
+
+        //openSearchPanel(this.editorview);
 
         this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: 100%;" });
     }
