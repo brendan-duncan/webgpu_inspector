@@ -1,4 +1,5 @@
 import { Div } from "./widget/div.js";
+import { Span } from "./widget/span.js";
 
 import { EditorView } from "codemirror";
 import { keymap, highlightSpecialChars, drawSelection, dropCursor, gutter, GutterMarker,
@@ -12,6 +13,8 @@ import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } 
 import { lintKeymap } from "@codemirror/lint";
 import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
 import { cobalt } from 'thememirror';
+import { Button } from "./widget/button.js";
+import { NumberInput } from "./widget/number_input.js";
 
 const breakpointEffect = StateEffect.define({
     map: (val, mapping) => ({ pos: mapping.mapPos(val.pos), on: val.on })
@@ -61,7 +64,7 @@ const breakpointGutter = [
         }
       }
     }),
-  
+
     EditorView.baseTheme({
       ".cm-breakpoint-gutter .cm-gutterElement": {
         color: "red",
@@ -131,27 +134,271 @@ const shaderEditorSetup = (() => [
 ])();
 
 export class ShaderDebugger extends Div {
-    constructor(command, data, database, options) {
+    constructor(command, data, database, capturePanel, options) {
         super(null, options);
         this._element.classList.add('shader-debugger');
 
+        this.capturePanel = capturePanel;
+        this.command = command;
         this.captureData = data;
         this.database = database;
-        const args = command.args;
+
+        this.pipelineState = this.capturePanel._getPipelineState(command);
+        const computePass = this.pipelineState.pipeline;
+
+        const args = computePass.args;
         const id = args[0]?.__id;
         const pipeline = database.getObject(id);
         const desc = pipeline.descriptor;
         const computeId = desc.compute?.module?.__id;
-        const computeModule = database.getObject(computeId);
+        this.module = database.getObject(computeId);
 
-        const code = computeModule.descriptor.code;
+        const code = this.module.descriptor.code;
 
-        new EditorView({
+        this._idX = 0;
+        this._idY = 0;
+        this._idZ = 0;
+
+        this.controls = new Div(this, { style: "display: flex; flex-direction: row; margin-top: 5px;" });
+        new Span(this.controls, { text: "ID:", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });
+        this.idXInput = new NumberInput(this.controls, {
+            value: 0,
+            min: 0,
+            precision: 0,
+            step: 1,
+            style: "flex: 0 0 auto; display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;",
+            onChange: (value) => {
+                this._idX = value;
+            }
+        });
+        this.idYInput = new NumberInput(this.controls, {
+            value: 0,
+            min: 0,
+            step: 1,
+            precision: 0,
+            style: "flex: 0 0 auto; display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;",
+            onChange: (value) => {
+                this._idY = value;
+            }
+        });
+        this.idZInput = new NumberInput(this.controls, {
+            value: 0,
+            min: 0,
+            step: 1,
+            precision: 0,
+            style: "flex: 0 0 auto; display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;",
+            onChange: (value) => {
+                this._idZ = value;
+            }
+        });
+
+        new Button(this.controls, {
+            text: "Debug",
+            onClick: () => {
+                this.debug();
+            }
+        });
+
+        new Div(this.controls, { style: "flex-grow: 1;" });
+
+        new Button(this.controls, {
+            text: "Step Into",
+            style: "background-color: #777;",
+            onClick: () => {
+                this.stepInto();
+            }
+        });
+        new Button(this.controls, {
+            text: "Step Over",
+            style: "background-color: #777;",
+            onClick: () => {
+                this.stepOver();
+            }
+        });
+
+        new Div(this.controls, { style: "flex-grow: 2;" });
+
+        this.editorView = new EditorView({
             doc: code,
             extensions: [
                 shaderEditorSetup
             ],
             parent: this.element,
         });
+    }
+
+    debug() {
+        const idx = Math.floor(this._idX);
+        const idy = Math.floor(this._idY);
+        const idz = Math.floor(this._idZ);
+
+        const dispatchCount = [1, 1, 1];
+        const dispatchArg = this.command.args[0];
+        if (dispatchArg instanceof Array) {
+            dispatchCount[0] = dispatchArg[0];
+            if (dispatchArg.length > 1) {
+                dispatchCount[1] = dispatchArg[1];
+            }
+            if (dispatchArg.length > 2) {
+                dispatchCount[2] = dispatchArg[2];
+            }
+        } else {
+            dispatchCount[0] = dispatchArg;
+        }
+
+        const reflection = this.module?.reflection;
+        if (!reflection) {
+            return;
+        }
+
+        const kernel = reflection.entry.compute[0];
+        if (!kernel) {
+            return;
+        }
+
+        const kernelName = kernel.name;
+        const workgroupSize = [1, 1, 1];
+        if (kernel.attributes) {
+            for (const attr of kernel.attributes) {
+                if (attr.name === "workgroup_size") {
+                    const size = attr.value;
+                    if (size instanceof Array) {
+                        if (size.length > 0) {
+                            workgroupSize[0] = parseInt(size[0]);
+                        }
+                        if (size.length > 1) {
+                            workgroupSize[1] = parseInt(size[1]);
+                        }
+                        if (size.length > 2) {
+                            workgroupSize[2] = parseInt(size[2]);
+                        }
+                    } else {
+                        workgroupSize[0] = parseInt(size);
+                    }
+                    break;
+                }
+            }
+        }
+
+        /*this.debugger = new WgslDebug(code);
+        const buffer = new Float32Array([1, 2, 6, 0]);
+        const bg = {0: {0: buffer}};
+        this.debugger.debugWorkgroup(kernelName, [idx, idy, idz], dispatchCount, bg);
+        this.update();*/
+        console.log("Debug", idx, idy, idz, dispatchCount, workgroupSize);
+        console.log(this.parentCommand);
+        console.log(this.module?.reflection);
+        console.log(this.pipelineState);
+    }
+
+    stepInto() {
+        if (this.debugger) {
+            this.debugger.stepNext(true);
+            this.update();
+        }
+    }
+
+    stepOver() {
+        if (this.debugger) {
+            this.debugger.stepNext(false);
+            this.update();
+        }
+    }
+
+    update() {
+        if (!this.debugger) {
+            return;
+        }
+
+        const cmd = this.debugger.currentCommand;
+        if (cmd !== null) {
+            const line = cmd.line;
+            if (line > -1) {
+            this._highlightLine(cmd.line);
+            } else {
+            this._highlightLine(0);
+            }
+        } else {
+            this._highlightLine(0);
+        }
+
+        while (this.watch.childElementCount > 0) {
+            this.watch.removeChild(this.watch.children[0]);
+        }
+
+        let state = this.debugger.currentState;
+        if (state === null) {
+            const context = this.debugger.context;
+            const currentFunctionName = context.currentFunctionName;
+            const div = document.createElement("div");
+            div.style.fontWeight = "bold";
+            div.innerText = currentFunctionName || "<shader>";
+            this.watch.appendChild(div);
+
+            context.variables.forEach((v, name) => {
+                if (!name.startsWith("@")) {
+                const div = document.createElement("div");
+                div.innerText = `${name} : ${v.value}`;
+                this.watch.appendChild(div);
+                }
+            });
+
+            const globals = document.createElement("div");
+            globals.style.marginTop = "10px";
+            globals.style.border = "1px solid black";
+            this.watch.appendChild(globals);
+            context.variables.forEach((v, name) => {
+                if (name.startsWith("@")) {
+                const div = document.createElement("div");
+                div.innerText = `${name} : ${v.value}`;
+                this.watch.appendChild(div);
+                }
+            });
+        } else {
+            let lastState = state;
+            while (state !== null) {
+                const context = state.context;
+                const currentFunctionName = context.currentFunctionName;
+                const div = document.createElement("div");
+                div.style.fontWeight = "bold";
+                div.innerText = currentFunctionName || "<shader>";
+                this.watch.appendChild(div);
+
+                context.variables.forEach((v, name) => {
+                    if (!name.startsWith("@")) {
+                        const div = document.createElement("div");
+                        div.innerText = `${name} : ${v.value}`;
+                        this.watch.appendChild(div);
+                    }
+                });
+
+                lastState = state;
+                state = state.parent;
+            }
+
+            if (lastState) {
+                const context = lastState.context;
+                const globals = document.createElement("div");
+                globals.style.marginTop = "10px";
+                globals.style.border = "1px solid black";
+                this.watch.appendChild(globals);
+                context.variables.forEach((v, name) => {
+                if (name.startsWith("@")) {
+                    const div = document.createElement("div");
+                    div.innerText = `${name} : ${v.value}`;
+                    this.watch.appendChild(div);
+                }
+                });
+            }
+        }
+    }
+
+    _highlightLine(lineNo) {
+        if (lineNo > 0) {
+            const docPosition = this.editorView.state.doc.line(lineNo).from;
+            this.editorView.dispatch({ effects: addLineHighlight.of({ lineNo: docPosition }) });
+        } else {
+            this.editorView.dispatch({ effects: addLineHighlight.of({ lineNo: 0 }) });
+        }
     }
 }

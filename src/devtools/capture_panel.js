@@ -1830,7 +1830,7 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_setPipeline(command, commandInfo) {
+  _showCaptureCommandInfo_setPipeline(command, commandInfo, parentCommand) {
     const args = command.args;
     const self = this;
     const id = args[0]?.__id;
@@ -1904,9 +1904,11 @@ export class CapturePanel {
           new Button(computeGrp.body, { label: "Inspect", callback: () => {
             self.window.inspectObject(computeModule);
           } });
-          new Button(computeGrp.body, { label: "Debug", style: "background-color: #755;", callback: () => {
-            self._debugShader(command);
-          } });
+          if (parentCommand) {
+            new Button(computeGrp.body, { label: "Debug", style: "background-color: rgb(211 26 26);", callback: () => {
+              self._debugShader(command, parentCommand);
+            } });
+          }
           const code = computeModule.descriptor.code;
           new Widget("pre", computeGrp.body, { text: code });
 
@@ -1916,13 +1918,13 @@ export class CapturePanel {
     }
   }
 
-  _debugShader(command) {
+  _debugShader(command, parentCommand) {
     const args = command.args;
     const id = args[0]?.__id;
     const pipeline = this._getObject(id);
     const desc = pipeline.descriptor;
     const computeId = desc.compute?.module?.__id;
-    const editor = new ShaderDebugger(command, this._captureData, this.database);
+    const editor = new ShaderDebugger(parentCommand, this._captureData, this.database, this);
     this._captureTab.addTab(`Compute Module ID:${computeId}`, editor);
     this._captureTab.setActivePanel(editor);
   }
@@ -2378,7 +2380,7 @@ export class CapturePanel {
     this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
-      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo);
     }
 
     for (const vertexBuffer of state.vertexBuffers) {
@@ -2399,7 +2401,7 @@ export class CapturePanel {
     this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
-      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo);
     }
     if (state.indexBuffer) {
       this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer, commandInfo, true);
@@ -2462,7 +2464,7 @@ export class CapturePanel {
     this._showCaptureCommandInfo_indirectBuffer(command, command.args[0], command.args[1], commandInfo, true);
 
     if (state.pipeline) {
-      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo);
     }
     for (const vertexBuffer of state.vertexBuffers) {
       this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true, state);
@@ -2481,7 +2483,7 @@ export class CapturePanel {
     this._showCaptureCommandInfo_indirectBuffer(command, command.args[0], command.args[1], commandInfo, true);
 
     if (state.pipeline) {
-      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo);
     }
     if (state.indexBuffer) {
       this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer, commandInfo, true);
@@ -2497,7 +2499,7 @@ export class CapturePanel {
   _showCaptureCommandInfo_dispatchWorkgroups(command, commandInfo) {
     const state = this._getPipelineState(command);
     if (state.pipeline) {
-      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, command);
     }
     for (const index in state.bindGroups) {
       this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index], commandInfo, index, true, state);
@@ -2509,7 +2511,7 @@ export class CapturePanel {
 
     const state = this._getPipelineState(command);
     if (state.pipeline) {
-      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, true);
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, command);
     }
     for (const index in state.bindGroups) {
       this._showCaptureCommandInfo_setBindGroup(state.bindGroups[index], commandInfo, index, true, state);
