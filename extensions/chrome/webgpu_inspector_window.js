@@ -1169,6 +1169,17 @@ var __webgpu_inspector_window = (function (exports) {
           if (t.name === "f32" || t.name === "f16" || t.name === "i32" || t.name === "u32") {
               return this.args[0].evaluate(context, type);
           }
+          /*if (t.name === "vec2" || t.name === "vec2f" || t.name === "vec2h" || t.name === "vec2i" || t.name === "vec2u") {
+            return [this.args[0].evaluate(context, type) as number, this.args[1].evaluate(context, type) as number];
+          }
+          if (t.name === "vec3" || t.name === "vec3f" || t.name === "vec3h" || t.name === "vec3i" || t.name === "vec3u") {
+            return [this.args[0].evaluate(context, type) as number, this.args[1].evaluate(context, type) as number,
+                    this.args[2].evaluate(context, type) as number];
+          }
+          if (t.name === "vec4" || t.name === "vec4f" || t.name === "vec4h" || t.name === "vec4i" || t.name === "vec4u") {
+            return [this.args[0].evaluate(context, type) as number, this.args[1].evaluate(context, type) as number,
+                    this.args[2].evaluate(context, type) as number, this.args[3].evaluate(context, type) as number];
+          }*/
           throw new Error(`Cannot evaluate node ${this.constructor.name}`);
       }
   }
@@ -1195,108 +1206,338 @@ var __webgpu_inspector_window = (function (exports) {
       }
       evaluate(context, type) {
           switch (this.name) {
-              case "abs":
-                  return Math.abs(this.args[0].evaluate(context, type));
-              case "acos":
-                  return Math.acos(this.args[0].evaluate(context, type));
-              case "acosh":
-                  return Math.acosh(this.args[0].evaluate(context, type));
-              case "asin":
-                  return Math.asin(this.args[0].evaluate(context, type));
-              case "asinh":
-                  return Math.asinh(this.args[0].evaluate(context, type));
-              case "atan":
-                  return Math.atan(this.args[0].evaluate(context, type));
+              case "abs": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.abs(v));
+                  }
+                  return Math.abs(value);
+              }
+              case "acos": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.acos(v));
+                  }
+                  return Math.acos(value);
+              }
+              case "acosh": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.acosh(v));
+                  }
+                  return Math.acosh(value);
+              }
+              case "asin": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.asin(v));
+                  }
+                  return Math.asin(value);
+              }
+              case "asinh": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.asinh(v));
+                  }
+                  return Math.asinh(value);
+              }
+              case "atan": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.atan(v));
+                  }
+                  return Math.atan(value);
+              }
               case "atan2":
-                  return Math.atan2(this.args[0].evaluate(context, type), this.args[1].evaluate(context, type));
-              case "atanh":
-                  return Math.atanh(this.args[0].evaluate(context, type));
-              case "ceil":
-                  return Math.ceil(this.args[0].evaluate(context, type));
-              case "clamp":
-                  return Math.min(Math.max(this.args[0].evaluate(context, type), this.args[1].evaluate(context, type)), this.args[2].evaluate(context, type));
-              case "cos":
-                  return Math.cos(this.args[0].evaluate(context, type));
-              //case "cross":
-              //TODO: (x[i] * y[j] - x[j] * y[i])
-              case "degrees":
-                  return (this.args[0].evaluate(context) * 180) / Math.PI;
-              //case "determinant":
-              //TODO implement
-              case "distance":
-                  return Math.sqrt(Math.pow(this.args[0].evaluate(context, type) - this.args[1].evaluate(context, type), 2));
-              case "dot":
-              //TODO: (x[i] * y[i])
-              case "exp":
-                  return Math.exp(this.args[0].evaluate(context, type));
-              case "exp2":
-                  return Math.pow(2, this.args[0].evaluate(context, type));
+                  const value = this.args[0].evaluate(context, type);
+                  const value2 = this.args[1].evaluate(context, type);
+                  if (Array.isArray(value) && Array.isArray(value2)) {
+                      return value.map((v, i) => Math.atan2(v, value2[i]));
+                  }
+                  return Math.atan2(value, value2);
+              case "atanh": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.atanh(v));
+                  }
+                  return Math.atanh(value);
+              }
+              case "ceil": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.ceil(v));
+                  }
+                  return Math.ceil(value);
+              }
+              case "clamp": {
+                  const value = this.args[0].evaluate(context, type);
+                  const a = this.args[1].evaluate(context, type);
+                  const b = this.args[2].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.min(Math.max(v, a), b));
+                  }
+                  return Math.min(Math.max(value, a), b);
+              }
+              case "cos": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.cos(v));
+                  }
+                  return Math.cos(value);
+              }
+              case "cross": {
+                  const x = this.args[0].evaluate(context, type);
+                  const y = this.args[1].evaluate(context, type);
+                  if (Array.isArray(x) && Array.isArray(y) && x.length === y.length && x.length === 3) {
+                      [
+                          x[1] * y[2] - x[2] * y[1],
+                          x[2] * y[0] - x[0] * y[2],
+                          x[0] * y[1] - x[1] * y[0]
+                      ];
+                  }
+                  throw new Error("Cross product is only supported for vec3");
+              }
+              case "degrees": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => v * 180 / Math.PI);
+                  }
+                  return value * 180 / Math.PI;
+              }
+              case "determinant":
+                  throw new Error("TODO Determinant is not implemented");
+              case "distance": {
+                  const a = this.args[0].evaluate(context, type);
+                  const b = this.args[1].evaluate(context, type);
+                  if (Array.isArray(a)) {
+                      let d2 = 0;
+                      for (let i = 0; i < a.length; i++) {
+                          d2 += (a[i] - b[i]) * (a[i] - b[i]);
+                      }
+                      return Math.sqrt(d2);
+                  }
+                  const bn = b;
+                  return Math.sqrt((bn - a) * (bn - a));
+              }
+              case "dot": {
+                  const a = this.args[0].evaluate(context, type);
+                  const b = this.args[1].evaluate(context, type);
+                  if (Array.isArray(a) && Array.isArray(b) && a.length === b.length) {
+                      let d = 0;
+                      for (let i = 0; i < a.length; i++) {
+                          d += a[i] * b[i];
+                      }
+                      return d;
+                  }
+                  return a * b;
+              }
+              case "exp": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.exp(v));
+                  }
+                  return Math.exp(value);
+              }
+              case "exp2": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.pow(2, v));
+                  }
+                  return Math.pow(2, value);
+              }
               //case "extractBits":
               //TODO: implement
               //case "firstLeadingBit":
               //TODO: implement
-              case "floor":
-                  return Math.floor(this.args[0].evaluate(context, type));
-              case "fma":
-                  return (this.args[0].evaluate(context, type) * this.args[1].evaluate(context, type) +
-                      this.args[2].evaluate(context, type));
-              case "fract":
-                  return (this.args[0].evaluate(context, type) -
-                      Math.floor(this.args[0].evaluate(context, type)));
+              case "floor": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.floor(v));
+                  }
+                  return Math.floor(value);
+              }
+              case "fma": {
+                  const a = this.args[0].evaluate(context, type);
+                  const b = this.args[1].evaluate(context, type);
+                  const c = this.args[2].evaluate(context, type);
+                  if (Array.isArray(a) && Array.isArray(b) && Array.isArray(c)) {
+                      return a.map((v, i) => v * b[i] + c[i]);
+                  }
+                  return a * b + c;
+              }
+              case "fract": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => v - Math.floor(v));
+                  }
+                  return value - Math.floor(value);
+              }
               //case "frexp":
               //TODO: implement
-              case "inverseSqrt":
-                  return 1 / Math.sqrt(this.args[0].evaluate(context, type));
-              //case "length":
-              //TODO: implement
-              case "log":
-                  return Math.log(this.args[0].evaluate(context, type));
-              case "log2":
-                  return Math.log2(this.args[0].evaluate(context, type));
-              case "max":
-                  return Math.max(this.args[0].evaluate(context, type), this.args[1].evaluate(context, type));
-              case "min":
-                  return Math.min(this.args[0].evaluate(context, type), this.args[1].evaluate(context, type));
-              case "mix":
-                  return (this.args[0].evaluate(context, type) *
-                      (1 - this.args[2].evaluate(context, type)) +
-                      this.args[1].evaluate(context, type) * this.args[2].evaluate(context, type));
+              case "inverseSqrt": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => 1 / Math.sqrt(v));
+                  }
+                  return 1 / Math.sqrt(value);
+              }
+              case "length": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      let d2 = 0;
+                      for (let i = 0; i < value.length; i++) {
+                          d2 += value[i] * value[i];
+                      }
+                      return Math.sqrt(d2);
+                  }
+                  return Math.abs(value);
+              }
+              case "log": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.log(v));
+                  }
+                  return Math.log(value);
+              }
+              case "log2": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.log2(v));
+                  }
+                  return Math.log2(value);
+              }
+              case "max": {
+                  const a = this.args[0].evaluate(context, type);
+                  const b = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value) && Array.isArray(b)) {
+                      return value.map((v, i) => Math.max(v, b[i]));
+                  }
+                  return Math.max(a, b);
+              }
+              case "min": {
+                  const a = this.args[0].evaluate(context, type);
+                  const b = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value) && Array.isArray(b)) {
+                      return value.map((v, i) => Math.min(v, b[i]));
+                  }
+                  return Math.min(a, b);
+              }
+              case "mix": {
+                  const a = this.args[0].evaluate(context, type);
+                  const b = this.args[1].evaluate(context, type);
+                  const c = this.args[2].evaluate(context, type);
+                  if (Array.isArray(a) && Array.isArray(b) && Array.isArray(c)) {
+                      return a.map((v, i) => v * (1 - c[i]) + b[i] * c[i]);
+                  }
+                  return a * (1 - c) + b * c;
+              }
               case "modf":
-                  return (this.args[0].evaluate(context, type) -
-                      Math.floor(this.args[0].evaluate(context, type)));
-              case "pow":
-                  return Math.pow(this.args[0].evaluate(context, type), this.args[1].evaluate(context, type));
-              case "radians":
-                  return (this.args[0].evaluate(context, type) * Math.PI) / 180;
-              case "round":
-                  return Math.round(this.args[0].evaluate(context, type));
-              case "sign":
-                  return Math.sign(this.args[0].evaluate(context, type));
-              case "sin":
-                  return Math.sin(this.args[0].evaluate(context, type));
-              case "sinh":
-                  return Math.sinh(this.args[0].evaluate(context, type));
-              case "saturate":
-                  return Math.min(Math.max(this.args[0].evaluate(context, type), 0), 1);
-              case "smoothstep":
-                  return (this.args[0].evaluate(context, type) *
-                      this.args[0].evaluate(context, type) *
-                      (3 - 2 * this.args[0].evaluate(context, type)));
-              case "sqrt":
-                  return Math.sqrt(this.args[0].evaluate(context, type));
-              case "step":
+                  throw new Error("TODO Modf is not implemented");
+              case "pow": {
+                  const a = this.args[0].evaluate(context, type);
+                  const b = this.args[1].evaluate(context, type);
+                  if (Array.isArray(a) && Array.isArray(b)) {
+                      return a.map((v, i) => Math.pow(v, b[i]));
+                  }
+                  return Math.pow(a, b);
+              }
+              case "radians": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => (v * Math.PI) / 180);
+                  }
+                  return (value * Math.PI) / 180;
+              }
+              case "round": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.round(v));
+                  }
+                  return Math.round(value);
+              }
+              case "sign": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.sign(v));
+                  }
+                  return Math.sign(value);
+              }
+              case "sin": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.sin(v));
+                  }
+                  return Math.sin(value);
+              }
+              case "sinh": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.sinh(v));
+                  }
+                  return Math.sinh(value);
+              }
+              case "saturate": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.min(Math.max(v, 0), 1));
+                  }
+                  return Math.min(Math.max(value, 0), 1);
+              }
+              case "smoothstep": {
+                  const edge0 = this.args[0].evaluate(context, type);
+                  const edge1 = this.args[1].evaluate(context, type);
+                  const x = this.args[2].evaluate(context, type);
+                  if (Array.isArray(edge0) && Array.isArray(edge1) && Array.isArray(x)) {
+                      return x.map((v, i) => {
+                          const t = Math.min(Math.max((v - edge0[i]) / (edge1[i] - edge0[i]), 0), 1);
+                          return t * t * (3 - 2 * t);
+                      });
+                  }
+                  const _x = x;
+                  const _edge0 = edge0;
+                  const _edge1 = edge1;
+                  const t = Math.min(Math.max((_x - _edge0) / (_edge1 - _edge0), 0), 1);
+                  return t * t * (3 - 2 * t);
+              }
+              case "sqrt": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.sqrt(v));
+                  }
+                  return Math.sqrt(value);
+              }
+              case "step": {
                   if (type !== undefined) {
                       type[0] = Type.bool;
                   }
-                  return this.args[0].evaluate(context) < this.args[1].evaluate(context)
-                      ? 0
-                      : 1;
-              case "tan":
-                  return Math.tan(this.args[0].evaluate(context, type));
-              case "tanh":
-                  return Math.tanh(this.args[0].evaluate(context, type));
-              case "trunc":
-                  return Math.trunc(this.args[0].evaluate(context, type));
+                  const edge = this.args[0].evaluate(context, type);
+                  const x = this.args[1].evaluate(context, type);
+                  if (Array.isArray(edge) && Array.isArray(x)) {
+                      return edge.map((v, i) => x[i] < v ? 0 : 1);
+                  }
+                  return x < edge ? 0 : 1;
+              }
+              case "tan": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.tan(v));
+                  }
+                  return Math.tan(value);
+              }
+              case "tanh": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.tanh(v));
+                  }
+                  return Math.tanh(value);
+              }
+              case "trunc": {
+                  const value = this.args[0].evaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.trunc(v));
+                  }
+                  return Math.trunc(value);
+              }
               default:
                   throw new Error("Non const function: " + this.name);
           }
@@ -1671,7 +1912,12 @@ var __webgpu_inspector_window = (function (exports) {
           const t2 = [Type.i32];
           switch (this.operator) {
               case "+": {
-                  const value = this.left.evaluate(context, t1) + this.right.evaluate(context, t2);
+                  const v1 = this.left.evaluate(context, t1);
+                  const v2 = this.right.evaluate(context, t2);
+                  if (Array.isArray(v1) && Array.isArray(v2)) {
+                      return v1.map((v, i) => v + v2[i]);
+                  }
+                  const value = v1 + v2;
                   if (type !== undefined) {
                       type[0] = this._getPromotedType(t1[0], t2[0]);
                       if (type[0] === Type.i32 || type[0] === Type.u32) {
@@ -1681,7 +1927,12 @@ var __webgpu_inspector_window = (function (exports) {
                   return value;
               }
               case "-": {
-                  const value = this.left.evaluate(context, t1) - this.right.evaluate(context, t2);
+                  const v1 = this.left.evaluate(context, t1);
+                  const v2 = this.right.evaluate(context, t2);
+                  if (Array.isArray(v1) && Array.isArray(v2)) {
+                      return v1.map((v, i) => v - v2[i]);
+                  }
+                  const value = v1 - v2;
                   if (type !== undefined) {
                       type[0] = this._getPromotedType(t1[0], t2[0]);
                       if (type[0] === Type.i32 || type[0] === Type.u32) {
@@ -1691,7 +1942,12 @@ var __webgpu_inspector_window = (function (exports) {
                   return value;
               }
               case "*": {
-                  const value = this.left.evaluate(context, type) * this.right.evaluate(context, type);
+                  const v1 = this.left.evaluate(context, t1);
+                  const v2 = this.right.evaluate(context, t2);
+                  if (Array.isArray(v1) && Array.isArray(v2)) {
+                      return v1.map((v, i) => v * v2[i]);
+                  }
+                  const value = v1 * v2;
                   if (type !== undefined) {
                       type[0] = this._getPromotedType(t1[0], t2[0]);
                       if (type[0] === Type.i32 || type[0] === Type.u32) {
@@ -1701,7 +1957,12 @@ var __webgpu_inspector_window = (function (exports) {
                   return value;
               }
               case "/": {
-                  const value = this.left.evaluate(context, type) / this.right.evaluate(context, type);
+                  const v1 = this.left.evaluate(context, t1);
+                  const v2 = this.right.evaluate(context, t2);
+                  if (Array.isArray(v1) && Array.isArray(v2)) {
+                      return v1.map((v, i) => v / v2[i]);
+                  }
+                  const value = v1 / v2;
                   if (type !== undefined) {
                       type[0] = this._getPromotedType(t1[0], t2[0]);
                       if (type[0] === Type.i32 || type[0] === Type.u32) {
@@ -1711,7 +1972,12 @@ var __webgpu_inspector_window = (function (exports) {
                   return value;
               }
               case "%": {
-                  const value = this.left.evaluate(context, type) % this.right.evaluate(context, type);
+                  const v1 = this.left.evaluate(context, t1);
+                  const v2 = this.right.evaluate(context, t2);
+                  if (Array.isArray(v1) && Array.isArray(v2)) {
+                      return v1.map((v, i) => v % v2[i]);
+                  }
+                  const value = v1 % v2;
                   if (type !== undefined) {
                       type[0] = this._getPromotedType(t1[0], t2[0]);
                       if (type[0] === Type.i32 || type[0] === Type.u32) {
@@ -3663,6 +3929,7 @@ var __webgpu_inspector_window = (function (exports) {
                   _var.value = new LiteralExpr(value, type[0]);
               }
               catch (_) {
+                  _var.value = expr;
               }
           }
           if (_var.type !== null && _var.value instanceof LiteralExpr) {
@@ -6443,6 +6710,94 @@ var __webgpu_inspector_window = (function (exports) {
               }
           }
       }
+      execStatement(stmt, context) {
+          if (stmt instanceof Return) {
+              const v = this.evalExpression(stmt.value, context);
+              const f = context.getFunction(context.currentFunctionName);
+              if (f === null || f === void 0 ? void 0 : f.node.returnType) {
+                  if (f.node.returnType.name === "i32" || f.node.returnType.name === "u32") {
+                      return Math.floor(v);
+                  }
+              }
+              return v;
+          }
+          else if (stmt instanceof Break$1) {
+              return stmt;
+          }
+          else if (stmt instanceof Continue) {
+              return stmt;
+          }
+          else if (stmt instanceof Let) {
+              this._let(stmt, context);
+          }
+          else if (stmt instanceof Var$1) {
+              this._var(stmt, context);
+          }
+          else if (stmt instanceof Const) {
+              this._const(stmt, context);
+          }
+          else if (stmt instanceof Function$1) {
+              this._function(stmt, context);
+          }
+          else if (stmt instanceof If) {
+              return this._if(stmt, context);
+          }
+          else if (stmt instanceof For) {
+              return this._for(stmt, context);
+          }
+          else if (stmt instanceof While) {
+              return this._while(stmt, context);
+          }
+          else if (stmt instanceof Assign) {
+              return this._assign(stmt, context);
+          }
+          else if (stmt instanceof Increment) {
+              this._increment(stmt, context);
+          }
+          else if (stmt instanceof Struct) {
+              return null;
+          }
+          else if (stmt instanceof Override) {
+              const name = stmt.name;
+              if (context.getVariable(name) === null) {
+                  console.error(`Override constant ${name} not found. Line ${stmt.line}`);
+                  return null;
+              }
+          }
+          else {
+              console.error(`Unknown statement type.`, stmt, `Line ${stmt.line}`);
+          }
+          return null;
+      }
+      evalExpression(node, context) {
+          if (node instanceof GroupingExpr) {
+              const grp = node;
+              return this.evalExpression(grp.contents[0], context);
+          }
+          else if (node instanceof BinaryOperator) {
+              return this._evalBinaryOp(node, context);
+          }
+          else if (node instanceof LiteralExpr) {
+              return this._evalLiteral(node, context);
+          }
+          else if (node instanceof StringExpr) {
+              return node.value;
+          }
+          else if (node instanceof VariableExpr) {
+              return this._evalVariable(node, context);
+          }
+          else if (node instanceof CallExpr) {
+              return this._evalCall(node, context);
+          }
+          else if (node instanceof CreateExpr) {
+              return this._evalCreate(node, context);
+          }
+          else if (node instanceof ConstExpr) {
+              return this._evalConst(node, context);
+          }
+          console.error(`Unknown expression type`, node, `Line ${node.line}`);
+          return null;
+      }
       _dispatchWorkgroup(f, workgroup_id, context) {
           const workgroupSize = [1, 1, 1];
           for (const attr of f.node.attributes) {
@@ -6518,11 +6873,11 @@ var __webgpu_inspector_window = (function (exports) {
           return this.reflection._types.get(type);
       }
       _getTypeName(type) {
-          if (type instanceof Type) {
+          /*if (type instanceof AST.Type) {
               type = this._getTypeInfo(type);
-          }
+          }*/
           let name = type.name;
-          if (type instanceof TemplateInfo) {
+          if (type instanceof TemplateInfo || type instanceof TemplateType) {
               if (type.format !== null) {
                   if (name === "vec2" || name === "vec3" || name === "vec4" ||
                       name === "mat2x2" || name === "mat2x3" || name === "mat2x4" ||
@@ -6576,65 +6931,6 @@ var __webgpu_inspector_window = (function (exports) {
               if (res) {
                   return res;
               }
-          }
-          return null;
-      }
-      execStatement(stmt, context) {
-          if (stmt instanceof Return) {
-              const v = this.evalExpression(stmt.value, context);
-              const f = context.getFunction(context.currentFunctionName);
-              if (f === null || f === void 0 ? void 0 : f.node.returnType) {
-                  if (f.node.returnType.name === "i32" || f.node.returnType.name === "u32") {
-                      return Math.floor(v);
-                  }
-              }
-              return v;
-          }
-          else if (stmt instanceof Break$1) {
-              return stmt;
-          }
-          else if (stmt instanceof Continue) {
-              return stmt;
-          }
-          else if (stmt instanceof Let) {
-              this._let(stmt, context);
-          }
-          else if (stmt instanceof Var$1) {
-              this._var(stmt, context);
-          }
-          else if (stmt instanceof Const) {
-              this._const(stmt, context);
-          }
-          else if (stmt instanceof Function$1) {
-              this._function(stmt, context);
-          }
-          else if (stmt instanceof If) {
-              return this._if(stmt, context);
-          }
-          else if (stmt instanceof For) {
-              return this._for(stmt, context);
-          }
-          else if (stmt instanceof While) {
-              return this._while(stmt, context);
-          }
-          else if (stmt instanceof Assign) {
-              return this._assign(stmt, context);
-          }
-          else if (stmt instanceof Increment) {
-              this._increment(stmt, context);
-          }
-          else if (stmt instanceof Struct) {
-              return null;
-          }
-          else if (stmt instanceof Override) {
-              const name = stmt.name;
-              if (context.getVariable(name) === null) {
-                  console.error(`Override constant ${name} not found. Line ${stmt.line}`);
-                  return null;
-              }
-          }
-          else {
-              console.error(`Unknown statement type.`, stmt, `Line ${stmt.line}`);
           }
           return null;
       }
@@ -6874,35 +7170,6 @@ var __webgpu_inspector_window = (function (exports) {
           }
           return null;
       }
-      evalExpression(node, context) {
-          if (node instanceof GroupingExpr) {
-              const grp = node;
-              return this.evalExpression(grp.contents[0], context);
-          }
-          else if (node instanceof BinaryOperator) {
-              return this._evalBinaryOp(node, context);
-          }
-          else if (node instanceof LiteralExpr) {
-              return this._evalLiteral(node, context);
-          }
-          else if (node instanceof StringExpr) {
-              return node.value;
-          }
-          else if (node instanceof VariableExpr) {
-              return this._evalVariable(node, context);
-          }
-          else if (node instanceof CallExpr) {
-              return this._evalCall(node, context);
-          }
-          else if (node instanceof CreateExpr) {
-              return this._evalCreate(node, context);
-          }
-          else if (node instanceof ConstExpr) {
-              return this._evalConst(node, context);
-          }
-          console.error(`Unknown expression type`, node, `Line ${node.line}`);
-          return null;
-      }
       _evalConst(node, context) {
           const v = context.getVariableValue(node.name);
           return v;
@@ -7081,16 +7348,56 @@ var __webgpu_inspector_window = (function (exports) {
           const l = this.evalExpression(node.left, context);
           const r = this.evalExpression(node.right, context);
           switch (node.operator) {
-              case "+":
+              case "+": {
+                  if (Array.isArray(l) && Array.isArray(r)) {
+                      if (l.length !== r.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      return l.map((x, i) => x + r[i]);
+                  }
                   return l + r;
-              case "-":
+              }
+              case "-": {
+                  if (Array.isArray(l) && Array.isArray(r)) {
+                      if (l.length !== r.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      return l.map((x, i) => x - r[i]);
+                  }
                   return l - r;
-              case "*":
+              }
+              case "*": {
+                  if (Array.isArray(l) && Array.isArray(r)) {
+                      if (l.length !== r.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      return l.map((x, i) => x * r[i]);
+                  }
                   return l * r;
-              case "%":
+              }
+              case "%": {
+                  if (Array.isArray(l) && Array.isArray(r)) {
+                      if (l.length !== r.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      return l.map((x, i) => x % r[i]);
+                  }
                   return l % r;
-              case "/":
+              }
+              case "/": {
+                  if (Array.isArray(l) && Array.isArray(r)) {
+                      if (l.length !== r.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      return l.map((x, i) => x / r[i]);
+                  }
                   return l / r;
+              }
               case ">":
                   if (l.length !== undefined && r.length !== undefined) {
                       if (l.length !== r.length) {
@@ -7101,7 +7408,7 @@ var __webgpu_inspector_window = (function (exports) {
                   }
                   return l > r;
               case "<":
-                  if (l.length !== undefined && r.length !== undefined) {
+                  if (Array.isArray(l) && Array.isArray(r)) {
                       if (l.length !== r.length) {
                           console.error(`Vector length mismatch. Line ${node.line}.`);
                           return null;
@@ -7109,18 +7416,66 @@ var __webgpu_inspector_window = (function (exports) {
                       return l.map((x, i) => x < r[i]);
                   }
                   return l < r;
-              case "==":
+              case "==": {
+                  if (Array.isArray(l) && Array.isArray(r)) {
+                      if (l.length !== r.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      return l.map((x, i) => x === r[i]);
+                  }
                   return l === r;
-              case "!=":
-                  return l !== r;
-              case ">=":
+              }
+              case "!=": {
+                  if (Array.isArray(l) && Array.isArray(r)) {
+                      if (l.length !== r.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      return l.map((x, i) => x != r[i]);
+                  }
+                  return l != r;
+              }
+              case ">=": {
+                  if (Array.isArray(l) && Array.isArray(r)) {
+                      if (l.length !== r.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      return l.map((x, i) => x >= r[i]);
+                  }
                   return l >= r;
-              case "<=":
+              }
+              case "<=": {
+                  if (Array.isArray(l) && Array.isArray(r)) {
+                      if (l.length !== r.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      return l.map((x, i) => x <= r[i]);
+                  }
                   return l <= r;
-              case "&&":
+              }
+              case "&&": {
+                  if (Array.isArray(l) && Array.isArray(r)) {
+                      if (l.length !== r.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      return l.map((x, i) => x && r[i]);
+                  }
                   return l && r;
-              case "||":
+              }
+              case "||": {
+                  if (Array.isArray(l) && Array.isArray(r)) {
+                      if (l.length !== r.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      return l.map((x, i) => x || r[i]);
+                  }
                   return l || r;
+              }
           }
           console.error(`Unknown operator ${node.operator}. Line ${node.line}`);
           return null;
