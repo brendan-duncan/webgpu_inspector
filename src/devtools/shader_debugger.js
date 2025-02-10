@@ -260,16 +260,13 @@ export class ShaderDebugger extends Div {
 
         this.editorView = new EditorView({
             doc: code,
-            extensions: [
-                shaderEditorSetup
-            ],
+            extensions: [ shaderEditorSetup ],
             parent: pane1.element,
         });
 
         this.editorView.debugger = this;
 
-        // TODO: persistent search panel
-        //openSearchPanel(this.editorview);
+        openSearchPanel(this.editorView);
 
         this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: 100%;" });
     }
@@ -294,11 +291,9 @@ export class ShaderDebugger extends Div {
 
         if (this.debugger.isRunning) {
             this.debugger.pause();
-            //this.continueButton.children[0].src = "img/debug-continue-small.svg";
             this.update();
         } else {
             this.debugger.run();
-            //this.continueButton.children[0].src = "img/debug-pause.svg";
             this.update();
         }
     }

@@ -41298,16 +41298,13 @@ var __webgpu_inspector_window = (function (exports) {
 
           this.editorView = new EditorView({
               doc: code,
-              extensions: [
-                  shaderEditorSetup$1
-              ],
+              extensions: [ shaderEditorSetup$1 ],
               parent: pane1.element,
           });
 
           this.editorView.debugger = this;
 
-          // TODO: persistent search panel
-          //openSearchPanel(this.editorview);
+          openSearchPanel(this.editorView);
 
           this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: 100%;" });
       }
@@ -41332,11 +41329,9 @@ var __webgpu_inspector_window = (function (exports) {
 
           if (this.debugger.isRunning) {
               this.debugger.pause();
-              //this.continueButton.children[0].src = "img/debug-continue-small.svg";
               this.update();
           } else {
               this.debugger.run();
-              //this.continueButton.children[0].src = "img/debug-pause.svg";
               this.update();
           }
       }
@@ -43396,7 +43391,7 @@ var __webgpu_inspector_window = (function (exports) {
             if (parentCommand) {
               new Button(computeGrp.body, { 
                 children: [ new Img(null, { title: "Debug Shader", src: "img/debug.svg", style: "width: 15px; height: 15px; filter: invert(1);" }) ],
-                title: "Debug Shadre", style: "background-color: rgb(180 26 26);", callback: () => {
+                title: "Debug Shadre", style: "background-color: rgb(26 80 180);", callback: () => {
                   self._debugShader(command, parentCommand);
               } });
             }
