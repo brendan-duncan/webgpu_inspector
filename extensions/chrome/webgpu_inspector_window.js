@@ -8029,7 +8029,7 @@ var __webgpu_inspector_window = (function (exports) {
           return this.statements.length > 0 ? this.statements[0].line : -1;
       }
   }
-  class ExecState {
+  class StackFrame {
       constructor(context, parent) {
           this.parent = null;
           this.commands = [];
@@ -8578,7 +8578,7 @@ var __webgpu_inspector_window = (function (exports) {
           this._execStack.states.push(state);
       }
       _createState(ast, context, parent) {
-          const state = new ExecState(context, parent !== null && parent !== void 0 ? parent : null);
+          const state = new StackFrame(context, parent !== null && parent !== void 0 ? parent : null);
           for (const statement of ast) {
               // A statement may have expressions that include function calls.
               // Gather all of the internal function calls from the statement.
