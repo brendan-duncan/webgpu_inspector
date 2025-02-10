@@ -1908,7 +1908,7 @@ export class CapturePanel {
           if (parentCommand) {
             new Button(computeGrp.body, { 
               children: [ new Img(null, { title: "Debug Shader", src: "img/debug.svg", style: "width: 15px; height: 15px; filter: invert(1);" }) ],
-              title: "Debug Shadre", style: "background-color: rgb(26 80 180);", callback: () => {
+              title: "Debug Shader", style: "background-color: rgb(26 80 180);", callback: () => {
                 self._debugShader(command, parentCommand);
             } });
           }
