@@ -277,6 +277,8 @@ export class ShaderDebugger extends Div {
         openSearchPanel(this.editorView);
 
         this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: 100%;" });
+
+        this.debug();
     }
 
     toggleBreakpoint(lineNo) {
@@ -340,28 +342,6 @@ export class ShaderDebugger extends Div {
         }
 
         const kernelName = kernel.name;
-        const workgroupSize = [1, 1, 1];
-        if (kernel.attributes) {
-            for (const attr of kernel.attributes) {
-                if (attr.name === "workgroup_size") {
-                    const size = attr.value;
-                    if (size instanceof Array) {
-                        if (size.length > 0) {
-                            workgroupSize[0] = parseInt(size[0]);
-                        }
-                        if (size.length > 1) {
-                            workgroupSize[1] = parseInt(size[1]);
-                        }
-                        if (size.length > 2) {
-                            workgroupSize[2] = parseInt(size[2]);
-                        }
-                    } else {
-                        workgroupSize[0] = parseInt(size);
-                    }
-                    break;
-                }
-            }
-        }
 
         const bindGroups = {};
 
@@ -399,7 +379,7 @@ export class ShaderDebugger extends Div {
 
     stepOut() {
         if (this.debugger) {
-            //this.debugger.stepOut();
+            this.debugger.stepOut();
             this.update();
         }
     }

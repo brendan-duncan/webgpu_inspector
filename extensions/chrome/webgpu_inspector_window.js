@@ -8136,6 +8136,9 @@ var __webgpu_inspector_window = (function (exports) {
           return this._runTimer !== null;
       }
       run() {
+          if (this.isRunning) {
+              return;
+          }
           this._runTimer = setInterval(() => {
               const command = this.currentCommand;
               if (command) {
@@ -8274,10 +8277,58 @@ var __webgpu_inspector_window = (function (exports) {
           return false;
       }
       stepInto() {
+          if (this.isRunning) {
+              return;
+          }
           this.stepNext(true);
       }
       stepOver() {
+          if (this.isRunning) {
+              return;
+          }
           this.stepNext(false);
+      }
+      stepOut() {
+          const state = this.currentState;
+          if (state === null) {
+              return;
+          }
+          const parentState = state.parent;
+          if (this.isRunning) {
+              clearInterval(this._runTimer);
+              this._runTimer = null;
+          }
+          this._runTimer = setInterval(() => {
+              const command = this.currentCommand;
+              if (command) {
+                  if (this.breakpoints.has(command.line)) {
+                      clearInterval(this._runTimer);
+                      this._runTimer = null;
+                      if (this.runStateCallback !== null) {
+                          this.runStateCallback();
+                      }
+                      return;
+                  }
+              }
+              if (!this.stepNext(true)) {
+                  clearInterval(this._runTimer);
+                  this._runTimer = null;
+                  if (this.runStateCallback !== null) {
+                      this.runStateCallback();
+                  }
+              }
+              const state = this.currentState;
+              if (state === parentState) {
+                  clearInterval(this._runTimer);
+                  this._runTimer = null;
+                  if (this.runStateCallback !== null) {
+                      this.runStateCallback();
+                  }
+              }
+          }, 0);
+          if (this.runStateCallback !== null) {
+              this.runStateCallback();
+          }
       }
       // Returns true if execution is not finished, false if execution is complete.
       stepNext(stepInto = true) {
@@ -8431,34 +8482,39 @@ var __webgpu_inspector_window = (function (exports) {
           const workgroupSize = [1, 1, 1];
           for (const attr of f.node.attributes) {
               if (attr.name === "workgroup_size") {
-                  if (attr.value.length > 0) {
-                      // The value could be an override constant
-                      const v = context.getVariableValue(attr.value[0]);
-                      if (v !== null) {
-                          workgroupSize[0] = v;
+                  if (Array.isArray(attr.value)) {
+                      if (attr.value.length > 0) {
+                          // The value could be an override constant
+                          const v = context.getVariableValue(attr.value[0]);
+                          if (v !== null) {
+                              workgroupSize[0] = v;
+                          }
+                          else {
+                              workgroupSize[0] = parseInt(attr.value[0]);
+                          }
                       }
-                      else {
-                          workgroupSize[0] = parseInt(attr.value[0]);
+                      if (attr.value.length > 1) {
+                          const v = context.getVariableValue(attr.value[1]);
+                          if (v !== null) {
+                              workgroupSize[1] = v;
+                          }
+                          else {
+                              workgroupSize[1] = parseInt(attr.value[1]);
+                          }
+                      }
+                      if (attr.value.length > 2) {
+                          const v = context.getVariableValue(attr.value[2]);
+                          if (v !== null) {
+                              workgroupSize[2] = v;
+                          }
+                          else {
+                              workgroupSize[2] = parseInt(attr.value[2]);
+                          }
                       }
                   }
-                  if (attr.value.length > 1) {
-                      const v = context.getVariableValue(attr.value[1]);
-                      if (v !== null) {
-                          workgroupSize[1] = v;
-                      }
-                      else {
-                          workgroupSize[1] = parseInt(attr.value[1]);
-                      }
-                  }
-                  if (attr.value.length > 2) {
-                      const v = context.getVariableValue(attr.value[2]);
-                      if (v !== null) {
-                          workgroupSize[2] = v;
-                      }
-                      else {
-                          workgroupSize[2] = parseInt(attr.value[2]);
-                      }
-                  }
+              }
+              else {
+                  workgroupSize[0] = parseInt(attr.value);
               }
           }
           context.setVariable("@workgroup_size", workgroupSize);
@@ -41280,7 +41336,7 @@ var __webgpu_inspector_window = (function (exports) {
               }
           });
           new Button(this.controls, {
-              children: [new Img(null, { title: "Step Into", src: "img/debug-step-out.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
+              children: [new Img(null, { title: "Step Out", src: "img/debug-step-out.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
               title: "Step Out",
               style: "background-color: #777;",
               onClick: () => {
@@ -41315,6 +41371,8 @@ var __webgpu_inspector_window = (function (exports) {
           openSearchPanel(this.editorView);
 
           this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: 100%;" });
+
+          this.debug();
       }
 
       toggleBreakpoint(lineNo) {
@@ -41378,25 +41436,6 @@ var __webgpu_inspector_window = (function (exports) {
           }
 
           const kernelName = kernel.name;
-          if (kernel.attributes) {
-              for (const attr of kernel.attributes) {
-                  if (attr.name === "workgroup_size") {
-                      const size = attr.value;
-                      if (size instanceof Array) {
-                          if (size.length > 0) {
-                              parseInt(size[0]);
-                          }
-                          if (size.length > 1) {
-                              parseInt(size[1]);
-                          }
-                          if (size.length > 2) {
-                              parseInt(size[2]);
-                          }
-                      }
-                      break;
-                  }
-              }
-          }
 
           const bindGroups = {};
 
@@ -41434,7 +41473,7 @@ var __webgpu_inspector_window = (function (exports) {
 
       stepOut() {
           if (this.debugger) {
-              //this.debugger.stepOut();
+              this.debugger.stepOut();
               this.update();
           }
       }
