@@ -6,13 +6,13 @@ import { WgslDebug } from "wgsl_reflect/wgsl_reflect.module.js";
 
 import { EditorView } from "codemirror";
 import { keymap, highlightSpecialChars, drawSelection, dropCursor, gutter, GutterMarker,
-  crosshairCursor, lineNumbers, highlightActiveLineGutter, Decoration } from "@codemirror/view";
+  crosshairCursor, lineNumbers, Decoration } from "@codemirror/view";
 import { EditorState, StateField, StateEffect, RangeSet } from "@codemirror/state";
 import { defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
   foldGutter, foldKeymap } from "@codemirror/language";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { searchKeymap, openSearchPanel  } from "@codemirror/search";
-import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import {  completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { lintKeymap } from "@codemirror/lint";
 import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
 import { cobalt } from 'thememirror';
@@ -74,7 +74,9 @@ const breakpointGutter = [
       initialSpacer: () => breakpointMarker,
       domEventHandlers: {
         mousedown(view, line) {
-          //console.log(line);
+          const lineNo = view.state.doc.lineAt(line.from).number;
+          const dbg = view.debugger;
+          dbg.toggleBreakpoint(lineNo);
           toggleBreakpoint(view, line.from)
           return true
         }
@@ -214,7 +216,7 @@ export class ShaderDebugger extends Div {
 
         new Div(this.controls, { style: "flex-grow: 1;" });
 
-        new Button(this.controls, {
+        this.continueButton = new Button(this.controls, {
             children: [new Img(null, { title: "Continue", src: "img/debug-continue-small.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
             title: "Continue",
             style: "background-color: #777;",
@@ -264,19 +266,41 @@ export class ShaderDebugger extends Div {
             parent: pane1.element,
         });
 
+        this.editorView.debugger = this;
+
         // TODO: persistent search panel
         //openSearchPanel(this.editorview);
 
         this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: 100%;" });
     }
 
+    toggleBreakpoint(lineNo) {
+        this.debugger.toggleBreakpoint(lineNo);
+    }
+
+    runStateChanged() {
+        if (this.debugger.isRunning) {
+            this.continueButton.children[0].src = "img/debug-pause.svg";
+        } else {
+            this.continueButton.children[0].src = "img/debug-continue-small.svg";
+        }
+        this.update();
+    }
+
     pauseContinue() {
         if (!this.debugger) {
             this.debug();
-            return;
         }
 
-        //this.debugger.runToBreakpoint();
+        if (this.debugger.isRunning) {
+            this.debugger.pause();
+            //this.continueButton.children[0].src = "img/debug-continue-small.svg";
+            this.update();
+        } else {
+            this.debugger.run();
+            //this.continueButton.children[0].src = "img/debug-pause.svg";
+            this.update();
+        }
     }
 
     restart() {
@@ -350,28 +374,22 @@ export class ShaderDebugger extends Div {
             bindGroups[index] = bindgroup;
         });
 
-        console.log("Debug", idx, idy, idz, dispatchCount.toString(), workgroupSize.toString());
-        console.log(this.command);
-        console.log(this.module?.reflection);
-        console.log(this.pipelineState);
-        console.log(bindGroups);
-
         const code = this.module.descriptor.code;
-        this.debugger = new WgslDebug(code);
+        this.debugger = new WgslDebug(code, this.runStateChanged.bind(this));
         this.debugger.debugWorkgroup(kernelName, [idx, idy, idz], dispatchCount, bindGroups);
         this.update();
     }
 
     stepInto() {
         if (this.debugger) {
-            this.debugger.stepNext(true);
+            this.debugger.stepInto();
             this.update();
         }
     }
 
     stepOver() {
         if (this.debugger) {
-            this.debugger.stepNext(false);
+            this.debugger.stepOver();
             this.update();
         }
     }
@@ -382,12 +400,12 @@ export class ShaderDebugger extends Div {
         }
 
         const cmd = this.debugger.currentCommand;
-        if (cmd !== null) {
+        if (cmd !== null && !this.debugger.isRunning) {
             const line = cmd.line;
             if (line > -1) {
-            this._highlightLine(cmd.line);
+                this._highlightLine(cmd.line);
             } else {
-            this._highlightLine(0);
+                this._highlightLine(0);
             }
         } else {
             this._highlightLine(0);

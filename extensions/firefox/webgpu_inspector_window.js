@@ -5084,7 +5084,7 @@ var __webgpu_inspector_window = (function (exports) {
   }
 
   class ExecInterface {
-      _evalExpression(node, context) {
+      evalExpression(node, context) {
           return null;
       }
       _getTypeName(type) {
@@ -5130,7 +5130,7 @@ var __webgpu_inspector_window = (function (exports) {
                           offset += idx.value * typeInfo.stride;
                       }
                       else {
-                          const i = exec._evalExpression(idx, context);
+                          const i = exec.evalExpression(idx, context);
                           if (i !== null) {
                               offset += i * typeInfo.stride;
                           }
@@ -5330,7 +5330,7 @@ var __webgpu_inspector_window = (function (exports) {
                           offset += idx.value * typeInfo.stride;
                       }
                       else {
-                          const i = exec._evalExpression(idx, context);
+                          const i = exec.evalExpression(idx, context);
                           if (i !== null) {
                               offset += i * typeInfo.stride;
                           }
@@ -5492,23 +5492,23 @@ var __webgpu_inspector_window = (function (exports) {
       }
       // Logical Built-in Functions
       All(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           let isTrue = true;
           value.forEach((x) => { if (!x)
               isTrue = false; });
           return isTrue;
       }
       Any(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           return value.some((v) => v);
       }
       Select(node, context) {
-          const condition = this.exec._evalExpression(node.args[2], context);
+          const condition = this.exec.evalExpression(node.args[2], context);
           if (condition) {
-              return this.exec._evalExpression(node.args[0], context);
+              return this.exec.evalExpression(node.args[0], context);
           }
           else {
-              return this.exec._evalExpression(node.args[1], context);
+              return this.exec.evalExpression(node.args[1], context);
           }
       }
       // Array Built-in Functions
@@ -5518,7 +5518,7 @@ var __webgpu_inspector_window = (function (exports) {
           if (arrayArg instanceof UnaryOperator) {
               arrayArg = arrayArg.right;
           }
-          const arrayData = this.exec._evalExpression(arrayArg, context);
+          const arrayData = this.exec.evalExpression(arrayArg, context);
           if (arrayData.typeInfo.size === 0) {
               const count = arrayData.buffer.byteLength / arrayData.typeInfo.stride;
               return count;
@@ -5527,64 +5527,64 @@ var __webgpu_inspector_window = (function (exports) {
       }
       // Numeric Built-in Functions
       Abs(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.abs(v));
           }
           return Math.abs(value);
       }
       Acos(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.acos(v));
           }
           return Math.acos(value);
       }
       Acosh(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.acosh(v));
           }
           return Math.acosh(value);
       }
       Asin(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.asin(v));
           }
           return Math.asin(value);
       }
       Asinh(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.asinh(v));
           }
           return Math.asinh(value);
       }
       Atan(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.atan(v));
           }
           return Math.atan(value);
       }
       Atanh(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.atanh(v));
           }
           return Math.atanh(value);
       }
       Atan2(node, context) {
-          const y = this.exec._evalExpression(node.args[0], context);
-          const x = this.exec._evalExpression(node.args[1], context);
+          const y = this.exec.evalExpression(node.args[0], context);
+          const x = this.exec.evalExpression(node.args[1], context);
           if (y.length !== undefined) {
               return y.map((v, i) => Math.atan2(v, x[i]));
           }
           return Math.atan2(y, x);
       }
       Ceil(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.ceil(v));
           }
@@ -5594,30 +5594,30 @@ var __webgpu_inspector_window = (function (exports) {
           return Math.min(Math.max(value, min), max);
       }
       Clamp(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
-          const min = this.exec._evalExpression(node.args[1], context);
-          const max = this.exec._evalExpression(node.args[2], context);
+          const value = this.exec.evalExpression(node.args[0], context);
+          const min = this.exec.evalExpression(node.args[1], context);
+          const max = this.exec.evalExpression(node.args[2], context);
           if (value instanceof Array) {
               return value.map((v, i) => this._clamp(v, min[i], max[i]));
           }
           return this._clamp(value, min, max);
       }
       Cos(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.cos(v));
           }
           return Math.cos(value);
       }
       Cosh(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.cosh(v));
           }
           return Math.cosh(value);
       }
       CountLeadingZeros(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.clz32(v));
           }
@@ -5634,7 +5634,7 @@ var __webgpu_inspector_window = (function (exports) {
           return count;
       }
       CountOneBits(node, context) {
-          let x = this.exec._evalExpression(node.args[0], context);
+          let x = this.exec.evalExpression(node.args[0], context);
           if (x instanceof Array) {
               return x.map((v) => this._countOneBits(v));
           }
@@ -5652,15 +5652,15 @@ var __webgpu_inspector_window = (function (exports) {
           return count;
       }
       CountTrailingZeros(node, context) {
-          let x = this.exec._evalExpression(node.args[0], context);
+          let x = this.exec.evalExpression(node.args[0], context);
           if (x instanceof Array) {
               return x.map((v) => this._countTrailingZeros(v));
           }
           this._countTrailingZeros(x);
       }
       Cross(node, context) {
-          const l = this.exec._evalExpression(node.args[0], context);
-          const r = this.exec._evalExpression(node.args[1], context);
+          const l = this.exec.evalExpression(node.args[0], context);
+          const r = this.exec.evalExpression(node.args[1], context);
           return [
               l[1] * r[2] - r[1] * l[2],
               l[2] * r[0] - r[2] * l[0],
@@ -5668,7 +5668,7 @@ var __webgpu_inspector_window = (function (exports) {
           ];
       }
       Degrees(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           const radToDeg = 180.0 / Math.PI;
           if (value instanceof Array) {
               return value.map((v) => v * radToDeg);
@@ -5676,7 +5676,7 @@ var __webgpu_inspector_window = (function (exports) {
           return value * radToDeg;
       }
       Determinant(node, context) {
-          const m = this.exec._evalExpression(node.args[0], context);
+          const m = this.exec.evalExpression(node.args[0], context);
           // TODO: get the dimensions of the matrix
           if (m.length === 4) {
               return m[0] * m[3] - m[1] * m[2];
@@ -5685,8 +5685,8 @@ var __webgpu_inspector_window = (function (exports) {
           return null;
       }
       Distance(node, context) {
-          const l = this.exec._evalExpression(node.args[0], context);
-          const r = this.exec._evalExpression(node.args[1], context);
+          const l = this.exec.evalExpression(node.args[0], context);
+          const r = this.exec.evalExpression(node.args[1], context);
           let sum = 0;
           for (let i = 0; i < l.length; ++i) {
               sum += (l[i] - r[i]) * (l[i] - r[i]);
@@ -5701,8 +5701,8 @@ var __webgpu_inspector_window = (function (exports) {
           return dot;
       }
       Dot(node, context) {
-          const l = this.exec._evalExpression(node.args[0], context);
-          const r = this.exec._evalExpression(node.args[1], context);
+          const l = this.exec.evalExpression(node.args[0], context);
+          const r = this.exec.evalExpression(node.args[1], context);
           return this._dot(l, r);
       }
       Dot4U8Packed(node, context) {
@@ -5714,23 +5714,23 @@ var __webgpu_inspector_window = (function (exports) {
           return null;
       }
       Exp(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.exp(v));
           }
           return Math.exp(value);
       }
       Exp2(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.pow(2, v));
           }
           return Math.pow(2, value);
       }
       ExtractBits(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
-          const offset = this.exec._evalExpression(node.args[1], context);
-          const count = this.exec._evalExpression(node.args[2], context);
+          const value = this.exec.evalExpression(node.args[0], context);
+          const offset = this.exec.evalExpression(node.args[1], context);
+          const count = this.exec.evalExpression(node.args[2], context);
           return (value >> offset) & ((1 << count) - 1);
       }
       FaceForward(node, context) {
@@ -5746,23 +5746,23 @@ var __webgpu_inspector_window = (function (exports) {
           return null;
       }
       Floor(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.floor(v));
           }
           return Math.floor(value);
       }
       Fma(node, context) {
-          const a = this.exec._evalExpression(node.args[0], context);
-          const b = this.exec._evalExpression(node.args[1], context);
-          const c = this.exec._evalExpression(node.args[2], context);
+          const a = this.exec.evalExpression(node.args[0], context);
+          const b = this.exec.evalExpression(node.args[1], context);
+          const c = this.exec.evalExpression(node.args[2], context);
           if (a.length !== undefined) {
               return a.map((v, i) => v * b[i] + c[i]);
           }
           return a * b + c;
       }
       Fract(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => v - Math.floor(v));
           }
@@ -5773,15 +5773,15 @@ var __webgpu_inspector_window = (function (exports) {
           return null;
       }
       InsertBits(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
-          const insert = this.exec._evalExpression(node.args[1], context);
-          const offset = this.exec._evalExpression(node.args[2], context);
-          const count = this.exec._evalExpression(node.args[3], context);
+          const value = this.exec.evalExpression(node.args[0], context);
+          const insert = this.exec.evalExpression(node.args[1], context);
+          const offset = this.exec.evalExpression(node.args[2], context);
+          const count = this.exec.evalExpression(node.args[3], context);
           const mask = ((1 << count) - 1) << offset;
           return (value & ~mask) | ((insert << offset) & mask);
       }
       InverseSqrt(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => 1 / Math.sqrt(v));
           }
@@ -5792,65 +5792,65 @@ var __webgpu_inspector_window = (function (exports) {
           return null;
       }
       Length(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           let sum = this._dot(value, value);
           return Math.sqrt(sum);
       }
       Log(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.log(v));
           }
           return Math.log(value);
       }
       Log2(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.log2(v));
           }
           return Math.log2(value);
       }
       Max(node, context) {
-          const l = this.exec._evalExpression(node.args[0], context);
-          const r = this.exec._evalExpression(node.args[1], context);
+          const l = this.exec.evalExpression(node.args[0], context);
+          const r = this.exec.evalExpression(node.args[1], context);
           if (l instanceof Array) {
               return l.map((v, i) => Math.max(v, r[i]));
           }
           return Math.max(l, r);
       }
       Min(node, context) {
-          const l = this.exec._evalExpression(node.args[0], context);
-          const r = this.exec._evalExpression(node.args[1], context);
+          const l = this.exec.evalExpression(node.args[0], context);
+          const r = this.exec.evalExpression(node.args[1], context);
           if (l instanceof Array) {
               return l.map((v, i) => Math.min(v, r[i]));
           }
           return Math.min(l, r);
       }
       Mix(node, context) {
-          const x = this.exec._evalExpression(node.args[0], context);
-          const y = this.exec._evalExpression(node.args[1], context);
-          const a = this.exec._evalExpression(node.args[2], context);
+          const x = this.exec.evalExpression(node.args[0], context);
+          const y = this.exec.evalExpression(node.args[1], context);
+          const a = this.exec.evalExpression(node.args[2], context);
           if (x instanceof Array) {
               return x.map((v, i) => x[i] * (1 - a[i]) + y[i] * a[i]);
           }
           return x * (1 - a) + y * a;
       }
       Modf(node, context) {
-          const x = this.exec._evalExpression(node.args[0], context);
-          const y = this.exec._evalExpression(node.args[1], context);
+          const x = this.exec.evalExpression(node.args[0], context);
+          const y = this.exec.evalExpression(node.args[1], context);
           if (x instanceof Array) {
               return x.map((v, i) => v % y[i]);
           }
           return x % y;
       }
       Normalize(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           const length = this.Length(node, context);
           return value.map((v) => v / length);
       }
       Pow(node, context) {
-          const x = this.exec._evalExpression(node.args[0], context);
-          const y = this.exec._evalExpression(node.args[1], context);
+          const x = this.exec.evalExpression(node.args[0], context);
+          const y = this.exec.evalExpression(node.args[1], context);
           if (x instanceof Array) {
               return x.map((v, i) => Math.pow(v, y[i]));
           }
@@ -5861,7 +5861,7 @@ var __webgpu_inspector_window = (function (exports) {
           return null;
       }
       Radians(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => v * Math.PI / 180);
           }
@@ -5869,15 +5869,15 @@ var __webgpu_inspector_window = (function (exports) {
       }
       Reflect(node, context) {
           // e1 - 2 * dot(e2, e1) * e2
-          let e1 = this.exec._evalExpression(node.args[0], context);
-          let e2 = this.exec._evalExpression(node.args[1], context);
+          let e1 = this.exec.evalExpression(node.args[0], context);
+          let e2 = this.exec.evalExpression(node.args[1], context);
           let dot = this._dot(e1, e2);
           return e1.map((v, i) => v - 2 * dot * e2[i]);
       }
       Refract(node, context) {
-          let e1 = this.exec._evalExpression(node.args[0], context);
-          let e2 = this.exec._evalExpression(node.args[1], context);
-          let e3 = this.exec._evalExpression(node.args[2], context);
+          let e1 = this.exec.evalExpression(node.args[0], context);
+          let e2 = this.exec.evalExpression(node.args[1], context);
+          let e3 = this.exec.evalExpression(node.args[2], context);
           let dot = this.Dot(e2, e1);
           const k = 1.0 - e3 * e3 * (1.0 - dot * dot);
           if (k < 0) {
@@ -5891,35 +5891,35 @@ var __webgpu_inspector_window = (function (exports) {
           return null;
       }
       Round(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.round(v));
           }
           return Math.round(value);
       }
       Saturate(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.min(Math.max(v, 0), 1));
           }
           return Math.min(Math.max(value, 0), 1);
       }
       Sign(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.sign(v));
           }
           return Math.sign(value);
       }
       Sin(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.sin(v));
           }
           return Math.sin(value);
       }
       Sinh(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.sinh(v));
           }
@@ -5930,38 +5930,38 @@ var __webgpu_inspector_window = (function (exports) {
           return t * t * (3 - 2 * t);
       }
       SmoothStep(node, context) {
-          const edge0 = this.exec._evalExpression(node.args[0], context);
-          const edge1 = this.exec._evalExpression(node.args[1], context);
-          const x = this.exec._evalExpression(node.args[2], context);
+          const edge0 = this.exec.evalExpression(node.args[0], context);
+          const edge1 = this.exec.evalExpression(node.args[1], context);
+          const x = this.exec.evalExpression(node.args[2], context);
           if (x instanceof Array) {
               return x.map((v, i) => this._smoothstep(edge0[i], edge1[i], v));
           }
           return this._smoothstep(edge0, edge1, x);
       }
       Sqrt(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.sqrt(v));
           }
           return Math.sqrt(value);
       }
       Step(node, context) {
-          const edge = this.exec._evalExpression(node.args[0], context);
-          const x = this.exec._evalExpression(node.args[1], context);
+          const edge = this.exec.evalExpression(node.args[0], context);
+          const x = this.exec.evalExpression(node.args[1], context);
           if (x instanceof Array) {
               return x.map((v, i) => v < edge[i] ? 0 : 1);
           }
           return x < edge ? 0 : 1;
       }
       Tan(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.tan(v));
           }
           return Math.tan(value);
       }
       Tanh(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.tanh(v));
           }
@@ -5972,7 +5972,7 @@ var __webgpu_inspector_window = (function (exports) {
           return null;
       }
       Trunc(node, context) {
-          const value = this.exec._evalExpression(node.args[0], context);
+          const value = this.exec.evalExpression(node.args[0], context);
           if (value instanceof Array) {
               return value.map((v) => Math.trunc(v));
           }
@@ -6018,7 +6018,7 @@ var __webgpu_inspector_window = (function (exports) {
       // Texture Built-in Functions
       TextureDimensions(node, context) {
           const textureArg = node.args[0];
-          node.args.length > 1 ? this.exec._evalExpression(node.args[1], context) : 0;
+          node.args.length > 1 ? this.exec.evalExpression(node.args[1], context) : 0;
           if (textureArg instanceof VariableExpr) {
               const textureName = textureArg.name;
               const texture = context.getVariableValue(textureName);
@@ -6043,8 +6043,8 @@ var __webgpu_inspector_window = (function (exports) {
       }
       TextureLoad(node, context) {
           const textureArg = node.args[0];
-          const uv = this.exec._evalExpression(node.args[1], context);
-          node.args.length > 2 ? this.exec._evalExpression(node.args[2], context) : 0;
+          const uv = this.exec.evalExpression(node.args[1], context);
+          node.args.length > 2 ? this.exec.evalExpression(node.args[2], context) : 0;
           if (textureArg instanceof VariableExpr) {
               const textureName = textureArg.name;
               const texture = context.getVariableValue(textureName);
@@ -6572,16 +6572,16 @@ var __webgpu_inspector_window = (function (exports) {
                   }
                   continue;
               }
-              const res = this._execStatement(stmt, context);
+              const res = this.execStatement(stmt, context);
               if (res) {
                   return res;
               }
           }
           return null;
       }
-      _execStatement(stmt, context) {
+      execStatement(stmt, context) {
           if (stmt instanceof Return) {
-              const v = this._evalExpression(stmt.value, context);
+              const v = this.evalExpression(stmt.value, context);
               const f = context.getFunction(context.currentFunctionName);
               if (f === null || f === void 0 ? void 0 : f.node.returnType) {
                   if (f.node.returnType.name === "i32" || f.node.returnType.name === "u32") {
@@ -6660,7 +6660,7 @@ var __webgpu_inspector_window = (function (exports) {
               console.error(`Variable ${name} not found. Line ${node.line}`);
               return null;
           }
-          let value = this._evalExpression(node.value, context);
+          let value = this.evalExpression(node.value, context);
           if (node.operator !== "=") {
               const currentValue = v.value instanceof TypedData ?
                   v.value.getDataValue(this, node.variable.postfix, context) :
@@ -6759,7 +6759,7 @@ var __webgpu_inspector_window = (function (exports) {
           }
           else if (node.variable.postfix) {
               if (node.variable.postfix instanceof ArrayIndex) {
-                  const idx = this._evalExpression(node.variable.postfix.index, context);
+                  const idx = this.evalExpression(node.variable.postfix.index, context);
                   // TODO: use array format to determine how to set the value
                   if (v.value instanceof Array) {
                       if (v.node.type.isArray) {
@@ -6809,32 +6809,32 @@ var __webgpu_inspector_window = (function (exports) {
       _const(node, context) {
           let value = null;
           if (node.value != null) {
-              value = this._evalExpression(node.value, context);
+              value = this.evalExpression(node.value, context);
           }
           context.createVariable(node.name, value, node);
       }
       _let(node, context) {
           let value = null;
           if (node.value != null) {
-              value = this._evalExpression(node.value, context);
+              value = this.evalExpression(node.value, context);
           }
           context.createVariable(node.name, value, node);
       }
       _var(node, context) {
           let value = null;
           if (node.value != null) {
-              value = this._evalExpression(node.value, context);
+              value = this.evalExpression(node.value, context);
           }
           context.createVariable(node.name, value, node);
       }
       _if(node, context) {
           context = context.clone();
-          const condition = this._evalExpression(node.condition, context);
+          const condition = this.evalExpression(node.condition, context);
           if (condition) {
               return this._execStatements(node.body, context);
           }
           for (const e of node.elseif) {
-              const condition = this._evalExpression(e.condition, context);
+              const condition = this.evalExpression(e.condition, context);
               if (condition) {
                   return this._execStatements(e.body, context);
               }
@@ -6846,19 +6846,19 @@ var __webgpu_inspector_window = (function (exports) {
       }
       _for(node, context) {
           context = context.clone();
-          this._execStatement(node.init, context);
-          while (this._evalExpression(node.condition, context)) {
+          this.execStatement(node.init, context);
+          while (this.evalExpression(node.condition, context)) {
               const res = this._execStatements(node.body, context);
               if (res) {
                   return res;
               }
-              this._execStatement(node.increment, context);
+              this.execStatement(node.increment, context);
           }
           return null;
       }
       _while(node, context) {
           context = context.clone();
-          let condition = this._evalExpression(node.condition, context);
+          let condition = this.evalExpression(node.condition, context);
           while (condition) {
               const res = this._execStatements(node.body, context);
               if (res instanceof Break$1) {
@@ -6870,14 +6870,14 @@ var __webgpu_inspector_window = (function (exports) {
               else if (res !== null) {
                   return res;
               }
-              condition = this._evalExpression(node.condition, context);
+              condition = this.evalExpression(node.condition, context);
           }
           return null;
       }
-      _evalExpression(node, context) {
+      evalExpression(node, context) {
           if (node instanceof GroupingExpr) {
               const grp = node;
-              return this._evalExpression(grp.contents[0], context);
+              return this.evalExpression(grp.contents[0], context);
           }
           else if (node instanceof BinaryOperator) {
               return this._evalBinaryOp(node, context);
@@ -6984,7 +6984,7 @@ var __webgpu_inspector_window = (function (exports) {
               for (let i = 0; i < node.args.length; ++i) {
                   const memberInfo = typeInfo.members[i];
                   const arg = node.args[i];
-                  const value = this._evalExpression(arg, context);
+                  const value = this.evalExpression(arg, context);
                   data.setData(this, value, memberInfo.type, memberInfo.offset, context);
               }
           }
@@ -7040,7 +7040,7 @@ var __webgpu_inspector_window = (function (exports) {
           }
           if (node.postfix) {
               if (node.postfix instanceof ArrayIndex) {
-                  const idx = this._evalExpression(node.postfix.index, context);
+                  const idx = this.evalExpression(node.postfix.index, context);
                   if ((value === null || value === void 0 ? void 0 : value.length) !== undefined) {
                       return value[idx];
                   }
@@ -7062,7 +7062,7 @@ var __webgpu_inspector_window = (function (exports) {
                                   if (m.name === member) {
                                       const v = new Float32Array(variable.value.buffer, m.offset);
                                       if (node.postfix.postfix) {
-                                          const postfix = this._evalExpression(node.postfix.postfix, context);
+                                          const postfix = this.evalExpression(node.postfix.postfix, context);
                                           return this._getArraySwizzle(value, postfix);
                                       }
                                       return v;
@@ -7078,8 +7078,8 @@ var __webgpu_inspector_window = (function (exports) {
           return value;
       }
       _evalBinaryOp(node, context) {
-          const l = this._evalExpression(node.left, context);
-          const r = this._evalExpression(node.right, context);
+          const l = this.evalExpression(node.left, context);
+          const r = this.evalExpression(node.right, context);
           switch (node.operator) {
               case "+":
                   return l + r;
@@ -7137,7 +7137,7 @@ var __webgpu_inspector_window = (function (exports) {
           }
           for (let ai = 0; ai < f.node.args.length; ++ai) {
               const arg = f.node.args[ai];
-              const value = this._evalExpression(node.args[ai], subContext);
+              const value = this.evalExpression(node.args[ai], subContext);
               subContext.setVariable(arg.name, value, arg);
           }
           const res = this._execStatements(f.node.body, subContext);
@@ -7457,7 +7457,7 @@ var __webgpu_inspector_window = (function (exports) {
               const subContext = context.clone();
               for (let ai = 0; ai < f.node.args.length; ++ai) {
                   const arg = f.node.args[ai];
-                  const value = this._evalExpression(node.args[ai], subContext);
+                  const value = this.evalExpression(node.args[ai], subContext);
                   subContext.setVariable(arg.name, value, arg);
               }
               return this._execStatements(f.node.body, subContext);
@@ -7469,7 +7469,7 @@ var __webgpu_inspector_window = (function (exports) {
           if (node.args.length === 0) {
               return 0;
           }
-          return this._evalExpression(node.args[0], context);
+          return this.evalExpression(node.args[0], context);
       }
       _callConstructorArray(node, context) {
           if (node.args.length === 0) {
@@ -7525,7 +7525,7 @@ var __webgpu_inspector_window = (function (exports) {
           }
           const values = [];
           for (const arg of node.args) {
-              values.push(this._evalExpression(arg, context));
+              values.push(this.evalExpression(arg, context));
           }
           return values;
       }
@@ -7551,7 +7551,7 @@ var __webgpu_inspector_window = (function (exports) {
           const values = [];
           // TODO: make sure the number of args matches the vector length.
           for (const arg of node.args) {
-              let v = this._evalExpression(arg, context);
+              let v = this.evalExpression(arg, context);
               if (isInt) {
                   v = Math.floor(v);
               }
@@ -7617,7 +7617,7 @@ var __webgpu_inspector_window = (function (exports) {
           const values = [];
           // TODO: make sure the number of args matches the matrix size.
           for (const arg of node.args) {
-              let v = this._evalExpression(arg, context);
+              let v = this.evalExpression(arg, context);
               if (isInt) {
                   v = Math.floor(v);
               }
@@ -7706,8 +7706,12 @@ var __webgpu_inspector_window = (function (exports) {
       }
   }
   class WgslDebug {
-      constructor(code, context) {
-          this._exec = new WgslExec(code, context);
+      constructor(code, runStateCallback) {
+          this._runTimer = null;
+          this.breakpoints = new Set();
+          this.runStateCallback = null;
+          this._exec = new WgslExec(code);
+          this.runStateCallback = runStateCallback !== null && runStateCallback !== void 0 ? runStateCallback : null;
       }
       getVariableValue(name) {
           return this._exec.context.getVariableValue(name);
@@ -7760,6 +7764,54 @@ var __webgpu_inspector_window = (function (exports) {
                   continue;
               }
               return command;
+          }
+      }
+      toggleBreakpoint(line) {
+          if (this.breakpoints.has(line)) {
+              this.breakpoints.delete(line);
+          }
+          else {
+              this.breakpoints.add(line);
+          }
+      }
+      clearBreakpoints() {
+          this.breakpoints.clear();
+      }
+      get isRunning() {
+          return this._runTimer !== null;
+      }
+      run() {
+          this._runTimer = setInterval(() => {
+              const command = this.currentCommand;
+              if (command) {
+                  if (this.breakpoints.has(command.line)) {
+                      clearInterval(this._runTimer);
+                      this._runTimer = null;
+                      if (this.runStateCallback !== null) {
+                          this.runStateCallback();
+                      }
+                      return;
+                  }
+              }
+              if (!this.stepNext(true)) {
+                  clearInterval(this._runTimer);
+                  this._runTimer = null;
+                  if (this.runStateCallback !== null) {
+                      this.runStateCallback();
+                  }
+              }
+          }, 0);
+          if (this.runStateCallback !== null) {
+              this.runStateCallback();
+          }
+      }
+      pause() {
+          if (this._runTimer !== null) {
+              clearInterval(this._runTimer);
+              this._runTimer = null;
+              if (this.runStateCallback !== null) {
+                  this.runStateCallback();
+              }
           }
       }
       debugWorkgroup(kernel, dispatchId, dispatchCount, bindGroups, config) {
@@ -7866,6 +7918,12 @@ var __webgpu_inspector_window = (function (exports) {
           }
           return false;
       }
+      stepInto() {
+          this.stepNext(true);
+      }
+      stepOver() {
+          this.stepNext(false);
+      }
       // Returns true if execution is not finished, false if execution is complete.
       stepNext(stepInto = true) {
           if (!this._execStack) {
@@ -7901,7 +7959,7 @@ var __webgpu_inspector_window = (function (exports) {
                   const fnState = this._createState(fn.node.body, state.context.clone(), state);
                   for (let ai = 0; ai < fn.node.args.length; ++ai) {
                       const arg = fn.node.args[ai];
-                      const value = this._exec._evalExpression(node.args[ai], fnState.context);
+                      const value = this._exec.evalExpression(node.args[ai], fnState.context);
                       fnState.context.setVariable(arg.name, value, arg);
                   }
                   fnState.parentCallExpr = node;
@@ -7913,7 +7971,7 @@ var __webgpu_inspector_window = (function (exports) {
                   return true;
               }
               else if (command instanceof StatementCommand) {
-                  const res = this._exec._execStatement(command.node, state.context);
+                  const res = this._exec.execStatement(command.node, state.context);
                   if (res !== null && res !== undefined) {
                       let s = state;
                       // Find the CallExpr to store the return value in.
@@ -7983,7 +8041,7 @@ var __webgpu_inspector_window = (function (exports) {
                       return false;
                   }
                   if (command.condition) {
-                      const res = this._exec._evalExpression(command.condition, state.context);
+                      const res = this._exec.evalExpression(command.condition, state.context);
                       if (res) {
                           if (this._shouldExecuteNectCommand()) {
                               continue;
@@ -40699,7 +40757,9 @@ var __webgpu_inspector_window = (function (exports) {
         initialSpacer: () => breakpointMarker,
         domEventHandlers: {
           mousedown(view, line) {
-            //console.log(line);
+            const lineNo = view.state.doc.lineAt(line.from).number;
+            const dbg = view.debugger;
+            dbg.toggleBreakpoint(lineNo);
             toggleBreakpoint(view, line.from);
             return true
           }
@@ -40839,7 +40899,7 @@ var __webgpu_inspector_window = (function (exports) {
 
           new Div(this.controls, { style: "flex-grow: 1;" });
 
-          new Button(this.controls, {
+          this.continueButton = new Button(this.controls, {
               children: [new Img(null, { title: "Continue", src: "img/debug-continue-small.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
               title: "Continue",
               style: "background-color: #777;",
@@ -40889,19 +40949,41 @@ var __webgpu_inspector_window = (function (exports) {
               parent: pane1.element,
           });
 
+          this.editorView.debugger = this;
+
           // TODO: persistent search panel
           //openSearchPanel(this.editorview);
 
           this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: 100%;" });
       }
 
+      toggleBreakpoint(lineNo) {
+          this.debugger.toggleBreakpoint(lineNo);
+      }
+
+      runStateChanged() {
+          if (this.debugger.isRunning) {
+              this.continueButton.children[0].src = "img/debug-pause.svg";
+          } else {
+              this.continueButton.children[0].src = "img/debug-continue-small.svg";
+          }
+          this.update();
+      }
+
       pauseContinue() {
           if (!this.debugger) {
               this.debug();
-              return;
           }
 
-          //this.debugger.runToBreakpoint();
+          if (this.debugger.isRunning) {
+              this.debugger.pause();
+              //this.continueButton.children[0].src = "img/debug-continue-small.svg";
+              this.update();
+          } else {
+              this.debugger.run();
+              //this.continueButton.children[0].src = "img/debug-pause.svg";
+              this.update();
+          }
       }
 
       restart() {
@@ -40938,23 +41020,20 @@ var __webgpu_inspector_window = (function (exports) {
           }
 
           const kernelName = kernel.name;
-          const workgroupSize = [1, 1, 1];
           if (kernel.attributes) {
               for (const attr of kernel.attributes) {
                   if (attr.name === "workgroup_size") {
                       const size = attr.value;
                       if (size instanceof Array) {
                           if (size.length > 0) {
-                              workgroupSize[0] = parseInt(size[0]);
+                              parseInt(size[0]);
                           }
                           if (size.length > 1) {
-                              workgroupSize[1] = parseInt(size[1]);
+                              parseInt(size[1]);
                           }
                           if (size.length > 2) {
-                              workgroupSize[2] = parseInt(size[2]);
+                              parseInt(size[2]);
                           }
-                      } else {
-                          workgroupSize[0] = parseInt(size);
                       }
                       break;
                   }
@@ -40975,28 +41054,22 @@ var __webgpu_inspector_window = (function (exports) {
               bindGroups[index] = bindgroup;
           });
 
-          console.log("Debug", idx, idy, idz, dispatchCount.toString(), workgroupSize.toString());
-          console.log(this.command);
-          console.log(this.module?.reflection);
-          console.log(this.pipelineState);
-          console.log(bindGroups);
-
           const code = this.module.descriptor.code;
-          this.debugger = new WgslDebug(code);
+          this.debugger = new WgslDebug(code, this.runStateChanged.bind(this));
           this.debugger.debugWorkgroup(kernelName, [idx, idy, idz], dispatchCount, bindGroups);
           this.update();
       }
 
       stepInto() {
           if (this.debugger) {
-              this.debugger.stepNext(true);
+              this.debugger.stepInto();
               this.update();
           }
       }
 
       stepOver() {
           if (this.debugger) {
-              this.debugger.stepNext(false);
+              this.debugger.stepOver();
               this.update();
           }
       }
@@ -41007,12 +41080,12 @@ var __webgpu_inspector_window = (function (exports) {
           }
 
           const cmd = this.debugger.currentCommand;
-          if (cmd !== null) {
+          if (cmd !== null && !this.debugger.isRunning) {
               const line = cmd.line;
               if (line > -1) {
-              this._highlightLine(cmd.line);
+                  this._highlightLine(cmd.line);
               } else {
-              this._highlightLine(0);
+                  this._highlightLine(0);
               }
           } else {
               this._highlightLine(0);
