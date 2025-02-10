@@ -41280,6 +41280,14 @@ var __webgpu_inspector_window = (function (exports) {
               }
           });
           new Button(this.controls, {
+              children: [new Img(null, { title: "Step Into", src: "img/debug-step-out.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
+              title: "Step Out",
+              style: "background-color: #777;",
+              onClick: () => {
+                  this.stepOut();
+              }
+          });
+          new Button(this.controls, {
               children: [new Img(null, { title: "Restart", src: "img/debug-restart.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
               title: "Restart",
               style: "background-color: #777;",
@@ -41420,6 +41428,13 @@ var __webgpu_inspector_window = (function (exports) {
       stepOver() {
           if (this.debugger) {
               this.debugger.stepOver();
+              this.update();
+          }
+      }
+
+      stepOut() {
+          if (this.debugger) {
+              //this.debugger.stepOut();
               this.update();
           }
       }
@@ -43391,7 +43406,7 @@ var __webgpu_inspector_window = (function (exports) {
             if (parentCommand) {
               new Button(computeGrp.body, { 
                 children: [ new Img(null, { title: "Debug Shader", src: "img/debug.svg", style: "width: 15px; height: 15px; filter: invert(1);" }) ],
-                title: "Debug Shadre", style: "background-color: rgb(26 80 180);", callback: () => {
+                title: "Debug Shader", style: "background-color: rgb(26 80 180);", callback: () => {
                   self._debugShader(command, parentCommand);
               } });
             }

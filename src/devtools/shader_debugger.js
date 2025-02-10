@@ -242,6 +242,14 @@ export class ShaderDebugger extends Div {
             }
         });
         new Button(this.controls, {
+            children: [new Img(null, { title: "Step Out", src: "img/debug-step-out.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
+            title: "Step Out",
+            style: "background-color: #777;",
+            onClick: () => {
+                this.stepOut();
+            }
+        });
+        new Button(this.controls, {
             children: [new Img(null, { title: "Restart", src: "img/debug-restart.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
             title: "Restart",
             style: "background-color: #777;",
@@ -385,6 +393,13 @@ export class ShaderDebugger extends Div {
     stepOver() {
         if (this.debugger) {
             this.debugger.stepOver();
+            this.update();
+        }
+    }
+
+    stepOut() {
+        if (this.debugger) {
+            //this.debugger.stepOut();
             this.update();
         }
     }
