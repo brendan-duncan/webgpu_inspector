@@ -6608,6 +6608,10 @@ var __webgpu_inspector_window = (function (exports) {
       }
   }
 
+  function isArray(value) {
+      return Array.isArray(value) || (value === null || value === void 0 ? void 0 : value.buffer) instanceof ArrayBuffer;
+  }
+
   class WgslExec extends ExecInterface {
       constructor(code, context) {
           var _a;
@@ -7349,7 +7353,7 @@ var __webgpu_inspector_window = (function (exports) {
           const r = this.evalExpression(node.right, context);
           switch (node.operator) {
               case "+": {
-                  if (Array.isArray(l) && Array.isArray(r)) {
+                  if (isArray(l) && isArray(r)) {
                       if (l.length !== r.length) {
                           console.error(`Vector length mismatch. Line ${node.line}.`);
                           return null;
@@ -7359,7 +7363,7 @@ var __webgpu_inspector_window = (function (exports) {
                   return l + r;
               }
               case "-": {
-                  if (Array.isArray(l) && Array.isArray(r)) {
+                  if (isArray(l) && isArray(r)) {
                       if (l.length !== r.length) {
                           console.error(`Vector length mismatch. Line ${node.line}.`);
                           return null;
@@ -7369,7 +7373,7 @@ var __webgpu_inspector_window = (function (exports) {
                   return l - r;
               }
               case "*": {
-                  if (Array.isArray(l) && Array.isArray(r)) {
+                  if (isArray(l) && isArray(r)) {
                       if (l.length !== r.length) {
                           console.error(`Vector length mismatch. Line ${node.line}.`);
                           return null;
@@ -7379,7 +7383,7 @@ var __webgpu_inspector_window = (function (exports) {
                   return l * r;
               }
               case "%": {
-                  if (Array.isArray(l) && Array.isArray(r)) {
+                  if (isArray(l) && isArray(r)) {
                       if (l.length !== r.length) {
                           console.error(`Vector length mismatch. Line ${node.line}.`);
                           return null;
@@ -7389,7 +7393,7 @@ var __webgpu_inspector_window = (function (exports) {
                   return l % r;
               }
               case "/": {
-                  if (Array.isArray(l) && Array.isArray(r)) {
+                  if (isArray(l) && isArray(r)) {
                       if (l.length !== r.length) {
                           console.error(`Vector length mismatch. Line ${node.line}.`);
                           return null;
@@ -7408,7 +7412,7 @@ var __webgpu_inspector_window = (function (exports) {
                   }
                   return l > r;
               case "<":
-                  if (Array.isArray(l) && Array.isArray(r)) {
+                  if (isArray(l) && isArray(r)) {
                       if (l.length !== r.length) {
                           console.error(`Vector length mismatch. Line ${node.line}.`);
                           return null;
@@ -7417,7 +7421,7 @@ var __webgpu_inspector_window = (function (exports) {
                   }
                   return l < r;
               case "==": {
-                  if (Array.isArray(l) && Array.isArray(r)) {
+                  if (isArray(l) && isArray(r)) {
                       if (l.length !== r.length) {
                           console.error(`Vector length mismatch. Line ${node.line}.`);
                           return null;
@@ -7427,7 +7431,7 @@ var __webgpu_inspector_window = (function (exports) {
                   return l === r;
               }
               case "!=": {
-                  if (Array.isArray(l) && Array.isArray(r)) {
+                  if (isArray(l) && isArray(r)) {
                       if (l.length !== r.length) {
                           console.error(`Vector length mismatch. Line ${node.line}.`);
                           return null;
@@ -7437,7 +7441,7 @@ var __webgpu_inspector_window = (function (exports) {
                   return l != r;
               }
               case ">=": {
-                  if (Array.isArray(l) && Array.isArray(r)) {
+                  if (isArray(l) && isArray(r)) {
                       if (l.length !== r.length) {
                           console.error(`Vector length mismatch. Line ${node.line}.`);
                           return null;
@@ -7447,7 +7451,7 @@ var __webgpu_inspector_window = (function (exports) {
                   return l >= r;
               }
               case "<=": {
-                  if (Array.isArray(l) && Array.isArray(r)) {
+                  if (isArray(l) && isArray(r)) {
                       if (l.length !== r.length) {
                           console.error(`Vector length mismatch. Line ${node.line}.`);
                           return null;
@@ -7457,7 +7461,7 @@ var __webgpu_inspector_window = (function (exports) {
                   return l <= r;
               }
               case "&&": {
-                  if (Array.isArray(l) && Array.isArray(r)) {
+                  if (isArray(l) && isArray(r)) {
                       if (l.length !== r.length) {
                           console.error(`Vector length mismatch. Line ${node.line}.`);
                           return null;
@@ -7467,7 +7471,7 @@ var __webgpu_inspector_window = (function (exports) {
                   return l && r;
               }
               case "||": {
-                  if (Array.isArray(l) && Array.isArray(r)) {
+                  if (isArray(l) && isArray(r)) {
                       if (l.length !== r.length) {
                           console.error(`Vector length mismatch. Line ${node.line}.`);
                           return null;
@@ -8065,11 +8069,18 @@ var __webgpu_inspector_window = (function (exports) {
           this._runTimer = null;
           this.breakpoints = new Set();
           this.runStateCallback = null;
+          this._code = code;
           this._exec = new WgslExec(code);
           this.runStateCallback = runStateCallback !== null && runStateCallback !== void 0 ? runStateCallback : null;
       }
       getVariableValue(name) {
           return this._exec.context.getVariableValue(name);
+      }
+      reset() {
+          this._exec = new WgslExec(this._code);
+          this._execStack = new ExecStack();
+          const state = this._createState(this._exec.ast, this._exec.context);
+          this._execStack.states.push(state);
       }
       startDebug() {
           this._execStack = new ExecStack();
@@ -41451,8 +41462,12 @@ var __webgpu_inspector_window = (function (exports) {
               bindGroups[index] = bindgroup;
           });
 
-          const code = this.module.descriptor.code;
-          this.debugger = new WgslDebug(code, this.runStateChanged.bind(this));
+          if (!this.debugger) {
+              const code = this.module.descriptor.code;
+              this.debugger = new WgslDebug(code, this.runStateChanged.bind(this));
+          } else {
+              this.debugger.reset();
+          }
           this.debugger.debugWorkgroup(kernelName, [idx, idy, idz], dispatchCount, bindGroups);
           this.update();
       }

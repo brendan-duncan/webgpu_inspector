@@ -357,8 +357,12 @@ export class ShaderDebugger extends Div {
             bindGroups[index] = bindgroup;
         });
 
-        const code = this.module.descriptor.code;
-        this.debugger = new WgslDebug(code, this.runStateChanged.bind(this));
+        if (!this.debugger) {
+            const code = this.module.descriptor.code;
+            this.debugger = new WgslDebug(code, this.runStateChanged.bind(this));
+        } else {
+            this.debugger.reset();
+        }
         this.debugger.debugWorkgroup(kernelName, [idx, idy, idz], dispatchCount, bindGroups);
         this.update();
     }
