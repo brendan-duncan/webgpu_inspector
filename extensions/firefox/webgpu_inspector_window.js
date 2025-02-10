@@ -8512,9 +8512,9 @@ var __webgpu_inspector_window = (function (exports) {
                           }
                       }
                   }
-              }
-              else {
-                  workgroupSize[0] = parseInt(attr.value);
+                  else {
+                      workgroupSize[0] = parseInt(attr.value);
+                  }
               }
           }
           context.setVariable("@workgroup_size", workgroupSize);
