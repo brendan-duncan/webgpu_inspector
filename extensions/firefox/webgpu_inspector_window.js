@@ -4158,6 +4158,7 @@ var __webgpu_inspector_window = (function (exports) {
           }
           this._consume(TokenTypes.tokens.brace_left, "Expected '{' for loop.");
           // statement*
+          let continuing = null;
           const statements = [];
           let statement = this._statement();
           while (statement !== null) {
@@ -4169,12 +4170,14 @@ var __webgpu_inspector_window = (function (exports) {
               else {
                   statements.push(statement);
               }
+              // Keep continuing in the loop body statements so it can be
+              // executed in the stackframe of the body statements.
+              if (statement instanceof Continuing) {
+                  continuing = statement;
+                  // Continuing should be the last statement in the loop.
+                  break;
+              }
               statement = this._statement();
-          }
-          // continuing_statement: continuing compound_statement
-          let continuing = null;
-          if (this._match(TokenTypes.keywords.continuing)) {
-              continuing = this._compound_statement();
           }
           this._consume(TokenTypes.tokens.brace_right, "Expected '}' for loop.");
           return this._updateNode(new Loop(statements, continuing));
@@ -8245,6 +8248,9 @@ var __webgpu_inspector_window = (function (exports) {
   const _u32_f32 = new Float32Array(_u32.buffer);
   const _u32_i32 = new Int32Array(_u32.buffer);
   function castScalar(v, from, to) {
+      if (from === to) {
+          return v;
+      }
       if (from === "f32") {
           if (to === "i32" || to === "x32") {
               _f32[0] = v;
@@ -8907,40 +8913,106 @@ var __webgpu_inspector_window = (function (exports) {
               v.value.setDataValue(this, value, node.variable.postfix, context);
           }
           else if (node.variable.postfix) {
+              if (!(v.value instanceof VectorData) && !(v.value instanceof MatrixData)) {
+                  console.error(`Variable ${v.name} is not a vector or matrix. Line ${node.line}`);
+                  return;
+              }
               if (node.variable.postfix instanceof ArrayIndex) {
-                  this.evalExpression(node.variable.postfix.index, context).value;
-                  // TODO: use array format to determine how to set the value
-                  /*if (v.value instanceof VectorData || v.value instanceof MatrixData) {
-                      if (v.node.type.isArray) {
-                          const arrayType = v.node.type as AST.ArrayType;
-                          if (arrayType.format.name === "vec3" ||
-                              arrayType.format.name === "vec3u" ||
-                              arrayType.format.name === "vec3i" ||
-                              arrayType.format.name === "vec3f") {
-                              v.value[idx * 3 + 0] = value[0];
-                              v.value[idx * 3 + 1] = value[1];
-                              v.value[idx * 3 + 2] = value[2];
-                          } else if (arrayType.format.name === "vec4" ||
-                              arrayType.format.name === "vec4u" ||
-                              arrayType.format.name === "vec4i" ||
-                              arrayType.format.name === "vec4f") {
-                              v.value[idx * 4 + 0] = value[0];
-                              v.value[idx * 4 + 1] = value[1];
-                              v.value[idx * 4 + 2] = value[2];
-                              v.value[idx * 4 + 3] = value[3];
-                          } else {
-                              v.value[idx] = value;
-                          }
-                      } else {
-                          v.value[idx] = value;
+                  const idx = this.evalExpression(node.variable.postfix.index, context).value;
+                  if (v.value instanceof VectorData) {
+                      if (value instanceof ScalarData) {
+                          v.value.value[idx] = value.value;
                       }
-                  } else {
-                      console.error(`Variable ${v.name} is not an array. Line ${node.line}`);
-                  }*/
-                  console.error(`TODO Array index. Line ${node.line}`);
+                      else {
+                          console.error(`Invalid assignment to ${v.name}. Line ${node.line}`);
+                          return;
+                      }
+                  }
+                  else if (v.value instanceof MatrixData) {
+                      console.error("TODO Matrix array index assignment. Line", node.line);
+                  }
+                  else {
+                      console.error(`Invalid assignment to ${v.name}. Line ${node.line}`);
+                      return;
+                  }
               }
               else if (node.variable.postfix instanceof StringExpr) {
-                  console.error(`TODO Struct member. Line ${node.line}`);
+                  const member = node.variable.postfix.value;
+                  if (!(v.value instanceof VectorData)) {
+                      console.error(`Invalid assignment to ${member}. Variable ${v.name} is not a vector. Line ${node.line}`);
+                      return;
+                  }
+                  if (value instanceof ScalarData) {
+                      if (member.length > 1) {
+                          console.error(`Invalid assignment to ${member} for variable ${v.name}. Line ${node.line}`);
+                          return;
+                      }
+                      if (member === "x") {
+                          v.value.value[0] = value.value;
+                      }
+                      else if (member === "y") {
+                          if (v.value.value.length < 2) {
+                              console.error(`Invalid assignment to ${member} for variable ${v.name}. Line ${node.line}`);
+                              return;
+                          }
+                          v.value.value[1] = value.value;
+                      }
+                      else if (member === "z") {
+                          if (v.value.value.length < 3) {
+                              console.error(`Invalid assignment to ${member} for variable ${v.name}. Line ${node.line}`);
+                              return;
+                          }
+                          v.value.value[2] = value.value;
+                      }
+                      else if (member === "w") {
+                          if (v.value.value.length < 4) {
+                              console.error(`Invalid assignment to ${member} for variable ${v.name}. Line ${node.line}`);
+                              return;
+                          }
+                          v.value.value[3] = value.value;
+                      }
+                  }
+                  else if (value instanceof VectorData) {
+                      if (member.length !== value.value.length) {
+                          console.error(`Invalid assignment to ${member} for variable ${v.name}. Line ${node.line}`);
+                          return;
+                      }
+                      for (let i = 0; i < member.length; ++i) {
+                          const m = member[i];
+                          if (m === "x" || m === "r") {
+                              v.value.value[0] = value.value[i];
+                          }
+                          else if (m === "y" || m === "g") {
+                              if (value.value.length < 2) {
+                                  console.error(`Invalid assignment to ${m} for variable ${v.name}. Line ${node.line}`);
+                                  return;
+                              }
+                              v.value.value[1] = value.value[i];
+                          }
+                          else if (m === "z" || m === "b") {
+                              if (value.value.length < 3) {
+                                  console.error(`Invalid assignment to ${m} for variable ${v.name}. Line ${node.line}`);
+                                  return;
+                              }
+                              v.value.value[2] = value.value[i];
+                          }
+                          else if (m === "w" || m === "a") {
+                              if (value.value.length < 4) {
+                                  console.error(`Invalid assignment to ${m} for variable ${v.name}. Line ${node.line}`);
+                                  return;
+                              }
+                              v.value.value[3] = value.value[i];
+                          }
+                          else {
+                              console.error(`Invalid assignment to ${m} for variable ${v.name}. Line ${node.line}`);
+                              return;
+                          }
+                      }
+                  }
+                  else {
+                      console.error(`Invalid assignment to ${v.name}. Line ${node.line}`);
+                      return;
+                  }
               }
           }
           else {
@@ -8970,6 +9042,31 @@ var __webgpu_inspector_window = (function (exports) {
           let value = null;
           if (node.value != null) {
               value = this.evalExpression(node.value, context);
+          }
+          else {
+              if (node.type === null) {
+                  console.error(`Variable ${node.name} has no type. Line ${node.line}`);
+                  return;
+              }
+              if (node.type.name === "f32" || node.type.name === "i32" || node.type.name === "u32" ||
+                  node.type.name === "bool" || node.type.name === "f16" ||
+                  node.type.name === "vec2" || node.type.name === "vec3" || node.type.name === "vec4" ||
+                  node.type.name === "vec2f" || node.type.name === "vec3f" || node.type.name === "vec4f" ||
+                  node.type.name === "vec2i" || node.type.name === "vec3i" || node.type.name === "vec4i" ||
+                  node.type.name === "vec2u" || node.type.name === "vec3u" || node.type.name === "vec4u" ||
+                  node.type.name === "vec2h" || node.type.name === "vec3h" || node.type.name === "vec4h" ||
+                  node.type.name === "mat2x2" || node.type.name === "mat2x3" || node.type.name === "mat2x4" ||
+                  node.type.name === "mat3x2" || node.type.name === "mat3x3" || node.type.name === "mat3x4" ||
+                  node.type.name === "mat4x2" || node.type.name === "mat4x3" || node.type.name === "mat4x4" ||
+                  node.type.name === "mat2x2f" || node.type.name === "mat2x3f" || node.type.name === "mat2x4f" ||
+                  node.type.name === "mat3x2f" || node.type.name === "mat3x3f" || node.type.name === "mat3x4f" ||
+                  node.type.name === "mat4x2f" || node.type.name === "mat4x3f" || node.type.name === "mat4x4f" ||
+                  node.type.name === "mat2x2h" || node.type.name === "mat2x3h" || node.type.name === "mat2x4h" ||
+                  node.type.name === "mat3x2h" || node.type.name === "mat3x3h" || node.type.name === "mat3x4h" ||
+                  node.type.name === "mat4x2h" || node.type.name === "mat4x3h" || node.type.name === "mat4x4h") {
+                  const defType = new CreateExpr(node.type, []);
+                  value = this._evalCreate(defType, context);
+              }
           }
           context.createVariable(node.name, value, node);
       }
@@ -9074,44 +9171,33 @@ var __webgpu_inspector_window = (function (exports) {
               case "vec4u":
                   return this._callConstructorVec(node, context);
               case "mat2x2":
-              case "mat2x2i":
-              case "mat2x2u":
               case "mat2x2f":
+              case "mat2x2h":
               case "mat2x3":
-              case "mat2x3i":
-              case "mat2x3u":
               case "mat2x3f":
+              case "mat2x3h":
               case "mat2x4":
-              case "mat2x4i":
-              case "mat2x4u":
               case "mat2x4f":
+              case "mat2x4h":
               case "mat3x2":
-              case "mat3x2i":
-              case "mat3x2u":
               case "mat3x2f":
+              case "mat3x2h":
               case "mat3x3":
-              case "mat3x3i":
-              case "mat3x3u":
               case "mat3x3f":
+              case "mat3x3h":
               case "mat3x4":
-              case "mat3x4i":
-              case "mat3x4u":
               case "mat3x4f":
+              case "mat3x4h":
               case "mat4x2":
-              case "mat4x2i":
-              case "mat4x2u":
               case "mat4x2f":
+              case "mat4x2h":
               case "mat4x3":
-              case "mat4x3i":
-              case "mat4x3u":
               case "mat4x3f":
+              case "mat4x3h":
               case "mat4x4":
-              case "mat4x4i":
-              case "mat4x4u":
               case "mat4x4f":
+              case "mat4x4h":
                   return this._callConstructorMatrix(node, context);
-              //case "array":
-              //return this._callConstructorArray(node, context);
           }
           const typeInfo = this.getTypeInfo(node.type);
           if (typeInfo === null) {
@@ -10698,7 +10784,10 @@ var __webgpu_inspector_window = (function (exports) {
                   if (command.position === GotoCommand.kContinue) {
                       while (!this._execStack.isEmpty) {
                           state = this._execStack.last;
-                          for (let i = state.current; i >= 0; --i) {
+                          //for (let i = state.current; i >= 0; --i) {
+                          // A continue might go forward to a continuing block, or backward to the
+                          // start of the loop.
+                          for (let i = state.commands.length - 1; i >= 0; --i) {
                               const cmd = state.commands[i];
                               if (cmd instanceof GotoCommand &&
                                   cmd.position === GotoCommand.kContinueTarget) {
@@ -10717,6 +10806,21 @@ var __webgpu_inspector_window = (function (exports) {
                   // kBreak is used as a marker for break statements. If we encounter it,
                   // then we need to find the nearest subsequent GotoCommand with a kBreakTarget.
                   if (command.position === GotoCommand.kBreak) {
+                      // break-if conditional break 
+                      if (command.condition) {
+                          const res = this._exec.evalExpression(command.condition, state.context);
+                          if (!(res instanceof ScalarData)) {
+                              console.error("Condition must be a scalar");
+                              return false;
+                          }
+                          // If the condition is false, then we should not the break.
+                          if (!res.value) {
+                              if (this._shouldExecuteNectCommand()) {
+                                  continue;
+                              }
+                              return true;
+                          }
+                      }
                       while (!this._execStack.isEmpty) {
                           state = this._execStack.last;
                           for (let i = state.current; i < state.commands.length; ++i) {
@@ -10976,11 +11080,24 @@ var __webgpu_inspector_window = (function (exports) {
                   state.commands.push(new GotoCommand(null, GotoCommand.kBreakTarget));
                   conditionCmd.position = state.commands.length;
               }
+              else if (statement instanceof Loop) {
+                  let loopStartPos = state.commands.length;
+                  if (!statement.continuing) {
+                      state.commands.push(new GotoCommand(null, GotoCommand.kContinueTarget));
+                  }
+                  state.commands.push(new BlockCommand(statement.body));
+                  state.commands.push(new GotoCommand(null, loopStartPos));
+                  state.commands.push(new GotoCommand(null, GotoCommand.kBreakTarget));
+              }
+              else if (statement instanceof Continuing) {
+                  state.commands.push(new GotoCommand(null, GotoCommand.kContinueTarget));
+                  state.commands.push(new BlockCommand(statement.body));
+              }
               else if (statement instanceof Continue) {
                   state.commands.push(new GotoCommand(null, GotoCommand.kContinue));
               }
               else if (statement instanceof Break$1) {
-                  state.commands.push(new GotoCommand(null, GotoCommand.kBreak));
+                  state.commands.push(new GotoCommand(statement.condition, GotoCommand.kBreak));
               }
               else {
                   console.error(`TODO: statement type ${statement.constructor.name}`);
