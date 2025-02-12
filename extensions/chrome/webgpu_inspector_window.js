@@ -9345,6 +9345,62 @@ var __webgpu_inspector_window = (function (exports) {
                   const t = this._maxFormatTypeInfo([_l.typeInfo, _r.typeInfo]);
                   return new ScalarData(ln / rn, t);
               }
+              case "<<": {
+                  if (isArray(l) && isArray(r)) {
+                      const la = l;
+                      const ra = r;
+                      if (la.length !== ra.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      const result = la.map((x, i) => x << ra[i]);
+                      return new VectorData(result, _l.typeInfo);
+                  }
+                  else if (isArray(l)) {
+                      const la = l;
+                      const rn = r;
+                      const result = la.map((x, i) => x << rn);
+                      return new VectorData(result, _l.typeInfo);
+                  }
+                  else if (isArray(r)) {
+                      const ln = l;
+                      const ra = r;
+                      const result = ra.map((x, i) => ln << x);
+                      return new VectorData(result, _r.typeInfo);
+                  }
+                  const ln = l;
+                  const rn = r;
+                  const t = this._maxFormatTypeInfo([_l.typeInfo, _r.typeInfo]);
+                  return new ScalarData(ln << rn, t);
+              }
+              case ">>": {
+                  if (isArray(l) && isArray(r)) {
+                      const la = l;
+                      const ra = r;
+                      if (la.length !== ra.length) {
+                          console.error(`Vector length mismatch. Line ${node.line}.`);
+                          return null;
+                      }
+                      const result = la.map((x, i) => x >> ra[i]);
+                      return new VectorData(result, _l.typeInfo);
+                  }
+                  else if (isArray(l)) {
+                      const la = l;
+                      const rn = r;
+                      const result = la.map((x, i) => x >> rn);
+                      return new VectorData(result, _l.typeInfo);
+                  }
+                  else if (isArray(r)) {
+                      const ln = l;
+                      const ra = r;
+                      const result = ra.map((x, i) => ln >> x);
+                      return new VectorData(result, _r.typeInfo);
+                  }
+                  const ln = l;
+                  const rn = r;
+                  const t = this._maxFormatTypeInfo([_l.typeInfo, _r.typeInfo]);
+                  return new ScalarData(ln >> rn, t);
+              }
               case ">": {
                   if (isArray(l) && isArray(r)) {
                       const la = l;
