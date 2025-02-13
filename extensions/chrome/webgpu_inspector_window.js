@@ -44000,7 +44000,7 @@ var __webgpu_inspector_window = (function (exports) {
 
           openSearchPanel(this.editorView);
 
-          this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: 100%;" });
+          this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: calc(100% - 20px);" });
 
           this.debug();
       }
