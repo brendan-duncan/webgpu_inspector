@@ -38080,10 +38080,18 @@ var __webgpu_inspector_window = (function (exports) {
               this.prevMatchInRange(state, curTo, state.doc.length);
       }
       getReplacement(result) {
-          return this.spec.unquote(this.spec.replace).replace(/\$([$&\d+])/g, (m, i) => i == "$" ? "$"
-              : i == "&" ? result.match[0]
-                  : i != "0" && +i < result.match.length ? result.match[i]
-                      : m);
+          return this.spec.unquote(this.spec.replace).replace(/\$([$&]|\d+)/g, (m, i) => {
+              if (i == "&")
+                  return result.match[0];
+              if (i == "$")
+                  return "$";
+              for (let l = i.length; l > 0; l--) {
+                  let n = +i.slice(0, l);
+                  if (n > 0 && n < result.match.length)
+                      return result.match[n] + i.slice(l);
+              }
+              return m;
+          });
       }
       matchAll(state, limit) {
           let cursor = regexpCursor(this.spec, state, 0, state.doc.length), ranges = [];
@@ -39957,7 +39965,7 @@ var __webgpu_inspector_window = (function (exports) {
   function closeBrackets() {
       return [inputHandler, bracketState];
   }
-  const definedClosing = "()[]{}<>";
+  const definedClosing = "()[]{}<>«»»«［］｛｝";
   function closing(ch) {
       for (let i = 0; i < definedClosing.length; i += 2)
           if (definedClosing.charCodeAt(i) == ch)
@@ -43795,13 +43803,13 @@ var __webgpu_inspector_window = (function (exports) {
 
       EditorView.baseTheme({
       ".cm-breakpoint-gutter": {
-          cursor: "default",
+          cursor: "pointer",
           backgroundColor: "rgb(45, 45, 45)"
         },
         ".cm-breakpoint-gutter .cm-gutterElement": {
           color: "red",
           paddingLeft: "5px",
-          cursor: "default",
+          cursor: "pointer",
           backgroundColor: "rgb(45, 45, 45)"
         }
       })
@@ -46070,7 +46078,7 @@ var __webgpu_inspector_window = (function (exports) {
               new Button(computeGrp.body, { 
                 //children: [ new Img(null, { title: "Debug Shader", src: "img/debug.svg", style: "width: 15px; height: 15px; filter: invert(1);" }) ],
                 text: "Debug",
-                title: "Debug Shader", style: "background-color: rgb(40, 40, 40);", callback: () => {
+                title: "Debug Shader", style: "background-color: rgb(90, 40, 40);", callback: () => {
                   self._debugShader(command, parentCommand);
               } });
             }
