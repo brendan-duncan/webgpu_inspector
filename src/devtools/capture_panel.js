@@ -22,6 +22,8 @@ import { ResourceType, WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
 import { CaptureData } from "./capture_data.js";
 import { ShaderDebugger } from "./shader_debugger.js";
 
+const _inspectButtonStyle = "background-color: rgb(40, 40, 40);";
+
 export class CapturePanel {
   constructor(window, parent) {
     this.window = window;
@@ -84,7 +86,7 @@ export class CapturePanel {
       self.captureFrameCount = Math.max(value, 1);
     } });
 
-    this.maxBufferSize = (1024 * 1024) / 2;
+    this.maxBufferSize = 10 * (1024 * 1024);
     new Span(controlBar, { text: "Max Buffer Size (Bytes):", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });
     new NumberInput(controlBar, { value: this.maxBufferSize, min: 1, step: 1, precision: 0, style: "display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;", onChange: (value) => {
       self.maxBufferSize = Math.max(value, 1);
@@ -912,14 +914,14 @@ export class CapturePanel {
         const format = texture.descriptor.format;
         if (texture.gpuTexture) {
           const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: Texture:${texture.idName} ${format} ${texture.resolutionString}` });
-          new Button(colorAttachmentGrp.body, { label: "Inspect", callback: () => {
+          new Button(colorAttachmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           const passId = this._getPassId(renderPassIndex, i);
           this._createTextureWidget(colorAttachmentGrp.body, texture, passId, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
         } else {
           const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format} ${texture.resolutionString}` });
-          new Button(colorAttachmentGrp.body, { label: "Inspect", callback: () => {
+          new Button(colorAttachmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(attachment.view.descriptor, undefined, 4) });
@@ -939,13 +941,13 @@ export class CapturePanel {
         if (texture.gpuTexture) {
           const format = texture.descriptor.format;
           const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment ${format} ${texture.resolutionString}` });
-          new Button(depthStencilAttachmentGrp.body, { label: "Inspect", callback: () => {
+          new Button(depthStencilAttachmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           this._createTextureWidget(depthStencilAttachmentGrp.body, texture, -1, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
         } else {
           const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.format ?? "<unknown format>"} ${texture.resolutionString}` });
-          new Button(depthStencilAttachmentGrp.body, { label: "Inspect", callback: () => {
+          new Button(depthStencilAttachmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
@@ -1462,7 +1464,7 @@ export class CapturePanel {
 
     const group = args[0];
     const bindGroupGrp = new Collapsable(commandInfo, { collapsed: true, label: `BindGroup ${groupIndex ?? ""} ID:${id}` });
-    new Button(bindGroupGrp.body, { label: "Inspect", callback: () => {
+    new Button(bindGroupGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
       self.window.inspectObject(bindGroup);
     } });
 
@@ -1592,7 +1594,7 @@ export class CapturePanel {
         for (const resource of inputs) {
           const texture = this.database.getTextureFromView(resource.textureView);
           if (texture) {
-            new Button(inputGrp.body, { label: "Inspect", callback: () => {
+            new Button(inputGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
               self.window.inspectObject(texture);
             } });
             if (texture.gpuTexture) {
@@ -1717,7 +1719,7 @@ export class CapturePanel {
       if (resource.__id !== undefined) {
         const obj = this._getObject(resource.__id);
         if (obj) {
-          new Button(resourceGrp.body, { label: "Inspect", callback: () => {
+          new Button(resourceGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(obj);
           } });
 
@@ -1754,7 +1756,7 @@ export class CapturePanel {
           const bufferId = resource.buffer.__id;
           const buffer = this._getObject(bufferId);
           if (buffer) {
-            new Button(resourceGrp.body, { label: "Inspect", callback: () => {
+            new Button(resourceGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
               self.window.inspectObject(buffer);
             } });
             const bufferDesc = buffer.descriptor;
@@ -1839,7 +1841,7 @@ export class CapturePanel {
 
     if (pipeline) {
       const pipelineGrp = new Collapsable(commandInfo, { collapsed: true, label: `Pipeline ID:${id}` });
-      new Button(pipelineGrp.body, { label: "Inspect", callback: () => {
+      new Button(pipelineGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(pipeline);
       } });
       const desc = pipeline.descriptor;
@@ -1856,7 +1858,7 @@ export class CapturePanel {
           const vertexEntry = desc.vertex?.entryPoint ?? "@vertex";
           const fragmentEntry = desc.fragment?.entryPoint ?? "@fragment";
           const grp = new Collapsable(commandInfo, { collapsed: true, label: `Module ID:${vertexId} Vertex: ${vertexEntry} Fragment: ${fragmentEntry}` });
-          new Button(grp.body, { label: "Inspect", callback: () => {
+          new Button(grp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(module);
           } });
           const code = module.descriptor.code;
@@ -1870,7 +1872,7 @@ export class CapturePanel {
           if (vertexModule) {
             const vertexEntry = desc.vertex?.entryPoint ?? "@vertex";
             const vertexGrp = new Collapsable(commandInfo, { collapsed: true, label: `Vertex Module ID:${vertexId} Entry: ${vertexEntry}` });
-            new Button(vertexGrp.body, { label: "Inspect", callback: () => {
+            new Button(vertexGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
               self.window.inspectObject(vertexModule);
             } });
             const code = vertexModule.descriptor.code;
@@ -1885,7 +1887,7 @@ export class CapturePanel {
           if (fragmentModule) {
             const fragmentEntry = desc.fragment?.entryPoint ?? "@fragment";
             const fragmentGrp = new Collapsable(commandInfo, { collapsed: true, label: `Fragment Module ID:${fragmentId} Entry: ${fragmentEntry}` });
-            new Button(fragmentGrp.body, { label: "Inspect", callback: () => {
+            new Button(fragmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
               self.window.inspectObject(fragmentModule);
             } });
             const code = fragmentModule.descriptor.code;
@@ -1902,13 +1904,14 @@ export class CapturePanel {
         if (computeModule) {
           const computeEntry = desc.compute?.entryPoint ?? "@compute";
           const computeGrp = new Collapsable(commandInfo, { collapsed: true, label: `Compute Module ID:${computeId} Entry: ${computeEntry}` });
-          new Button(computeGrp.body, { label: "Inspect", callback: () => {
+          new Button(computeGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(computeModule);
           } });
           if (parentCommand) {
             new Button(computeGrp.body, { 
-              children: [ new Img(null, { title: "Debug Shader", src: "img/debug.svg", style: "width: 15px; height: 15px; filter: invert(1);" }) ],
-              title: "Debug Shader", style: "background-color: rgb(26 80 180);", callback: () => {
+              //children: [ new Img(null, { title: "Debug Shader", src: "img/debug.svg", style: "width: 15px; height: 15px; filter: invert(1);" }) ],
+              text: "Debug",
+              title: "Debug Shader", style: "background-color: rgb(40, 40, 40);", callback: () => {
                 self._debugShader(command, parentCommand);
             } });
           }
@@ -1955,7 +1958,7 @@ export class CapturePanel {
     const buffer = this._getObject(id);
     if (buffer) {
       const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Index Buffer ID:${id}` });
-      new Button(bufferGrp.body, { label: "Inspect", callback: () => {
+      new Button(bufferGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(buffer);
       } });
       const desc = buffer.descriptor;
@@ -2007,7 +2010,7 @@ export class CapturePanel {
 
     if (buffer) {
       const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Vertex Buffer ${index} ID:${id}` });
-      new Button(bufferGrp.body, { label: "Inspect", callback: () => {
+      new Button(bufferGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(buffer);
       } });
       const desc = buffer.descriptor;
@@ -2296,7 +2299,7 @@ export class CapturePanel {
         const texture = outputs.color[index];
         const passId = this._getPassId(renderPassIndex, index);
         if (texture) {
-          new Button(outputGrp.body, { label: "Inspect", callback: () => {
+          new Button(outputGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           if (texture.gpuTexture) {
@@ -2313,7 +2316,7 @@ export class CapturePanel {
       if (outputs.depthStencil) {
         const texture = outputs.depthStencil;
         if (texture) {
-          new Button(outputGrp.body, { label: "Inspect", callback: () => {
+          new Button(outputGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           if (texture.gpuTexture) {
@@ -2353,7 +2356,7 @@ export class CapturePanel {
       for (const resource of inputs) {
         const texture = this.database.getTextureFromView(resource.textureView);
         if (texture) {
-          new Button(inputGrp.body, { label: "Inspect", callback: () => {
+          new Button(inputGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           if (texture.gpuTexture) {
@@ -2423,7 +2426,7 @@ export class CapturePanel {
     if (buffer) {
       const self = this;
       const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Indirect Buffer ID:${id} ${buffer.label}` });
-      new Button(bufferGrp.body, { label: "Inspect", callback: () => {
+      new Button(bufferGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(buffer);
       } });
       const desc = buffer.descriptor;
@@ -2529,7 +2532,7 @@ export class CapturePanel {
 
     const self = this;
     const inputGrp = new Collapsable(commandInfo, { collapsed: false, label: `Texture ${texture.idName} ${texture.format} ${texture.resolutionString}` });
-    new Button(inputGrp.body, { label: "Inspect", callback: () => {
+    new Button(inputGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
       self.window.inspectObject(texture);
     } });
     if (texture.gpuTexture) {
@@ -2656,7 +2659,7 @@ export class CapturePanel {
         method === "createPipelineLayout") {
       const obj = this._getObject(command.result);
       const self = this;
-      new Button(commandInfo, { label: "Inspect", callback: () => {
+      new Button(commandInfo, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(obj);
       } });
     } else if (method == "beginRenderPass") {

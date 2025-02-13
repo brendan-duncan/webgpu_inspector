@@ -86,7 +86,7 @@ function build(name, input, dst, file, copyFiles, watchInclude) {
         }
       },
       nodeResolve(),
-      terser({
+      /*terser({
         ecma: 2020,
         compress: {
           module: true,
@@ -97,7 +97,7 @@ function build(name, input, dst, file, copyFiles, watchInclude) {
           drop_debugger: false
         },
         output: { quote_style: 1 }
-      })
+      })*/
     ]
   };
 
@@ -131,6 +131,7 @@ for (const version of versions) {
       { src: `src/extension/webgpu_inspector_panel.css`, dest: `extensions/${version}` },
       { src: `src/extension/webgpu_inspector_panel.html`, dest: `extensions/${version}` },
       { src: `src/extension/res`, dest: `extensions/${version}` },
+      { src: `src/extension/img`, dest: `extensions/${version}` },
     ]
   };
 

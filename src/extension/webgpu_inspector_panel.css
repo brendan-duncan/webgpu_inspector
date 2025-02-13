@@ -429,7 +429,7 @@ span {
 .button {
   /*background: linear-gradient(#32302D, #4B4947) repeat scroll 0 0 transparent;
     box-shadow: 0 1px 0 #5B5957 inset, 0 -1px 0 rgb(56, 53, 53), 0 1px 0 black, -1px 0 0 black, 1px 0 0 black, 0 1px 1px #111111;*/
-  background-color: #575;
+  background-color: rgb(60, 60, 60);
   border: 0 none;
   border-radius: 10px;
   color: #eee;

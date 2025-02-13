@@ -357,6 +357,8 @@ export class ShaderDebugger extends Div {
             bindGroups[index] = bindgroup;
         });
 
+        console.log("Bind Groups", bindGroups);
+
         if (!this.debugger) {
             const code = this.module.descriptor.code;
             this.debugger = new WgslDebug(code, this.runStateChanged.bind(this));

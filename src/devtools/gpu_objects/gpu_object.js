@@ -50,7 +50,9 @@ export class GPUObject {
   decrementReferenceCount(deleteCallback) {
     this._referenceCount--;
     if (this._referenceCount <= 0) {
-      deleteCallback(this);
+      if (deleteCallback) {
+        deleteCallback(this);
+      }
     }
     for (const dependency of this.dependencies) {
       dependency.decrementReferenceCount(deleteCallback);

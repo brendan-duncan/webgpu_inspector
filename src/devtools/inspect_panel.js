@@ -76,7 +76,7 @@ export class InspectPanel {
     const self = this;
     const controlBar = new Div(parent, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px; font-size: 10pt;" });
 
-    this.inspectButton = new Button(controlBar, { label: "Start", callback: () => {
+    this.inspectButton = new Button(controlBar, { label: "Start", style: "background-color: #575;", callback: () => {
       try {
         self._reset();
         self.port.postMessage({ action: PanelActions.InitializeInspector });
