@@ -10730,11 +10730,11 @@ var __webgpu_inspector_window = (function (exports) {
           if (command === null) {
               return false;
           }
-          /*if (command instanceof GotoCommand) {
+          if (command instanceof GotoCommand) {
               if (command.condition === null) {
                   return true;
               }
-          }*/
+          }
           return false;
       }
       stepInto() {
@@ -43794,10 +43794,15 @@ var __webgpu_inspector_window = (function (exports) {
       }),
 
       EditorView.baseTheme({
+      ".cm-breakpoint-gutter": {
+          cursor: "default",
+          backgroundColor: "rgb(45, 45, 45)"
+        },
         ".cm-breakpoint-gutter .cm-gutterElement": {
           color: "red",
           paddingLeft: "5px",
-          cursor: "default"
+          cursor: "default",
+          backgroundColor: "rgb(45, 45, 45)"
         }
       })
   ];
@@ -43981,6 +43986,7 @@ var __webgpu_inspector_window = (function (exports) {
               extensions: [ shaderEditorSetup$1 ],
               parent: pane1.element,
           });
+          this.editorView.dom.style.height = "100%";
 
           this.editorView.debugger = this;
 
@@ -44066,8 +44072,6 @@ var __webgpu_inspector_window = (function (exports) {
               }
               bindGroups[index] = bindgroup;
           });
-
-          console.log("Bind Groups", bindGroups);
 
           if (!this.debugger) {
               const code = this.module.descriptor.code;
@@ -44162,10 +44166,10 @@ var __webgpu_inspector_window = (function (exports) {
 
                   if (lastState) {
                       const context = lastState.context;
-                      new Div(this.watch, { style: "margin-top: 10px; border: 1px solid black;" });
+                      const globals = new Div(this.watch, { style: "margin-top: 10px; border: 1px solid black;" });
                       context.variables.forEach((v, name) => {
                           if (name.startsWith("@")) {
-                              const div = new Div(this.watch);
+                              const div = new Div(globals);
                               div.text = `${name} : ${v.value}`;
                           }
                       });
@@ -44176,16 +44180,12 @@ var __webgpu_inspector_window = (function (exports) {
 
       _highlightLine(lineNo) {
           if (lineNo > 0) {
-              const docPosition = this.editorView.state.doc.line(lineNo).from;
-              this.editorView.dispatch({ effects: debugLineHighlightEffect.of({ lineNo: docPosition }) });
+              const line = this.editorView.state.doc.line(lineNo);
+              const scrollEffect = EditorView.scrollIntoView(line.from, { y: "center" });
+              this.editorView.dispatch({ effects: [debugLineHighlightEffect.of({ lineNo: line.from }), scrollEffect] });
           } else {
               this.editorView.dispatch({ effects: debugLineHighlightEffect.of({ lineNo: 0 }) });
           }
-
-          // TODO: figure out how to scroll CM6 so the line is visible
-          /*const t = this.editorView.elementAtHeight(lineNo).from;
-          const middleHeight = this.editorView.scrollDOM.offsetHeight / 2; 
-          this.editorView.scrollDOM.scrollTop = t - middleHeight - 5;*/
       }
   }
 
@@ -46089,7 +46089,7 @@ var __webgpu_inspector_window = (function (exports) {
       const pipeline = this._getObject(id);
       const desc = pipeline.descriptor;
       const computeId = desc.compute?.module?.__id;
-      const editor = new ShaderDebugger(parentCommand, this._captureData, this.database, this, { style: "overflow: hidden;" });
+      const editor = new ShaderDebugger(parentCommand, this._captureData, this.database, this, { style: "overflow: clip;" });
       this._captureTab.addTab(`Compute Module ID:${computeId}`, editor);
       this._captureTab.setActivePanel(editor);
     }

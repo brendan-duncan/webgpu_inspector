@@ -84,10 +84,15 @@ const breakpointGutter = [
     }),
 
     EditorView.baseTheme({
+    ".cm-breakpoint-gutter": {
+        cursor: "pointer",
+        backgroundColor: "rgb(45, 45, 45)"
+      },
       ".cm-breakpoint-gutter .cm-gutterElement": {
         color: "red",
         paddingLeft: "5px",
-        cursor: "default"
+        cursor: "pointer",
+        backgroundColor: "rgb(45, 45, 45)"
       }
     })
 ];
@@ -271,6 +276,7 @@ export class ShaderDebugger extends Div {
             extensions: [ shaderEditorSetup ],
             parent: pane1.element,
         });
+        this.editorView.dom.style.height = "100%";
 
         this.editorView.debugger = this;
 
@@ -356,8 +362,6 @@ export class ShaderDebugger extends Div {
             }
             bindGroups[index] = bindgroup;
         });
-
-        console.log("Bind Groups", bindGroups);
 
         if (!this.debugger) {
             const code = this.module.descriptor.code;
@@ -455,7 +459,7 @@ export class ShaderDebugger extends Div {
                     const globals = new Div(this.watch, { style: "margin-top: 10px; border: 1px solid black;" });
                     context.variables.forEach((v, name) => {
                         if (name.startsWith("@")) {
-                            const div = new Div(this.watch);
+                            const div = new Div(globals);
                             div.text = `${name} : ${v.value}`;
                         }
                     });
@@ -466,15 +470,11 @@ export class ShaderDebugger extends Div {
 
     _highlightLine(lineNo) {
         if (lineNo > 0) {
-            const docPosition = this.editorView.state.doc.line(lineNo).from;
-            this.editorView.dispatch({ effects: debugLineHighlightEffect.of({ lineNo: docPosition }) });
+            const line = this.editorView.state.doc.line(lineNo);
+            const scrollEffect = EditorView.scrollIntoView(line.from, { y: "center" });
+            this.editorView.dispatch({ effects: [debugLineHighlightEffect.of({ lineNo: line.from }), scrollEffect] });
         } else {
             this.editorView.dispatch({ effects: debugLineHighlightEffect.of({ lineNo: 0 }) });
         }
-
-        // TODO: figure out how to scroll CM6 so the line is visible
-        /*const t = this.editorView.elementAtHeight(lineNo).from;
-        const middleHeight = this.editorView.scrollDOM.offsetHeight / 2; 
-        this.editorView.scrollDOM.scrollTop = t - middleHeight - 5;*/
     }
 }

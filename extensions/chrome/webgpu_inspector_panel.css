@@ -1238,6 +1238,8 @@ ol::-webkit-scrollbar-thumb:hover {
   overflow: auto;
   font-size: 11pt;
   height: calc(-110px + 100vh);
+  position: relative;
+  top: 0px;
 }
 
 .cm-breakpoint-marker {
