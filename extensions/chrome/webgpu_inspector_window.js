@@ -43795,13 +43795,13 @@ var __webgpu_inspector_window = (function (exports) {
 
       EditorView.baseTheme({
       ".cm-breakpoint-gutter": {
-          cursor: "default",
+          cursor: "pointer",
           backgroundColor: "rgb(45, 45, 45)"
         },
         ".cm-breakpoint-gutter .cm-gutterElement": {
           color: "red",
           paddingLeft: "5px",
-          cursor: "default",
+          cursor: "pointer",
           backgroundColor: "rgb(45, 45, 45)"
         }
       })
@@ -43992,7 +43992,7 @@ var __webgpu_inspector_window = (function (exports) {
 
           openSearchPanel(this.editorView);
 
-          this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: 100%;" });
+          this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: calc(100% - 20px);" });
 
           this.debug();
       }
@@ -46070,7 +46070,7 @@ var __webgpu_inspector_window = (function (exports) {
               new Button(computeGrp.body, { 
                 //children: [ new Img(null, { title: "Debug Shader", src: "img/debug.svg", style: "width: 15px; height: 15px; filter: invert(1);" }) ],
                 text: "Debug",
-                title: "Debug Shader", style: "background-color: rgb(40, 40, 40);", callback: () => {
+                title: "Debug Shader", style: "background-color: rgb(90, 40, 40);", callback: () => {
                   self._debugShader(command, parentCommand);
               } });
             }
