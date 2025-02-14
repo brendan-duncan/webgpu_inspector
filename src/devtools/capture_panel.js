@@ -4,7 +4,6 @@ import {
   TextureView
 } from "./gpu_objects/index.js";
 import { Button } from "./widget/button.js";
-import { Img } from "./widget/img.js";
 import { Collapsable } from "./widget/collapsable.js";
 import { Dialog } from "./widget/dialog.js";
 import { Div } from "./widget/div.js";

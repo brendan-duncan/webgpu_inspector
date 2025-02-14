@@ -614,7 +614,7 @@ var __webgpu_inspector_window = (function (exports) {
    * @extends Statement
    * @category AST
    */
-  class Var$1 extends Statement {
+  class Var extends Statement {
       constructor(name, type, storage, access, value) {
           super();
           this.attributes = null;
@@ -4106,7 +4106,7 @@ var __webgpu_inspector_window = (function (exports) {
               if (this._match(TokenTypes.tokens.equal)) {
                   value = this._short_circuit_or_expression();
               }
-              return this._updateNode(new Var$1(_var.name, _var.type, _var.storage, _var.access, value));
+              return this._updateNode(new Var(_var.name, _var.type, _var.storage, _var.access, value));
           }
           if (this._match(TokenTypes.keywords.let)) {
               const name = this._consume(TokenTypes.tokens.ident, "Expected name for let.").toString();
@@ -4903,7 +4903,7 @@ var __webgpu_inspector_window = (function (exports) {
                   type.attributes = attrs;
               }
           }
-          return this._updateNode(new Var$1(name.toString(), type, storage, access, null));
+          return this._updateNode(new Var(name.toString(), type, storage, access, null));
       }
       _override_decl() {
           // override (ident variable_ident_decl)
@@ -5621,7 +5621,7 @@ var __webgpu_inspector_window = (function (exports) {
               else if (node instanceof _BlockEnd) {
                   varStack.pop();
               }
-              else if (node instanceof Var$1) {
+              else if (node instanceof Var) {
                   const v = node;
                   if (isEntry && v.type !== null) {
                       this._markStructsFromAST(v.type);
@@ -6015,18 +6015,18 @@ var __webgpu_inspector_window = (function (exports) {
           return null;
       }
       _isUniformVar(node) {
-          return node instanceof Var$1 && node.storage == "uniform";
+          return node instanceof Var && node.storage == "uniform";
       }
       _isStorageVar(node) {
-          return node instanceof Var$1 && node.storage == "storage";
+          return node instanceof Var && node.storage == "storage";
       }
       _isTextureVar(node) {
-          return (node instanceof Var$1 &&
+          return (node instanceof Var &&
               node.type !== null &&
               WgslReflect._textureTypes.indexOf(node.type.name) != -1);
       }
       _isSamplerVar(node) {
-          return (node instanceof Var$1 &&
+          return (node instanceof Var &&
               node.type !== null &&
               WgslReflect._samplerTypes.indexOf(node.type.name) != -1);
       }
@@ -6109,23 +6109,23 @@ var __webgpu_inspector_window = (function (exports) {
       return t.name;
   });
 
-  class Var {
+  class VarRef {
       constructor(n, v, node) {
           this.name = n;
           this.value = v;
           this.node = node;
       }
       clone() {
-          return new Var(this.name, this.value, this.node);
+          return new VarRef(this.name, this.value, this.node);
       }
   }
-  class Function$2 {
+  class FunctionRef {
       constructor(node) {
           this.name = node.name;
           this.node = node;
       }
       clone() {
-          return new Function$2(this.node);
+          return new FunctionRef(this.node);
       }
   }
   class ExecContext {
@@ -6160,7 +6160,7 @@ var __webgpu_inspector_window = (function (exports) {
           return null;
       }
       createVariable(name, value, node) {
-          this.variables.set(name, new Var(name, value, node !== null && node !== void 0 ? node : null));
+          this.variables.set(name, new VarRef(name, value, node !== null && node !== void 0 ? node : null));
       }
       setVariable(name, value, node) {
           const v = this.getVariable(name);
@@ -6408,7 +6408,11 @@ var __webgpu_inspector_window = (function (exports) {
           return this;
       }
       toString() {
-          return `${this.value}`;
+          let s = `${this.value[0]}`;
+          for (let i = 1; i < this.value.length; ++i) {
+              s += `, ${this.value[i]}`;
+          }
+          return s;
       }
   }
   class MatrixData extends Data {
@@ -6507,7 +6511,11 @@ var __webgpu_inspector_window = (function (exports) {
           return this;
       }
       toString() {
-          return `${this.value}`;
+          let s = `${this.value[0]}`;
+          for (let i = 1; i < this.value.length; ++i) {
+              s += `, ${this.value[i]}`;
+          }
+          return s;
       }
   }
   // Used to store array and struct data
@@ -6982,6 +6990,60 @@ var __webgpu_inspector_window = (function (exports) {
               }
           }
           return new TypedData(this.buffer, typeInfo, offset);
+      }
+      toString() {
+          let s = "";
+          if (this.typeInfo instanceof ArrayInfo) {
+              if (this.typeInfo.format.name === "f32") {
+                  const fa = new Float32Array(this.buffer, this.offset);
+                  s = `[${fa[0]}`;
+                  for (let i = 1; i < fa.length; ++i) {
+                      s += `, ${fa[i]}`;
+                  }
+              }
+              else if (this.typeInfo.format.name === "i32") {
+                  const fa = new Int32Array(this.buffer, this.offset);
+                  s = `[${fa[0]}`;
+                  for (let i = 1; i < fa.length; ++i) {
+                      s += `, ${fa[i]}`;
+                  }
+              }
+              else if (this.typeInfo.format.name === "u32") {
+                  const fa = new Uint32Array(this.buffer, this.offset);
+                  s = `[${fa[0]}`;
+                  for (let i = 1; i < fa.length; ++i) {
+                      s += `, ${fa[i]}`;
+                  }
+              }
+              else if (this.typeInfo.format.name === "vec2f") {
+                  const fa = new Float32Array(this.buffer, this.offset);
+                  s = `[${fa[0]}, ${fa[1]}]`;
+                  for (let i = 1; i < fa.length / 2; ++i) {
+                      s += `, [${fa[i * 2]}, ${fa[i * 2 + 1]}]`;
+                  }
+              }
+              else if (this.typeInfo.format.name === "vec3f") {
+                  const fa = new Float32Array(this.buffer, this.offset);
+                  s = `[${fa[0]}, ${fa[1]}, ${fa[2]}]`;
+                  for (let i = 4; i < fa.length; i += 4) {
+                      s += `, [${fa[i]}, ${fa[i + 1]}, ${fa[i + 2]}]`;
+                  }
+              }
+              else if (this.typeInfo.format.name === "vec4f") {
+                  const fa = new Float32Array(this.buffer, this.offset);
+                  s = `[${fa[0]}, ${fa[1]}, ${fa[2]}, ${fa[3]}]`;
+                  for (let i = 4; i < fa.length; i += 4) {
+                      s += `, [${fa[i]}, ${fa[i + 1]}, ${fa[i + 2]}, ${fa[i + 3]}]`;
+                  }
+              }
+              else {
+                  s = `[...]`;
+              }
+          }
+          else if (this.typeInfo instanceof StructInfo) {
+              s += `{...}`;
+          }
+          return s;
       }
   }
 
@@ -8512,7 +8574,7 @@ var __webgpu_inspector_window = (function (exports) {
           else if (stmt instanceof Let) {
               this._let(stmt, context);
           }
-          else if (stmt instanceof Var$1) {
+          else if (stmt instanceof Var) {
               this._var(stmt, context);
           }
           else if (stmt instanceof Const) {
@@ -9111,7 +9173,7 @@ var __webgpu_inspector_window = (function (exports) {
           return;
       }
       _function(node, context) {
-          const f = new Function$2(node);
+          const f = new FunctionRef(node);
           context.functions.set(node.name, f);
       }
       _const(node, context) {
@@ -10735,6 +10797,9 @@ var __webgpu_inspector_window = (function (exports) {
                   return true;
               }
           }
+          else if (command instanceof ContinueTargetCommand || command instanceof BreakTargetCommand) {
+              return true;
+          }
           return false;
       }
       stepInto() {
@@ -11146,7 +11211,7 @@ var __webgpu_inspector_window = (function (exports) {
               // values with the call node so that when it is evaluated, it uses that
               // already computed value. This allows us to step into the function
               if (statement instanceof Let ||
-                  statement instanceof Var$1 ||
+                  statement instanceof Var ||
                   statement instanceof Assign) {
                   const functionCalls = [];
                   this._collectFunctionCalls(statement.value, functionCalls);
@@ -11177,7 +11242,7 @@ var __webgpu_inspector_window = (function (exports) {
                   state.commands.push(new StatementCommand(statement));
               }
               else if (statement instanceof Function$1) {
-                  const f = new Function$2(statement);
+                  const f = new FunctionRef(statement);
                   state.context.functions.set(statement.name, f);
                   continue;
               }
@@ -15028,30 +15093,6 @@ var __webgpu_inspector_window = (function (exports) {
     }
   }
 
-  class Img extends Widget {
-    constructor(parent, options) {
-      super('img', parent, options);
-    }
-
-    get src() {
-      return this.element.src;
-    }
-
-    set src(v) {
-      this.element.src = v;
-    }
-
-    configure(options) {
-      if (!options) {
-        return;
-      }
-      super.configure(options);
-      if (options.src !== undefined) {
-        this.element.src = options.src;
-      }
-    }
-  }
-
   /**
    * A SPAN element widget.
    */
@@ -16284,7 +16325,7 @@ var __webgpu_inspector_window = (function (exports) {
       if (this.orientation === SplitBar.Horizontal) {
         const dy = e.clientY - this._mouseY;
         if (dy != 0) {
-          if (this.parent.mode === SplitBar.Percentage) {
+          if (this.parent.mode === 0) {
             const pct = dy / this.parent.height;
             this.parent.position += pct;
           } else {
@@ -16294,7 +16335,7 @@ var __webgpu_inspector_window = (function (exports) {
       } else {
         const dx = e.clientX - this._mouseX;
         if (dx != 0) {
-          if (this.parent.mode === SplitBar.Percentage) {
+          if (this.parent.mode === 0) {
             const pct = dx / this.parent.width;
             this.parent.position += pct;
           } else {
@@ -16481,6 +16522,30 @@ var __webgpu_inspector_window = (function (exports) {
   Split.Vertical = 1;
   Split.Percentage = 0;
   Split.Pixel = 1;
+
+  class Img extends Widget {
+    constructor(parent, options) {
+      super('img', parent, options);
+    }
+
+    get src() {
+      return this.element.src;
+    }
+
+    set src(v) {
+      this.element.src = v;
+    }
+
+    configure(options) {
+      if (!options) {
+        return;
+      }
+      super.configure(options);
+      if (options.src !== undefined) {
+        this.element.src = options.src;
+      }
+    }
+  }
 
   // These are filled with ranges (rangeFrom[i] up to but not including
   // rangeTo[i]) of code points that count as extending characters.
@@ -43897,7 +43962,7 @@ var __webgpu_inspector_window = (function (exports) {
           this._idZ = 0;
 
           this.controls = new Div(this, { style: "display: flex; flex-direction: row; margin-top: 5px;" });
-          new Span(this.controls, { text: "ID:", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });
+          new Span(this.controls, { text: "Thread ID:", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });
           this.idXInput = new NumberInput(this.controls, {
               value: 0,
               min: 0,
@@ -44000,8 +44065,9 @@ var __webgpu_inspector_window = (function (exports) {
 
           openSearchPanel(this.editorView);
 
-          this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: calc(100% - 20px);" });
+          this.watch = new Div(pane2, { style: "overflow: auto; background-color: #333; color: #bbb; height: 100%;" });
 
+          this.variables = new Collapsable(this.watch, { collapsed: false, label: `Variables` });        this.globals = new Collapsable(this.watch, { collapsed: false, label: `Globals` });        this.callstack = new Collapsable(this.watch, { collapsed: false, label: `Callstack` });
           this.debug();
       }
 
@@ -44112,6 +44178,18 @@ var __webgpu_inspector_window = (function (exports) {
           }
       }
 
+      _createVariableDiv(v, parent) {
+          const div = new Div(parent);
+          const type = v.value.typeInfo;
+          let typeName = type.name;
+          if (type.format) {
+              typeName = `${typeName}<${type.format.name}>`;
+          }
+          new Span(div, { text: v.name, class: "watch-var-name" });
+          new Span(div, { text: typeName, class: "watch-var-type" });
+          new Span(div, { text: `${v.value}`, class: "watch-var-value" });
+      }
+
       update() {
           if (!this.debugger) {
               return;
@@ -44129,59 +44207,61 @@ var __webgpu_inspector_window = (function (exports) {
               this._highlightLine(0);
           }
 
-          if (this.watch) {
-              this.watch.removeAllChildren();
+          this.variables.body.removeAllChildren();
+          this.globals.body.removeAllChildren();
+          this.callstack.body.removeAllChildren();
 
-              let state = this.debugger.currentState;
-              if (state === null) {
-                  const context = this.debugger.context;
-                  const currentFunctionName = context.currentFunctionName;
-                  const div = new Div(this.watch, { style: "font-weight: bold;" });
-                  div.text = currentFunctionName || "<shader>";
+          let state = this.debugger.currentState;
+          if (state === null) {
+              const context = this.debugger.context;
+              const currentFunctionName = context.currentFunctionName;
+              new Div(this.variables.body, { text: currentFunctionName || "<shader>", style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
+
+              new Div(this.callstack.body, { text: currentFunctionName || "<shader>", style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
+
+              context.variables.forEach((v, name) => {
+                  if (!name.startsWith("@")) {
+                      this._createVariableDiv(v, this.variables.body);
+                  }
+              });
+
+              context.variables.forEach((v, name) => {
+                  if (name.startsWith("@")) {
+                      this._createVariableDiv(v, this.globals.body);
+                  }
+              });
+          } else {
+              let lastState = state;
+              let lastFunctionName = null;
+              while (state !== null) {
+                  const context = state.context;
+                  const currentFunctionName = context.currentFunctionName || "<shader>";
+
+                  new Div(this.variables.body, { text: currentFunctionName, style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
+
+                  if (currentFunctionName !== lastFunctionName) {
+                      new Div(this.callstack.body, { text: currentFunctionName, style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
+                  }
+
+                  lastFunctionName = currentFunctionName;
 
                   context.variables.forEach((v, name) => {
                       if (!name.startsWith("@")) {
-                          const div = new Div(this.watch);
-                          div.text = `${name} : ${v.value}`;
+                          this._createVariableDiv(v, this.variables.body);
                       }
                   });
 
-                  const globals = new Div(this.watch, { style: "margin-top: 10px; border: 1px solid black;" });
+                  lastState = state;
+                  state = state.parent;
+              }
+
+              if (lastState) {
+                  const context = lastState.context;
                   context.variables.forEach((v, name) => {
                       if (name.startsWith("@")) {
-                          const div = new Div(globals);
-                          div.text = `${name} : ${v.value}`;
+                          this._createVariableDiv(v, this.globals.body);
                       }
                   });
-              } else {
-                  let lastState = state;
-                  while (state !== null) {
-                      const context = state.context;
-                      const currentFunctionName = context.currentFunctionName;
-                      const div = new Div(this.watch, { style: "font-weight: bold;" });
-                      div.text = currentFunctionName || "<shader>";
-
-                      context.variables.forEach((v, name) => {
-                          if (!name.startsWith("@")) {
-                              const div = new Div(this.watch);
-                              div.text = `${name} : ${v.value}`;
-                          }
-                      });
-
-                      lastState = state;
-                      state = state.parent;
-                  }
-
-                  if (lastState) {
-                      const context = lastState.context;
-                      const globals = new Div(this.watch, { style: "margin-top: 10px; border: 1px solid black;" });
-                      context.variables.forEach((v, name) => {
-                          if (name.startsWith("@")) {
-                              const div = new Div(globals);
-                              div.text = `${name} : ${v.value}`;
-                          }
-                      });
-                  }
               }
           }
       }

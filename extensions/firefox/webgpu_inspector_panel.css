@@ -86,7 +86,7 @@ body {
 
 .title_bar {
   background-color: rgb(128, 128, 128);
-  padding: 5px;
+  padding: 3px;
   border: 1px solid #000;
   margin-top: 0px;
   margin-bottom: 0px;
@@ -1240,6 +1240,35 @@ ol::-webkit-scrollbar-thumb:hover {
   height: calc(-110px + 100vh);
   position: relative;
   top: 0px;
+}
+
+.watch-var-name {
+  width: 200px;
+  border: 1px solid #000;
+  overflow: clip;
+  padding-left: 10px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  color: #eee;
+}
+
+.watch-var-type {
+  width: 150px;
+  border: 1px solid #000;
+  overflow: clip;
+  padding-left: 10px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  color: #eee;
+}
+
+.watch-var-value {
+  color: #eee;
+  padding-left: 10px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  border: 1px solid #000;
+  width: calc(100% - 390px);
 }
 
 .cm-breakpoint-marker {

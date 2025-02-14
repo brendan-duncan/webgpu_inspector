@@ -62,7 +62,7 @@ export class SplitBar extends Div {
     if (this.orientation === SplitBar.Horizontal) {
       const dy = e.clientY - this._mouseY;
       if (dy != 0) {
-        if (this.parent.mode === SplitBar.Percentage) {
+        if (this.parent.mode === 0) {
           const pct = dy / this.parent.height;
           this.parent.position += pct;
         } else {
@@ -72,7 +72,7 @@ export class SplitBar extends Div {
     } else {
       const dx = e.clientX - this._mouseX;
       if (dx != 0) {
-        if (this.parent.mode === SplitBar.Percentage) {
+        if (this.parent.mode === 0) {
           const pct = dx / this.parent.width;
           this.parent.position += pct;
         } else {

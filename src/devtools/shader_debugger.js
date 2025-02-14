@@ -2,6 +2,7 @@ import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
 import { Split } from "./widget/split.js";
 import { Img } from "./widget/img.js";
+import { Collapsable } from "./widget/collapsable.js";
 import { WgslDebug } from "wgsl_reflect/wgsl_reflect.module.js";
 
 import { EditorView } from "codemirror";
@@ -179,7 +180,7 @@ export class ShaderDebugger extends Div {
         this._idZ = 0;
 
         this.controls = new Div(this, { style: "display: flex; flex-direction: row; margin-top: 5px;" });
-        new Span(this.controls, { text: "ID:", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });
+        new Span(this.controls, { text: "Thread ID:", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });
         this.idXInput = new NumberInput(this.controls, {
             value: 0,
             min: 0,
@@ -282,7 +283,11 @@ export class ShaderDebugger extends Div {
 
         openSearchPanel(this.editorView);
 
-        this.watch = new Div(pane2, { style: "overflow-y: auto; padding: 10px; background-color: #333; color: #bbb; height: calc(100% - 20px);" });
+        this.watch = new Div(pane2, { style: "overflow: auto; background-color: #333; color: #bbb; height: 100%;" });
+
+        this.variables = new Collapsable(this.watch, { collapsed: false, label: `Variables` });;
+        this.globals = new Collapsable(this.watch, { collapsed: false, label: `Globals` });;
+        this.callstack = new Collapsable(this.watch, { collapsed: false, label: `Callstack` });;
 
         this.debug();
     }
@@ -394,6 +399,18 @@ export class ShaderDebugger extends Div {
         }
     }
 
+    _createVariableDiv(v, parent) {
+        const div = new Div(parent);
+        const type = v.value.typeInfo;
+        let typeName = type.name;
+        if (type.format) {
+            typeName = `${typeName}<${type.format.name}>`;
+        }
+        new Span(div, { text: v.name, class: "watch-var-name" });
+        new Span(div, { text: typeName, class: "watch-var-type" });
+        new Span(div, { text: `${v.value}`, class: "watch-var-value" });
+    }
+
     update() {
         if (!this.debugger) {
             return;
@@ -411,59 +428,61 @@ export class ShaderDebugger extends Div {
             this._highlightLine(0);
         }
 
-        if (this.watch) {
-            this.watch.removeAllChildren();
+        this.variables.body.removeAllChildren();
+        this.globals.body.removeAllChildren();
+        this.callstack.body.removeAllChildren();
 
-            let state = this.debugger.currentState;
-            if (state === null) {
-                const context = this.debugger.context;
-                const currentFunctionName = context.currentFunctionName;
-                const div = new Div(this.watch, { style: "font-weight: bold;" });
-                div.text = currentFunctionName || "<shader>";
+        let state = this.debugger.currentState;
+        if (state === null) {
+            const context = this.debugger.context;
+            const currentFunctionName = context.currentFunctionName;
+            new Div(this.variables.body, { text: currentFunctionName || "<shader>", style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
+
+            new Div(this.callstack.body, { text: currentFunctionName || "<shader>", style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
+
+            context.variables.forEach((v, name) => {
+                if (!name.startsWith("@")) {
+                    this._createVariableDiv(v, this.variables.body);
+                }
+            });
+
+            context.variables.forEach((v, name) => {
+                if (name.startsWith("@")) {
+                    this._createVariableDiv(v, this.globals.body);
+                }
+            });
+        } else {
+            let lastState = state;
+            let lastFunctionName = null;
+            while (state !== null) {
+                const context = state.context;
+                const currentFunctionName = context.currentFunctionName || "<shader>";
+
+                new Div(this.variables.body, { text: currentFunctionName, style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
+
+                if (currentFunctionName !== lastFunctionName) {
+                    new Div(this.callstack.body, { text: currentFunctionName, style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
+                }
+
+                lastFunctionName = currentFunctionName;
 
                 context.variables.forEach((v, name) => {
                     if (!name.startsWith("@")) {
-                        const div = new Div(this.watch);
-                        div.text = `${name} : ${v.value}`;
+                        this._createVariableDiv(v, this.variables.body);
                     }
                 });
 
-                const globals = new Div(this.watch, { style: "margin-top: 10px; border: 1px solid black;" });
+                lastState = state;
+                state = state.parent;
+            }
+
+            if (lastState) {
+                const context = lastState.context;
                 context.variables.forEach((v, name) => {
                     if (name.startsWith("@")) {
-                        const div = new Div(globals);
-                        div.text = `${name} : ${v.value}`;
+                        this._createVariableDiv(v, this.globals.body);
                     }
                 });
-            } else {
-                let lastState = state;
-                while (state !== null) {
-                    const context = state.context;
-                    const currentFunctionName = context.currentFunctionName;
-                    const div = new Div(this.watch, { style: "font-weight: bold;" });
-                    div.text = currentFunctionName || "<shader>";
-
-                    context.variables.forEach((v, name) => {
-                        if (!name.startsWith("@")) {
-                            const div = new Div(this.watch);
-                            div.text = `${name} : ${v.value}`;
-                        }
-                    });
-
-                    lastState = state;
-                    state = state.parent;
-                }
-
-                if (lastState) {
-                    const context = lastState.context;
-                    const globals = new Div(this.watch, { style: "margin-top: 10px; border: 1px solid black;" });
-                    context.variables.forEach((v, name) => {
-                        if (name.startsWith("@")) {
-                            const div = new Div(globals);
-                            div.text = `${name} : ${v.value}`;
-                        }
-                    });
-                }
             }
         }
     }
