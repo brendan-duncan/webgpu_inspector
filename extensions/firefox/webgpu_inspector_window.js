@@ -4927,8 +4927,13 @@ var __webgpu_inspector_window = (function (exports) {
           const severity = this._consume(TokenTypes.tokens.ident, "Expected severity control name.");
           this._consume(TokenTypes.tokens.comma, "Expected ','");
           const rule = this._consume(TokenTypes.tokens.ident, "Expected diagnostic rule name.");
+          let ruleMessage = rule.toString();
+          if (this._match(TokenTypes.tokens.period)) {
+              const message = this._consume(TokenTypes.tokens.ident, "Expected diagnostic message.");
+              ruleMessage += `.${message.toString()}`;
+          }
           this._consume(TokenTypes.tokens.paren_right, "Expected ')'");
-          return this._updateNode(new Diagnostic(severity.toString(), rule.toString()));
+          return this._updateNode(new Diagnostic(severity.toString(), ruleMessage));
       }
       _enable_directive() {
           // enable ident semicolon
