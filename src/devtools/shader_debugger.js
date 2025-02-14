@@ -3,7 +3,7 @@ import { Span } from "./widget/span.js";
 import { Split } from "./widget/split.js";
 import { Img } from "./widget/img.js";
 import { Collapsable } from "./widget/collapsable.js";
-import { WgslDebug } from "wgsl_reflect/wgsl_reflect.module.js";
+import { WgslDebug } from "wgsl_reflect/wgsl_debugger.module.js";
 
 import { EditorView } from "codemirror";
 import { keymap, highlightSpecialChars, drawSelection, dropCursor, gutter, GutterMarker,

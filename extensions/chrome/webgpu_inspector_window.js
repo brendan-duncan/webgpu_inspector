@@ -445,6 +445,10814 @@ var __webgpu_inspector_window = (function (exports) {
   }
   Sampler.className = "Sampler";
 
+  class ParseContext$2 {
+      constructor() {
+          this.constants = new Map();
+          this.aliases = new Map();
+          this.structs = new Map();
+      }
+  }
+  /**
+   * @class Node
+   * @category AST
+   * Base class for AST nodes parsed from a WGSL shader.
+   */
+  class Node$1 {
+      constructor() {
+          this.id = Node$1._id++;
+          this.line = 0;
+      }
+      get isAstNode() {
+          return true;
+      }
+      get astNodeType() {
+          return "";
+      }
+      constEvaluate(context, type) {
+          throw new Error("Cannot evaluate node");
+      }
+      constEvaluateString(context) {
+          return this.constEvaluate(context).toString();
+      }
+      search(callback) { }
+      searchBlock(block, callback) {
+          if (block) {
+              callback(_BlockStart$1.instance);
+              for (const node of block) {
+                  if (node instanceof Array) {
+                      this.searchBlock(node, callback);
+                  }
+                  else {
+                      node.search(callback);
+                  }
+              }
+              callback(_BlockEnd$1.instance);
+          }
+      }
+  }
+  Node$1._id = 0;
+  // For internal use only
+  class _BlockStart$1 extends Node$1 {
+  }
+  _BlockStart$1.instance = new _BlockStart$1();
+  // For internal use only
+  class _BlockEnd$1 extends Node$1 {
+  }
+  _BlockEnd$1.instance = new _BlockEnd$1();
+  /**
+   * @class Statement
+   * @extends Node
+   * @category AST
+   */
+  class Statement$1 extends Node$1 {
+      constructor() {
+          super();
+      }
+  }
+  /**
+   * @class Function
+   * @extends Statement
+   * @category AST
+   */
+  class Function$2 extends Statement$1 {
+      constructor(name, args, returnType, body, startLine, endLine) {
+          super();
+          this.calls = new Set();
+          this.name = name;
+          this.args = args;
+          this.returnType = returnType;
+          this.body = body;
+          this.startLine = startLine;
+          this.endLine = endLine;
+      }
+      get astNodeType() {
+          return "function";
+      }
+      search(callback) {
+          this.searchBlock(this.body, callback);
+      }
+  }
+  /**
+   * @class StaticAssert
+   * @extends Statement
+   * @category AST
+   */
+  class StaticAssert$1 extends Statement$1 {
+      constructor(expression) {
+          super();
+          this.expression = expression;
+      }
+      get astNodeType() {
+          return "staticAssert";
+      }
+      search(callback) {
+          this.expression.search(callback);
+      }
+  }
+  /**
+   * @class While
+   * @extends Statement
+   * @category AST
+   */
+  class While$1 extends Statement$1 {
+      constructor(condition, body) {
+          super();
+          this.condition = condition;
+          this.body = body;
+      }
+      get astNodeType() {
+          return "while";
+      }
+      search(callback) {
+          this.condition.search(callback);
+          this.searchBlock(this.body, callback);
+      }
+  }
+  /**
+   * @class Continuing
+   * @extends Statement
+   * @category AST
+   */
+  class Continuing$1 extends Statement$1 {
+      constructor(body) {
+          super();
+          this.body = body;
+      }
+      get astNodeType() {
+          return "continuing";
+      }
+      search(callback) {
+          this.searchBlock(this.body, callback);
+      }
+  }
+  /**
+   * @class For
+   * @extends Statement
+   * @category AST
+   */
+  class For$1 extends Statement$1 {
+      constructor(init, condition, increment, body) {
+          super();
+          this.init = init;
+          this.condition = condition;
+          this.increment = increment;
+          this.body = body;
+      }
+      get astNodeType() {
+          return "for";
+      }
+      search(callback) {
+          var _a, _b, _c;
+          (_a = this.init) === null || _a === void 0 ? void 0 : _a.search(callback);
+          (_b = this.condition) === null || _b === void 0 ? void 0 : _b.search(callback);
+          (_c = this.increment) === null || _c === void 0 ? void 0 : _c.search(callback);
+          this.searchBlock(this.body, callback);
+      }
+  }
+  /**
+   * @class Var
+   * @extends Statement
+   * @category AST
+   */
+  class Var$1 extends Statement$1 {
+      constructor(name, type, storage, access, value) {
+          super();
+          this.attributes = null;
+          this.name = name;
+          this.type = type;
+          this.storage = storage;
+          this.access = access;
+          this.value = value;
+      }
+      get astNodeType() {
+          return "var";
+      }
+      search(callback) {
+          var _a;
+          callback(this);
+          (_a = this.value) === null || _a === void 0 ? void 0 : _a.search(callback);
+      }
+  }
+  /**
+   * @class Override
+   * @extends Statement
+   * @category AST
+   */
+  class Override$1 extends Statement$1 {
+      constructor(name, type, value) {
+          super();
+          this.attributes = null;
+          this.name = name;
+          this.type = type;
+          this.value = value;
+      }
+      get astNodeType() {
+          return "override";
+      }
+      search(callback) {
+          var _a;
+          (_a = this.value) === null || _a === void 0 ? void 0 : _a.search(callback);
+      }
+  }
+  /**
+   * @class Let
+   * @extends Statement
+   * @category AST
+   */
+  class Let$1 extends Statement$1 {
+      constructor(name, type, storage, access, value) {
+          super();
+          this.attributes = null;
+          this.name = name;
+          this.type = type;
+          this.storage = storage;
+          this.access = access;
+          this.value = value;
+      }
+      get astNodeType() {
+          return "let";
+      }
+      search(callback) {
+          var _a;
+          callback(this);
+          (_a = this.value) === null || _a === void 0 ? void 0 : _a.search(callback);
+      }
+  }
+  /**
+   * @class Const
+   * @extends Statement
+   * @category AST
+   */
+  class Const$1 extends Statement$1 {
+      constructor(name, type, storage, access, value) {
+          super();
+          this.attributes = null;
+          this.name = name;
+          this.type = type;
+          this.storage = storage;
+          this.access = access;
+          this.value = value;
+      }
+      get astNodeType() {
+          return "const";
+      }
+      constEvaluate(context, type) {
+          return this.value.constEvaluate(context, type);
+      }
+      search(callback) {
+          var _a;
+          callback(this);
+          (_a = this.value) === null || _a === void 0 ? void 0 : _a.search(callback);
+      }
+  }
+  var IncrementOperator$1;
+  (function (IncrementOperator) {
+      IncrementOperator["increment"] = "++";
+      IncrementOperator["decrement"] = "--";
+  })(IncrementOperator$1 || (IncrementOperator$1 = {}));
+  (function (IncrementOperator) {
+      function parse(val) {
+          const key = val;
+          if (key == "parse")
+              throw new Error("Invalid value for IncrementOperator");
+          return IncrementOperator[key];
+      }
+      IncrementOperator.parse = parse;
+  })(IncrementOperator$1 || (IncrementOperator$1 = {}));
+  /**
+   * @class Increment
+   * @extends Statement
+   * @category AST
+   */
+  class Increment$1 extends Statement$1 {
+      constructor(operator, variable) {
+          super();
+          this.operator = operator;
+          this.variable = variable;
+      }
+      get astNodeType() {
+          return "increment";
+      }
+      search(callback) {
+          this.variable.search(callback);
+      }
+  }
+  var AssignOperator$1;
+  (function (AssignOperator) {
+      AssignOperator["assign"] = "=";
+      AssignOperator["addAssign"] = "+=";
+      AssignOperator["subtractAssin"] = "-=";
+      AssignOperator["multiplyAssign"] = "*=";
+      AssignOperator["divideAssign"] = "/=";
+      AssignOperator["moduloAssign"] = "%=";
+      AssignOperator["andAssign"] = "&=";
+      AssignOperator["orAssign"] = "|=";
+      AssignOperator["xorAssign"] = "^=";
+      AssignOperator["shiftLeftAssign"] = "<<=";
+      AssignOperator["shiftRightAssign"] = ">>=";
+  })(AssignOperator$1 || (AssignOperator$1 = {}));
+  (function (AssignOperator) {
+      function parse(val) {
+          const key = val;
+          if (key == "parse") {
+              throw new Error("Invalid value for AssignOperator");
+          }
+          //return AssignOperator[key];
+          return key;
+      }
+      AssignOperator.parse = parse;
+  })(AssignOperator$1 || (AssignOperator$1 = {}));
+  /**
+   * @class Assign
+   * @extends Statement
+   * @category AST
+   */
+  class Assign$1 extends Statement$1 {
+      constructor(operator, variable, value) {
+          super();
+          this.operator = operator;
+          this.variable = variable;
+          this.value = value;
+      }
+      get astNodeType() {
+          return "assign";
+      }
+      search(callback) {
+          this.variable.search(callback);
+          this.value.search(callback);
+      }
+  }
+  /**
+   * @class Call
+   * @extends Statement
+   * @category AST
+   */
+  class Call$1 extends Statement$1 {
+      constructor(name, args) {
+          super();
+          this.name = name;
+          this.args = args;
+      }
+      get astNodeType() {
+          return "call";
+      }
+      search(callback) {
+          for (const node of this.args) {
+              node.search(callback);
+          }
+          callback(this);
+      }
+  }
+  /**
+   * @class Loop
+   * @extends Statement
+   * @category AST
+   */
+  class Loop$1 extends Statement$1 {
+      constructor(body, continuing) {
+          super();
+          this.body = body;
+          this.continuing = continuing;
+      }
+      get astNodeType() {
+          return "loop";
+      }
+  }
+  /**
+   * @class Switch
+   * @extends Statement
+   * @category AST
+   */
+  class Switch$1 extends Statement$1 {
+      constructor(condition, body) {
+          super();
+          this.condition = condition;
+          this.body = body;
+      }
+      get astNodeType() {
+          return "body";
+      }
+  }
+  /**
+   * @class If
+   * @extends Statement
+   * @category AST
+   */
+  class If$1 extends Statement$1 {
+      constructor(condition, body, elseif, _else) {
+          super();
+          this.condition = condition;
+          this.body = body;
+          this.elseif = elseif;
+          this.else = _else;
+      }
+      get astNodeType() {
+          return "if";
+      }
+      search(callback) {
+          this.condition.search(callback);
+          this.searchBlock(this.body, callback);
+          this.searchBlock(this.elseif, callback);
+          this.searchBlock(this.else, callback);
+      }
+  }
+  /**
+   * @class Return
+   * @extends Statement
+   * @category AST
+   */
+  class Return$1 extends Statement$1 {
+      constructor(value) {
+          super();
+          this.value = value;
+      }
+      get astNodeType() {
+          return "return";
+      }
+      search(callback) {
+          var _a;
+          (_a = this.value) === null || _a === void 0 ? void 0 : _a.search(callback);
+      }
+  }
+  /**
+   * @class Enable
+   * @extends Statement
+   * @category AST
+   */
+  class Enable$1 extends Statement$1 {
+      constructor(name) {
+          super();
+          this.name = name;
+      }
+      get astNodeType() {
+          return "enable";
+      }
+  }
+  /**
+   * @class Requires
+   * @extends Statement
+   * @category AST
+   */
+  class Requires$1 extends Statement$1 {
+      constructor(extensions) {
+          super();
+          this.extensions = extensions;
+      }
+      get astNodeType() {
+          return "requires";
+      }
+  }
+  /**
+   * @class Diagnostic
+   * @extends Statement
+   * @category AST
+   */
+  class Diagnostic$1 extends Statement$1 {
+      constructor(severity, rule) {
+          super();
+          this.severity = severity;
+          this.rule = rule;
+      }
+      get astNodeType() {
+          return "diagnostic";
+      }
+  }
+  /**
+   * @class Alias
+   * @extends Statement
+   * @category AST
+   */
+  class Alias$1 extends Statement$1 {
+      constructor(name, type) {
+          super();
+          this.name = name;
+          this.type = type;
+      }
+      get astNodeType() {
+          return "alias";
+      }
+  }
+  /**
+   * @class Discard
+   * @extends Statement
+   * @category AST
+   */
+  class Discard$1 extends Statement$1 {
+      constructor() {
+          super();
+      }
+      get astNodeType() {
+          return "discard";
+      }
+  }
+  /**
+   * @class Break
+   * @extends Statement
+   * @category AST
+   */
+  class Break$2 extends Statement$1 {
+      constructor() {
+          super();
+          this.condition = null;
+          this.loopId = -1;
+      }
+      get astNodeType() {
+          return "break";
+      }
+  }
+  /**
+   * @class Continue
+   * @extends Statement
+   * @category AST
+   */
+  class Continue$1 extends Statement$1 {
+      constructor() {
+          super();
+          this.loopId = -1;
+      }
+      get astNodeType() {
+          return "continue";
+      }
+  }
+  /**
+   * @class Type
+   * @extends Statement
+   * @category AST
+   */
+  class Type$1 extends Statement$1 {
+      constructor(name) {
+          super();
+          this.attributes = null;
+          this.name = name;
+      }
+      get astNodeType() {
+          return "type";
+      }
+      get isStruct() {
+          return false;
+      }
+      get isArray() {
+          return false;
+      }
+      static maxFormatType(x) {
+          let t = x[0];
+          if (t.name === "f32") {
+              return t;
+          }
+          for (let i = 1; i < x.length; ++i) {
+              const tv = Type$1._priority.get(t.name);
+              const xv = Type$1._priority.get(x[i].name);
+              if (xv < tv) {
+                  t = x[i];
+              }
+          }
+          if (t.name === "x32") {
+              return Type$1.i32;
+          }
+          return t;
+      }
+  }
+  Type$1.x32 = new Type$1("x32");
+  Type$1.f32 = new Type$1("f32");
+  Type$1.i32 = new Type$1("i32");
+  Type$1.u32 = new Type$1("u32");
+  Type$1.f16 = new Type$1("f16");
+  Type$1.bool = new Type$1("bool");
+  Type$1._priority = new Map([["f32", 0], ["f16", 1], ["u32", 2], ["i32", 3], ["x32", 3]]);
+  /**
+   * @class StructType
+   * @extends Type
+   * @category AST
+   */
+  class Struct$1 extends Type$1 {
+      constructor(name, members, startLine, endLine) {
+          super(name);
+          this.members = members;
+          this.startLine = startLine;
+          this.endLine = endLine;
+      }
+      get astNodeType() {
+          return "struct";
+      }
+      get isStruct() {
+          return true;
+      }
+      /// Return the index of the member with the given name, or -1 if not found.
+      getMemberIndex(name) {
+          for (let i = 0; i < this.members.length; i++) {
+              if (this.members[i].name == name)
+                  return i;
+          }
+          return -1;
+      }
+  }
+  /**
+   * @class TemplateType
+   * @extends Type
+   * @category AST
+   */
+  class TemplateType$1 extends Type$1 {
+      constructor(name, format, access) {
+          super(name);
+          this.format = format;
+          this.access = access;
+      }
+      get astNodeType() {
+          return "template";
+      }
+  }
+  TemplateType$1.vec2f = new TemplateType$1("vec2", Type$1.f32, null);
+  TemplateType$1.vec3f = new TemplateType$1("vec3", Type$1.f32, null);
+  TemplateType$1.vec4f = new TemplateType$1("vec4", Type$1.f32, null);
+  TemplateType$1.vec2i = new TemplateType$1("vec2", Type$1.i32, null);
+  TemplateType$1.vec3i = new TemplateType$1("vec3", Type$1.i32, null);
+  TemplateType$1.vec4i = new TemplateType$1("vec4", Type$1.i32, null);
+  TemplateType$1.vec2u = new TemplateType$1("vec2", Type$1.u32, null);
+  TemplateType$1.vec3u = new TemplateType$1("vec3", Type$1.u32, null);
+  TemplateType$1.vec4u = new TemplateType$1("vec4", Type$1.u32, null);
+  TemplateType$1.vec2h = new TemplateType$1("vec2", Type$1.f16, null);
+  TemplateType$1.vec3h = new TemplateType$1("vec3", Type$1.f16, null);
+  TemplateType$1.vec4h = new TemplateType$1("vec4", Type$1.f16, null);
+  TemplateType$1.vec2b = new TemplateType$1("vec2", Type$1.bool, null);
+  TemplateType$1.vec3b = new TemplateType$1("vec3", Type$1.bool, null);
+  TemplateType$1.vec4b = new TemplateType$1("vec4", Type$1.bool, null);
+  TemplateType$1.mat2x2f = new TemplateType$1("mat2x2", Type$1.f32, null);
+  TemplateType$1.mat2x3f = new TemplateType$1("mat2x3", Type$1.f32, null);
+  TemplateType$1.mat2x4f = new TemplateType$1("mat2x4", Type$1.f32, null);
+  TemplateType$1.mat3x2f = new TemplateType$1("mat3x2", Type$1.f32, null);
+  TemplateType$1.mat3x3f = new TemplateType$1("mat3x3", Type$1.f32, null);
+  TemplateType$1.mat3x4f = new TemplateType$1("mat3x4", Type$1.f32, null);
+  TemplateType$1.mat4x2f = new TemplateType$1("mat4x2", Type$1.f32, null);
+  TemplateType$1.mat4x3f = new TemplateType$1("mat4x3", Type$1.f32, null);
+  TemplateType$1.mat4x4f = new TemplateType$1("mat4x4", Type$1.f32, null);
+  TemplateType$1.mat2x2h = new TemplateType$1("mat2x2", Type$1.f16, null);
+  TemplateType$1.mat2x3h = new TemplateType$1("mat2x3", Type$1.f16, null);
+  TemplateType$1.mat2x4h = new TemplateType$1("mat2x4", Type$1.f16, null);
+  TemplateType$1.mat3x2h = new TemplateType$1("mat3x2", Type$1.f16, null);
+  TemplateType$1.mat3x3h = new TemplateType$1("mat3x3", Type$1.f16, null);
+  TemplateType$1.mat3x4h = new TemplateType$1("mat3x4", Type$1.f16, null);
+  TemplateType$1.mat4x2h = new TemplateType$1("mat4x2", Type$1.f16, null);
+  TemplateType$1.mat4x3h = new TemplateType$1("mat4x3", Type$1.f16, null);
+  TemplateType$1.mat4x4h = new TemplateType$1("mat4x4", Type$1.f16, null);
+  /**
+   * @class PointerType
+   * @extends Type
+   * @category AST
+   */
+  class PointerType$1 extends Type$1 {
+      constructor(name, storage, type, access) {
+          super(name);
+          this.storage = storage;
+          this.type = type;
+          this.access = access;
+      }
+      get astNodeType() {
+          return "pointer";
+      }
+  }
+  /**
+   * @class ArrayType
+   * @extends Type
+   * @category AST
+   */
+  class ArrayType$1 extends Type$1 {
+      constructor(name, attributes, format, count) {
+          super(name);
+          this.attributes = attributes;
+          this.format = format;
+          this.count = count;
+      }
+      get astNodeType() {
+          return "array";
+      }
+      get isArray() {
+          return true;
+      }
+  }
+  /**
+   * @class SamplerType
+   * @extends Type
+   * @category AST
+   */
+  class SamplerType$1 extends Type$1 {
+      constructor(name, format, access) {
+          super(name);
+          this.format = format;
+          this.access = access;
+      }
+      get astNodeType() {
+          return "sampler";
+      }
+  }
+  /**
+   * @class Expression
+   * @extends Node
+   * @category AST
+   */
+  class Expression$1 extends Node$1 {
+      constructor() {
+          super();
+          this.postfix = null;
+      }
+  }
+  /**
+   * @class StringExpr
+   * @extends Expression
+   * @category AST
+   */
+  class StringExpr$1 extends Expression$1 {
+      constructor(value) {
+          super();
+          this.value = value;
+      }
+      get astNodeType() {
+          return "stringExpr";
+      }
+      toString() {
+          return this.value;
+      }
+      constEvaluateString() {
+          return this.value;
+      }
+  }
+  /**
+   * @class CreateExpr
+   * @extends Expression
+   * @category AST
+   */
+  class CreateExpr$1 extends Expression$1 {
+      constructor(type, args) {
+          super();
+          this.type = type;
+          this.args = args;
+      }
+      get astNodeType() {
+          return "createExpr";
+      }
+      search(callback) {
+          callback(this);
+          if (this.args) {
+              for (const node of this.args) {
+                  node.search(callback);
+              }
+          }
+      }
+      constEvaluate(context, type) {
+          const t = this.type;
+          if (t.name === "f32" || t.name === "f16" || t.name === "i32" || t.name === "u32" || t.name === "bool") {
+              return this.args[0].constEvaluate(context, type);
+          }
+          if (t.name === "vec2" || t.name === "vec2f" || t.name === "vec2h" || t.name === "vec2i" || t.name === "vec2u") {
+              const tx = [Type$1.f32];
+              const ty = [Type$1.f32];
+              const v = [this.args[0].constEvaluate(context, tx),
+                  this.args[1].constEvaluate(context, ty)];
+              if (type) {
+                  type[0] = t;
+                  if (t instanceof TemplateType$1 && t.format === null) {
+                      t.format = Type$1.maxFormatType([tx[0], ty[0]]);
+                  }
+              }
+              return v;
+          }
+          if (t.name === "vec3" || t.name === "vec3f" || t.name === "vec3h" || t.name === "vec3i" || t.name === "vec3u") {
+              const tx = [Type$1.f32];
+              const ty = [Type$1.f32];
+              const tz = [Type$1.f32];
+              const v = [this.args[0].constEvaluate(context, tx),
+                  this.args[1].constEvaluate(context, ty),
+                  this.args[2].constEvaluate(context, tz)];
+              if (type) {
+                  type[0] = t;
+                  if (t instanceof TemplateType$1 && t.format === null) {
+                      t.format = Type$1.maxFormatType([tx[0], ty[0], tz[0]]);
+                  }
+              }
+              return v;
+          }
+          if (t.name === "vec4" || t.name === "vec4f" || t.name === "vec4h" || t.name === "vec4i" || t.name === "vec4u") {
+              const tx = [Type$1.f32];
+              const ty = [Type$1.f32];
+              const tz = [Type$1.f32];
+              const tw = [Type$1.f32];
+              const v = [this.args[0].constEvaluate(context, tx),
+                  this.args[1].constEvaluate(context, ty),
+                  this.args[2].constEvaluate(context, tz),
+                  this.args[3].constEvaluate(context, tw)];
+              if (type) {
+                  type[0] = t;
+                  if (t instanceof TemplateType$1 && t.format === null) {
+                      t.format = Type$1.maxFormatType([tx[0], ty[0], tz[0], tw[0]]);
+                  }
+              }
+              return v;
+          }
+          if (t.name === "mat2x2") {
+              if (this.args.length === 1) {
+                  // mat2x2(other: mat2x2)
+                  const e1 = [Type$1.f32];
+                  const v = this.args[0].constEvaluate(context, e1);
+                  if (e1[0].name !== "mat2x2" && e1[0].name !== "mat2x2f" && e1[0].name != "mat2x2h") {
+                      throw "Invalid argument for mat2x2";
+                  }
+                  if (type) {
+                      type[0] = e1[0];
+                  }
+                  return v;
+              }
+              else if (this.args.length === 2) {
+                  // mat2x2(v1: vec2, v2: vec2)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const v1 = this.args[0].constEvaluate(context, e1);
+                  const v2 = this.args[1].constEvaluate(context, e2);
+                  if ((e1[0].name !== "vec2" && e1[0].name !== "vec2f" && e1[0].name !== "vec2h") ||
+                      (e2[0].name !== "vec2" && e2[0].name !== "vec2f" && e2[0].name !== "vec2h")) {
+                      throw "Invalid arguments for mat2x2";
+                  }
+                  const v1a = v1;
+                  const v2a = v2;
+                  const v = [v1a[0], v1a[1], v2a[0], v2a[1]];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          if (e1[0].name === "vec2f") {
+                              t.format = Type$1.f32;
+                          }
+                          else if (e1[0].name === "vec2h") {
+                              t.format = Type$1.f16;
+                          }
+                          else if (e1[0] instanceof TemplateType$1) {
+                              t.format = e1[0].format;
+                          }
+                      }
+                  }
+                  return v;
+              }
+              else if (this.args.length === 4) {
+                  // mat2x2(e1, e2, e3, e4)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const e4 = [Type$1.f32];
+                  const v = [this.args[0].constEvaluate(context, e1),
+                      this.args[1].constEvaluate(context, e2),
+                      this.args[2].constEvaluate(context, e3),
+                      this.args[3].constEvaluate(context, e4)];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          t.format = Type$1.maxFormatType([e1[0], e2[0], e3[0], e4[0]]);
+                      }
+                  }
+                  return v;
+              }
+              else {
+                  throw "Invalid arguments for mat2x2";
+              }
+          }
+          if (t.name === "mat2x3") {
+              if (this.args.length === 1) {
+                  // mat2x3(other: mat2x3)
+                  const e1 = [Type$1.f32];
+                  const v = this.args[0].constEvaluate(context, e1);
+                  if (e1[0].name !== "mat232" && e1[0].name !== "mat2x3f" && e1[0].name != "mat2x3h") {
+                      throw "Invalid argument for mat2x3";
+                  }
+                  if (type) {
+                      type[0] = e1[0];
+                  }
+                  return v;
+              }
+              else if (this.args.length === 2) {
+                  // mat2x3(v1: vec3, v2: vec3)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const v1 = this.args[0].constEvaluate(context, e1);
+                  const v2 = this.args[1].constEvaluate(context, e2);
+                  if ((e1[0].name !== "vec3" && e1[0].name !== "vec3f" && e1[0].name !== "vec3h") ||
+                      (e2[0].name !== "vec3" && e2[0].name !== "vec3f" && e2[0].name !== "vec3h")) {
+                      throw "Invalid arguments for mat2x3";
+                  }
+                  const v1a = v1;
+                  const v2a = v2;
+                  const v = [v1a[0], v1a[1], v1a[2], v2a[0], v2a[1], v2a[2]];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          if (e1[0].name === "vec3f") {
+                              t.format = Type$1.f32;
+                          }
+                          else if (e1[0].name === "vec3h") {
+                              t.format = Type$1.f16;
+                          }
+                          else if (e1[0] instanceof TemplateType$1) {
+                              t.format = e1[0].format;
+                          }
+                      }
+                  }
+                  return v;
+              }
+              else if (this.args.length === 6) {
+                  // mat2x3(e1, e2, e3, e4, e5, e6)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const e4 = [Type$1.f32];
+                  const e5 = [Type$1.f32];
+                  const e6 = [Type$1.f32];
+                  const v = [this.args[0].constEvaluate(context, e1),
+                      this.args[1].constEvaluate(context, e2),
+                      this.args[2].constEvaluate(context, e3),
+                      this.args[3].constEvaluate(context, e4),
+                      this.args[4].constEvaluate(context, e5),
+                      this.args[5].constEvaluate(context, e6)];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          t.format = Type$1.maxFormatType([e1[0], e2[0], e3[0], e4[0], e5[0], e6[0]]);
+                      }
+                  }
+                  return v;
+              }
+              else {
+                  throw "Invalid arguments for mat2x3";
+              }
+          }
+          if (t.name === "mat2x4") {
+              if (this.args.length === 1) {
+                  // mat2x4(other: mat2x4)
+                  const e1 = [Type$1.f32];
+                  const v = this.args[0].constEvaluate(context, e1);
+                  if (e1[0].name !== "mat2x4" && e1[0].name !== "mat2x4f" && e1[0].name != "mat2x4h") {
+                      throw "Invalid argument for mat2x4";
+                  }
+                  if (type) {
+                      type[0] = e1[0];
+                  }
+                  return v;
+              }
+              else if (this.args.length === 2) {
+                  // mat2x4(v1: vec4, v2: vec4)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const v1 = this.args[0].constEvaluate(context, e1);
+                  const v2 = this.args[1].constEvaluate(context, e2);
+                  if ((e1[0].name !== "vec4" && e1[0].name !== "vec4f" && e1[0].name !== "vec4h") ||
+                      (e2[0].name !== "vec4" && e2[0].name !== "vec4f" && e2[0].name !== "vec4h")) {
+                      throw "Invalid arguments for mat2x4";
+                  }
+                  const v1a = v1;
+                  const v2a = v2;
+                  const v = [v1a[0], v1a[1], v1a[2], v1a[3], v2a[0], v2a[1], v2a[2], v2a[3]];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          if (e1[0].name === "vec4f") {
+                              t.format = Type$1.f32;
+                          }
+                          else if (e1[0].name === "vec4h") {
+                              t.format = Type$1.f16;
+                          }
+                          else if (e1[0] instanceof TemplateType$1) {
+                              t.format = e1[0].format;
+                          }
+                      }
+                  }
+                  return v;
+              }
+              else if (this.args.length === 8) {
+                  // mat2x4(e1, e2, e3, e4, e5, e6, e7, e8)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const e4 = [Type$1.f32];
+                  const e5 = [Type$1.f32];
+                  const e6 = [Type$1.f32];
+                  const e7 = [Type$1.f32];
+                  const e8 = [Type$1.f32];
+                  const v = [this.args[0].constEvaluate(context, e1),
+                      this.args[1].constEvaluate(context, e2),
+                      this.args[2].constEvaluate(context, e3),
+                      this.args[3].constEvaluate(context, e4),
+                      this.args[4].constEvaluate(context, e5),
+                      this.args[5].constEvaluate(context, e6),
+                      this.args[6].constEvaluate(context, e7),
+                      this.args[7].constEvaluate(context, e8)];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          t.format = Type$1.maxFormatType([e1[0], e2[0], e3[0], e4[0], e5[0], e6[0], e7[0], e8[0]]);
+                      }
+                  }
+                  return v;
+              }
+              else {
+                  throw "Invalid arguments for mat2x4";
+              }
+          }
+          if (t.name === "mat3x2") {
+              if (this.args.length === 1) {
+                  // mat3x2(other: mat3x2)
+                  const e1 = [Type$1.f32];
+                  const v = this.args[0].constEvaluate(context, e1);
+                  if (e1[0].name !== "mat3x2" && e1[0].name !== "mat3x2f" && e1[0].name != "mat3x2h") {
+                      throw "Invalid argument for mat3x2";
+                  }
+                  if (type) {
+                      type[0] = e1[0];
+                  }
+                  return v;
+              }
+              else if (this.args.length === 3) {
+                  // mat3x2(v1: vec2, v2: vec2, v3: vec2)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const v1 = this.args[0].constEvaluate(context, e1);
+                  const v2 = this.args[1].constEvaluate(context, e2);
+                  const v3 = this.args[1].constEvaluate(context, e3);
+                  if ((e1[0].name !== "vec2" && e1[0].name !== "vec2f" && e1[0].name !== "vec2h") ||
+                      (e2[0].name !== "vec2" && e2[0].name !== "vec2f" && e2[0].name !== "vec2h") ||
+                      (e3[0].name !== "vec2" && e3[0].name !== "vec2f" && e3[0].name !== "vec2h")) {
+                      throw "Invalid arguments for mat3x2";
+                  }
+                  const v1a = v1;
+                  const v2a = v2;
+                  const v3a = v3;
+                  const v = [v1a[0], v1a[1], v2a[0], v2a[1], v3a[0], v3a[1]];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          if (e1[0].name === "vec2f") {
+                              t.format = Type$1.f32;
+                          }
+                          else if (e1[0].name === "vec2h") {
+                              t.format = Type$1.f16;
+                          }
+                          else if (e1[0] instanceof TemplateType$1) {
+                              t.format = e1[0].format;
+                          }
+                      }
+                  }
+                  return v;
+              }
+              else if (this.args.length === 6) {
+                  // mat3x2(e1, e2, e3, e4, e5, e6)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const e4 = [Type$1.f32];
+                  const e5 = [Type$1.f32];
+                  const e6 = [Type$1.f32];
+                  const v = [this.args[0].constEvaluate(context, e1),
+                      this.args[1].constEvaluate(context, e2),
+                      this.args[2].constEvaluate(context, e3),
+                      this.args[3].constEvaluate(context, e4),
+                      this.args[4].constEvaluate(context, e5),
+                      this.args[5].constEvaluate(context, e6)];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          t.format = Type$1.maxFormatType([e1[0], e2[0], e3[0], e4[0], e5[0], e6[0]]);
+                      }
+                  }
+                  return v;
+              }
+              else {
+                  throw "Invalid arguments for mat3x2";
+              }
+          }
+          if (t.name === "mat3x3") {
+              if (this.args.length === 1) {
+                  // mat3x3(other: mat3x3)
+                  const e1 = [Type$1.f32];
+                  const v = this.args[0].constEvaluate(context, e1);
+                  if (e1[0].name !== "mat3x3" && e1[0].name !== "mat3x3f" && e1[0].name != "mat3x3h") {
+                      throw "Invalid argument for mat3x3";
+                  }
+                  if (type) {
+                      type[0] = e1[0];
+                  }
+                  return v;
+              }
+              else if (this.args.length === 3) {
+                  // mat3x3(v1: vec3, v2: vec3, v3: vec3)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const v1 = this.args[0].constEvaluate(context, e1);
+                  const v2 = this.args[1].constEvaluate(context, e2);
+                  const v3 = this.args[1].constEvaluate(context, e3);
+                  if ((e1[0].name !== "vec3" && e1[0].name !== "vec3f" && e1[0].name !== "vec3h") ||
+                      (e2[0].name !== "vec3" && e2[0].name !== "vec3f" && e2[0].name !== "vec3h") ||
+                      (e3[0].name !== "vec3" && e3[0].name !== "vec3f" && e3[0].name !== "vec3h")) {
+                      throw "Invalid arguments for mat3x3";
+                  }
+                  const v1a = v1;
+                  const v2a = v2;
+                  const v3a = v3;
+                  const v = [v1a[0], v1a[1], v1a[2], v2a[0], v2a[1], v2a[2], v3a[0], v3a[1], v3a[2]];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          if (e1[0].name === "vec3f") {
+                              t.format = Type$1.f32;
+                          }
+                          else if (e1[0].name === "vec3h") {
+                              t.format = Type$1.f16;
+                          }
+                          else if (e1[0] instanceof TemplateType$1) {
+                              t.format = e1[0].format;
+                          }
+                      }
+                  }
+                  return v;
+              }
+              else if (this.args.length === 9) {
+                  // mat2x4(e1, e2, e3, e4, e5, e6, e7, e8, e9)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const e4 = [Type$1.f32];
+                  const e5 = [Type$1.f32];
+                  const e6 = [Type$1.f32];
+                  const e7 = [Type$1.f32];
+                  const e8 = [Type$1.f32];
+                  const e9 = [Type$1.f32];
+                  const v = [this.args[0].constEvaluate(context, e1),
+                      this.args[1].constEvaluate(context, e2),
+                      this.args[2].constEvaluate(context, e3),
+                      this.args[3].constEvaluate(context, e4),
+                      this.args[4].constEvaluate(context, e5),
+                      this.args[5].constEvaluate(context, e6),
+                      this.args[6].constEvaluate(context, e7),
+                      this.args[7].constEvaluate(context, e8),
+                      this.args[8].constEvaluate(context, e9)];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          t.format = Type$1.maxFormatType([e1[0], e2[0], e3[0], e4[0], e5[0], e6[0], e7[0], e8[0], e9[0]]);
+                      }
+                  }
+                  return v;
+              }
+              else {
+                  throw "Invalid arguments for mat3x3";
+              }
+          }
+          if (t.name === "mat3x4") {
+              if (this.args.length === 1) {
+                  // mat3x4(other: mat3x4)
+                  const e1 = [Type$1.f32];
+                  const v = this.args[0].constEvaluate(context, e1);
+                  if (e1[0].name !== "mat3x4" && e1[0].name !== "mat3x4f" && e1[0].name != "mat3x4h") {
+                      throw "Invalid argument for mat3x4";
+                  }
+                  if (type) {
+                      type[0] = e1[0];
+                  }
+                  return v;
+              }
+              else if (this.args.length === 3) {
+                  // mat3x4(v1: vec4, v2: vec4, v3: vec4)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const v1 = this.args[0].constEvaluate(context, e1);
+                  const v2 = this.args[1].constEvaluate(context, e2);
+                  const v3 = this.args[1].constEvaluate(context, e3);
+                  if ((e1[0].name !== "vec4" && e1[0].name !== "vec4f" && e1[0].name !== "vec4h") ||
+                      (e2[0].name !== "vec4" && e2[0].name !== "vec4f" && e2[0].name !== "vec4h") ||
+                      (e3[0].name !== "vec4" && e3[0].name !== "vec4f" && e3[0].name !== "vec4h")) {
+                      throw "Invalid arguments for mat3x4";
+                  }
+                  const v1a = v1;
+                  const v2a = v2;
+                  const v3a = v3;
+                  const v = [v1a[0], v1a[1], v1a[2], v1a[3], v2a[0], v2a[1], v2a[2], v2a[3], v3a[0], v3a[1], v3a[2], v3a[3]];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          if (e1[0].name === "vec4f") {
+                              t.format = Type$1.f32;
+                          }
+                          else if (e1[0].name === "vec4h") {
+                              t.format = Type$1.f16;
+                          }
+                          else if (e1[0] instanceof TemplateType$1) {
+                              t.format = e1[0].format;
+                          }
+                      }
+                  }
+                  return v;
+              }
+              else if (this.args.length === 9) {
+                  // mat3x4(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const e4 = [Type$1.f32];
+                  const e5 = [Type$1.f32];
+                  const e6 = [Type$1.f32];
+                  const e7 = [Type$1.f32];
+                  const e8 = [Type$1.f32];
+                  const e9 = [Type$1.f32];
+                  const e10 = [Type$1.f32];
+                  const e11 = [Type$1.f32];
+                  const e12 = [Type$1.f32];
+                  const v = [this.args[0].constEvaluate(context, e1),
+                      this.args[1].constEvaluate(context, e2),
+                      this.args[2].constEvaluate(context, e3),
+                      this.args[3].constEvaluate(context, e4),
+                      this.args[4].constEvaluate(context, e5),
+                      this.args[5].constEvaluate(context, e6),
+                      this.args[6].constEvaluate(context, e7),
+                      this.args[7].constEvaluate(context, e8),
+                      this.args[8].constEvaluate(context, e9),
+                      this.args[9].constEvaluate(context, e10),
+                      this.args[10].constEvaluate(context, e11),
+                      this.args[11].constEvaluate(context, e12)];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          t.format = Type$1.maxFormatType([e1[0], e2[0], e3[0], e4[0], e5[0], e6[0], e7[0],
+                              e8[0], e9[0], e10[0], e11[0]]);
+                      }
+                  }
+                  return v;
+              }
+              else {
+                  throw "Invalid arguments for mat3x4";
+              }
+          }
+          if (t.name === "mat4x2") {
+              if (this.args.length === 1) {
+                  // mat4x2(other: mat4x2)
+                  const e1 = [Type$1.f32];
+                  const v = this.args[0].constEvaluate(context, e1);
+                  if (e1[0].name !== "mat4x2" && e1[0].name !== "mat4x2f" && e1[0].name != "mat4x2h") {
+                      throw "Invalid argument for mat4x2";
+                  }
+                  if (type) {
+                      type[0] = e1[0];
+                  }
+                  return v;
+              }
+              else if (this.args.length === 4) {
+                  // mat4x2(v1: vec2, v2: vec2, v3: vec2, v4: vec2)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const e4 = [Type$1.f32];
+                  const v1 = this.args[0].constEvaluate(context, e1);
+                  const v2 = this.args[1].constEvaluate(context, e2);
+                  const v3 = this.args[1].constEvaluate(context, e3);
+                  const v4 = this.args[1].constEvaluate(context, e4);
+                  if ((e1[0].name !== "vec2" && e1[0].name !== "vec2f" && e1[0].name !== "vec2h") ||
+                      (e2[0].name !== "vec2" && e2[0].name !== "vec2f" && e2[0].name !== "vec2h") ||
+                      (e3[0].name !== "vec2" && e3[0].name !== "vec2f" && e3[0].name !== "vec2h") ||
+                      (e4[0].name !== "vec2" && e4[0].name !== "vec2f" && e4[0].name !== "vec2h")) {
+                      throw "Invalid arguments for mat4x2";
+                  }
+                  const v1a = v1;
+                  const v2a = v2;
+                  const v3a = v3;
+                  const v4a = v4;
+                  const v = [v1a[0], v1a[1], v2a[0], v2a[1], v3a[0], v3a[1], v4a[0], v4a[1]];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          if (e1[0].name === "vec2f") {
+                              t.format = Type$1.f32;
+                          }
+                          else if (e1[0].name === "vec2h") {
+                              t.format = Type$1.f16;
+                          }
+                          else if (e1[0] instanceof TemplateType$1) {
+                              t.format = e1[0].format;
+                          }
+                      }
+                  }
+                  return v;
+              }
+              else if (this.args.length === 8) {
+                  // mat4x2(e1, e2, e3, e4, e5, e6, e7, e8)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const e4 = [Type$1.f32];
+                  const e5 = [Type$1.f32];
+                  const e6 = [Type$1.f32];
+                  const e7 = [Type$1.f32];
+                  const e8 = [Type$1.f32];
+                  const v = [this.args[0].constEvaluate(context, e1),
+                      this.args[1].constEvaluate(context, e2),
+                      this.args[2].constEvaluate(context, e3),
+                      this.args[3].constEvaluate(context, e4),
+                      this.args[4].constEvaluate(context, e5),
+                      this.args[5].constEvaluate(context, e6),
+                      this.args[6].constEvaluate(context, e7),
+                      this.args[7].constEvaluate(context, e8)];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          t.format = Type$1.maxFormatType([e1[0], e2[0], e3[0], e4[0], e5[0], e6[0], e7[0], e8[0]]);
+                      }
+                  }
+                  return v;
+              }
+              else {
+                  throw "Invalid arguments for mat4x2";
+              }
+          }
+          if (t.name === "mat4x3") {
+              if (this.args.length === 1) {
+                  // mat4x3(other: mat4x3)
+                  const e1 = [Type$1.f32];
+                  const v = this.args[0].constEvaluate(context, e1);
+                  if (e1[0].name !== "mat4x3" && e1[0].name !== "mat4x3f" && e1[0].name != "mat4x3h") {
+                      throw "Invalid argument for mat4x3";
+                  }
+                  if (type) {
+                      type[0] = e1[0];
+                  }
+                  return v;
+              }
+              else if (this.args.length === 4) {
+                  // mat4x3(v1: vec3, v2: vec3, v3: vec3, v4: vec3)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const e4 = [Type$1.f32];
+                  const v1 = this.args[0].constEvaluate(context, e1);
+                  const v2 = this.args[1].constEvaluate(context, e2);
+                  const v3 = this.args[1].constEvaluate(context, e3);
+                  const v4 = this.args[1].constEvaluate(context, e4);
+                  if ((e1[0].name !== "vec3" && e1[0].name !== "vec3f" && e1[0].name !== "vec3h") ||
+                      (e2[0].name !== "vec3" && e2[0].name !== "vec3f" && e2[0].name !== "vec3h") ||
+                      (e3[0].name !== "vec3" && e3[0].name !== "vec3f" && e3[0].name !== "vec3h") ||
+                      (e4[0].name !== "vec3" && e4[0].name !== "vec3f" && e4[0].name !== "vec3h")) {
+                      throw "Invalid arguments for mat4x3";
+                  }
+                  const v1a = v1;
+                  const v2a = v2;
+                  const v3a = v3;
+                  const v4a = v4;
+                  const v = [v1a[0], v1a[1], v1a[2], v2a[0], v2a[1], v2a[2], v3a[0], v3a[1], v3a[2], v4a[0], v4a[1], v4a[2]];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          if (e1[0].name === "vec3f") {
+                              t.format = Type$1.f32;
+                          }
+                          else if (e1[0].name === "vec3h") {
+                              t.format = Type$1.f16;
+                          }
+                          else if (e1[0] instanceof TemplateType$1) {
+                              t.format = e1[0].format;
+                          }
+                      }
+                  }
+                  return v;
+              }
+              else if (this.args.length === 9) {
+                  // mat4x3(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const e4 = [Type$1.f32];
+                  const e5 = [Type$1.f32];
+                  const e6 = [Type$1.f32];
+                  const e7 = [Type$1.f32];
+                  const e8 = [Type$1.f32];
+                  const e9 = [Type$1.f32];
+                  const e10 = [Type$1.f32];
+                  const e11 = [Type$1.f32];
+                  const e12 = [Type$1.f32];
+                  const v = [this.args[0].constEvaluate(context, e1),
+                      this.args[1].constEvaluate(context, e2),
+                      this.args[2].constEvaluate(context, e3),
+                      this.args[3].constEvaluate(context, e4),
+                      this.args[4].constEvaluate(context, e5),
+                      this.args[5].constEvaluate(context, e6),
+                      this.args[6].constEvaluate(context, e7),
+                      this.args[7].constEvaluate(context, e8),
+                      this.args[8].constEvaluate(context, e9),
+                      this.args[9].constEvaluate(context, e10),
+                      this.args[10].constEvaluate(context, e11),
+                      this.args[11].constEvaluate(context, e12)];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          t.format = Type$1.maxFormatType([e1[0], e2[0], e3[0], e4[0], e5[0], e6[0], e7[0], e8[0],
+                              e9[0], e10[0], e11[0], e12[0]]);
+                      }
+                  }
+                  return v;
+              }
+              else {
+                  throw "Invalid arguments for mat4x3";
+              }
+          }
+          if (t.name === "mat4x4") {
+              if (this.args.length === 1) {
+                  // mat4x4(other: mat4x4)
+                  const e1 = [Type$1.f32];
+                  const v = this.args[0].constEvaluate(context, e1);
+                  if (e1[0].name !== "mat4x4" && e1[0].name !== "mat4x4f" && e1[0].name != "mat4x4h") {
+                      throw "Invalid argument for mat4x4";
+                  }
+                  if (type) {
+                      type[0] = e1[0];
+                  }
+                  return v;
+              }
+              else if (this.args.length === 4) {
+                  // mat4x4(v1: vec4, v2: vec4, v3: vec4, v4: vec4)
+                  // mat4x3(v1: vec3, v2: vec3, v3: vec3, v4: vec3)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const e4 = [Type$1.f32];
+                  const v1 = this.args[0].constEvaluate(context, e1);
+                  const v2 = this.args[1].constEvaluate(context, e2);
+                  const v3 = this.args[1].constEvaluate(context, e3);
+                  const v4 = this.args[1].constEvaluate(context, e4);
+                  if ((e1[0].name !== "vec4" && e1[0].name !== "vec4f" && e1[0].name !== "vec4h") ||
+                      (e2[0].name !== "vec4" && e2[0].name !== "vec4f" && e2[0].name !== "vec4h") ||
+                      (e3[0].name !== "vec4" && e3[0].name !== "vec4f" && e3[0].name !== "vec4h") ||
+                      (e4[0].name !== "vec4" && e4[0].name !== "vec4f" && e4[0].name !== "vec4h")) {
+                      throw "Invalid arguments for mat4x4";
+                  }
+                  const v1a = v1;
+                  const v2a = v2;
+                  const v3a = v3;
+                  const v4a = v4;
+                  const v = [v1a[0], v1a[1], v1a[2], v1a[3],
+                      v2a[0], v2a[1], v2a[2], v2a[3],
+                      v3a[0], v3a[1], v3a[2], v3a[3],
+                      v4a[0], v4a[1], v4a[2], v4a[3]];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          if (e1[0].name === "vec4f") {
+                              t.format = Type$1.f32;
+                          }
+                          else if (e1[0].name === "vec4h") {
+                              t.format = Type$1.f16;
+                          }
+                          else if (e1[0] instanceof TemplateType$1) {
+                              t.format = e1[0].format;
+                          }
+                      }
+                  }
+                  return v;
+              }
+              else if (this.args.length === 9) {
+                  // mat4x4(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16)
+                  const e1 = [Type$1.f32];
+                  const e2 = [Type$1.f32];
+                  const e3 = [Type$1.f32];
+                  const e4 = [Type$1.f32];
+                  const e5 = [Type$1.f32];
+                  const e6 = [Type$1.f32];
+                  const e7 = [Type$1.f32];
+                  const e8 = [Type$1.f32];
+                  const e9 = [Type$1.f32];
+                  const e10 = [Type$1.f32];
+                  const e11 = [Type$1.f32];
+                  const e12 = [Type$1.f32];
+                  const e13 = [Type$1.f32];
+                  const e14 = [Type$1.f32];
+                  const e15 = [Type$1.f32];
+                  const e16 = [Type$1.f32];
+                  const v = [this.args[0].constEvaluate(context, e1),
+                      this.args[1].constEvaluate(context, e2),
+                      this.args[2].constEvaluate(context, e3),
+                      this.args[3].constEvaluate(context, e4),
+                      this.args[4].constEvaluate(context, e5),
+                      this.args[5].constEvaluate(context, e6),
+                      this.args[6].constEvaluate(context, e7),
+                      this.args[7].constEvaluate(context, e8),
+                      this.args[8].constEvaluate(context, e9),
+                      this.args[9].constEvaluate(context, e10),
+                      this.args[10].constEvaluate(context, e11),
+                      this.args[11].constEvaluate(context, e12),
+                      this.args[12].constEvaluate(context, e13),
+                      this.args[13].constEvaluate(context, e14),
+                      this.args[14].constEvaluate(context, e15),
+                      this.args[15].constEvaluate(context, e16)];
+                  if (type) {
+                      type[0] = t;
+                      if (t instanceof TemplateType$1 && t.format === null) {
+                          t.format = Type$1.maxFormatType([e1[0], e2[0], e3[0], e4[0], e5[0], e6[0], e7[0], e8[0],
+                              e9[0], e10[0], e11[0], e12[0], e13[0], e14[0], e15[0]]);
+                      }
+                  }
+                  return v;
+              }
+              else {
+                  throw "Invalid arguments for mat4x4";
+              }
+          }
+          if (t.name === "array") {
+              const v = [];
+              const ta = t;
+              for (const arg of this.args) {
+                  const te = [Type$1.f32];
+                  const e = arg.constEvaluate(context, te);
+                  v.push(e);
+                  if (ta.format === null) {
+                      ta.format = te[0];
+                  }
+                  else {
+                      ta.format = Type$1.maxFormatType([ta.format, te[0]]);
+                  }
+              }
+              if (type) {
+                  type[0] = ta;
+              }
+              return v;
+          }
+          throw new Error(`Cannot evaluate node ${this.constructor.name}`);
+      }
+  }
+  /**
+   * @class CallExpr
+   * @extends Expression
+   * @category AST
+   */
+  class CallExpr$1 extends Expression$1 {
+      constructor(name, args) {
+          super();
+          this.cachedReturnValue = null;
+          this.name = name;
+          this.args = args;
+      }
+      get astNodeType() {
+          return "callExpr";
+      }
+      setCachedReturnValue(value) {
+          this.cachedReturnValue = value;
+      }
+      get isBuiltin() {
+          return CallExpr$1.builtinFunctionNames.has(this.name);
+      }
+      constEvaluate(context, type) {
+          switch (this.name) {
+              case "abs": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.abs(v));
+                  }
+                  return Math.abs(value);
+              }
+              case "acos": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.acos(v));
+                  }
+                  return Math.acos(value);
+              }
+              case "acosh": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.acosh(v));
+                  }
+                  return Math.acosh(value);
+              }
+              case "asin": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.asin(v));
+                  }
+                  return Math.asin(value);
+              }
+              case "asinh": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.asinh(v));
+                  }
+                  return Math.asinh(value);
+              }
+              case "atan": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.atan(v));
+                  }
+                  return Math.atan(value);
+              }
+              case "atan2":
+                  const value = this.args[0].constEvaluate(context, type);
+                  const value2 = this.args[1].constEvaluate(context, type);
+                  if (Array.isArray(value) && Array.isArray(value2)) {
+                      return value.map((v, i) => Math.atan2(v, value2[i]));
+                  }
+                  return Math.atan2(value, value2);
+              case "atanh": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.atanh(v));
+                  }
+                  return Math.atanh(value);
+              }
+              case "ceil": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.ceil(v));
+                  }
+                  return Math.ceil(value);
+              }
+              case "clamp": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  const a = this.args[1].constEvaluate(context, type);
+                  const b = this.args[2].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.min(Math.max(v, a), b));
+                  }
+                  return Math.min(Math.max(value, a), b);
+              }
+              case "cos": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.cos(v));
+                  }
+                  return Math.cos(value);
+              }
+              case "cross": {
+                  const x = this.args[0].constEvaluate(context, type);
+                  const y = this.args[1].constEvaluate(context, type);
+                  if (Array.isArray(x) && Array.isArray(y) && x.length === y.length && x.length === 3) {
+                      [
+                          x[1] * y[2] - x[2] * y[1],
+                          x[2] * y[0] - x[0] * y[2],
+                          x[0] * y[1] - x[1] * y[0]
+                      ];
+                  }
+                  throw new Error("Cross product is only supported for vec3");
+              }
+              case "degrees": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => v * 180 / Math.PI);
+                  }
+                  return value * 180 / Math.PI;
+              }
+              case "determinant":
+                  throw new Error("TODO Determinant is not implemented");
+              case "distance": {
+                  const a = this.args[0].constEvaluate(context, type);
+                  const b = this.args[1].constEvaluate(context, type);
+                  if (Array.isArray(a) && Array.isArray(b)) {
+                      let d2 = 0;
+                      for (let i = 0; i < a.length; i++) {
+                          d2 += (a[i] - b[i]) * (a[i] - b[i]);
+                      }
+                      return Math.sqrt(d2);
+                  }
+                  const an = a;
+                  const bn = b;
+                  return Math.sqrt((bn - an) * (bn - an));
+              }
+              case "dot": {
+                  const a = this.args[0].constEvaluate(context, type);
+                  const b = this.args[1].constEvaluate(context, type);
+                  if (Array.isArray(a) && Array.isArray(b) && a.length === b.length) {
+                      let d = 0;
+                      for (let i = 0; i < a.length; i++) {
+                          d += a[i] * b[i];
+                      }
+                      return d;
+                  }
+                  return a * b;
+              }
+              case "exp": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.exp(v));
+                  }
+                  return Math.exp(value);
+              }
+              case "exp2": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.pow(2, v));
+                  }
+                  return Math.pow(2, value);
+              }
+              //case "extractBits":
+              //TODO: implement
+              //case "firstLeadingBit":
+              //TODO: implement
+              case "floor": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.floor(v));
+                  }
+                  return Math.floor(value);
+              }
+              case "fma": {
+                  const a = this.args[0].constEvaluate(context, type);
+                  const b = this.args[1].constEvaluate(context, type);
+                  const c = this.args[2].constEvaluate(context, type);
+                  if (Array.isArray(a) && Array.isArray(b) && Array.isArray(c)) {
+                      return a.map((v, i) => v * b[i] + c[i]);
+                  }
+                  return a * b + c;
+              }
+              case "fract": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => v - Math.floor(v));
+                  }
+                  return value - Math.floor(value);
+              }
+              //case "frexp":
+              //TODO: implement
+              case "inverseSqrt": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => 1 / Math.sqrt(v));
+                  }
+                  return 1 / Math.sqrt(value);
+              }
+              case "length": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      let d2 = 0;
+                      for (let i = 0; i < value.length; i++) {
+                          d2 += value[i] * value[i];
+                      }
+                      return Math.sqrt(d2);
+                  }
+                  return Math.abs(value);
+              }
+              case "log": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.log(v));
+                  }
+                  return Math.log(value);
+              }
+              case "log2": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.log2(v));
+                  }
+                  return Math.log2(value);
+              }
+              case "max": {
+                  const a = this.args[0].constEvaluate(context, type);
+                  const b = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value) && Array.isArray(b)) {
+                      return value.map((v, i) => Math.max(v, b[i]));
+                  }
+                  return Math.max(a, b);
+              }
+              case "min": {
+                  const a = this.args[0].constEvaluate(context, type);
+                  const b = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value) && Array.isArray(b)) {
+                      return value.map((v, i) => Math.min(v, b[i]));
+                  }
+                  return Math.min(a, b);
+              }
+              case "mix": {
+                  const a = this.args[0].constEvaluate(context, type);
+                  const b = this.args[1].constEvaluate(context, type);
+                  const c = this.args[2].constEvaluate(context, type);
+                  if (Array.isArray(a) && Array.isArray(b) && Array.isArray(c)) {
+                      return a.map((v, i) => v * (1 - c[i]) + b[i] * c[i]);
+                  }
+                  return a * (1 - c) + b * c;
+              }
+              case "modf":
+                  throw new Error("TODO Modf is not implemented");
+              case "pow": {
+                  const a = this.args[0].constEvaluate(context, type);
+                  const b = this.args[1].constEvaluate(context, type);
+                  if (Array.isArray(a) && Array.isArray(b)) {
+                      return a.map((v, i) => Math.pow(v, b[i]));
+                  }
+                  return Math.pow(a, b);
+              }
+              case "radians": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => (v * Math.PI) / 180);
+                  }
+                  return (value * Math.PI) / 180;
+              }
+              case "round": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.round(v));
+                  }
+                  return Math.round(value);
+              }
+              case "sign": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.sign(v));
+                  }
+                  return Math.sign(value);
+              }
+              case "sin": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.sin(v));
+                  }
+                  return Math.sin(value);
+              }
+              case "sinh": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.sinh(v));
+                  }
+                  return Math.sinh(value);
+              }
+              case "saturate": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.min(Math.max(v, 0), 1));
+                  }
+                  return Math.min(Math.max(value, 0), 1);
+              }
+              case "smoothstep": {
+                  const edge0 = this.args[0].constEvaluate(context, type);
+                  const edge1 = this.args[1].constEvaluate(context, type);
+                  const x = this.args[2].constEvaluate(context, type);
+                  if (Array.isArray(edge0) && Array.isArray(edge1) && Array.isArray(x)) {
+                      return x.map((v, i) => {
+                          const t = Math.min(Math.max((v - edge0[i]) / (edge1[i] - edge0[i]), 0), 1);
+                          return t * t * (3 - 2 * t);
+                      });
+                  }
+                  const _x = x;
+                  const _edge0 = edge0;
+                  const _edge1 = edge1;
+                  const t = Math.min(Math.max((_x - _edge0) / (_edge1 - _edge0), 0), 1);
+                  return t * t * (3 - 2 * t);
+              }
+              case "sqrt": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.sqrt(v));
+                  }
+                  return Math.sqrt(value);
+              }
+              case "step": {
+                  if (type !== undefined) {
+                      type[0] = Type$1.bool;
+                  }
+                  const edge = this.args[0].constEvaluate(context, type);
+                  const x = this.args[1].constEvaluate(context, type);
+                  if (Array.isArray(edge) && Array.isArray(x)) {
+                      return edge.map((v, i) => x[i] < v ? 0 : 1);
+                  }
+                  return x < edge ? 0 : 1;
+              }
+              case "tan": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.tan(v));
+                  }
+                  return Math.tan(value);
+              }
+              case "tanh": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.tanh(v));
+                  }
+                  return Math.tanh(value);
+              }
+              case "trunc": {
+                  const value = this.args[0].constEvaluate(context, type);
+                  if (Array.isArray(value)) {
+                      return value.map((v) => Math.trunc(v));
+                  }
+                  return Math.trunc(value);
+              }
+              default:
+                  throw new Error("Non const function: " + this.name);
+          }
+      }
+      search(callback) {
+          for (const node of this.args) {
+              node.search(callback);
+          }
+          callback(this);
+      }
+  }
+  CallExpr$1.builtinFunctionNames = new Set([
+      "all",
+      "all",
+      "any",
+      "select",
+      "arrayLength",
+      "abs",
+      "acos",
+      "acosh",
+      "asin",
+      "asinh",
+      "atan",
+      "atanh",
+      "atan2",
+      "ceil",
+      "clamp",
+      "cos",
+      "cosh",
+      "countLeadingZeros",
+      "countOneBits",
+      "countTrailingZeros",
+      "cross",
+      "degrees",
+      "determinant",
+      "distance",
+      "dot",
+      "dot4U8Packed",
+      "dot4I8Packed",
+      "exp",
+      "exp2",
+      "extractBits",
+      "faceForward",
+      "firstLeadingBit",
+      "firstTrailingBit",
+      "floor",
+      "fma",
+      "fract",
+      "frexp",
+      "insertBits",
+      "inverseSqrt",
+      "ldexp",
+      "length",
+      "log",
+      "log2",
+      "max",
+      "min",
+      "mix",
+      "modf",
+      "normalize",
+      "pow",
+      "quantizeToF16",
+      "radians",
+      "reflect",
+      "refract",
+      "reverseBits",
+      "round",
+      "saturate",
+      "sign",
+      "sin",
+      "sinh",
+      "smoothStep",
+      "sqrt",
+      "step",
+      "tan",
+      "tanh",
+      "transpose",
+      "trunc",
+      "dpdx",
+      "dpdxCoarse",
+      "dpdxFine",
+      "dpdy",
+      "dpdyCoarse",
+      "dpdyFine",
+      "fwidth",
+      "fwidthCoarse",
+      "fwidthFine",
+      "textureDimensions",
+      "textureGather",
+      "textureGatherCompare",
+      "textureLoad",
+      "textureNumLayers",
+      "textureNumLevels",
+      "textureNumSamples",
+      "textureSample",
+      "textureSampleBias",
+      "textureSampleCompare",
+      "textureSampleCompareLevel",
+      "textureSampleGrad",
+      "textureSampleLevel",
+      "textureSampleBaseClampToEdge",
+      "textureStore",
+      "atomicLoad",
+      "atomicStore",
+      "atomicAdd",
+      "atomicSub",
+      "atomicMax",
+      "atomicMin",
+      "atomicAnd",
+      "atomicOr",
+      "atomicXor",
+      "atomicExchange",
+      "atomicCompareExchangeWeak",
+      "pack4x8snorm",
+      "pack4x8unorm",
+      "pack4xI8",
+      "pack4xU8",
+      "pack4x8Clamp",
+      "pack4xU8Clamp",
+      "pack2x16snorm",
+      "pack2x16unorm",
+      "pack2x16float",
+      "unpack4x8snorm",
+      "unpack4x8unorm",
+      "unpack4xI8",
+      "unpack4xU8",
+      "unpack2x16snorm",
+      "unpack2x16unorm",
+      "unpack2x16float",
+      "storageBarrier",
+      "textureBarrier",
+      "workgroupBarrier",
+      "workgroupUniformLoad",
+      "subgroupAdd",
+      "subgroupExclusiveAdd",
+      "subgroupInclusiveAdd",
+      "subgroupAll",
+      "subgroupAnd",
+      "subgroupAny",
+      "subgroupBallot",
+      "subgroupBroadcast",
+      "subgroupBroadcastFirst",
+      "subgroupElect",
+      "subgroupMax",
+      "subgroupMin",
+      "subgroupMul",
+      "subgroupExclusiveMul",
+      "subgroupInclusiveMul",
+      "subgroupOr",
+      "subgroupShuffle",
+      "subgroupShuffleDown",
+      "subgroupShuffleUp",
+      "subgroupShuffleXor",
+      "subgroupXor",
+      "quadBroadcast",
+      "quadSwapDiagonal",
+      "quadSwapX",
+      "quadSwapY",
+  ]);
+  /**
+   * @class VariableExpr
+   * @extends Expression
+   * @category AST
+   */
+  class VariableExpr$1 extends Expression$1 {
+      constructor(name) {
+          super();
+          this.name = name;
+      }
+      get astNodeType() {
+          return "varExpr";
+      }
+      search(callback) {
+          callback(this);
+          if (this.postfix) {
+              this.postfix.search(callback);
+          }
+      }
+      constEvaluate(context, type) {
+          const constant = context.constants.get(this.name);
+          if (!constant) {
+              throw new Error("Cannot evaluate node");
+          }
+          return constant.constEvaluate(context, type);
+      }
+  }
+  /**
+   * @class ConstExpr
+   * @extends Expression
+   * @category AST
+   */
+  class ConstExpr$1 extends Expression$1 {
+      constructor(name, initializer) {
+          super();
+          this.name = name;
+          this.initializer = initializer;
+      }
+      get astNodeType() {
+          return "constExpr";
+      }
+      constEvaluate(context, type) {
+          var _a, _b;
+          if (this.initializer instanceof CreateExpr$1) {
+              // This is a struct constant
+              const property = (_a = this.postfix) === null || _a === void 0 ? void 0 : _a.constEvaluateString(context);
+              const t = (_b = this.initializer.type) === null || _b === void 0 ? void 0 : _b.name;
+              const struct = context.structs.get(t);
+              const memberIndex = struct === null || struct === void 0 ? void 0 : struct.getMemberIndex(property);
+              if (memberIndex !== undefined && memberIndex != -1) {
+                  const value = this.initializer.args[memberIndex].constEvaluate(context, type);
+                  return value;
+              }
+              else {
+                  return this.initializer.constEvaluate(context, type);
+              }
+          }
+          return this.initializer.constEvaluate(context, type);
+      }
+      search(callback) {
+          this.initializer.search(callback);
+      }
+  }
+  /**
+   * @class LiteralExpr
+   * @extends Expression
+   * @category AST
+   */
+  class LiteralExpr$1 extends Expression$1 {
+      constructor(value, type) {
+          super();
+          this.value = value;
+          this.type = type;
+      }
+      get astNodeType() {
+          return "literalExpr";
+      }
+      constEvaluate(context, type) {
+          if (type !== undefined) {
+              type[0] = this.type;
+          }
+          return this.value;
+      }
+      get scalarValue() { return this.value; }
+      get vectorValue() { return this.value; }
+  }
+  /**
+   * @class BitcastExpr
+   * @extends Expression
+   * @category AST
+   */
+  class BitcastExpr$1 extends Expression$1 {
+      constructor(type, value) {
+          super();
+          this.type = type;
+          this.value = value;
+      }
+      get astNodeType() {
+          return "bitcastExpr";
+      }
+      search(callback) {
+          this.value.search(callback);
+      }
+  }
+  /**
+   * @class GroupingExpr
+   * @extends Expression
+   * @category AST
+   */
+  class GroupingExpr$1 extends Expression$1 {
+      constructor(contents) {
+          super();
+          this.contents = contents;
+      }
+      get astNodeType() {
+          return "groupExpr";
+      }
+      constEvaluate(context, type) {
+          return this.contents[0].constEvaluate(context, type);
+      }
+      search(callback) {
+          this.searchBlock(this.contents, callback);
+      }
+  }
+  /**
+   * @class ArrayIndex
+   * @extends Expression
+   * @category AST
+   */
+  class ArrayIndex$1 extends Expression$1 {
+      constructor(index) {
+          super();
+          this.index = index;
+      }
+      search(callback) {
+          this.index.search(callback);
+      }
+  }
+  /**
+   * @class Operator
+   * @extends Expression
+   * @category AST
+   */
+  class Operator$1 extends Expression$1 {
+      constructor() {
+          super();
+      }
+  }
+  /**
+   * @class UnaryOperator
+   * @extends Operator
+   * @category AST
+   * @property {string} operator +, -, !, ~
+   */
+  class UnaryOperator$1 extends Operator$1 {
+      constructor(operator, right) {
+          super();
+          this.operator = operator;
+          this.right = right;
+      }
+      get astNodeType() {
+          return "unaryOp";
+      }
+      constEvaluate(context, type) {
+          switch (this.operator) {
+              case "+":
+                  return this.right.constEvaluate(context, type);
+              case "-":
+                  return -this.right.constEvaluate(context, type);
+              case "!":
+                  if (type !== undefined) {
+                      type[0] = Type$1.bool;
+                  }
+                  return this.right.constEvaluate(context) ? 0 : 1;
+              case "~":
+                  return ~this.right.constEvaluate(context, type);
+              default:
+                  throw new Error("Unknown unary operator: " + this.operator);
+          }
+      }
+      search(callback) {
+          this.right.search(callback);
+      }
+  }
+  /**
+   * @class BinaryOperator
+   * @extends Operator
+   * @category AST
+   * @property {string} operator +, -, *, /, %, ==, !=, <, >, <=, >=, &&, ||
+   */
+  class BinaryOperator$1 extends Operator$1 {
+      constructor(operator, left, right) {
+          super();
+          this.operator = operator;
+          this.left = left;
+          this.right = right;
+      }
+      get astNodeType() {
+          return "binaryOp";
+      }
+      _getPromotedType(t1, t2) {
+          if (t1.name === t2.name) {
+              return t1;
+          }
+          if (t1.name === "f32" || t2.name === "f32") {
+              return Type$1.f32;
+          }
+          if (t1.name === "u32" || t2.name === "u32") {
+              return Type$1.u32;
+          }
+          return Type$1.i32;
+      }
+      constEvaluate(context, type) {
+          const t1 = [Type$1.i32];
+          const t2 = [Type$1.i32];
+          switch (this.operator) {
+              case "+": {
+                  const v1 = this.left.constEvaluate(context, t1);
+                  const v2 = this.right.constEvaluate(context, t2);
+                  if (Array.isArray(v1) && Array.isArray(v2)) {
+                      return v1.map((v, i) => v + v2[i]);
+                  }
+                  const value = v1 + v2;
+                  if (type !== undefined) {
+                      type[0] = this._getPromotedType(t1[0], t2[0]);
+                      if (type[0] === Type$1.i32 || type[0] === Type$1.u32) {
+                          return Math.floor(value);
+                      }
+                  }
+                  return value;
+              }
+              case "-": {
+                  const v1 = this.left.constEvaluate(context, t1);
+                  const v2 = this.right.constEvaluate(context, t2);
+                  if (Array.isArray(v1) && Array.isArray(v2)) {
+                      return v1.map((v, i) => v - v2[i]);
+                  }
+                  const value = v1 - v2;
+                  if (type !== undefined) {
+                      type[0] = this._getPromotedType(t1[0], t2[0]);
+                      if (type[0] === Type$1.i32 || type[0] === Type$1.u32) {
+                          return Math.floor(value);
+                      }
+                  }
+                  return value;
+              }
+              case "*": {
+                  const v1 = this.left.constEvaluate(context, t1);
+                  const v2 = this.right.constEvaluate(context, t2);
+                  if (Array.isArray(v1) && Array.isArray(v2)) {
+                      return v1.map((v, i) => v * v2[i]);
+                  }
+                  const value = v1 * v2;
+                  if (type !== undefined) {
+                      type[0] = this._getPromotedType(t1[0], t2[0]);
+                      if (type[0] === Type$1.i32 || type[0] === Type$1.u32) {
+                          return Math.floor(value);
+                      }
+                  }
+                  return value;
+              }
+              case "/": {
+                  const v1 = this.left.constEvaluate(context, t1);
+                  const v2 = this.right.constEvaluate(context, t2);
+                  if (Array.isArray(v1) && Array.isArray(v2)) {
+                      return v1.map((v, i) => v / v2[i]);
+                  }
+                  const value = v1 / v2;
+                  if (type !== undefined) {
+                      type[0] = this._getPromotedType(t1[0], t2[0]);
+                      if (type[0] === Type$1.i32 || type[0] === Type$1.u32) {
+                          return Math.floor(value);
+                      }
+                  }
+                  return value;
+              }
+              case "%": {
+                  const v1 = this.left.constEvaluate(context, t1);
+                  const v2 = this.right.constEvaluate(context, t2);
+                  if (Array.isArray(v1) && Array.isArray(v2)) {
+                      return v1.map((v, i) => v % v2[i]);
+                  }
+                  const value = v1 % v2;
+                  if (type !== undefined) {
+                      type[0] = this._getPromotedType(t1[0], t2[0]);
+                      if (type[0] === Type$1.i32 || type[0] === Type$1.u32) {
+                          return Math.floor(value);
+                      }
+                  }
+                  return value;
+              }
+              case "<":
+                  if (type !== undefined) {
+                      type[0] = Type$1.bool;
+                  }
+                  return this.left.constEvaluate(context) < this.right.constEvaluate(context)
+                      ? 1
+                      : 0;
+              case ">":
+                  if (type !== undefined) {
+                      type[0] = Type$1.bool;
+                  }
+                  return this.left.constEvaluate(context) > this.right.constEvaluate(context)
+                      ? 1
+                      : 0;
+              case "==":
+                  if (type !== undefined) {
+                      type[0] = Type$1.bool;
+                  }
+                  return this.left.constEvaluate(context) == this.right.constEvaluate(context)
+                      ? 1
+                      : 0;
+              case "!=":
+                  if (type !== undefined) {
+                      type[0] = Type$1.bool;
+                  }
+                  return this.left.constEvaluate(context) != this.right.constEvaluate(context)
+                      ? 1
+                      : 0;
+              case "<=":
+                  if (type !== undefined) {
+                      type[0] = Type$1.bool;
+                  }
+                  return this.left.constEvaluate(context) <= this.right.constEvaluate(context)
+                      ? 1
+                      : 0;
+              case ">=":
+                  if (type !== undefined) {
+                      type[0] = Type$1.bool;
+                  }
+                  return this.left.constEvaluate(context) >= this.right.constEvaluate(context)
+                      ? 1
+                      : 0;
+              case "&&":
+                  if (type !== undefined) {
+                      type[0] = Type$1.bool;
+                  }
+                  return this.left.constEvaluate(context) && this.right.constEvaluate(context)
+                      ? 1
+                      : 0;
+              case "||":
+                  if (type !== undefined) {
+                      type[0] = Type$1.bool;
+                  }
+                  return this.left.constEvaluate(context) || this.right.constEvaluate(context)
+                      ? 1
+                      : 0;
+              default:
+                  throw new Error(`Unknown operator ${this.operator}`);
+          }
+      }
+      search(callback) {
+          this.left.search(callback);
+          this.right.search(callback);
+      }
+  }
+  /**
+   * @class SwitchCase
+   * @extends Node
+   * @category AST
+   */
+  class SwitchCase$1 extends Node$1 {
+      constructor() {
+          super();
+      }
+  }
+  /**
+   * @class Case
+   * @extends SwitchCase
+   * @category AST
+   */
+  class Case$1 extends SwitchCase$1 {
+      constructor(selector, body) {
+          super();
+          this.selector = selector;
+          this.body = body;
+      }
+      get astNodeType() {
+          return "case";
+      }
+      search(callback) {
+          this.searchBlock(this.body, callback);
+      }
+  }
+  /**
+   * @class Default
+   * @extends SwitchCase
+   * @category AST
+   */
+  class Default$1 extends SwitchCase$1 {
+      constructor(body) {
+          super();
+          this.body = body;
+      }
+      get astNodeType() {
+          return "default";
+      }
+      search(callback) {
+          this.searchBlock(this.body, callback);
+      }
+  }
+  /**
+   * @class Argument
+   * @extends Node
+   * @category AST
+   */
+  class Argument$1 extends Node$1 {
+      constructor(name, type, attributes) {
+          super();
+          this.name = name;
+          this.type = type;
+          this.attributes = attributes;
+      }
+      get astNodeType() {
+          return "argument";
+      }
+  }
+  /**
+   * @class ElseIf
+   * @extends Node
+   * @category AST
+   */
+  class ElseIf$1 extends Node$1 {
+      constructor(condition, body) {
+          super();
+          this.condition = condition;
+          this.body = body;
+      }
+      get astNodeType() {
+          return "elseif";
+      }
+      search(callback) {
+          this.condition.search(callback);
+          this.searchBlock(this.body, callback);
+      }
+  }
+  /**
+   * @class Member
+   * @extends Node
+   * @category AST
+   */
+  class Member$1 extends Node$1 {
+      constructor(name, type, attributes) {
+          super();
+          this.name = name;
+          this.type = type;
+          this.attributes = attributes;
+      }
+      get astNodeType() {
+          return "member";
+      }
+  }
+  /**
+   * @class Attribute
+   * @extends Node
+   * @category AST
+   */
+  class Attribute$1 extends Node$1 {
+      constructor(name, value) {
+          super();
+          this.name = name;
+          this.value = value;
+      }
+      get astNodeType() {
+          return "attribute";
+      }
+  }
+
+  var _a$2;
+  var TokenClass$1;
+  (function (TokenClass) {
+      TokenClass[TokenClass["token"] = 0] = "token";
+      TokenClass[TokenClass["keyword"] = 1] = "keyword";
+      TokenClass[TokenClass["reserved"] = 2] = "reserved";
+  })(TokenClass$1 || (TokenClass$1 = {}));
+  class TokenType$1 {
+      constructor(name, type, rule) {
+          this.name = name;
+          this.type = type;
+          this.rule = rule;
+      }
+      toString() {
+          return this.name;
+      }
+  }
+  /// Catalog of defined token types, keywords, and reserved words.
+  class TokenTypes$1 {
+  }
+  _a$2 = TokenTypes$1;
+  TokenTypes$1.none = new TokenType$1("", TokenClass$1.reserved, "");
+  TokenTypes$1.eof = new TokenType$1("EOF", TokenClass$1.token, "");
+  TokenTypes$1.reserved = {
+      asm: new TokenType$1("asm", TokenClass$1.reserved, "asm"),
+      bf16: new TokenType$1("bf16", TokenClass$1.reserved, "bf16"),
+      do: new TokenType$1("do", TokenClass$1.reserved, "do"),
+      enum: new TokenType$1("enum", TokenClass$1.reserved, "enum"),
+      f16: new TokenType$1("f16", TokenClass$1.reserved, "f16"),
+      f64: new TokenType$1("f64", TokenClass$1.reserved, "f64"),
+      handle: new TokenType$1("handle", TokenClass$1.reserved, "handle"),
+      i8: new TokenType$1("i8", TokenClass$1.reserved, "i8"),
+      i16: new TokenType$1("i16", TokenClass$1.reserved, "i16"),
+      i64: new TokenType$1("i64", TokenClass$1.reserved, "i64"),
+      mat: new TokenType$1("mat", TokenClass$1.reserved, "mat"),
+      premerge: new TokenType$1("premerge", TokenClass$1.reserved, "premerge"),
+      regardless: new TokenType$1("regardless", TokenClass$1.reserved, "regardless"),
+      typedef: new TokenType$1("typedef", TokenClass$1.reserved, "typedef"),
+      u8: new TokenType$1("u8", TokenClass$1.reserved, "u8"),
+      u16: new TokenType$1("u16", TokenClass$1.reserved, "u16"),
+      u64: new TokenType$1("u64", TokenClass$1.reserved, "u64"),
+      unless: new TokenType$1("unless", TokenClass$1.reserved, "unless"),
+      using: new TokenType$1("using", TokenClass$1.reserved, "using"),
+      vec: new TokenType$1("vec", TokenClass$1.reserved, "vec"),
+      void: new TokenType$1("void", TokenClass$1.reserved, "void"),
+  };
+  TokenTypes$1.keywords = {
+      array: new TokenType$1("array", TokenClass$1.keyword, "array"),
+      atomic: new TokenType$1("atomic", TokenClass$1.keyword, "atomic"),
+      bool: new TokenType$1("bool", TokenClass$1.keyword, "bool"),
+      f32: new TokenType$1("f32", TokenClass$1.keyword, "f32"),
+      i32: new TokenType$1("i32", TokenClass$1.keyword, "i32"),
+      mat2x2: new TokenType$1("mat2x2", TokenClass$1.keyword, "mat2x2"),
+      mat2x3: new TokenType$1("mat2x3", TokenClass$1.keyword, "mat2x3"),
+      mat2x4: new TokenType$1("mat2x4", TokenClass$1.keyword, "mat2x4"),
+      mat3x2: new TokenType$1("mat3x2", TokenClass$1.keyword, "mat3x2"),
+      mat3x3: new TokenType$1("mat3x3", TokenClass$1.keyword, "mat3x3"),
+      mat3x4: new TokenType$1("mat3x4", TokenClass$1.keyword, "mat3x4"),
+      mat4x2: new TokenType$1("mat4x2", TokenClass$1.keyword, "mat4x2"),
+      mat4x3: new TokenType$1("mat4x3", TokenClass$1.keyword, "mat4x3"),
+      mat4x4: new TokenType$1("mat4x4", TokenClass$1.keyword, "mat4x4"),
+      ptr: new TokenType$1("ptr", TokenClass$1.keyword, "ptr"),
+      sampler: new TokenType$1("sampler", TokenClass$1.keyword, "sampler"),
+      sampler_comparison: new TokenType$1("sampler_comparison", TokenClass$1.keyword, "sampler_comparison"),
+      struct: new TokenType$1("struct", TokenClass$1.keyword, "struct"),
+      texture_1d: new TokenType$1("texture_1d", TokenClass$1.keyword, "texture_1d"),
+      texture_2d: new TokenType$1("texture_2d", TokenClass$1.keyword, "texture_2d"),
+      texture_2d_array: new TokenType$1("texture_2d_array", TokenClass$1.keyword, "texture_2d_array"),
+      texture_3d: new TokenType$1("texture_3d", TokenClass$1.keyword, "texture_3d"),
+      texture_cube: new TokenType$1("texture_cube", TokenClass$1.keyword, "texture_cube"),
+      texture_cube_array: new TokenType$1("texture_cube_array", TokenClass$1.keyword, "texture_cube_array"),
+      texture_multisampled_2d: new TokenType$1("texture_multisampled_2d", TokenClass$1.keyword, "texture_multisampled_2d"),
+      texture_storage_1d: new TokenType$1("texture_storage_1d", TokenClass$1.keyword, "texture_storage_1d"),
+      texture_storage_2d: new TokenType$1("texture_storage_2d", TokenClass$1.keyword, "texture_storage_2d"),
+      texture_storage_2d_array: new TokenType$1("texture_storage_2d_array", TokenClass$1.keyword, "texture_storage_2d_array"),
+      texture_storage_3d: new TokenType$1("texture_storage_3d", TokenClass$1.keyword, "texture_storage_3d"),
+      texture_depth_2d: new TokenType$1("texture_depth_2d", TokenClass$1.keyword, "texture_depth_2d"),
+      texture_depth_2d_array: new TokenType$1("texture_depth_2d_array", TokenClass$1.keyword, "texture_depth_2d_array"),
+      texture_depth_cube: new TokenType$1("texture_depth_cube", TokenClass$1.keyword, "texture_depth_cube"),
+      texture_depth_cube_array: new TokenType$1("texture_depth_cube_array", TokenClass$1.keyword, "texture_depth_cube_array"),
+      texture_depth_multisampled_2d: new TokenType$1("texture_depth_multisampled_2d", TokenClass$1.keyword, "texture_depth_multisampled_2d"),
+      texture_external: new TokenType$1("texture_external", TokenClass$1.keyword, "texture_external"),
+      u32: new TokenType$1("u32", TokenClass$1.keyword, "u32"),
+      vec2: new TokenType$1("vec2", TokenClass$1.keyword, "vec2"),
+      vec3: new TokenType$1("vec3", TokenClass$1.keyword, "vec3"),
+      vec4: new TokenType$1("vec4", TokenClass$1.keyword, "vec4"),
+      bitcast: new TokenType$1("bitcast", TokenClass$1.keyword, "bitcast"),
+      block: new TokenType$1("block", TokenClass$1.keyword, "block"),
+      break: new TokenType$1("break", TokenClass$1.keyword, "break"),
+      case: new TokenType$1("case", TokenClass$1.keyword, "case"),
+      continue: new TokenType$1("continue", TokenClass$1.keyword, "continue"),
+      continuing: new TokenType$1("continuing", TokenClass$1.keyword, "continuing"),
+      default: new TokenType$1("default", TokenClass$1.keyword, "default"),
+      diagnostic: new TokenType$1("diagnostic", TokenClass$1.keyword, "diagnostic"),
+      discard: new TokenType$1("discard", TokenClass$1.keyword, "discard"),
+      else: new TokenType$1("else", TokenClass$1.keyword, "else"),
+      enable: new TokenType$1("enable", TokenClass$1.keyword, "enable"),
+      fallthrough: new TokenType$1("fallthrough", TokenClass$1.keyword, "fallthrough"),
+      false: new TokenType$1("false", TokenClass$1.keyword, "false"),
+      fn: new TokenType$1("fn", TokenClass$1.keyword, "fn"),
+      for: new TokenType$1("for", TokenClass$1.keyword, "for"),
+      function: new TokenType$1("function", TokenClass$1.keyword, "function"),
+      if: new TokenType$1("if", TokenClass$1.keyword, "if"),
+      let: new TokenType$1("let", TokenClass$1.keyword, "let"),
+      const: new TokenType$1("const", TokenClass$1.keyword, "const"),
+      loop: new TokenType$1("loop", TokenClass$1.keyword, "loop"),
+      while: new TokenType$1("while", TokenClass$1.keyword, "while"),
+      private: new TokenType$1("private", TokenClass$1.keyword, "private"),
+      read: new TokenType$1("read", TokenClass$1.keyword, "read"),
+      read_write: new TokenType$1("read_write", TokenClass$1.keyword, "read_write"),
+      return: new TokenType$1("return", TokenClass$1.keyword, "return"),
+      requires: new TokenType$1("requires", TokenClass$1.keyword, "requires"),
+      storage: new TokenType$1("storage", TokenClass$1.keyword, "storage"),
+      switch: new TokenType$1("switch", TokenClass$1.keyword, "switch"),
+      true: new TokenType$1("true", TokenClass$1.keyword, "true"),
+      alias: new TokenType$1("alias", TokenClass$1.keyword, "alias"),
+      type: new TokenType$1("type", TokenClass$1.keyword, "type"),
+      uniform: new TokenType$1("uniform", TokenClass$1.keyword, "uniform"),
+      var: new TokenType$1("var", TokenClass$1.keyword, "var"),
+      override: new TokenType$1("override", TokenClass$1.keyword, "override"),
+      workgroup: new TokenType$1("workgroup", TokenClass$1.keyword, "workgroup"),
+      write: new TokenType$1("write", TokenClass$1.keyword, "write"),
+      r8unorm: new TokenType$1("r8unorm", TokenClass$1.keyword, "r8unorm"),
+      r8snorm: new TokenType$1("r8snorm", TokenClass$1.keyword, "r8snorm"),
+      r8uint: new TokenType$1("r8uint", TokenClass$1.keyword, "r8uint"),
+      r8sint: new TokenType$1("r8sint", TokenClass$1.keyword, "r8sint"),
+      r16uint: new TokenType$1("r16uint", TokenClass$1.keyword, "r16uint"),
+      r16sint: new TokenType$1("r16sint", TokenClass$1.keyword, "r16sint"),
+      r16float: new TokenType$1("r16float", TokenClass$1.keyword, "r16float"),
+      rg8unorm: new TokenType$1("rg8unorm", TokenClass$1.keyword, "rg8unorm"),
+      rg8snorm: new TokenType$1("rg8snorm", TokenClass$1.keyword, "rg8snorm"),
+      rg8uint: new TokenType$1("rg8uint", TokenClass$1.keyword, "rg8uint"),
+      rg8sint: new TokenType$1("rg8sint", TokenClass$1.keyword, "rg8sint"),
+      r32uint: new TokenType$1("r32uint", TokenClass$1.keyword, "r32uint"),
+      r32sint: new TokenType$1("r32sint", TokenClass$1.keyword, "r32sint"),
+      r32float: new TokenType$1("r32float", TokenClass$1.keyword, "r32float"),
+      rg16uint: new TokenType$1("rg16uint", TokenClass$1.keyword, "rg16uint"),
+      rg16sint: new TokenType$1("rg16sint", TokenClass$1.keyword, "rg16sint"),
+      rg16float: new TokenType$1("rg16float", TokenClass$1.keyword, "rg16float"),
+      rgba8unorm: new TokenType$1("rgba8unorm", TokenClass$1.keyword, "rgba8unorm"),
+      rgba8unorm_srgb: new TokenType$1("rgba8unorm_srgb", TokenClass$1.keyword, "rgba8unorm_srgb"),
+      rgba8snorm: new TokenType$1("rgba8snorm", TokenClass$1.keyword, "rgba8snorm"),
+      rgba8uint: new TokenType$1("rgba8uint", TokenClass$1.keyword, "rgba8uint"),
+      rgba8sint: new TokenType$1("rgba8sint", TokenClass$1.keyword, "rgba8sint"),
+      bgra8unorm: new TokenType$1("bgra8unorm", TokenClass$1.keyword, "bgra8unorm"),
+      bgra8unorm_srgb: new TokenType$1("bgra8unorm_srgb", TokenClass$1.keyword, "bgra8unorm_srgb"),
+      rgb10a2unorm: new TokenType$1("rgb10a2unorm", TokenClass$1.keyword, "rgb10a2unorm"),
+      rg11b10float: new TokenType$1("rg11b10float", TokenClass$1.keyword, "rg11b10float"),
+      rg32uint: new TokenType$1("rg32uint", TokenClass$1.keyword, "rg32uint"),
+      rg32sint: new TokenType$1("rg32sint", TokenClass$1.keyword, "rg32sint"),
+      rg32float: new TokenType$1("rg32float", TokenClass$1.keyword, "rg32float"),
+      rgba16uint: new TokenType$1("rgba16uint", TokenClass$1.keyword, "rgba16uint"),
+      rgba16sint: new TokenType$1("rgba16sint", TokenClass$1.keyword, "rgba16sint"),
+      rgba16float: new TokenType$1("rgba16float", TokenClass$1.keyword, "rgba16float"),
+      rgba32uint: new TokenType$1("rgba32uint", TokenClass$1.keyword, "rgba32uint"),
+      rgba32sint: new TokenType$1("rgba32sint", TokenClass$1.keyword, "rgba32sint"),
+      rgba32float: new TokenType$1("rgba32float", TokenClass$1.keyword, "rgba32float"),
+      static_assert: new TokenType$1("static_assert", TokenClass$1.keyword, "static_assert"),
+      // WGSL grammar has a few keywords that have different token names than the strings they
+      // represent. Aliasing them here.
+      /*int32: new TokenType("i32", TokenClass.keyword, "i32"),
+          uint32: new TokenType("u32", TokenClass.keyword, "u32"),
+          float32: new TokenType("f32", TokenClass.keyword, "f32"),
+          pointer: new TokenType("ptr", TokenClass.keyword, "ptr"),*/
+  };
+  TokenTypes$1.tokens = {
+      decimal_float_literal: new TokenType$1("decimal_float_literal", TokenClass$1.token, /((-?[0-9]*\.[0-9]+|-?[0-9]+\.[0-9]*)((e|E)(\+|-)?[0-9]+)?[fh]?)|(-?[0-9]+(e|E)(\+|-)?[0-9]+[fh]?)|(-?[0-9]+[fh])/),
+      hex_float_literal: new TokenType$1("hex_float_literal", TokenClass$1.token, /-?0x((([0-9a-fA-F]*\.[0-9a-fA-F]+|[0-9a-fA-F]+\.[0-9a-fA-F]*)((p|P)(\+|-)?[0-9]+[fh]?)?)|([0-9a-fA-F]+(p|P)(\+|-)?[0-9]+[fh]?))/),
+      int_literal: new TokenType$1("int_literal", TokenClass$1.token, /-?0x[0-9a-fA-F]+|0i?|-?[1-9][0-9]*i?/),
+      uint_literal: new TokenType$1("uint_literal", TokenClass$1.token, /0x[0-9a-fA-F]+u|0u|[1-9][0-9]*u/),
+      ident: new TokenType$1("ident", TokenClass$1.token, /[_a-zA-Z][0-9a-zA-Z_]*/),
+      and: new TokenType$1("and", TokenClass$1.token, "&"),
+      and_and: new TokenType$1("and_and", TokenClass$1.token, "&&"),
+      arrow: new TokenType$1("arrow ", TokenClass$1.token, "->"),
+      attr: new TokenType$1("attr", TokenClass$1.token, "@"),
+      forward_slash: new TokenType$1("forward_slash", TokenClass$1.token, "/"),
+      bang: new TokenType$1("bang", TokenClass$1.token, "!"),
+      bracket_left: new TokenType$1("bracket_left", TokenClass$1.token, "["),
+      bracket_right: new TokenType$1("bracket_right", TokenClass$1.token, "]"),
+      brace_left: new TokenType$1("brace_left", TokenClass$1.token, "{"),
+      brace_right: new TokenType$1("brace_right", TokenClass$1.token, "}"),
+      colon: new TokenType$1("colon", TokenClass$1.token, ":"),
+      comma: new TokenType$1("comma", TokenClass$1.token, ","),
+      equal: new TokenType$1("equal", TokenClass$1.token, "="),
+      equal_equal: new TokenType$1("equal_equal", TokenClass$1.token, "=="),
+      not_equal: new TokenType$1("not_equal", TokenClass$1.token, "!="),
+      greater_than: new TokenType$1("greater_than", TokenClass$1.token, ">"),
+      greater_than_equal: new TokenType$1("greater_than_equal", TokenClass$1.token, ">="),
+      shift_right: new TokenType$1("shift_right", TokenClass$1.token, ">>"),
+      less_than: new TokenType$1("less_than", TokenClass$1.token, "<"),
+      less_than_equal: new TokenType$1("less_than_equal", TokenClass$1.token, "<="),
+      shift_left: new TokenType$1("shift_left", TokenClass$1.token, "<<"),
+      modulo: new TokenType$1("modulo", TokenClass$1.token, "%"),
+      minus: new TokenType$1("minus", TokenClass$1.token, "-"),
+      minus_minus: new TokenType$1("minus_minus", TokenClass$1.token, "--"),
+      period: new TokenType$1("period", TokenClass$1.token, "."),
+      plus: new TokenType$1("plus", TokenClass$1.token, "+"),
+      plus_plus: new TokenType$1("plus_plus", TokenClass$1.token, "++"),
+      or: new TokenType$1("or", TokenClass$1.token, "|"),
+      or_or: new TokenType$1("or_or", TokenClass$1.token, "||"),
+      paren_left: new TokenType$1("paren_left", TokenClass$1.token, "("),
+      paren_right: new TokenType$1("paren_right", TokenClass$1.token, ")"),
+      semicolon: new TokenType$1("semicolon", TokenClass$1.token, ";"),
+      star: new TokenType$1("star", TokenClass$1.token, "*"),
+      tilde: new TokenType$1("tilde", TokenClass$1.token, "~"),
+      underscore: new TokenType$1("underscore", TokenClass$1.token, "_"),
+      xor: new TokenType$1("xor", TokenClass$1.token, "^"),
+      plus_equal: new TokenType$1("plus_equal", TokenClass$1.token, "+="),
+      minus_equal: new TokenType$1("minus_equal", TokenClass$1.token, "-="),
+      times_equal: new TokenType$1("times_equal", TokenClass$1.token, "*="),
+      division_equal: new TokenType$1("division_equal", TokenClass$1.token, "/="),
+      modulo_equal: new TokenType$1("modulo_equal", TokenClass$1.token, "%="),
+      and_equal: new TokenType$1("and_equal", TokenClass$1.token, "&="),
+      or_equal: new TokenType$1("or_equal", TokenClass$1.token, "|="),
+      xor_equal: new TokenType$1("xor_equal", TokenClass$1.token, "^="),
+      shift_right_equal: new TokenType$1("shift_right_equal", TokenClass$1.token, ">>="),
+      shift_left_equal: new TokenType$1("shift_left_equal", TokenClass$1.token, "<<="),
+  };
+  TokenTypes$1.simpleTokens = {
+      "@": _a$2.tokens.attr,
+      "{": _a$2.tokens.brace_left,
+      "}": _a$2.tokens.brace_right,
+      ":": _a$2.tokens.colon,
+      ",": _a$2.tokens.comma,
+      "(": _a$2.tokens.paren_left,
+      ")": _a$2.tokens.paren_right,
+      ";": _a$2.tokens.semicolon,
+  };
+  TokenTypes$1.literalTokens = {
+      "&": _a$2.tokens.and,
+      "&&": _a$2.tokens.and_and,
+      "->": _a$2.tokens.arrow,
+      "/": _a$2.tokens.forward_slash,
+      "!": _a$2.tokens.bang,
+      "[": _a$2.tokens.bracket_left,
+      "]": _a$2.tokens.bracket_right,
+      "=": _a$2.tokens.equal,
+      "==": _a$2.tokens.equal_equal,
+      "!=": _a$2.tokens.not_equal,
+      ">": _a$2.tokens.greater_than,
+      ">=": _a$2.tokens.greater_than_equal,
+      ">>": _a$2.tokens.shift_right,
+      "<": _a$2.tokens.less_than,
+      "<=": _a$2.tokens.less_than_equal,
+      "<<": _a$2.tokens.shift_left,
+      "%": _a$2.tokens.modulo,
+      "-": _a$2.tokens.minus,
+      "--": _a$2.tokens.minus_minus,
+      ".": _a$2.tokens.period,
+      "+": _a$2.tokens.plus,
+      "++": _a$2.tokens.plus_plus,
+      "|": _a$2.tokens.or,
+      "||": _a$2.tokens.or_or,
+      "*": _a$2.tokens.star,
+      "~": _a$2.tokens.tilde,
+      "_": _a$2.tokens.underscore,
+      "^": _a$2.tokens.xor,
+      "+=": _a$2.tokens.plus_equal,
+      "-=": _a$2.tokens.minus_equal,
+      "*=": _a$2.tokens.times_equal,
+      "/=": _a$2.tokens.division_equal,
+      "%=": _a$2.tokens.modulo_equal,
+      "&=": _a$2.tokens.and_equal,
+      "|=": _a$2.tokens.or_equal,
+      "^=": _a$2.tokens.xor_equal,
+      ">>=": _a$2.tokens.shift_right_equal,
+      "<<=": _a$2.tokens.shift_left_equal,
+  };
+  TokenTypes$1.regexTokens = {
+      decimal_float_literal: _a$2.tokens.decimal_float_literal,
+      hex_float_literal: _a$2.tokens.hex_float_literal,
+      int_literal: _a$2.tokens.int_literal,
+      uint_literal: _a$2.tokens.uint_literal,
+      ident: _a$2.tokens.ident,
+  };
+  TokenTypes$1.storage_class = [
+      _a$2.keywords.function,
+      _a$2.keywords.private,
+      _a$2.keywords.workgroup,
+      _a$2.keywords.uniform,
+      _a$2.keywords.storage,
+  ];
+  TokenTypes$1.access_mode = [
+      _a$2.keywords.read,
+      _a$2.keywords.write,
+      _a$2.keywords.read_write,
+  ];
+  TokenTypes$1.sampler_type = [
+      _a$2.keywords.sampler,
+      _a$2.keywords.sampler_comparison,
+  ];
+  TokenTypes$1.sampled_texture_type = [
+      _a$2.keywords.texture_1d,
+      _a$2.keywords.texture_2d,
+      _a$2.keywords.texture_2d_array,
+      _a$2.keywords.texture_3d,
+      _a$2.keywords.texture_cube,
+      _a$2.keywords.texture_cube_array,
+  ];
+  TokenTypes$1.multisampled_texture_type = [
+      _a$2.keywords.texture_multisampled_2d,
+  ];
+  TokenTypes$1.storage_texture_type = [
+      _a$2.keywords.texture_storage_1d,
+      _a$2.keywords.texture_storage_2d,
+      _a$2.keywords.texture_storage_2d_array,
+      _a$2.keywords.texture_storage_3d,
+  ];
+  TokenTypes$1.depth_texture_type = [
+      _a$2.keywords.texture_depth_2d,
+      _a$2.keywords.texture_depth_2d_array,
+      _a$2.keywords.texture_depth_cube,
+      _a$2.keywords.texture_depth_cube_array,
+      _a$2.keywords.texture_depth_multisampled_2d,
+  ];
+  TokenTypes$1.texture_external_type = [_a$2.keywords.texture_external];
+  TokenTypes$1.any_texture_type = [
+      ..._a$2.sampled_texture_type,
+      ..._a$2.multisampled_texture_type,
+      ..._a$2.storage_texture_type,
+      ..._a$2.depth_texture_type,
+      ..._a$2.texture_external_type,
+  ];
+  TokenTypes$1.texel_format = [
+      _a$2.keywords.r8unorm,
+      _a$2.keywords.r8snorm,
+      _a$2.keywords.r8uint,
+      _a$2.keywords.r8sint,
+      _a$2.keywords.r16uint,
+      _a$2.keywords.r16sint,
+      _a$2.keywords.r16float,
+      _a$2.keywords.rg8unorm,
+      _a$2.keywords.rg8snorm,
+      _a$2.keywords.rg8uint,
+      _a$2.keywords.rg8sint,
+      _a$2.keywords.r32uint,
+      _a$2.keywords.r32sint,
+      _a$2.keywords.r32float,
+      _a$2.keywords.rg16uint,
+      _a$2.keywords.rg16sint,
+      _a$2.keywords.rg16float,
+      _a$2.keywords.rgba8unorm,
+      _a$2.keywords.rgba8unorm_srgb,
+      _a$2.keywords.rgba8snorm,
+      _a$2.keywords.rgba8uint,
+      _a$2.keywords.rgba8sint,
+      _a$2.keywords.bgra8unorm,
+      _a$2.keywords.bgra8unorm_srgb,
+      _a$2.keywords.rgb10a2unorm,
+      _a$2.keywords.rg11b10float,
+      _a$2.keywords.rg32uint,
+      _a$2.keywords.rg32sint,
+      _a$2.keywords.rg32float,
+      _a$2.keywords.rgba16uint,
+      _a$2.keywords.rgba16sint,
+      _a$2.keywords.rgba16float,
+      _a$2.keywords.rgba32uint,
+      _a$2.keywords.rgba32sint,
+      _a$2.keywords.rgba32float,
+  ];
+  TokenTypes$1.const_literal = [
+      _a$2.tokens.int_literal,
+      _a$2.tokens.uint_literal,
+      _a$2.tokens.decimal_float_literal,
+      _a$2.tokens.hex_float_literal,
+      _a$2.keywords.true,
+      _a$2.keywords.false,
+  ];
+  TokenTypes$1.literal_or_ident = [
+      _a$2.tokens.ident,
+      _a$2.tokens.int_literal,
+      _a$2.tokens.uint_literal,
+      _a$2.tokens.decimal_float_literal,
+      _a$2.tokens.hex_float_literal,
+  ];
+  TokenTypes$1.element_count_expression = [
+      _a$2.tokens.int_literal,
+      _a$2.tokens.uint_literal,
+      _a$2.tokens.ident,
+  ];
+  TokenTypes$1.template_types = [
+      _a$2.keywords.vec2,
+      _a$2.keywords.vec3,
+      _a$2.keywords.vec4,
+      _a$2.keywords.mat2x2,
+      _a$2.keywords.mat2x3,
+      _a$2.keywords.mat2x4,
+      _a$2.keywords.mat3x2,
+      _a$2.keywords.mat3x3,
+      _a$2.keywords.mat3x4,
+      _a$2.keywords.mat4x2,
+      _a$2.keywords.mat4x3,
+      _a$2.keywords.mat4x4,
+      _a$2.keywords.atomic,
+      _a$2.keywords.bitcast,
+      ..._a$2.any_texture_type,
+  ];
+  // The grammar calls out 'block', but attribute grammar is defined to use a 'ident'.
+  // The attribute grammar should be ident | block.
+  TokenTypes$1.attribute_name = [_a$2.tokens.ident, _a$2.keywords.block, _a$2.keywords.diagnostic];
+  TokenTypes$1.assignment_operators = [
+      _a$2.tokens.equal,
+      _a$2.tokens.plus_equal,
+      _a$2.tokens.minus_equal,
+      _a$2.tokens.times_equal,
+      _a$2.tokens.division_equal,
+      _a$2.tokens.modulo_equal,
+      _a$2.tokens.and_equal,
+      _a$2.tokens.or_equal,
+      _a$2.tokens.xor_equal,
+      _a$2.tokens.shift_right_equal,
+      _a$2.tokens.shift_left_equal,
+  ];
+  TokenTypes$1.increment_operators = [
+      _a$2.tokens.plus_plus,
+      _a$2.tokens.minus_minus,
+  ];
+  /// A token parsed by the WgslScanner.
+  class Token$1 {
+      constructor(type, lexeme, line) {
+          this.type = type;
+          this.lexeme = lexeme;
+          this.line = line;
+      }
+      toString() {
+          return this.lexeme;
+      }
+      isTemplateType() {
+          return TokenTypes$1.template_types.indexOf(this.type) != -1;
+      }
+      isArrayType() {
+          return this.type == TokenTypes$1.keywords.array;
+      }
+      isArrayOrTemplateType() {
+          return this.isArrayType() || this.isTemplateType();
+      }
+  }
+  /// Lexical scanner for the WGSL language. This takes an input source text and generates a list
+  /// of Token objects, which can then be fed into the WgslParser to generate an AST.
+  class WgslScanner$1 {
+      constructor(source) {
+          this._tokens = [];
+          this._start = 0;
+          this._current = 0;
+          this._line = 1;
+          this._source = source !== null && source !== void 0 ? source : "";
+      }
+      /// Scan all tokens from the source.
+      scanTokens() {
+          while (!this._isAtEnd()) {
+              this._start = this._current;
+              if (!this.scanToken()) {
+                  throw `Invalid syntax at line ${this._line}`;
+              }
+          }
+          this._tokens.push(new Token$1(TokenTypes$1.eof, "", this._line));
+          return this._tokens;
+      }
+      /// Scan a single token from the source.
+      scanToken() {
+          // Find the longest consecutive set of characters that match a rule.
+          let lexeme = this._advance();
+          // Skip line-feed, adding to the line counter.
+          if (lexeme == "\n") {
+              this._line++;
+              return true;
+          }
+          // Skip whitespace
+          if (this._isWhitespace(lexeme)) {
+              return true;
+          }
+          if (lexeme == "/") {
+              // If it's a // comment, skip everything until the next line-feed.
+              if (this._peekAhead() == "/") {
+                  while (lexeme != "\n") {
+                      if (this._isAtEnd()) {
+                          return true;
+                      }
+                      lexeme = this._advance();
+                  }
+                  // skip the linefeed
+                  this._line++;
+                  return true;
+              }
+              else if (this._peekAhead() == "*") {
+                  // If it's a / * block comment, skip everything until the matching * /,
+                  // allowing for nested block comments.
+                  this._advance();
+                  let commentLevel = 1;
+                  while (commentLevel > 0) {
+                      if (this._isAtEnd()) {
+                          return true;
+                      }
+                      lexeme = this._advance();
+                      if (lexeme == "\n") {
+                          this._line++;
+                      }
+                      else if (lexeme == "*") {
+                          if (this._peekAhead() == "/") {
+                              this._advance();
+                              commentLevel--;
+                              if (commentLevel == 0) {
+                                  return true;
+                              }
+                          }
+                      }
+                      else if (lexeme == "/") {
+                          if (this._peekAhead() == "*") {
+                              this._advance();
+                              commentLevel++;
+                          }
+                      }
+                  }
+                  return true;
+              }
+          }
+          // Shortcut single character tokens
+          const simpleToken = TokenTypes$1.simpleTokens[lexeme];
+          if (simpleToken) {
+              this._addToken(simpleToken);
+              return true;
+          }
+          // Shortcut keywords and identifiers
+          let matchType = TokenTypes$1.none;
+          const isAlpha = this._isAlpha(lexeme);
+          const isUnderscore = lexeme === "_";
+          if (this._isAlphaNumeric(lexeme)) {
+              let nextChar = this._peekAhead();
+              while (this._isAlphaNumeric(nextChar)) {
+                  lexeme += this._advance();
+                  nextChar = this._peekAhead();
+              }
+          }
+          if (isAlpha) {
+              const matchedType = TokenTypes$1.keywords[lexeme];
+              if (matchedType) {
+                  this._addToken(matchedType);
+                  return true;
+              }
+          }
+          if (isAlpha || isUnderscore) {
+              this._addToken(TokenTypes$1.tokens.ident);
+              return true;
+          }
+          // Scan for the next valid token type
+          for (;;) {
+              let matchedType = this._findType(lexeme);
+              // An exception to "longest lexeme" rule is '>>'. In the case of 1>>2, it's a
+              // shift_right.
+              // In the case of array<vec4<f32>>, it's two greater_than's (one to close the vec4,
+              // and one to close the array).
+              // Another ambiguity is '>='. In the case of vec2<i32>=vec2(1,2),
+              // it's a greather_than and an equal, not a greater_than_equal.
+              // Another ambiguity is '-'. In the case of a-2, it's a minus; in the case of a*-2, it's a -2;
+              // in the case of foo()->int, it's a ->; in the case of foo-- or --foo, it's a -- decrement.
+              // WGSL requires context sensitive parsing to resolve these ambiguities. Both of these cases
+              // are predicated on it the > either closing a template, or being part of an operator.
+              // The solution here is to check if there was a less_than up to some number of tokens
+              // previously, and the token prior to that is a keyword that requires a '<', then it will be
+              // split into two operators; otherwise it's a single operator.
+              const nextLexeme = this._peekAhead();
+              if (lexeme == "-" && this._tokens.length > 0) {
+                  if (nextLexeme == "=") {
+                      this._current++;
+                      lexeme += nextLexeme;
+                      this._addToken(TokenTypes$1.tokens.minus_equal);
+                      return true;
+                  }
+                  if (nextLexeme == "-") {
+                      this._current++;
+                      lexeme += nextLexeme;
+                      this._addToken(TokenTypes$1.tokens.minus_minus);
+                      return true;
+                  }
+                  const ti = this._tokens.length - 1;
+                  const isIdentOrLiteral = TokenTypes$1.literal_or_ident.indexOf(this._tokens[ti].type) != -1;
+                  if ((isIdentOrLiteral || this._tokens[ti].type == TokenTypes$1.tokens.paren_right) && nextLexeme != ">") {
+                      this._addToken(matchedType);
+                      return true;
+                  }
+              }
+              if (lexeme == ">" && (nextLexeme == ">" || nextLexeme == "=")) {
+                  let foundLessThan = false;
+                  let ti = this._tokens.length - 1;
+                  for (let count = 0; count < 5 && ti >= 0; ++count, --ti) {
+                      if (TokenTypes$1.assignment_operators.indexOf(this._tokens[ti].type) !== -1) {
+                          break;
+                      }
+                      if (this._tokens[ti].type === TokenTypes$1.tokens.less_than) {
+                          if (ti > 0 && this._tokens[ti - 1].isArrayOrTemplateType()) {
+                              foundLessThan = true;
+                          }
+                          break;
+                      }
+                  }
+                  // If there was a less_than in the recent token history, then this is probably a
+                  // greater_than.
+                  if (foundLessThan) {
+                      this._addToken(matchedType);
+                      return true;
+                  }
+              }
+              // The current lexeme may not match any rule, but some token types may be invalid for
+              // part of the string but valid after a few more characters.
+              // For example, 0x.5 is a hex_float_literal. But as it's being scanned,
+              // "0" is a int_literal, then "0x" is invalid. If we stopped there, it would return
+              // the int_literal "0", but that's incorrect. So if we look forward a few characters,
+              // we'd get "0x.", which is still invalid, followed by "0x.5" which is the correct
+              // hex_float_literal. So that means if we hit an non-matching string, we should look
+              // ahead up to two characters to see if the string starts matching a valid rule again.
+              if (matchedType === TokenTypes$1.none) {
+                  let lookAheadLexeme = lexeme;
+                  let lookAhead = 0;
+                  const maxLookAhead = 2;
+                  for (let li = 0; li < maxLookAhead; ++li) {
+                      lookAheadLexeme += this._peekAhead(li);
+                      matchedType = this._findType(lookAheadLexeme);
+                      if (matchedType !== TokenTypes$1.none) {
+                          lookAhead = li;
+                          break;
+                      }
+                  }
+                  if (matchedType === TokenTypes$1.none) {
+                      if (matchType === TokenTypes$1.none) {
+                          return false;
+                      }
+                      this._current--;
+                      this._addToken(matchType);
+                      return true;
+                  }
+                  lexeme = lookAheadLexeme;
+                  this._current += lookAhead + 1;
+              }
+              matchType = matchedType;
+              if (this._isAtEnd()) {
+                  break;
+              }
+              lexeme += this._advance();
+          }
+          // We got to the end of the input stream. Then the token we've ready so far is it.
+          if (matchType === TokenTypes$1.none) {
+              return false;
+          }
+          this._addToken(matchType);
+          return true;
+      }
+      _findType(lexeme) {
+          for (const name in TokenTypes$1.regexTokens) {
+              const type = TokenTypes$1.regexTokens[name];
+              if (this._match(lexeme, type.rule)) {
+                  return type;
+              }
+          }
+          const type = TokenTypes$1.literalTokens[lexeme];
+          if (type) {
+              return type;
+          }
+          return TokenTypes$1.none;
+      }
+      _match(lexeme, rule) {
+          const match = rule.exec(lexeme);
+          return match && match.index == 0 && match[0] == lexeme;
+      }
+      _isAtEnd() {
+          return this._current >= this._source.length;
+      }
+      _isAlpha(c) {
+          return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z");
+      }
+      _isAlphaNumeric(c) {
+          return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c == "_" || (c >= "0" && c <= "9");
+      }
+      _isWhitespace(c) {
+          return c == " " || c == "\t" || c == "\r";
+      }
+      _advance(amount = 0) {
+          let c = this._source[this._current];
+          amount = amount || 0;
+          amount++;
+          this._current += amount;
+          return c;
+      }
+      _peekAhead(offset = 0) {
+          offset = offset || 0;
+          if (this._current + offset >= this._source.length) {
+              return "\0";
+          }
+          return this._source[this._current + offset];
+      }
+      _addToken(type) {
+          const text = this._source.substring(this._start, this._current);
+          this._tokens.push(new Token$1(type, text, this._line));
+      }
+  }
+
+  /**
+   * @author Brendan Duncan / https://github.com/brendan-duncan
+   */
+  /// Parse a sequence of tokens from the WgslScanner into an Abstract Syntax Tree (AST).
+  class WgslParser$1 {
+      constructor() {
+          this._tokens = [];
+          this._current = 0;
+          this._currentLine = 0;
+          this._context = new ParseContext$2();
+          this._deferArrayCountEval = [];
+          this._currentLoop = [];
+      }
+      parse(tokensOrCode) {
+          this._initialize(tokensOrCode);
+          this._deferArrayCountEval.length = 0;
+          const statements = [];
+          while (!this._isAtEnd()) {
+              const statement = this._global_decl_or_directive();
+              if (!statement) {
+                  break;
+              }
+              statements.push(statement);
+          }
+          // Since constants can be declared after they are used, and
+          // constants can be used to size arrays, defer calculating the
+          // size until after the shader has finished parsing.
+          if (this._deferArrayCountEval.length > 0) {
+              for (const arrayDecl of this._deferArrayCountEval) {
+                  const arrayType = arrayDecl["arrayType"];
+                  const countNode = arrayDecl["countNode"];
+                  if (countNode instanceof VariableExpr$1) {
+                      const variable = countNode;
+                      const name = variable.name;
+                      const constant = this._context.constants.get(name);
+                      if (constant) {
+                          try {
+                              const count = constant.constEvaluate(this._context);
+                              arrayType.count = count;
+                          }
+                          catch (e) {
+                          }
+                      }
+                  }
+              }
+              this._deferArrayCountEval.length = 0;
+          }
+          return statements;
+      }
+      _initialize(tokensOrCode) {
+          if (tokensOrCode) {
+              if (typeof tokensOrCode == "string") {
+                  const scanner = new WgslScanner$1(tokensOrCode);
+                  this._tokens = scanner.scanTokens();
+              }
+              else {
+                  this._tokens = tokensOrCode;
+              }
+          }
+          else {
+              this._tokens = [];
+          }
+          this._current = 0;
+      }
+      _updateNode(n, l) {
+          n.line = l !== null && l !== void 0 ? l : this._currentLine;
+          return n;
+      }
+      _error(token, message) {
+          return {
+              token,
+              message,
+              toString: function () {
+                  return `${message}`;
+              },
+          };
+      }
+      _isAtEnd() {
+          return (this._current >= this._tokens.length ||
+              this._peek().type == TokenTypes$1.eof);
+      }
+      _match(types) {
+          if (types instanceof TokenType$1) {
+              if (this._check(types)) {
+                  this._advance();
+                  return true;
+              }
+              return false;
+          }
+          for (let i = 0, l = types.length; i < l; ++i) {
+              const type = types[i];
+              if (this._check(type)) {
+                  this._advance();
+                  return true;
+              }
+          }
+          return false;
+      }
+      _consume(types, message) {
+          if (this._check(types)) {
+              return this._advance();
+          }
+          throw this._error(this._peek(), `${message}. Line:${this._currentLine}`);
+      }
+      _check(types) {
+          if (this._isAtEnd()) {
+              return false;
+          }
+          const tk = this._peek();
+          if (types instanceof Array) {
+              const t = tk.type;
+              const index = types.indexOf(t);
+              return index != -1;
+          }
+          return tk.type == types;
+      }
+      _advance() {
+          var _a, _b;
+          this._currentLine = (_b = (_a = this._peek()) === null || _a === void 0 ? void 0 : _a.line) !== null && _b !== void 0 ? _b : -1;
+          if (!this._isAtEnd()) {
+              this._current++;
+          }
+          return this._previous();
+      }
+      _peek() {
+          return this._tokens[this._current];
+      }
+      _previous() {
+          return this._tokens[this._current - 1];
+      }
+      _global_decl_or_directive() {
+          // semicolon
+          // global_variable_decl semicolon
+          // global_constant_decl semicolon
+          // type_alias semicolon
+          // struct_decl
+          // function_decl
+          // enable_directive
+          // Ignore any stand-alone semicolons
+          while (this._match(TokenTypes$1.tokens.semicolon) && !this._isAtEnd())
+              ;
+          if (this._match(TokenTypes$1.keywords.alias)) {
+              const type = this._type_alias();
+              this._consume(TokenTypes$1.tokens.semicolon, "Expected ';'");
+              return type;
+          }
+          if (this._match(TokenTypes$1.keywords.diagnostic)) {
+              const directive = this._diagnostic();
+              this._consume(TokenTypes$1.tokens.semicolon, "Expected ';'");
+              return directive;
+          }
+          if (this._match(TokenTypes$1.keywords.requires)) {
+              const requires = this._requires_directive();
+              this._consume(TokenTypes$1.tokens.semicolon, "Expected ';'");
+              return requires;
+          }
+          if (this._match(TokenTypes$1.keywords.enable)) {
+              const enable = this._enable_directive();
+              this._consume(TokenTypes$1.tokens.semicolon, "Expected ';'");
+              return enable;
+          }
+          // The following statements have an optional attribute*
+          const attrs = this._attribute();
+          if (this._check(TokenTypes$1.keywords.var)) {
+              const _var = this._global_variable_decl();
+              if (_var != null) {
+                  _var.attributes = attrs;
+              }
+              this._consume(TokenTypes$1.tokens.semicolon, "Expected ';'.");
+              return _var;
+          }
+          if (this._check(TokenTypes$1.keywords.override)) {
+              const _override = this._override_variable_decl();
+              if (_override != null) {
+                  _override.attributes = attrs;
+              }
+              this._consume(TokenTypes$1.tokens.semicolon, "Expected ';'.");
+              return _override;
+          }
+          if (this._check(TokenTypes$1.keywords.let)) {
+              const _let = this._global_let_decl();
+              if (_let != null) {
+                  _let.attributes = attrs;
+              }
+              this._consume(TokenTypes$1.tokens.semicolon, "Expected ';'.");
+              return _let;
+          }
+          if (this._check(TokenTypes$1.keywords.const)) {
+              const _const = this._global_const_decl();
+              if (_const != null) {
+                  _const.attributes = attrs;
+              }
+              this._consume(TokenTypes$1.tokens.semicolon, "Expected ';'.");
+              return _const;
+          }
+          if (this._check(TokenTypes$1.keywords.struct)) {
+              const _struct = this._struct_decl();
+              if (_struct != null) {
+                  _struct.attributes = attrs;
+              }
+              return _struct;
+          }
+          if (this._check(TokenTypes$1.keywords.fn)) {
+              const _fn = this._function_decl();
+              if (_fn != null) {
+                  _fn.attributes = attrs;
+              }
+              return _fn;
+          }
+          return null;
+      }
+      _function_decl() {
+          // attribute* function_header compound_statement
+          // function_header: fn ident paren_left param_list? paren_right (arrow attribute* type_decl)?
+          if (!this._match(TokenTypes$1.keywords.fn)) {
+              return null;
+          }
+          const startLine = this._currentLine;
+          const name = this._consume(TokenTypes$1.tokens.ident, "Expected function name.").toString();
+          this._consume(TokenTypes$1.tokens.paren_left, "Expected '(' for function arguments.");
+          const args = [];
+          if (!this._check(TokenTypes$1.tokens.paren_right)) {
+              do {
+                  if (this._check(TokenTypes$1.tokens.paren_right)) {
+                      break;
+                  }
+                  const argAttrs = this._attribute();
+                  const name = this._consume(TokenTypes$1.tokens.ident, "Expected argument name.").toString();
+                  this._consume(TokenTypes$1.tokens.colon, "Expected ':' for argument type.");
+                  const typeAttrs = this._attribute();
+                  const type = this._type_decl();
+                  if (type != null) {
+                      type.attributes = typeAttrs;
+                      args.push(this._updateNode(new Argument$1(name, type, argAttrs)));
+                  }
+              } while (this._match(TokenTypes$1.tokens.comma));
+          }
+          this._consume(TokenTypes$1.tokens.paren_right, "Expected ')' after function arguments.");
+          let _return = null;
+          if (this._match(TokenTypes$1.tokens.arrow)) {
+              const attrs = this._attribute();
+              _return = this._type_decl();
+              if (_return != null) {
+                  _return.attributes = attrs;
+              }
+          }
+          const body = this._compound_statement();
+          const endLine = this._currentLine;
+          return this._updateNode(new Function$2(name, args, _return, body, startLine, endLine), startLine);
+      }
+      _compound_statement() {
+          // brace_left statement* brace_right
+          const statements = [];
+          this._consume(TokenTypes$1.tokens.brace_left, "Expected '{' for block.");
+          while (!this._check(TokenTypes$1.tokens.brace_right)) {
+              const statement = this._statement();
+              if (statement !== null) {
+                  statements.push(statement);
+              }
+          }
+          this._consume(TokenTypes$1.tokens.brace_right, "Expected '}' for block.");
+          return statements;
+      }
+      _statement() {
+          // semicolon
+          // return_statement semicolon
+          // if_statement
+          // switch_statement
+          // loop_statement
+          // for_statement
+          // func_call_statement semicolon
+          // variable_statement semicolon
+          // break_statement semicolon
+          // continue_statement semicolon
+          // continuing_statement compound_statement
+          // discard semicolon
+          // assignment_statement semicolon
+          // compound_statement
+          // increment_statement semicolon
+          // decrement_statement semicolon
+          // static_assert_statement semicolon
+          // Ignore any stand-alone semicolons
+          while (this._match(TokenTypes$1.tokens.semicolon) && !this._isAtEnd())
+              ;
+          if (this._check(TokenTypes$1.tokens.attr)) {
+              this._attribute();
+          }
+          if (this._check(TokenTypes$1.keywords.if)) {
+              return this._if_statement();
+          }
+          if (this._check(TokenTypes$1.keywords.switch)) {
+              return this._switch_statement();
+          }
+          if (this._check(TokenTypes$1.keywords.loop)) {
+              return this._loop_statement();
+          }
+          if (this._check(TokenTypes$1.keywords.for)) {
+              return this._for_statement();
+          }
+          if (this._check(TokenTypes$1.keywords.while)) {
+              return this._while_statement();
+          }
+          if (this._check(TokenTypes$1.keywords.continuing)) {
+              return this._continuing_statement();
+          }
+          if (this._check(TokenTypes$1.keywords.static_assert)) {
+              return this._static_assert_statement();
+          }
+          if (this._check(TokenTypes$1.tokens.brace_left)) {
+              return this._compound_statement();
+          }
+          let result = null;
+          if (this._check(TokenTypes$1.keywords.return)) {
+              result = this._return_statement();
+          }
+          else if (this._check([
+              TokenTypes$1.keywords.var,
+              TokenTypes$1.keywords.let,
+              TokenTypes$1.keywords.const,
+          ])) {
+              result = this._variable_statement();
+          }
+          else if (this._match(TokenTypes$1.keywords.discard)) {
+              result = this._updateNode(new Discard$1());
+          }
+          else if (this._match(TokenTypes$1.keywords.break)) {
+              const breakStmt = this._updateNode(new Break$2());
+              if (this._currentLoop.length > 0) {
+                  const loop = this._currentLoop[this._currentLoop.length - 1];
+                  breakStmt.loopId = loop.id;
+              }
+              else {
+                  // This break statement is not inside a loop. 
+                  throw this._error(this._peek(), "Break statement must be inside a loop.");
+              }
+              result = breakStmt;
+              if (this._check(TokenTypes$1.keywords.if)) {
+                  // break-if
+                  this._advance();
+                  breakStmt.condition = this._optional_paren_expression();
+                  if (breakStmt.condition instanceof GroupingExpr$1 && breakStmt.condition.contents.length === 1) {
+                      breakStmt.condition = breakStmt.condition.contents[0];
+                  }
+              }
+          }
+          else if (this._match(TokenTypes$1.keywords.continue)) {
+              const continueStmt = this._updateNode(new Continue$1());
+              if (this._currentLoop.length > 0) {
+                  const loop = this._currentLoop[this._currentLoop.length - 1];
+                  continueStmt.loopId = loop.id;
+              }
+              else {
+                  // This continue statement is not inside a loop. 
+                  throw this._error(this._peek(), "Continue statement must be inside a loop.");
+              }
+              result = continueStmt;
+          }
+          else {
+              result =
+                  this._increment_decrement_statement() ||
+                      this._func_call_statement() ||
+                      this._assignment_statement();
+          }
+          if (result != null) {
+              this._consume(TokenTypes$1.tokens.semicolon, "Expected ';' after statement.");
+          }
+          return result;
+      }
+      _static_assert_statement() {
+          if (!this._match(TokenTypes$1.keywords.static_assert)) {
+              return null;
+          }
+          const expression = this._optional_paren_expression();
+          return this._updateNode(new StaticAssert$1(expression));
+      }
+      _while_statement() {
+          if (!this._match(TokenTypes$1.keywords.while)) {
+              return null;
+          }
+          const whileLoop = this._updateNode(new While$1(null, null));
+          this._currentLoop.push(whileLoop);
+          whileLoop.condition = this._optional_paren_expression();
+          if (this._check(TokenTypes$1.tokens.attr)) {
+              this._attribute();
+          }
+          whileLoop.body = this._compound_statement();
+          this._currentLoop.pop();
+          return whileLoop;
+      }
+      _continuing_statement() {
+          if (!this._match(TokenTypes$1.keywords.continuing)) {
+              return null;
+          }
+          const block = this._compound_statement();
+          return this._updateNode(new Continuing$1(block));
+      }
+      _for_statement() {
+          // for paren_left for_header paren_right compound_statement
+          if (!this._match(TokenTypes$1.keywords.for)) {
+              return null;
+          }
+          this._consume(TokenTypes$1.tokens.paren_left, "Expected '('.");
+          const forLoop = this._updateNode(new For$1(null, null, null, null));
+          this._currentLoop.push(forLoop);
+          // for_header: (variable_statement assignment_statement func_call_statement)? semicolon short_circuit_or_expression? semicolon (assignment_statement func_call_statement)?
+          forLoop.init = !this._check(TokenTypes$1.tokens.semicolon)
+              ? this._for_init()
+              : null;
+          this._consume(TokenTypes$1.tokens.semicolon, "Expected ';'.");
+          forLoop.condition = !this._check(TokenTypes$1.tokens.semicolon)
+              ? this._short_circuit_or_expression()
+              : null;
+          this._consume(TokenTypes$1.tokens.semicolon, "Expected ';'.");
+          forLoop.increment = !this._check(TokenTypes$1.tokens.paren_right)
+              ? this._for_increment()
+              : null;
+          this._consume(TokenTypes$1.tokens.paren_right, "Expected ')'.");
+          if (this._check(TokenTypes$1.tokens.attr)) {
+              this._attribute();
+          }
+          forLoop.body = this._compound_statement();
+          this._currentLoop.pop();
+          return forLoop;
+      }
+      _for_init() {
+          // (variable_statement assignment_statement func_call_statement)?
+          return (this._variable_statement() ||
+              this._func_call_statement() ||
+              this._assignment_statement());
+      }
+      _for_increment() {
+          // (assignment_statement func_call_statement increment_statement)?
+          return (this._func_call_statement() ||
+              this._increment_decrement_statement() ||
+              this._assignment_statement());
+      }
+      _variable_statement() {
+          // variable_decl
+          // variable_decl equal short_circuit_or_expression
+          // let (ident variable_ident_decl) equal short_circuit_or_expression
+          // const (ident variable_ident_decl) equal short_circuit_or_expression
+          if (this._check(TokenTypes$1.keywords.var)) {
+              const _var = this._variable_decl();
+              if (_var === null) {
+                  throw this._error(this._peek(), "Variable declaration expected.");
+              }
+              let value = null;
+              if (this._match(TokenTypes$1.tokens.equal)) {
+                  value = this._short_circuit_or_expression();
+              }
+              return this._updateNode(new Var$1(_var.name, _var.type, _var.storage, _var.access, value));
+          }
+          if (this._match(TokenTypes$1.keywords.let)) {
+              const name = this._consume(TokenTypes$1.tokens.ident, "Expected name for let.").toString();
+              let type = null;
+              if (this._match(TokenTypes$1.tokens.colon)) {
+                  const typeAttrs = this._attribute();
+                  type = this._type_decl();
+                  if (type != null) {
+                      type.attributes = typeAttrs;
+                  }
+              }
+              this._consume(TokenTypes$1.tokens.equal, "Expected '=' for let.");
+              const value = this._short_circuit_or_expression();
+              return this._updateNode(new Let$1(name, type, null, null, value));
+          }
+          if (this._match(TokenTypes$1.keywords.const)) {
+              const name = this._consume(TokenTypes$1.tokens.ident, "Expected name for const.").toString();
+              let type = null;
+              if (this._match(TokenTypes$1.tokens.colon)) {
+                  const typeAttrs = this._attribute();
+                  type = this._type_decl();
+                  if (type != null) {
+                      type.attributes = typeAttrs;
+                  }
+              }
+              this._consume(TokenTypes$1.tokens.equal, "Expected '=' for const.");
+              const value = this._short_circuit_or_expression();
+              if (type === null && value instanceof LiteralExpr$1) {
+                  type = value.type;
+              }
+              return this._updateNode(new Const$1(name, type, null, null, value));
+          }
+          return null;
+      }
+      _increment_decrement_statement() {
+          const savedPos = this._current;
+          const _var = this._unary_expression();
+          if (_var == null) {
+              return null;
+          }
+          if (!this._check(TokenTypes$1.increment_operators)) {
+              this._current = savedPos;
+              return null;
+          }
+          const token = this._consume(TokenTypes$1.increment_operators, "Expected increment operator");
+          return this._updateNode(new Increment$1(token.type === TokenTypes$1.tokens.plus_plus
+              ? IncrementOperator$1.increment
+              : IncrementOperator$1.decrement, _var));
+      }
+      _assignment_statement() {
+          // (unary_expression underscore) equal short_circuit_or_expression
+          let _var = null;
+          if (this._check(TokenTypes$1.tokens.brace_right)) {
+              return null;
+          }
+          let isUnderscore = this._match(TokenTypes$1.tokens.underscore);
+          if (!isUnderscore) {
+              _var = this._unary_expression();
+          }
+          if (!isUnderscore && _var == null) {
+              return null;
+          }
+          const type = this._consume(TokenTypes$1.assignment_operators, "Expected assignment operator.");
+          const value = this._short_circuit_or_expression();
+          return this._updateNode(new Assign$1(AssignOperator$1.parse(type.lexeme), _var, value));
+      }
+      _func_call_statement() {
+          // ident argument_expression_list
+          if (!this._check(TokenTypes$1.tokens.ident)) {
+              return null;
+          }
+          const savedPos = this._current;
+          const name = this._consume(TokenTypes$1.tokens.ident, "Expected function name.");
+          const args = this._argument_expression_list();
+          if (args === null) {
+              this._current = savedPos;
+              return null;
+          }
+          return this._updateNode(new Call$1(name.lexeme, args));
+      }
+      _loop_statement() {
+          // loop brace_left statement* continuing_statement? brace_right
+          if (!this._match(TokenTypes$1.keywords.loop)) {
+              return null;
+          }
+          if (this._check(TokenTypes$1.tokens.attr)) {
+              this._attribute();
+          }
+          this._consume(TokenTypes$1.tokens.brace_left, "Expected '{' for loop.");
+          const loop = this._updateNode(new Loop$1([], null));
+          this._currentLoop.push(loop);
+          // statement*
+          let statement = this._statement();
+          while (statement !== null) {
+              if (Array.isArray(statement)) {
+                  for (let s of statement) {
+                      loop.body.push(s);
+                  }
+              }
+              else {
+                  loop.body.push(statement);
+              }
+              // Keep continuing in the loop body statements so it can be
+              // executed in the stackframe of the body statements.
+              if (statement instanceof Continuing$1) {
+                  loop.continuing = statement;
+                  // Continuing should be the last statement in the loop.
+                  break;
+              }
+              statement = this._statement();
+          }
+          this._currentLoop.pop();
+          this._consume(TokenTypes$1.tokens.brace_right, "Expected '}' for loop.");
+          return loop;
+      }
+      _switch_statement() {
+          // switch optional_paren_expression brace_left switch_body+ brace_right
+          if (!this._match(TokenTypes$1.keywords.switch)) {
+              return null;
+          }
+          const condition = this._optional_paren_expression();
+          if (this._check(TokenTypes$1.tokens.attr)) {
+              this._attribute();
+          }
+          this._consume(TokenTypes$1.tokens.brace_left, "Expected '{' for switch.");
+          const body = this._switch_body();
+          if (body == null || body.length == 0) {
+              throw this._error(this._previous(), "Expected 'case' or 'default'.");
+          }
+          this._consume(TokenTypes$1.tokens.brace_right, "Expected '}' for switch.");
+          return this._updateNode(new Switch$1(condition, body));
+      }
+      _switch_body() {
+          // case case_selectors colon brace_left case_body? brace_right
+          // default colon brace_left case_body? brace_right
+          const cases = [];
+          if (this._match(TokenTypes$1.keywords.case)) {
+              const selector = this._case_selectors();
+              this._match(TokenTypes$1.tokens.colon); // colon is optional
+              if (this._check(TokenTypes$1.tokens.attr)) {
+                  this._attribute();
+              }
+              this._consume(TokenTypes$1.tokens.brace_left, "Exected '{' for switch case.");
+              const body = this._case_body();
+              this._consume(TokenTypes$1.tokens.brace_right, "Exected '}' for switch case.");
+              cases.push(this._updateNode(new Case$1(selector, body)));
+          }
+          if (this._match(TokenTypes$1.keywords.default)) {
+              this._match(TokenTypes$1.tokens.colon); // colon is optional
+              if (this._check(TokenTypes$1.tokens.attr)) {
+                  this._attribute();
+              }
+              this._consume(TokenTypes$1.tokens.brace_left, "Exected '{' for switch default.");
+              const body = this._case_body();
+              this._consume(TokenTypes$1.tokens.brace_right, "Exected '}' for switch default.");
+              cases.push(this._updateNode(new Default$1(body)));
+          }
+          if (this._check([TokenTypes$1.keywords.default, TokenTypes$1.keywords.case])) {
+              const _cases = this._switch_body();
+              cases.push(_cases[0]);
+          }
+          return cases;
+      }
+      _case_selectors() {
+          // const_literal (comma const_literal)* comma?
+          const selectors = [
+              this._shift_expression(), //?.constEvaluate(this._context).toString() ?? "",
+          ];
+          while (this._match(TokenTypes$1.tokens.comma)) {
+              selectors.push(this._shift_expression());
+          }
+          return selectors;
+      }
+      _case_body() {
+          // statement case_body?
+          // fallthrough semicolon
+          if (this._match(TokenTypes$1.keywords.fallthrough)) {
+              this._consume(TokenTypes$1.tokens.semicolon, "Expected ';'");
+              return [];
+          }
+          let statement = this._statement();
+          if (statement == null) {
+              return [];
+          }
+          if (!(statement instanceof Array)) {
+              statement = [statement];
+          }
+          const nextStatement = this._case_body();
+          if (nextStatement.length == 0) {
+              return statement;
+          }
+          return [...statement, nextStatement[0]];
+      }
+      _if_statement() {
+          // if optional_paren_expression compound_statement elseif_statement? else_statement?
+          if (!this._match(TokenTypes$1.keywords.if)) {
+              return null;
+          }
+          const line = this._currentLine;
+          const condition = this._optional_paren_expression();
+          if (this._check(TokenTypes$1.tokens.attr)) {
+              this._attribute();
+          }
+          const block = this._compound_statement();
+          let elseif = [];
+          if (this._match_elseif()) {
+              if (this._check(TokenTypes$1.tokens.attr)) {
+                  this._attribute();
+              }
+              elseif = this._elseif_statement(elseif);
+          }
+          let _else = null;
+          if (this._match(TokenTypes$1.keywords.else)) {
+              if (this._check(TokenTypes$1.tokens.attr)) {
+                  this._attribute();
+              }
+              _else = this._compound_statement();
+          }
+          return this._updateNode(new If$1(condition, block, elseif, _else), line);
+      }
+      _match_elseif() {
+          if (this._tokens[this._current].type === TokenTypes$1.keywords.else &&
+              this._tokens[this._current + 1].type === TokenTypes$1.keywords.if) {
+              this._advance();
+              this._advance();
+              return true;
+          }
+          return false;
+      }
+      _elseif_statement(elseif = []) {
+          // else_if optional_paren_expression compound_statement elseif_statement?
+          const condition = this._optional_paren_expression();
+          const block = this._compound_statement();
+          elseif.push(this._updateNode(new ElseIf$1(condition, block)));
+          if (this._match_elseif()) {
+              if (this._check(TokenTypes$1.tokens.attr)) {
+                  this._attribute();
+              }
+              this._elseif_statement(elseif);
+          }
+          return elseif;
+      }
+      _return_statement() {
+          // return short_circuit_or_expression?
+          if (!this._match(TokenTypes$1.keywords.return)) {
+              return null;
+          }
+          const value = this._short_circuit_or_expression();
+          return this._updateNode(new Return$1(value));
+      }
+      _short_circuit_or_expression() {
+          // short_circuit_and_expression
+          // short_circuit_or_expression or_or short_circuit_and_expression
+          let expr = this._short_circuit_and_expr();
+          while (this._match(TokenTypes$1.tokens.or_or)) {
+              expr = this._updateNode(new BinaryOperator$1(this._previous().toString(), expr, this._short_circuit_and_expr()));
+          }
+          return expr;
+      }
+      _short_circuit_and_expr() {
+          // inclusive_or_expression
+          // short_circuit_and_expression and_and inclusive_or_expression
+          let expr = this._inclusive_or_expression();
+          while (this._match(TokenTypes$1.tokens.and_and)) {
+              expr = this._updateNode(new BinaryOperator$1(this._previous().toString(), expr, this._inclusive_or_expression()));
+          }
+          return expr;
+      }
+      _inclusive_or_expression() {
+          // exclusive_or_expression
+          // inclusive_or_expression or exclusive_or_expression
+          let expr = this._exclusive_or_expression();
+          while (this._match(TokenTypes$1.tokens.or)) {
+              expr = this._updateNode(new BinaryOperator$1(this._previous().toString(), expr, this._exclusive_or_expression()));
+          }
+          return expr;
+      }
+      _exclusive_or_expression() {
+          // and_expression
+          // exclusive_or_expression xor and_expression
+          let expr = this._and_expression();
+          while (this._match(TokenTypes$1.tokens.xor)) {
+              expr = this._updateNode(new BinaryOperator$1(this._previous().toString(), expr, this._and_expression()));
+          }
+          return expr;
+      }
+      _and_expression() {
+          // equality_expression
+          // and_expression and equality_expression
+          let expr = this._equality_expression();
+          while (this._match(TokenTypes$1.tokens.and)) {
+              expr = this._updateNode(new BinaryOperator$1(this._previous().toString(), expr, this._equality_expression()));
+          }
+          return expr;
+      }
+      _equality_expression() {
+          // relational_expression
+          // relational_expression equal_equal relational_expression
+          // relational_expression not_equal relational_expression
+          const expr = this._relational_expression();
+          if (this._match([TokenTypes$1.tokens.equal_equal, TokenTypes$1.tokens.not_equal])) {
+              return this._updateNode(new BinaryOperator$1(this._previous().toString(), expr, this._relational_expression()));
+          }
+          return expr;
+      }
+      _relational_expression() {
+          // shift_expression
+          // relational_expression less_than shift_expression
+          // relational_expression greater_than shift_expression
+          // relational_expression less_than_equal shift_expression
+          // relational_expression greater_than_equal shift_expression
+          let expr = this._shift_expression();
+          while (this._match([
+              TokenTypes$1.tokens.less_than,
+              TokenTypes$1.tokens.greater_than,
+              TokenTypes$1.tokens.less_than_equal,
+              TokenTypes$1.tokens.greater_than_equal,
+          ])) {
+              expr = this._updateNode(new BinaryOperator$1(this._previous().toString(), expr, this._shift_expression()));
+          }
+          return expr;
+      }
+      _shift_expression() {
+          // additive_expression
+          // shift_expression shift_left additive_expression
+          // shift_expression shift_right additive_expression
+          let expr = this._additive_expression();
+          while (this._match([TokenTypes$1.tokens.shift_left, TokenTypes$1.tokens.shift_right])) {
+              expr = this._updateNode(new BinaryOperator$1(this._previous().toString(), expr, this._additive_expression()));
+          }
+          return expr;
+      }
+      _additive_expression() {
+          // multiplicative_expression
+          // additive_expression plus multiplicative_expression
+          // additive_expression minus multiplicative_expression
+          let expr = this._multiplicative_expression();
+          while (this._match([TokenTypes$1.tokens.plus, TokenTypes$1.tokens.minus])) {
+              expr = this._updateNode(new BinaryOperator$1(this._previous().toString(), expr, this._multiplicative_expression()));
+          }
+          return expr;
+      }
+      _multiplicative_expression() {
+          // unary_expression
+          // multiplicative_expression star unary_expression
+          // multiplicative_expression forward_slash unary_expression
+          // multiplicative_expression modulo unary_expression
+          let expr = this._unary_expression();
+          while (this._match([
+              TokenTypes$1.tokens.star,
+              TokenTypes$1.tokens.forward_slash,
+              TokenTypes$1.tokens.modulo,
+          ])) {
+              expr = this._updateNode(new BinaryOperator$1(this._previous().toString(), expr, this._unary_expression()));
+          }
+          return expr;
+      }
+      _unary_expression() {
+          // singular_expression
+          // minus unary_expression
+          // bang unary_expression
+          // tilde unary_expression
+          // star unary_expression
+          // and unary_expression
+          if (this._match([
+              TokenTypes$1.tokens.minus,
+              TokenTypes$1.tokens.bang,
+              TokenTypes$1.tokens.tilde,
+              TokenTypes$1.tokens.star,
+              TokenTypes$1.tokens.and,
+          ])) {
+              return this._updateNode(new UnaryOperator$1(this._previous().toString(), this._unary_expression()));
+          }
+          return this._singular_expression();
+      }
+      _singular_expression() {
+          // primary_expression postfix_expression ?
+          const expr = this._primary_expression();
+          const p = this._postfix_expression();
+          if (p) {
+              expr.postfix = p;
+          }
+          return expr;
+      }
+      _postfix_expression() {
+          // bracket_left short_circuit_or_expression bracket_right postfix_expression?
+          if (this._match(TokenTypes$1.tokens.bracket_left)) {
+              const expr = this._short_circuit_or_expression();
+              this._consume(TokenTypes$1.tokens.bracket_right, "Expected ']'.");
+              const arrayIndex = this._updateNode(new ArrayIndex$1(expr));
+              const p = this._postfix_expression();
+              if (p) {
+                  arrayIndex.postfix = p;
+              }
+              return arrayIndex;
+          }
+          // period ident postfix_expression?
+          if (this._match(TokenTypes$1.tokens.period)) {
+              const name = this._consume(TokenTypes$1.tokens.ident, "Expected member name.");
+              const p = this._postfix_expression();
+              const expr = this._updateNode(new StringExpr$1(name.lexeme));
+              if (p) {
+                  expr.postfix = p;
+              }
+              return expr;
+          }
+          return null;
+      }
+      _getStruct(name) {
+          if (this._context.aliases.has(name)) {
+              const alias = this._context.aliases.get(name).type;
+              return alias;
+          }
+          if (this._context.structs.has(name)) {
+              const struct = this._context.structs.get(name);
+              return struct;
+          }
+          return null;
+      }
+      _getType(name) {
+          const struct = this._getStruct(name);
+          if (struct !== null) {
+              return struct;
+          }
+          switch (name) {
+              case "bool":
+                  return Type$1.bool;
+              case "i32":
+                  return Type$1.i32;
+              case "u32":
+                  return Type$1.u32;
+              case "f32":
+                  return Type$1.f32;
+              case "f16":
+                  return Type$1.f16;
+              case "vec2f":
+                  return TemplateType$1.vec2f;
+              case "vec3f":
+                  return TemplateType$1.vec3f;
+              case "vec4f":
+                  return TemplateType$1.vec4f;
+              case "vec2i":
+                  return TemplateType$1.vec2i;
+              case "vec3i":
+                  return TemplateType$1.vec3i;
+              case "vec4i":
+                  return TemplateType$1.vec4i;
+              case "vec2u":
+                  return TemplateType$1.vec2u;
+              case "vec3u":
+                  return TemplateType$1.vec3u;
+              case "vec4u":
+                  return TemplateType$1.vec4u;
+              case "vec2h":
+                  return TemplateType$1.vec2h;
+              case "vec3h":
+                  return TemplateType$1.vec3h;
+              case "vec4h":
+                  return TemplateType$1.vec4h;
+              case "mat2x2f":
+                  return TemplateType$1.mat2x2f;
+              case "mat2x3f":
+                  return TemplateType$1.mat2x3f;
+              case "mat2x4f":
+                  return TemplateType$1.mat2x4f;
+              case "mat3x2f":
+                  return TemplateType$1.mat3x2f;
+              case "mat3x3f":
+                  return TemplateType$1.mat3x3f;
+              case "mat3x4f":
+                  return TemplateType$1.mat3x4f;
+              case "mat4x2f":
+                  return TemplateType$1.mat4x2f;
+              case "mat4x3f":
+                  return TemplateType$1.mat4x3f;
+              case "mat4x4f":
+                  return TemplateType$1.mat4x4f;
+              case "mat2x2h":
+                  return TemplateType$1.mat2x2h;
+              case "mat2x3h":
+                  return TemplateType$1.mat2x3h;
+              case "mat2x4h":
+                  return TemplateType$1.mat2x4h;
+              case "mat3x2h":
+                  return TemplateType$1.mat3x2h;
+              case "mat3x3h":
+                  return TemplateType$1.mat3x3h;
+              case "mat3x4h":
+                  return TemplateType$1.mat3x4h;
+              case "mat4x2h":
+                  return TemplateType$1.mat4x2h;
+              case "mat4x3h":
+                  return TemplateType$1.mat4x3h;
+              case "mat4x4h":
+                  return TemplateType$1.mat4x4h;
+          }
+          return null;
+      }
+      _validateTypeRange(value, type) {
+          if (type.name === "i32") {
+              if (value < -2147483648 || value > 2147483647) {
+                  throw this._error(this._previous(), `Value out of range for i32: ${value}. Line: ${this._currentLine}.`);
+              }
+          }
+          else if (type.name === "u32") {
+              if (value < 0 || value > 4294967295) {
+                  throw this._error(this._previous(), `Value out of range for u32: ${value}. Line: ${this._currentLine}.`);
+              }
+          }
+      }
+      _primary_expression() {
+          // ident argument_expression_list?
+          if (this._match(TokenTypes$1.tokens.ident)) {
+              const name = this._previous().toString();
+              if (this._check(TokenTypes$1.tokens.paren_left)) {
+                  const args = this._argument_expression_list();
+                  const type = this._getType(name);
+                  if (type !== null) {
+                      return this._updateNode(new CreateExpr$1(type, args));
+                  }
+                  return this._updateNode(new CallExpr$1(name, args));
+              }
+              if (this._context.constants.has(name)) {
+                  const c = this._context.constants.get(name);
+                  return this._updateNode(new ConstExpr$1(name, c.value));
+              }
+              return this._updateNode(new VariableExpr$1(name));
+          }
+          // const_literal
+          if (this._match(TokenTypes$1.tokens.int_literal)) {
+              const s = this._previous().toString();
+              let type = s.endsWith("i") || s.endsWith("i") ? Type$1.i32 :
+                  s.endsWith("u") || s.endsWith("U") ? Type$1.u32 : Type$1.x32;
+              const i = parseInt(s);
+              this._validateTypeRange(i, type);
+              return this._updateNode(new LiteralExpr$1(i, type));
+          }
+          else if (this._match(TokenTypes$1.tokens.uint_literal)) {
+              const u = parseInt(this._previous().toString());
+              this._validateTypeRange(u, Type$1.u32);
+              return this._updateNode(new LiteralExpr$1(u, Type$1.u32));
+          }
+          else if (this._match([TokenTypes$1.tokens.decimal_float_literal, TokenTypes$1.tokens.hex_float_literal])) {
+              let fs = this._previous().toString();
+              let isF16 = fs.endsWith("h");
+              if (isF16) {
+                  fs = fs.substring(0, fs.length - 1);
+              }
+              const f = parseFloat(fs);
+              this._validateTypeRange(f, isF16 ? Type$1.f16 : Type$1.f32);
+              return this._updateNode(new LiteralExpr$1(f, isF16 ? Type$1.f16 : Type$1.f32));
+          }
+          else if (this._match([TokenTypes$1.keywords.true, TokenTypes$1.keywords.false])) {
+              let b = this._previous().toString() === TokenTypes$1.keywords.true.rule;
+              return this._updateNode(new LiteralExpr$1(b ? 1 : 0, Type$1.bool));
+          }
+          // paren_expression
+          if (this._check(TokenTypes$1.tokens.paren_left)) {
+              return this._paren_expression();
+          }
+          // bitcast less_than type_decl greater_than paren_expression
+          if (this._match(TokenTypes$1.keywords.bitcast)) {
+              this._consume(TokenTypes$1.tokens.less_than, "Expected '<'.");
+              const type = this._type_decl();
+              this._consume(TokenTypes$1.tokens.greater_than, "Expected '>'.");
+              const value = this._paren_expression();
+              return this._updateNode(new BitcastExpr$1(type, value));
+          }
+          // type_decl argument_expression_list
+          const type = this._type_decl();
+          const args = this._argument_expression_list();
+          return this._updateNode(new CreateExpr$1(type, args));
+      }
+      _argument_expression_list() {
+          // paren_left ((short_circuit_or_expression comma)* short_circuit_or_expression comma?)? paren_right
+          if (!this._match(TokenTypes$1.tokens.paren_left)) {
+              return null;
+          }
+          const args = [];
+          do {
+              if (this._check(TokenTypes$1.tokens.paren_right)) {
+                  break;
+              }
+              const arg = this._short_circuit_or_expression();
+              args.push(arg);
+          } while (this._match(TokenTypes$1.tokens.comma));
+          this._consume(TokenTypes$1.tokens.paren_right, "Expected ')' for agument list");
+          return args;
+      }
+      _optional_paren_expression() {
+          // [paren_left] short_circuit_or_expression [paren_right]
+          this._match(TokenTypes$1.tokens.paren_left);
+          const expr = this._short_circuit_or_expression();
+          this._match(TokenTypes$1.tokens.paren_right);
+          return this._updateNode(new GroupingExpr$1([expr]));
+      }
+      _paren_expression() {
+          // paren_left short_circuit_or_expression paren_right
+          this._consume(TokenTypes$1.tokens.paren_left, "Expected '('.");
+          const expr = this._short_circuit_or_expression();
+          this._consume(TokenTypes$1.tokens.paren_right, "Expected ')'.");
+          return this._updateNode(new GroupingExpr$1([expr]));
+      }
+      _struct_decl() {
+          // attribute* struct ident struct_body_decl
+          if (!this._match(TokenTypes$1.keywords.struct)) {
+              return null;
+          }
+          const startLine = this._currentLine;
+          const name = this._consume(TokenTypes$1.tokens.ident, "Expected name for struct.").toString();
+          // struct_body_decl: brace_left (struct_member comma)* struct_member comma? brace_right
+          this._consume(TokenTypes$1.tokens.brace_left, "Expected '{' for struct body.");
+          const members = [];
+          while (!this._check(TokenTypes$1.tokens.brace_right)) {
+              // struct_member: attribute* variable_ident_decl
+              const memberAttrs = this._attribute();
+              const memberName = this._consume(TokenTypes$1.tokens.ident, "Expected variable name.").toString();
+              this._consume(TokenTypes$1.tokens.colon, "Expected ':' for struct member type.");
+              const typeAttrs = this._attribute();
+              const memberType = this._type_decl();
+              if (memberType != null) {
+                  memberType.attributes = typeAttrs;
+              }
+              if (!this._check(TokenTypes$1.tokens.brace_right)) {
+                  this._consume(TokenTypes$1.tokens.comma, "Expected ',' for struct member.");
+              }
+              else {
+                  this._match(TokenTypes$1.tokens.comma); // trailing comma optional.
+              }
+              members.push(this._updateNode(new Member$1(memberName, memberType, memberAttrs)));
+          }
+          this._consume(TokenTypes$1.tokens.brace_right, "Expected '}' after struct body.");
+          const endLine = this._currentLine;
+          const structNode = this._updateNode(new Struct$1(name, members, startLine, endLine), startLine);
+          this._context.structs.set(name, structNode);
+          return structNode;
+      }
+      _global_variable_decl() {
+          // attribute* variable_decl (equal const_expression)?
+          const _var = this._variable_decl();
+          if (_var && this._match(TokenTypes$1.tokens.equal)) {
+              const expr = this._const_expression();
+              const type = [Type$1.f32];
+              try {
+                  const value = expr.constEvaluate(this._context, type);
+                  _var.value = new LiteralExpr$1(value, type[0]);
+              }
+              catch (_) {
+                  _var.value = expr;
+              }
+          }
+          if (_var.type !== null && _var.value instanceof LiteralExpr$1) {
+              if (_var.value.type.name !== "x32") {
+                  if (_var.type.name !== _var.value.type.name) {
+                      throw this._error(this._peek(), `Invalid cast from ${_var.value.type.name} to ${_var.type.name}. Line:${this._currentLine}`);
+                  }
+              }
+              this._validateTypeRange(_var.value.scalarValue, _var.type);
+              _var.value.type = _var.type;
+          }
+          else if (_var.type === null && _var.value instanceof LiteralExpr$1) {
+              _var.type = _var.value.type.name === "x32" ? Type$1.i32 : _var.value.type;
+              this._validateTypeRange(_var.value.scalarValue, _var.type);
+          }
+          return _var;
+      }
+      _override_variable_decl() {
+          // attribute* override_decl (equal const_expression)?
+          const _override = this._override_decl();
+          if (_override && this._match(TokenTypes$1.tokens.equal)) {
+              _override.value = this._const_expression();
+          }
+          return _override;
+      }
+      _global_const_decl() {
+          var _a;
+          // attribute* const (ident variable_ident_decl) global_const_initializer?
+          if (!this._match(TokenTypes$1.keywords.const)) {
+              return null;
+          }
+          const name = this._consume(TokenTypes$1.tokens.ident, "Expected variable name");
+          let type = null;
+          if (this._match(TokenTypes$1.tokens.colon)) {
+              const attrs = this._attribute();
+              type = this._type_decl();
+              if (type != null) {
+                  type.attributes = attrs;
+              }
+          }
+          let value = null;
+          this._consume(TokenTypes$1.tokens.equal, "const declarations require an assignment");
+          const valueExpr = this._short_circuit_or_expression();
+          /*if (valueExpr instanceof AST.CreateExpr) {
+            value = valueExpr;
+          } else if (valueExpr instanceof AST.ConstExpr &&
+                     valueExpr.initializer instanceof AST.CreateExpr) {
+            value = valueExpr.initializer;
+          } else*/ {
+              try {
+                  let type = [Type$1.f32];
+                  const constValue = valueExpr.constEvaluate(this._context, type);
+                  this._validateTypeRange(constValue, type[0]);
+                  value = this._updateNode(new LiteralExpr$1(constValue, type[0]));
+              }
+              catch (_b) {
+                  value = valueExpr;
+              }
+          }
+          if (type !== null && value instanceof LiteralExpr$1) {
+              if (value.type.name !== "x32") {
+                  if (type.name !== value.type.name) {
+                      throw this._error(this._peek(), `Invalid cast from ${value.type.name} to ${type.name}. Line:${this._currentLine}`);
+                  }
+              }
+              value.type = type;
+              this._validateTypeRange(value.scalarValue, value.type);
+          }
+          else if (type === null && value instanceof LiteralExpr$1) {
+              type = (_a = value === null || value === void 0 ? void 0 : value.type) !== null && _a !== void 0 ? _a : Type$1.f32;
+              if (type === Type$1.x32) {
+                  type = Type$1.i32;
+              }
+          }
+          const c = this._updateNode(new Const$1(name.toString(), type, "", "", value));
+          this._context.constants.set(c.name, c);
+          return c;
+      }
+      _global_let_decl() {
+          // attribute* let (ident variable_ident_decl) global_const_initializer?
+          if (!this._match(TokenTypes$1.keywords.let)) {
+              return null;
+          }
+          const name = this._consume(TokenTypes$1.tokens.ident, "Expected variable name");
+          let type = null;
+          if (this._match(TokenTypes$1.tokens.colon)) {
+              const attrs = this._attribute();
+              type = this._type_decl();
+              if (type != null) {
+                  type.attributes = attrs;
+              }
+          }
+          let value = null;
+          if (this._match(TokenTypes$1.tokens.equal)) {
+              value = this._const_expression();
+              const type = [Type$1.f32];
+              try {
+                  const v = value.constEvaluate(this._context, type);
+                  value = new LiteralExpr$1(v, type[0]);
+              }
+              catch (_) {
+              }
+          }
+          if (type !== null && value instanceof LiteralExpr$1) {
+              if (value.type.name !== "x32") {
+                  if (type.name !== value.type.name) {
+                      throw this._error(this._peek(), `Invalid cast from ${value.type.name} to ${type.name}. Line:${this._currentLine}`);
+                  }
+              }
+              value.type = type;
+          }
+          else if (type === null && value instanceof LiteralExpr$1) {
+              type = value.type.name === "x32" ? Type$1.i32 : value.type;
+          }
+          if (value instanceof LiteralExpr$1) {
+              this._validateTypeRange(value.scalarValue, type);
+          }
+          return this._updateNode(new Let$1(name.toString(), type, "", "", value));
+      }
+      _const_expression() {
+          // type_decl paren_left ((const_expression comma)* const_expression comma?)? paren_right
+          // const_literal
+          return this._short_circuit_or_expression();
+      }
+      _variable_decl() {
+          // var variable_qualifier? (ident variable_ident_decl)
+          if (!this._match(TokenTypes$1.keywords.var)) {
+              return null;
+          }
+          // variable_qualifier: less_than storage_class (comma access_mode)? greater_than
+          let storage = "";
+          let access = "";
+          if (this._match(TokenTypes$1.tokens.less_than)) {
+              storage = this._consume(TokenTypes$1.storage_class, "Expected storage_class.").toString();
+              if (this._match(TokenTypes$1.tokens.comma))
+                  access = this._consume(TokenTypes$1.access_mode, "Expected access_mode.").toString();
+              this._consume(TokenTypes$1.tokens.greater_than, "Expected '>'.");
+          }
+          const name = this._consume(TokenTypes$1.tokens.ident, "Expected variable name");
+          let type = null;
+          if (this._match(TokenTypes$1.tokens.colon)) {
+              const attrs = this._attribute();
+              type = this._type_decl();
+              if (type != null) {
+                  type.attributes = attrs;
+              }
+          }
+          return this._updateNode(new Var$1(name.toString(), type, storage, access, null));
+      }
+      _override_decl() {
+          // override (ident variable_ident_decl)
+          if (!this._match(TokenTypes$1.keywords.override)) {
+              return null;
+          }
+          const name = this._consume(TokenTypes$1.tokens.ident, "Expected variable name");
+          let type = null;
+          if (this._match(TokenTypes$1.tokens.colon)) {
+              const attrs = this._attribute();
+              type = this._type_decl();
+              if (type != null) {
+                  type.attributes = attrs;
+              }
+          }
+          return this._updateNode(new Override$1(name.toString(), type, null));
+      }
+      _diagnostic() {
+          // diagnostic(severity_control_name, diagnostic_rule_name)
+          this._consume(TokenTypes$1.tokens.paren_left, "Expected '('");
+          const severity = this._consume(TokenTypes$1.tokens.ident, "Expected severity control name.");
+          this._consume(TokenTypes$1.tokens.comma, "Expected ','");
+          const rule = this._consume(TokenTypes$1.tokens.ident, "Expected diagnostic rule name.");
+          let ruleMessage = rule.toString();
+          if (this._match(TokenTypes$1.tokens.period)) {
+              const message = this._consume(TokenTypes$1.tokens.ident, "Expected diagnostic message.");
+              ruleMessage += `.${message.toString()}`;
+          }
+          this._consume(TokenTypes$1.tokens.paren_right, "Expected ')'");
+          return this._updateNode(new Diagnostic$1(severity.toString(), ruleMessage));
+      }
+      _enable_directive() {
+          // enable ident semicolon
+          const name = this._consume(TokenTypes$1.tokens.ident, "identity expected.");
+          return this._updateNode(new Enable$1(name.toString()));
+      }
+      _requires_directive() {
+          // requires extension [, extension]* semicolon
+          const extensions = [this._consume(TokenTypes$1.tokens.ident, "identity expected.").toString()];
+          while (this._match(TokenTypes$1.tokens.comma)) {
+              const name = this._consume(TokenTypes$1.tokens.ident, "identity expected.");
+              extensions.push(name.toString());
+          }
+          return this._updateNode(new Requires$1(extensions));
+      }
+      _type_alias() {
+          // type ident equal type_decl
+          const name = this._consume(TokenTypes$1.tokens.ident, "identity expected.");
+          this._consume(TokenTypes$1.tokens.equal, "Expected '=' for type alias.");
+          let aliasType = this._type_decl();
+          if (aliasType === null) {
+              throw this._error(this._peek(), "Expected Type for Alias.");
+          }
+          if (this._context.aliases.has(aliasType.name)) {
+              aliasType = this._context.aliases.get(aliasType.name).type;
+          }
+          const aliasNode = this._updateNode(new Alias$1(name.toString(), aliasType));
+          this._context.aliases.set(aliasNode.name, aliasNode);
+          return aliasNode;
+      }
+      _type_decl() {
+          // ident
+          // bool
+          // float32
+          // int32
+          // uint32
+          // vec2 less_than type_decl greater_than
+          // vec3 less_than type_decl greater_than
+          // vec4 less_than type_decl greater_than
+          // mat2x2 less_than type_decl greater_than
+          // mat2x3 less_than type_decl greater_than
+          // mat2x4 less_than type_decl greater_than
+          // mat3x2 less_than type_decl greater_than
+          // mat3x3 less_than type_decl greater_than
+          // mat3x4 less_than type_decl greater_than
+          // mat4x2 less_than type_decl greater_than
+          // mat4x3 less_than type_decl greater_than
+          // mat4x4 less_than type_decl greater_than
+          // atomic less_than type_decl greater_than
+          // pointer less_than storage_class comma type_decl (comma access_mode)? greater_than
+          // array_type_decl
+          // texture_sampler_types
+          if (this._check([
+              TokenTypes$1.tokens.ident,
+              ...TokenTypes$1.texel_format,
+              TokenTypes$1.keywords.bool,
+              TokenTypes$1.keywords.f32,
+              TokenTypes$1.keywords.i32,
+              TokenTypes$1.keywords.u32,
+          ])) {
+              const type = this._advance();
+              const typeName = type.toString();
+              if (this._context.structs.has(typeName)) {
+                  return this._context.structs.get(typeName);
+              }
+              if (this._context.aliases.has(typeName)) {
+                  return this._context.aliases.get(typeName).type;
+              }
+              return this._updateNode(new Type$1(type.toString()));
+          }
+          // texture_sampler_types
+          let type = this._texture_sampler_types();
+          if (type) {
+              return type;
+          }
+          if (this._check(TokenTypes$1.template_types)) {
+              let type = this._advance().toString();
+              let format = null;
+              let access = null;
+              if (this._match(TokenTypes$1.tokens.less_than)) {
+                  format = this._type_decl();
+                  access = null;
+                  if (this._match(TokenTypes$1.tokens.comma)) {
+                      access = this._consume(TokenTypes$1.access_mode, "Expected access_mode for pointer").toString();
+                  }
+                  this._consume(TokenTypes$1.tokens.greater_than, "Expected '>' for type.");
+              }
+              return this._updateNode(new TemplateType$1(type, format, access));
+          }
+          // pointer less_than storage_class comma type_decl (comma access_mode)? greater_than
+          if (this._match(TokenTypes$1.keywords.ptr)) {
+              let pointer = this._previous().toString();
+              this._consume(TokenTypes$1.tokens.less_than, "Expected '<' for pointer.");
+              const storage = this._consume(TokenTypes$1.storage_class, "Expected storage_class for pointer");
+              this._consume(TokenTypes$1.tokens.comma, "Expected ',' for pointer.");
+              const decl = this._type_decl();
+              let access = null;
+              if (this._match(TokenTypes$1.tokens.comma)) {
+                  access = this._consume(TokenTypes$1.access_mode, "Expected access_mode for pointer").toString();
+              }
+              this._consume(TokenTypes$1.tokens.greater_than, "Expected '>' for pointer.");
+              return this._updateNode(new PointerType$1(pointer, storage.toString(), decl, access));
+          }
+          // The following type_decl's have an optional attribyte_list*
+          const attrs = this._attribute();
+          // attribute* array
+          // attribute* array less_than type_decl (comma element_count_expression)? greater_than
+          if (this._match(TokenTypes$1.keywords.array)) {
+              let format = null;
+              let countInt = -1;
+              const array = this._previous();
+              let countNode = null;
+              if (this._match(TokenTypes$1.tokens.less_than)) {
+                  format = this._type_decl();
+                  if (this._context.aliases.has(format.name)) {
+                      format = this._context.aliases.get(format.name).type;
+                  }
+                  let count = "";
+                  if (this._match(TokenTypes$1.tokens.comma)) {
+                      countNode = this._shift_expression();
+                      // If we can't evaluate the node, defer evaluating it until after the shader has
+                      // finished being parsed, because const statements can be declared **after** they
+                      // are used.
+                      try {
+                          count = countNode.constEvaluate(this._context).toString();
+                          countNode = null;
+                      }
+                      catch (e) {
+                          count = "1";
+                      }
+                  }
+                  this._consume(TokenTypes$1.tokens.greater_than, "Expected '>' for array.");
+                  countInt = count ? parseInt(count) : 0;
+              }
+              const arrayType = this._updateNode(new ArrayType$1(array.toString(), attrs, format, countInt));
+              if (countNode) {
+                  this._deferArrayCountEval.push({ arrayType, countNode });
+              }
+              return arrayType;
+          }
+          return null;
+      }
+      _texture_sampler_types() {
+          // sampler_type
+          if (this._match(TokenTypes$1.sampler_type)) {
+              return this._updateNode(new SamplerType$1(this._previous().toString(), null, null));
+          }
+          // depth_texture_type
+          if (this._match(TokenTypes$1.depth_texture_type)) {
+              return this._updateNode(new SamplerType$1(this._previous().toString(), null, null));
+          }
+          // sampled_texture_type less_than type_decl greater_than
+          // multisampled_texture_type less_than type_decl greater_than
+          if (this._match(TokenTypes$1.sampled_texture_type) ||
+              this._match(TokenTypes$1.multisampled_texture_type)) {
+              const sampler = this._previous();
+              this._consume(TokenTypes$1.tokens.less_than, "Expected '<' for sampler type.");
+              const format = this._type_decl();
+              this._consume(TokenTypes$1.tokens.greater_than, "Expected '>' for sampler type.");
+              return this._updateNode(new SamplerType$1(sampler.toString(), format, null));
+          }
+          // storage_texture_type less_than texel_format comma access_mode greater_than
+          if (this._match(TokenTypes$1.storage_texture_type)) {
+              const sampler = this._previous();
+              this._consume(TokenTypes$1.tokens.less_than, "Expected '<' for sampler type.");
+              const format = this._consume(TokenTypes$1.texel_format, "Invalid texel format.").toString();
+              this._consume(TokenTypes$1.tokens.comma, "Expected ',' after texel format.");
+              const access = this._consume(TokenTypes$1.access_mode, "Expected access mode for storage texture type.").toString();
+              this._consume(TokenTypes$1.tokens.greater_than, "Expected '>' for sampler type.");
+              return this._updateNode(new SamplerType$1(sampler.toString(), format, access));
+          }
+          return null;
+      }
+      _attribute() {
+          // attr ident paren_left (literal_or_ident comma)* literal_or_ident paren_right
+          // attr ident
+          let attributes = [];
+          while (this._match(TokenTypes$1.tokens.attr)) {
+              const name = this._consume(TokenTypes$1.attribute_name, "Expected attribute name");
+              const attr = this._updateNode(new Attribute$1(name.toString(), null));
+              if (this._match(TokenTypes$1.tokens.paren_left)) {
+                  // literal_or_ident
+                  attr.value = this._consume(TokenTypes$1.literal_or_ident, "Expected attribute value").toString();
+                  if (this._check(TokenTypes$1.tokens.comma)) {
+                      this._advance();
+                      do {
+                          const v = this._consume(TokenTypes$1.literal_or_ident, "Expected attribute value").toString();
+                          if (!(attr.value instanceof Array)) {
+                              attr.value = [attr.value];
+                          }
+                          attr.value.push(v);
+                      } while (this._match(TokenTypes$1.tokens.comma));
+                  }
+                  this._consume(TokenTypes$1.tokens.paren_right, "Expected ')'");
+              }
+              attributes.push(attr);
+          }
+          if (attributes.length == 0) {
+              return null;
+          }
+          return attributes;
+      }
+  }
+
+  /**
+   * @author Brendan Duncan / https://github.com/brendan-duncan
+   */
+  class TypeInfo$1 {
+      constructor(name, attributes) {
+          this.name = name;
+          this.attributes = attributes;
+          this.size = 0;
+      }
+      get isArray() {
+          return false;
+      }
+      get isStruct() {
+          return false;
+      }
+      get isTemplate() {
+          return false;
+      }
+  }
+  class MemberInfo$1 {
+      constructor(name, type, attributes) {
+          this.name = name;
+          this.type = type;
+          this.attributes = attributes;
+          this.offset = 0;
+          this.size = 0;
+      }
+      get isArray() {
+          return this.type.isArray;
+      }
+      get isStruct() {
+          return this.type.isStruct;
+      }
+      get isTemplate() {
+          return this.type.isTemplate;
+      }
+      get align() {
+          return this.type.isStruct ? this.type.align : 0;
+      }
+      get members() {
+          return this.type.isStruct ? this.type.members : null;
+      }
+      get format() {
+          return this.type.isArray
+              ? this.type.format
+              : this.type.isTemplate
+                  ? this.type.format
+                  : null;
+      }
+      get count() {
+          return this.type.isArray ? this.type.count : 0;
+      }
+      get stride() {
+          return this.type.isArray ? this.type.stride : this.size;
+      }
+  }
+  class StructInfo$1 extends TypeInfo$1 {
+      constructor(name, attributes) {
+          super(name, attributes);
+          this.members = [];
+          this.align = 0;
+          this.startLine = -1;
+          this.endLine = -1;
+          this.inUse = false;
+      }
+      get isStruct() {
+          return true;
+      }
+  }
+  class ArrayInfo$1 extends TypeInfo$1 {
+      constructor(name, attributes) {
+          super(name, attributes);
+          this.count = 0;
+          this.stride = 0;
+      }
+      get isArray() {
+          return true;
+      }
+  }
+  class TemplateInfo$1 extends TypeInfo$1 {
+      constructor(name, format, attributes, access) {
+          super(name, attributes);
+          this.format = format;
+          this.access = access;
+      }
+      get isTemplate() {
+          return true;
+      }
+  }
+  var ResourceType$1;
+  (function (ResourceType) {
+      ResourceType[ResourceType["Uniform"] = 0] = "Uniform";
+      ResourceType[ResourceType["Storage"] = 1] = "Storage";
+      ResourceType[ResourceType["Texture"] = 2] = "Texture";
+      ResourceType[ResourceType["Sampler"] = 3] = "Sampler";
+      ResourceType[ResourceType["StorageTexture"] = 4] = "StorageTexture";
+  })(ResourceType$1 || (ResourceType$1 = {}));
+  class VariableInfo$1 {
+      constructor(name, type, group, binding, attributes, resourceType, access) {
+          this.name = name;
+          this.type = type;
+          this.group = group;
+          this.binding = binding;
+          this.attributes = attributes;
+          this.resourceType = resourceType;
+          this.access = access;
+      }
+      get isArray() {
+          return this.type.isArray;
+      }
+      get isStruct() {
+          return this.type.isStruct;
+      }
+      get isTemplate() {
+          return this.type.isTemplate;
+      }
+      get size() {
+          return this.type.size;
+      }
+      get align() {
+          return this.type.isStruct ? this.type.align : 0;
+      }
+      get members() {
+          return this.type.isStruct ? this.type.members : null;
+      }
+      get format() {
+          return this.type.isArray
+              ? this.type.format
+              : this.type.isTemplate
+                  ? this.type.format
+                  : null;
+      }
+      get count() {
+          return this.type.isArray ? this.type.count : 0;
+      }
+      get stride() {
+          return this.type.isArray ? this.type.stride : this.size;
+      }
+  }
+  class AliasInfo$1 {
+      constructor(name, type) {
+          this.name = name;
+          this.type = type;
+      }
+  }
+  class _TypeSize$1 {
+      constructor(align, size) {
+          this.align = align;
+          this.size = size;
+      }
+  }
+  class InputInfo$1 {
+      constructor(name, type, locationType, location) {
+          this.name = name;
+          this.type = type;
+          this.locationType = locationType;
+          this.location = location;
+          this.interpolation = null;
+      }
+  }
+  class OutputInfo$1 {
+      constructor(name, type, locationType, location) {
+          this.name = name;
+          this.type = type;
+          this.locationType = locationType;
+          this.location = location;
+      }
+  }
+  class OverrideInfo$1 {
+      constructor(name, type, attributes, id) {
+          this.name = name;
+          this.type = type;
+          this.attributes = attributes;
+          this.id = id;
+      }
+  }
+  class ArgumentInfo$1 {
+      constructor(name, type, attributes) {
+          this.name = name;
+          this.type = type;
+          this.attributes = attributes;
+      }
+  }
+  class FunctionInfo$1 {
+      constructor(name, stage = null, attributes) {
+          this.stage = null;
+          this.inputs = [];
+          this.outputs = [];
+          this.arguments = [];
+          this.returnType = null;
+          this.resources = [];
+          this.overrides = [];
+          this.startLine = -1;
+          this.endLine = -1;
+          this.inUse = false;
+          this.calls = new Set();
+          this.name = name;
+          this.stage = stage;
+          this.attributes = attributes;
+      }
+  }
+  class EntryFunctions$1 {
+      constructor() {
+          this.vertex = [];
+          this.fragment = [];
+          this.compute = [];
+      }
+  }
+  class _FunctionResources$1 {
+      constructor(node) {
+          this.resources = null;
+          this.inUse = false;
+          this.info = null;
+          this.node = node;
+      }
+  }
+  class WgslReflect$1 {
+      constructor(code) {
+          /// All top-level uniform vars in the shader.
+          this.uniforms = [];
+          /// All top-level storage vars in the shader.
+          this.storage = [];
+          /// All top-level texture vars in the shader;
+          this.textures = [];
+          // All top-level sampler vars in the shader.
+          this.samplers = [];
+          /// All top-level type aliases in the shader.
+          this.aliases = [];
+          /// All top-level overrides in the shader.
+          this.overrides = [];
+          /// All top-level structs in the shader.
+          this.structs = [];
+          /// All entry functions in the shader: vertex, fragment, and/or compute.
+          this.entry = new EntryFunctions$1();
+          /// All functions in the shader, including entry functions.
+          this.functions = [];
+          this._types = new Map();
+          this._functions = new Map();
+          if (code) {
+              this.update(code);
+          }
+      }
+      _isStorageTexture(type) {
+          return (type.name == "texture_storage_1d" ||
+              type.name == "texture_storage_2d" ||
+              type.name == "texture_storage_2d_array" ||
+              type.name == "texture_storage_3d");
+      }
+      update(code) {
+          const parser = new WgslParser$1();
+          const ast = parser.parse(code);
+          this.updateAST(ast);
+      }
+      updateAST(ast) {
+          for (const node of ast) {
+              if (node instanceof Function$2) {
+                  this._functions.set(node.name, new _FunctionResources$1(node));
+              }
+          }
+          for (const node of ast) {
+              if (node instanceof Struct$1) {
+                  const info = this.getTypeInfo(node, null);
+                  if (info instanceof StructInfo$1) {
+                      this.structs.push(info);
+                  }
+              }
+          }
+          for (const node of ast) {
+              if (node instanceof Alias$1) {
+                  this.aliases.push(this._getAliasInfo(node));
+                  continue;
+              }
+              if (node instanceof Override$1) {
+                  const v = node;
+                  const id = this._getAttributeNum(v.attributes, "id", 0);
+                  const type = v.type != null ? this.getTypeInfo(v.type, v.attributes) : null;
+                  this.overrides.push(new OverrideInfo$1(v.name, type, v.attributes, id));
+                  continue;
+              }
+              if (this._isUniformVar(node)) {
+                  const v = node;
+                  const g = this._getAttributeNum(v.attributes, "group", 0);
+                  const b = this._getAttributeNum(v.attributes, "binding", 0);
+                  const type = this.getTypeInfo(v.type, v.attributes);
+                  const varInfo = new VariableInfo$1(v.name, type, g, b, v.attributes, ResourceType$1.Uniform, v.access);
+                  this.uniforms.push(varInfo);
+                  continue;
+              }
+              if (this._isStorageVar(node)) {
+                  const v = node;
+                  const g = this._getAttributeNum(v.attributes, "group", 0);
+                  const b = this._getAttributeNum(v.attributes, "binding", 0);
+                  const type = this.getTypeInfo(v.type, v.attributes);
+                  const isStorageTexture = this._isStorageTexture(type);
+                  const varInfo = new VariableInfo$1(v.name, type, g, b, v.attributes, isStorageTexture ? ResourceType$1.StorageTexture : ResourceType$1.Storage, v.access);
+                  this.storage.push(varInfo);
+                  continue;
+              }
+              if (this._isTextureVar(node)) {
+                  const v = node;
+                  const g = this._getAttributeNum(v.attributes, "group", 0);
+                  const b = this._getAttributeNum(v.attributes, "binding", 0);
+                  const type = this.getTypeInfo(v.type, v.attributes);
+                  const isStorageTexture = this._isStorageTexture(type);
+                  const varInfo = new VariableInfo$1(v.name, type, g, b, v.attributes, isStorageTexture ? ResourceType$1.StorageTexture : ResourceType$1.Texture, v.access);
+                  if (isStorageTexture) {
+                      this.storage.push(varInfo);
+                  }
+                  else {
+                      this.textures.push(varInfo);
+                  }
+                  continue;
+              }
+              if (this._isSamplerVar(node)) {
+                  const v = node;
+                  const g = this._getAttributeNum(v.attributes, "group", 0);
+                  const b = this._getAttributeNum(v.attributes, "binding", 0);
+                  const type = this.getTypeInfo(v.type, v.attributes);
+                  const varInfo = new VariableInfo$1(v.name, type, g, b, v.attributes, ResourceType$1.Sampler, v.access);
+                  this.samplers.push(varInfo);
+                  continue;
+              }
+              if (node instanceof Function$2) {
+                  const vertexStage = this._getAttribute(node, "vertex");
+                  const fragmentStage = this._getAttribute(node, "fragment");
+                  const computeStage = this._getAttribute(node, "compute");
+                  const stage = vertexStage || fragmentStage || computeStage;
+                  const fn = new FunctionInfo$1(node.name, stage === null || stage === void 0 ? void 0 : stage.name, node.attributes);
+                  fn.attributes = node.attributes;
+                  fn.startLine = node.startLine;
+                  fn.endLine = node.endLine;
+                  this.functions.push(fn);
+                  this._functions.get(node.name).info = fn;
+                  if (stage) {
+                      this._functions.get(node.name).inUse = true;
+                      fn.inUse = true;
+                      fn.resources = this._findResources(node, !!stage);
+                      fn.inputs = this._getInputs(node.args);
+                      fn.outputs = this._getOutputs(node.returnType);
+                      this.entry[stage.name].push(fn);
+                  }
+                  fn.arguments = node.args.map((arg) => new ArgumentInfo$1(arg.name, this.getTypeInfo(arg.type, arg.attributes), arg.attributes));
+                  fn.returnType = node.returnType
+                      ? this.getTypeInfo(node.returnType, node.attributes)
+                      : null;
+                  continue;
+              }
+          }
+          for (const fn of this._functions.values()) {
+              if (fn.info) {
+                  fn.info.inUse = fn.inUse;
+                  this._addCalls(fn.node, fn.info.calls);
+              }
+          }
+          for (const fn of this._functions.values()) {
+              fn.node.search((node) => {
+                  var _a;
+                  if (node.astNodeType === "varExpr") {
+                      const v = node;
+                      for (const override of this.overrides) {
+                          if (v.name == override.name) {
+                              (_a = fn.info) === null || _a === void 0 ? void 0 : _a.overrides.push(override);
+                          }
+                      }
+                  }
+              });
+          }
+          for (const u of this.uniforms) {
+              this._markStructsInUse(u.type);
+          }
+          for (const s of this.storage) {
+              this._markStructsInUse(s.type);
+          }
+      }
+      getStructInfo(name) {
+          for (const s of this.structs) {
+              if (s.name == name) {
+                  return s;
+              }
+          }
+          return null;
+      }
+      getOverrideInfo(name) {
+          for (const o of this.overrides) {
+              if (o.name == name) {
+                  return o;
+              }
+          }
+          return null;
+      }
+      _markStructsInUse(type) {
+          if (!type) {
+              return;
+          }
+          if (type.isStruct) {
+              type.inUse = true;
+              if (type.members) {
+                  for (const m of type.members) {
+                      this._markStructsInUse(m.type);
+                  }
+              }
+          }
+          else if (type.isArray) {
+              this._markStructsInUse(type.format);
+          }
+          else if (type.isTemplate) {
+              if (type.format) {
+                  this._markStructsInUse(type.format);
+              }
+          }
+          else {
+              const alias = this._getAlias(type.name);
+              if (alias) {
+                  this._markStructsInUse(alias);
+              }
+          }
+      }
+      _addCalls(fn, calls) {
+          var _a;
+          for (const call of fn.calls) {
+              const info = (_a = this._functions.get(call.name)) === null || _a === void 0 ? void 0 : _a.info;
+              if (info) {
+                  calls.add(info);
+              }
+          }
+      }
+      /// Find a resource by its group and binding.
+      findResource(group, binding) {
+          for (const u of this.uniforms) {
+              if (u.group == group && u.binding == binding) {
+                  return u;
+              }
+          }
+          for (const s of this.storage) {
+              if (s.group == group && s.binding == binding) {
+                  return s;
+              }
+          }
+          for (const t of this.textures) {
+              if (t.group == group && t.binding == binding) {
+                  return t;
+              }
+          }
+          for (const s of this.samplers) {
+              if (s.group == group && s.binding == binding) {
+                  return s;
+              }
+          }
+          return null;
+      }
+      _findResource(name) {
+          for (const u of this.uniforms) {
+              if (u.name == name) {
+                  return u;
+              }
+          }
+          for (const s of this.storage) {
+              if (s.name == name) {
+                  return s;
+              }
+          }
+          for (const t of this.textures) {
+              if (t.name == name) {
+                  return t;
+              }
+          }
+          for (const s of this.samplers) {
+              if (s.name == name) {
+                  return s;
+              }
+          }
+          return null;
+      }
+      _markStructsFromAST(type) {
+          const info = this.getTypeInfo(type, null);
+          this._markStructsInUse(info);
+      }
+      _findResources(fn, isEntry) {
+          const resources = [];
+          const self = this;
+          const varStack = [];
+          fn.search((node) => {
+              if (node instanceof _BlockStart$1) {
+                  varStack.push({});
+              }
+              else if (node instanceof _BlockEnd$1) {
+                  varStack.pop();
+              }
+              else if (node instanceof Var$1) {
+                  const v = node;
+                  if (isEntry && v.type !== null) {
+                      this._markStructsFromAST(v.type);
+                  }
+                  if (varStack.length > 0) {
+                      varStack[varStack.length - 1][v.name] = v;
+                  }
+              }
+              else if (node instanceof CreateExpr$1) {
+                  const c = node;
+                  if (isEntry && c.type !== null) {
+                      this._markStructsFromAST(c.type);
+                  }
+              }
+              else if (node instanceof Let$1) {
+                  const v = node;
+                  if (isEntry && v.type !== null) {
+                      this._markStructsFromAST(v.type);
+                  }
+                  if (varStack.length > 0) {
+                      varStack[varStack.length - 1][v.name] = v;
+                  }
+              }
+              else if (node instanceof VariableExpr$1) {
+                  const v = node;
+                  // Check to see if the variable is a local variable before checking to see if it's
+                  // a resource.
+                  if (varStack.length > 0) {
+                      const varInfo = varStack[varStack.length - 1][v.name];
+                      if (varInfo) {
+                          return;
+                      }
+                  }
+                  const varInfo = self._findResource(v.name);
+                  if (varInfo) {
+                      resources.push(varInfo);
+                  }
+              }
+              else if (node instanceof CallExpr$1) {
+                  const c = node;
+                  const callFn = self._functions.get(c.name);
+                  if (callFn) {
+                      if (isEntry) {
+                          callFn.inUse = true;
+                      }
+                      fn.calls.add(callFn.node);
+                      if (callFn.resources === null) {
+                          callFn.resources = self._findResources(callFn.node, isEntry);
+                      }
+                      resources.push(...callFn.resources);
+                  }
+              }
+              else if (node instanceof Call$1) {
+                  const c = node;
+                  const callFn = self._functions.get(c.name);
+                  if (callFn) {
+                      if (isEntry) {
+                          callFn.inUse = true;
+                      }
+                      fn.calls.add(callFn.node);
+                      if (callFn.resources === null) {
+                          callFn.resources = self._findResources(callFn.node, isEntry);
+                      }
+                      resources.push(...callFn.resources);
+                  }
+              }
+          });
+          return [...new Map(resources.map(r => [r.name, r])).values()];
+      }
+      getBindGroups() {
+          const groups = [];
+          function _makeRoom(group, binding) {
+              if (group >= groups.length) {
+                  groups.length = group + 1;
+              }
+              if (groups[group] === undefined) {
+                  groups[group] = [];
+              }
+              if (binding >= groups[group].length) {
+                  groups[group].length = binding + 1;
+              }
+          }
+          for (const u of this.uniforms) {
+              _makeRoom(u.group, u.binding);
+              const group = groups[u.group];
+              group[u.binding] = u;
+          }
+          for (const u of this.storage) {
+              _makeRoom(u.group, u.binding);
+              const group = groups[u.group];
+              group[u.binding] = u;
+          }
+          for (const t of this.textures) {
+              _makeRoom(t.group, t.binding);
+              const group = groups[t.group];
+              group[t.binding] = t;
+          }
+          for (const t of this.samplers) {
+              _makeRoom(t.group, t.binding);
+              const group = groups[t.group];
+              group[t.binding] = t;
+          }
+          return groups;
+      }
+      _getOutputs(type, outputs = undefined) {
+          if (outputs === undefined) {
+              outputs = [];
+          }
+          if (type instanceof Struct$1) {
+              this._getStructOutputs(type, outputs);
+          }
+          else {
+              const output = this._getOutputInfo(type);
+              if (output !== null) {
+                  outputs.push(output);
+              }
+          }
+          return outputs;
+      }
+      _getStructOutputs(struct, outputs) {
+          for (const m of struct.members) {
+              if (m.type instanceof Struct$1) {
+                  this._getStructOutputs(m.type, outputs);
+              }
+              else {
+                  const location = this._getAttribute(m, "location") || this._getAttribute(m, "builtin");
+                  if (location !== null) {
+                      const typeInfo = this.getTypeInfo(m.type, m.type.attributes);
+                      const locationValue = this._parseInt(location.value);
+                      const info = new OutputInfo$1(m.name, typeInfo, location.name, locationValue);
+                      outputs.push(info);
+                  }
+              }
+          }
+      }
+      _getOutputInfo(type) {
+          const location = this._getAttribute(type, "location") ||
+              this._getAttribute(type, "builtin");
+          if (location !== null) {
+              const typeInfo = this.getTypeInfo(type, type.attributes);
+              const locationValue = this._parseInt(location.value);
+              const info = new OutputInfo$1("", typeInfo, location.name, locationValue);
+              return info;
+          }
+          return null;
+      }
+      _getInputs(args, inputs = undefined) {
+          if (inputs === undefined) {
+              inputs = [];
+          }
+          for (const arg of args) {
+              if (arg.type instanceof Struct$1) {
+                  this._getStructInputs(arg.type, inputs);
+              }
+              else {
+                  const input = this._getInputInfo(arg);
+                  if (input !== null) {
+                      inputs.push(input);
+                  }
+              }
+          }
+          return inputs;
+      }
+      _getStructInputs(struct, inputs) {
+          for (const m of struct.members) {
+              if (m.type instanceof Struct$1) {
+                  this._getStructInputs(m.type, inputs);
+              }
+              else {
+                  const input = this._getInputInfo(m);
+                  if (input !== null) {
+                      inputs.push(input);
+                  }
+              }
+          }
+      }
+      _getInputInfo(node) {
+          const location = this._getAttribute(node, "location") ||
+              this._getAttribute(node, "builtin");
+          if (location !== null) {
+              const interpolation = this._getAttribute(node, "interpolation");
+              const type = this.getTypeInfo(node.type, node.attributes);
+              const locationValue = this._parseInt(location.value);
+              const info = new InputInfo$1(node.name, type, location.name, locationValue);
+              if (interpolation !== null) {
+                  info.interpolation = this._parseString(interpolation.value);
+              }
+              return info;
+          }
+          return null;
+      }
+      _parseString(s) {
+          if (s instanceof Array) {
+              s = s[0];
+          }
+          return s;
+      }
+      _parseInt(s) {
+          if (s instanceof Array) {
+              s = s[0];
+          }
+          const n = parseInt(s);
+          return isNaN(n) ? s : n;
+      }
+      _getAlias(name) {
+          for (const a of this.aliases) {
+              if (a.name == name) {
+                  return a.type;
+              }
+          }
+          return null;
+      }
+      _getAliasInfo(node) {
+          return new AliasInfo$1(node.name, this.getTypeInfo(node.type, null));
+      }
+      getTypeInfo(type, attributes = null) {
+          if (this._types.has(type)) {
+              return this._types.get(type);
+          }
+          if (type instanceof ArrayType$1) {
+              const a = type;
+              const t = a.format ? this.getTypeInfo(a.format, a.attributes) : null;
+              const info = new ArrayInfo$1(a.name, attributes);
+              info.format = t;
+              info.count = a.count;
+              this._types.set(type, info);
+              this._updateTypeInfo(info);
+              return info;
+          }
+          if (type instanceof Struct$1) {
+              const s = type;
+              const info = new StructInfo$1(s.name, attributes);
+              info.startLine = s.startLine;
+              info.endLine = s.endLine;
+              for (const m of s.members) {
+                  const t = this.getTypeInfo(m.type, m.attributes);
+                  info.members.push(new MemberInfo$1(m.name, t, m.attributes));
+              }
+              this._types.set(type, info);
+              this._updateTypeInfo(info);
+              return info;
+          }
+          if (type instanceof SamplerType$1) {
+              const s = type;
+              const formatIsType = s.format instanceof Type$1;
+              const format = s.format
+                  ? formatIsType
+                      ? this.getTypeInfo(s.format, null)
+                      : new TypeInfo$1(s.format, null)
+                  : null;
+              const info = new TemplateInfo$1(s.name, format, attributes, s.access);
+              this._types.set(type, info);
+              this._updateTypeInfo(info);
+              return info;
+          }
+          if (type instanceof TemplateType$1) {
+              const t = type;
+              const format = t.format ? this.getTypeInfo(t.format, null) : null;
+              const info = new TemplateInfo$1(t.name, format, attributes, t.access);
+              this._types.set(type, info);
+              this._updateTypeInfo(info);
+              return info;
+          }
+          const info = new TypeInfo$1(type.name, attributes);
+          this._types.set(type, info);
+          this._updateTypeInfo(info);
+          return info;
+      }
+      _updateTypeInfo(type) {
+          var _a, _b, _c;
+          const typeSize = this._getTypeSize(type);
+          type.size = (_a = typeSize === null || typeSize === void 0 ? void 0 : typeSize.size) !== null && _a !== void 0 ? _a : 0;
+          if (type instanceof ArrayInfo$1) {
+              if (type["format"]) {
+                  const formatInfo = this._getTypeSize(type["format"]);
+                  // Array stride is the maximum of the format size and alignment.
+                  // In the case of a vec3f, the size is 12 bytes, but the alignment is 16 bytes.
+                  // Buffer alignment is therefore 16 bytes.
+                  type.stride = Math.max((_b = formatInfo === null || formatInfo === void 0 ? void 0 : formatInfo.size) !== null && _b !== void 0 ? _b : 0, (_c = formatInfo === null || formatInfo === void 0 ? void 0 : formatInfo.align) !== null && _c !== void 0 ? _c : 0);
+                  this._updateTypeInfo(type["format"]);
+              }
+          }
+          if (type instanceof StructInfo$1) {
+              this._updateStructInfo(type);
+          }
+      }
+      _updateStructInfo(struct) {
+          var _a;
+          let offset = 0;
+          let lastSize = 0;
+          let lastOffset = 0;
+          let structAlign = 0;
+          for (let mi = 0, ml = struct.members.length; mi < ml; ++mi) {
+              const member = struct.members[mi];
+              const sizeInfo = this._getTypeSize(member);
+              if (!sizeInfo) {
+                  continue;
+              }
+              (_a = this._getAlias(member.type.name)) !== null && _a !== void 0 ? _a : member.type;
+              const align = sizeInfo.align;
+              const size = sizeInfo.size;
+              offset = this._roundUp(align, offset + lastSize);
+              lastSize = size;
+              lastOffset = offset;
+              structAlign = Math.max(structAlign, align);
+              member.offset = offset;
+              member.size = size;
+              this._updateTypeInfo(member.type);
+          }
+          struct.size = this._roundUp(structAlign, lastOffset + lastSize);
+          struct.align = structAlign;
+      }
+      _getTypeSize(type) {
+          var _a, _b;
+          if (type === null || type === undefined) {
+              return null;
+          }
+          const explicitSize = this._getAttributeNum(type.attributes, "size", 0);
+          const explicitAlign = this._getAttributeNum(type.attributes, "align", 0);
+          if (type instanceof MemberInfo$1) {
+              type = type.type;
+          }
+          if (type instanceof TypeInfo$1) {
+              const alias = this._getAlias(type.name);
+              if (alias !== null) {
+                  type = alias;
+              }
+          }
+          {
+              const info = WgslReflect$1._typeInfo[type.name];
+              if (info !== undefined) {
+                  const divisor = ((_a = type["format"]) === null || _a === void 0 ? void 0 : _a.name) === "f16" ? 2 : 1;
+                  return new _TypeSize$1(Math.max(explicitAlign, info.align / divisor), Math.max(explicitSize, info.size / divisor));
+              }
+          }
+          {
+              const info = WgslReflect$1._typeInfo[type.name.substring(0, type.name.length - 1)];
+              if (info) {
+                  const divisor = type.name[type.name.length - 1] === "h" ? 2 : 1;
+                  return new _TypeSize$1(Math.max(explicitAlign, info.align / divisor), Math.max(explicitSize, info.size / divisor));
+              }
+          }
+          if (type instanceof ArrayInfo$1) {
+              let arrayType = type;
+              let align = 8;
+              let size = 8;
+              // Type                 AlignOf(T)          Sizeof(T)
+              // array<E, N>          AlignOf(E)          N * roundUp(AlignOf(E), SizeOf(E))
+              // array<E>             AlignOf(E)          N * roundUp(AlignOf(E), SizeOf(E))  (N determined at runtime)
+              //
+              // @stride(Q)
+              // array<E, N>          AlignOf(E)          N * Q
+              //
+              // @stride(Q)
+              // array<E>             AlignOf(E)          Nruntime * Q
+              //const E = type.format.name;
+              const E = this._getTypeSize(arrayType.format);
+              if (E !== null) {
+                  size = E.size;
+                  align = E.align;
+              }
+              const N = arrayType.count;
+              const stride = this._getAttributeNum((_b = type === null || type === void 0 ? void 0 : type.attributes) !== null && _b !== void 0 ? _b : null, "stride", this._roundUp(align, size));
+              size = N * stride;
+              if (explicitSize) {
+                  size = explicitSize;
+              }
+              return new _TypeSize$1(Math.max(explicitAlign, align), Math.max(explicitSize, size));
+          }
+          if (type instanceof StructInfo$1) {
+              let align = 0;
+              let size = 0;
+              // struct S     AlignOf:    max(AlignOfMember(S, M1), ... , AlignOfMember(S, MN))
+              //              SizeOf:     roundUp(AlignOf(S), OffsetOfMember(S, L) + SizeOfMember(S, L))
+              //                          Where L is the last member of the structure
+              let offset = 0;
+              let lastSize = 0;
+              let lastOffset = 0;
+              for (const m of type.members) {
+                  const mi = this._getTypeSize(m.type);
+                  if (mi !== null) {
+                      align = Math.max(mi.align, align);
+                      offset = this._roundUp(mi.align, offset + lastSize);
+                      lastSize = mi.size;
+                      lastOffset = offset;
+                  }
+              }
+              size = this._roundUp(align, lastOffset + lastSize);
+              return new _TypeSize$1(Math.max(explicitAlign, align), Math.max(explicitSize, size));
+          }
+          return null;
+      }
+      _isUniformVar(node) {
+          return node instanceof Var$1 && node.storage == "uniform";
+      }
+      _isStorageVar(node) {
+          return node instanceof Var$1 && node.storage == "storage";
+      }
+      _isTextureVar(node) {
+          return (node instanceof Var$1 &&
+              node.type !== null &&
+              WgslReflect$1._textureTypes.indexOf(node.type.name) != -1);
+      }
+      _isSamplerVar(node) {
+          return (node instanceof Var$1 &&
+              node.type !== null &&
+              WgslReflect$1._samplerTypes.indexOf(node.type.name) != -1);
+      }
+      _getAttribute(node, name) {
+          const obj = node;
+          if (!obj || !obj["attributes"]) {
+              return null;
+          }
+          const attrs = obj["attributes"];
+          for (let a of attrs) {
+              if (a.name == name) {
+                  return a;
+              }
+          }
+          return null;
+      }
+      _getAttributeNum(attributes, name, defaultValue) {
+          if (attributes === null) {
+              return defaultValue;
+          }
+          for (let a of attributes) {
+              if (a.name == name) {
+                  let v = a !== null && a.value !== null ? a.value : defaultValue;
+                  if (v instanceof Array) {
+                      v = v[0];
+                  }
+                  if (typeof v === "number") {
+                      return v;
+                  }
+                  if (typeof v === "string") {
+                      return parseInt(v);
+                  }
+                  return defaultValue;
+              }
+          }
+          return defaultValue;
+      }
+      _roundUp(k, n) {
+          return Math.ceil(n / k) * k;
+      }
+  }
+  // Type                 AlignOf(T)          Sizeof(T)
+  // i32, u32, or f32     4                   4
+  // atomic<T>            4                   4
+  // vec2<T>              8                   8
+  // vec3<T>              16                  12
+  // vec4<T>              16                  16
+  // mat2x2<f32>          8                   16
+  // mat3x2<f32>          8                   24
+  // mat4x2<f32>          8                   32
+  // mat2x3<f32>          16                  32
+  // mat3x3<f32>          16                  48
+  // mat4x3<f32>          16                  64
+  // mat2x4<f32>          16                  32
+  // mat3x4<f32>          16                  48
+  // mat4x4<f32>          16                  64
+  WgslReflect$1._typeInfo = {
+      f16: { align: 2, size: 2 },
+      i32: { align: 4, size: 4 },
+      u32: { align: 4, size: 4 },
+      f32: { align: 4, size: 4 },
+      atomic: { align: 4, size: 4 },
+      vec2: { align: 8, size: 8 },
+      vec3: { align: 16, size: 12 },
+      vec4: { align: 16, size: 16 },
+      mat2x2: { align: 8, size: 16 },
+      mat3x2: { align: 8, size: 24 },
+      mat4x2: { align: 8, size: 32 },
+      mat2x3: { align: 16, size: 32 },
+      mat3x3: { align: 16, size: 48 },
+      mat4x3: { align: 16, size: 64 },
+      mat2x4: { align: 16, size: 32 },
+      mat3x4: { align: 16, size: 48 },
+      mat4x4: { align: 16, size: 64 },
+  };
+  WgslReflect$1._textureTypes = TokenTypes$1.any_texture_type.map((t) => {
+      return t.name;
+  });
+  WgslReflect$1._samplerTypes = TokenTypes$1.sampler_type.map((t) => {
+      return t.name;
+  });
+
+  class ShaderModule extends GPUObject {
+    constructor(id, descriptor, stacktrace) {
+      super(id, descriptor, stacktrace);
+      this._reflection = null;
+      this.descriptor = descriptor;
+      this.hasVertexEntries = descriptor?.code ? descriptor.code.indexOf("@vertex") != -1 : false;
+      this.hasFragmentEntries = descriptor?.code ? descriptor.code.indexOf("@fragment") != -1 : false;
+      this.hasComputeEntries = descriptor?.code ? descriptor.code.indexOf("@compute") != -1 : false;
+      this.replacementCode = null;
+
+      this.isDestroyed = false;
+    }
+
+    get code() {
+      return this.replacementCode ?? this.descriptor?.code ?? "";
+    }
+
+    get reflection() {
+      if (this._reflection === null) {
+        try {
+          this._reflection = new WgslReflect$1(this.code);
+        } catch (e) {
+          this._reflection = null;
+        }
+      }
+      return this._reflection;
+    }
+  }
+  ShaderModule.className = "ShaderModule";
+
+  class TextureView extends GPUObject {
+    constructor(id, texture, descriptor, stacktrace) {
+      super(id, descriptor, stacktrace);
+      this.descriptor = descriptor;
+      this.texture = texture;
+    }
+  }
+  TextureView.className = "TextureView";
+
+  const TextureFormatInfo = {
+      "r8unorm": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r8snorm": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r8uint": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r8sint": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "rg8unorm": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg8snorm": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg8uint": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg8sint": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+
+      "rgba8unorm": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba8unorm-srgb": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba8snorm": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba8uint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba8sint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "bgra8unorm": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "bgra8unorm-srgb": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+
+      "r16uint": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r16sint": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r16float": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+
+      "rg16uint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg16sint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg16float": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+
+      "rgba16uint": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba16sint": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba16float": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+
+      "r32uint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r32sint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+      "r32float": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
+
+      "rg32uint": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg32sint": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+      "rg32float": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
+
+      "rgba32uint": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba32sint": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgba32float": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgb10a2uint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rgb10a2unorm": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+      "rg11b10ufloat": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+
+      // Depth Stencil Formats
+      "stencil8": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": false, "hasStencil": true, "channels": 1 }, // bytesPerBlock is actually 1-4
+      "depth16unorm": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": false, "channels": 1 },
+      "depth24plus": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": false, "depthOnlyFormat": "depth32float", "channels": 1 },
+      "depth24plus-stencil8": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": true, "depthOnlyFormat": "depth32float", "channels": 1 }, // bytesPerBlock is actually 4-8
+      "depth32float": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": false, "channels": 1 },
+      "depth32float-stencil8": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": true, "stencilOnlyFormat": "depth32float", "channels": 1 }, // bytesPerBlock is actually 5-8
+
+      // Packed Formats
+      "rgb9e5ufloat": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
+
+      // Compressed Formats
+      "bc1-rgba-unorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc1-rgba-unorm-srgb": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc2-rgba-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc2-rgba-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc3-rgba-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc3-rgba-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+
+      "bc4-r-unorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 1 },
+      "bc4-r-snorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 1 },
+
+      "bc5-rg-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 2 },
+      "bc5-rg-snorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 2 },
+
+      "bc6h-rgb-ufloat": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc6h-rgb-float": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc7-rgba-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "bc7-rgba-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      
+      "etc2-rgb8unorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "etc2-rgb8unorm-srgb": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "etc2-rgb8a1unorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "etc2-rgb8a1unorm-srgb": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "etc2-rgba8unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "etc2-rgba8unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      
+      "eac-r11unorm": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": true, "channels": 1 },
+      "eac-r11snorm": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": true, "channels": 1 },
+
+      "eac-rg11unorm": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": true, "channels": 2 },
+      "eac-rg11snorm": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": true, "channels": 2 },
+
+      "astc-4x4-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "astc-4x4-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "astc-5x4-unorm": { "bytesPerBlock": 16, "blockWidth": 5, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "astc-5x4-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 5, "blockHeight": 4, "isCompressed": true, "channels": 4 },
+      "astc-5x5-unorm": { "bytesPerBlock": 16, "blockWidth": 5, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-5x5-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 5, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-6x5-unorm": { "bytesPerBlock": 16, "blockWidth": 6, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-6x5-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 6, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-6x6-unorm": { "bytesPerBlock": 16, "blockWidth": 6, "blockHeight": 6, "isCompressed": true, "channels": 4 },
+      "astc-6x6-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 6, "blockHeight": 6, "isCompressed": true, "channels": 4 },
+      "astc-8x5-unorm": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-8x5-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-8x6-unorm": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 6, "isCompressed": true, "channels": 4 },
+      "astc-8x6-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 6, "isCompressed": true, "channels": 4 },
+      "astc-8x8-unorm": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 8, "isCompressed": true, "channels": 4 },
+      "astc-8x8-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 8, "isCompressed": true, "channels": 4 },
+      "astc-10x5-unorm": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-10x5-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 5, "isCompressed": true, "channels": 4 },
+      "astc-10x6-unorm": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 6, "isCompressed": true, "channels": 4 },
+      "astc-10x6-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 6, "isCompressed": true, "channels": 4 },
+      "astc-10x8-unorm": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 8, "isCompressed": true, "channels": 4 },
+      "astc-10x8-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 8, "isCompressed": true, "channels": 4 },
+      "astc-10x10-unorm": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 10, "isCompressed": true, "channels": 4 },
+      "astc-10x10-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 10, "isCompressed": true, "channels": 4 },
+      "astc-12x10-unorm": { "bytesPerBlock": 16, "blockWidth": 12, "blockHeight": 10, "isCompressed": true, "channels": 4 },
+      "astc-12x10-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 12, "blockHeight": 10, "isCompressed": true, "channels": 4 },
+      "astc-12x12-unorm": { "bytesPerBlock": 16, "blockWidth": 12, "blockHeight": 12, "isCompressed": true, "channels": 4 },
+      "astc-12x12-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 12, "blockHeight": 12, "isCompressed": true, "channels": 4 },
+  };
+
+  // From https://stackoverflow.com/questions/5678432/decompressing-half-precision-floats-in-javascript
+  function float16ToFloat32(float16) {
+      var s = (float16 & 0x8000) >> 15;
+      var e = (float16 & 0x7C00) >> 10;
+      var f = float16 & 0x03FF;
+
+      if (e == 0) {
+        return (s ? -1:1) * Math.pow(2, -14) * (f / Math.pow(2, 10));
+      } else if (e == 0x1F) {
+        return f ? NaN : ((s ? -1 : 1) * Infinity);
+      }
+
+      return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + (f / Math.pow(2, 10)));
+  }
+
+  const uint32 = new Uint32Array(1);
+  const uint32ToFloat32 = new Float32Array(uint32.buffer, 0, 1);
+
+  function float11ToFloat32(f11) {
+    const u32 = (((((f11) >> 6) & 0x1F) + (127 - 15)) << 23) | (((f11) & 0x3F) << 17);
+    uint32[0] = u32;
+    return uint32ToFloat32[0];
+  }
+
+  function float10ToFloat32(f10) {
+    const u32 = (((((f10) >> 5) & 0x1F) + (127 - 15)) << 23) | (((f10) & 0x1F) << 18);
+    uint32[0] = u32;
+    return uint32ToFloat32[0];
+  }
+
+  class Texture extends GPUObject {
+    constructor(id, descriptor, stacktrace) {
+      super(id, descriptor, stacktrace);
+      this.descriptor = descriptor;
+      this.imageData = null;
+      this.loadedImageDataChunks = [];
+      this.imageDataPending = false;
+      this.isImageDataLoaded = false;
+      this.gpuTexture = null;
+      this._layerRanges = null;
+
+      this.display = {
+        exposure: 1,
+        channels: 0,
+        minRnage: 0,
+        maxRange: 1,
+        mipLevel: 0
+      };
+    }
+
+    get layerRanges() {
+      if (this._layerRanges === null) {
+        const formatInfo = TextureFormatInfo[this.format];
+        if (formatInfo.isDepthStencil) {
+          const lr = [];
+          const numLayers = this.depthOrArrayLayers;
+          const width = this.width;
+            const height = this.height;
+          for (let layer = 0; layer < numLayers; ++layer) {
+            let min = null;
+            let max = null;
+            for (let y = 0; y < height; ++y) {
+              for (let x = 0; x < width; ++x) {
+                const pixel = this.getPixel(x, y, layer);
+                if (min === null || pixel.r < min) {
+                  min = pixel.r;
+                }
+                if (max === null || pixel.r > max) {
+                  max = pixel.r;
+                }
+              }
+            }
+            lr.push({ min, max });
+          }
+          this._layerRanges = lr;
+        }
+      }
+      return this._layerRanges
+    }
+
+    getPixel(x, y, z, mipLevel) {
+      mipLevel ??= 0;
+      mipLevel = Math.max(Math.min(mipLevel, this.mipLevelCount - 1), 0);
+      function pixelValue(imageData, offset, format, numChannels) {
+        const value = [null, null, null, null];
+        for (let i = 0; i < numChannels; ++i) {
+          switch (format) {
+            case "8unorm":
+              value[i] = imageData[offset] / 255;
+              offset++;
+              break;
+            case "8snorm":
+              value[i] = (imageData[offset] / 255) * 2 - 1;
+              offset++;
+              break;
+            case "8uint":
+              value[i] = imageData[offset];
+              offset++;
+              break;
+            case "8sint":
+              value[i] = imageData[offset] - 127;
+              offset++;
+              break;
+            case "16uint":
+              value[i] = imageData[offset] | (imageData[offset + 1] << 8);
+              offset += 2;
+              break;
+            case "16sint":
+              value[i] = (imageData[offset] | (imageData[offset + 1] << 8)) - 32768;
+              offset += 2;
+              break;
+            case "16float":
+              value[i] = float16ToFloat32(imageData[offset] | (imageData[offset + 1] << 8));
+              offset += 2;
+              break;
+            case "32uint":
+              value[i] = imageData[offset] | (imageData[offset + 1] << 8) | (imageData[offset + 2] << 16) | (imageData[offset + 3] << 24);
+              offset += 4;
+              break;
+            case "32sint":
+              value[i] = (imageData[offset] | (imageData[offset + 1] << 8) | (imageData[offset + 2] << 16) | (imageData[offset + 3] << 24)) | 0;
+              offset += 4;
+              break;
+            case "32float":
+              value[i] = new Float32Array(imageData.buffer, offset, 1)[0];
+              offset += 4;
+              break;
+          }
+        }
+        return value;
+      }
+
+      if (this.imageData) {
+        const bytesPerRow = this.bytesPerRow >> mipLevel;
+        const height = this.height >> mipLevel;
+        const offset = (z * bytesPerRow * height) + y * bytesPerRow + x * this.texelByteSize;
+        const imageData = this.imageData;
+        switch (this.format) {
+          case "r8unorm": {
+            const value = pixelValue(imageData, offset, "8unorm", 1);
+            return { r: value[0] };
+          }
+          case "r8snorm": {
+            const value = pixelValue(imageData, offset, "8snorm", 1);
+            return { r: value[0] };
+          }
+          case "r8uint": {
+            const value = pixelValue(imageData, offset, "8uint", 1);
+            return { r: value[0] };
+          }
+          case "r8sint": {
+            const value = pixelValue(imageData, offset, "8sint", 1);
+            return { r: value[0] };
+          }
+
+          case "rg8unorm": {
+            const value = pixelValue(imageData, offset, "8unorm", 2);
+            return { r: value[0], g: value[1] };
+          }
+          case "rg8snorm": {
+            const value = pixelValue(imageData, offset, "8snorm", 2);
+            return { r: value[0], g: value[1] };
+          }
+          case "rg8uint": {
+            const value = pixelValue(imageData, offset, "8uint", 2);
+            return { r: value[0], g: value[1] };
+          }
+          case "rg8sint": {
+            const value = pixelValue(imageData, offset, "8sint", 2);
+            return { r: value[0], g: value[1] };
+          }
+          
+          case "rgba8unorm-srgb":
+          case "rgba8unorm": {
+            const value = pixelValue(imageData, offset, "8unorm", 4);
+            return { r: value[0], g: value[1], b: value[2], a: value[3] };
+          }
+          case "rgba8snorm": {
+            const value = pixelValue(imageData, offset, "8snorm", 4);
+            return { r: value[0], g: value[1], b: value[2], a: value[3] };
+          }
+          case "rgba8uint": {
+            const value = pixelValue(imageData, offset, "8uint", 4);
+            return { r: value[0], g: value[1], b: value[2], a: value[3] };
+          }
+          case "rgba8sint": {
+            const value = pixelValue(imageData, offset, "8sint", 4);
+            return { r: value[0], g: value[1], b: value[2], a: value[3] };
+          }
+
+          case "bgra8unorm-srgb":
+          case "bgra8unorm": {
+            const value = pixelValue(imageData, offset, "8unorm", 4);
+            return { r: value[2], g: value[1], b: value[0], a: value[3] };
+          }
+
+          case "r16uint": {
+            const value = pixelValue(imageData, offset, "16uint", 1);
+            return { r: value[0] };
+          }
+          case "r16sint": {
+            const value = pixelValue(imageData, offset, "16sint", 1);
+            return { r: value[0] };
+          }
+          case "r16float": {
+            const value = pixelValue(imageData, offset, "16float", 1);
+            return { r: value[0] };
+          }
+
+          case "rg16uint": {
+            const value = pixelValue(imageData, offset, "16uint", 2);
+            return { r: value[0], g: value[1] };
+          }
+          case "rg16sint": {
+            const value = pixelValue(imageData, offset, "16sint", 2);
+            return { r: value[0], g: value[1] };
+          }
+          case "rg16float": {
+            const value = pixelValue(imageData, offset, "16float", 2);
+            return { r: value[0], g: value[1] };
+          }
+
+          case "rgba16uint": {
+            const value = pixelValue(imageData, offset, "16uint", 4);
+            return { r: value[0], g: value[1], b: value[2], a: value[3] };
+          }
+          case "rgba16sint": {
+            const value = pixelValue(imageData, offset, "16sint", 4);
+            return { r: value[0], g: value[1], b: value[2], a: value[3] };
+          }
+          case "rgba16float": {
+            const value = pixelValue(imageData, offset, "16float", 4);
+            return { r: value[0], g: value[1], b: value[2], a: value[3] };
+          }
+
+          case "r32uint": {
+            const value = pixelValue(imageData, offset, "32uint", 1);
+            return { r: value[0] };
+          }
+          case "r32sint": {
+            const value = pixelValue(imageData, offset, "32sint", 1);
+            return { r: value[0] };
+          }
+          case "depth16unorm": // depth formats get conerted to r32float
+          case "depth24plus":
+          case "depth24plus-stencil8":
+          case "depth32float":
+          case "depth32float-stencil8":
+          case "r32float": {
+            const value = pixelValue(imageData, offset, "32float", 1);
+            return { r: value[0] };
+          }
+          case "rg32uint": {
+            const value = pixelValue(imageData, offset, "32uint", 2);
+            return { r: value[0], g: value[1] };
+          }
+          case "rg32sint": {
+            const value = pixelValue(imageData, offset, "32sint", 2);
+            return { r: value[0], g: value[1] };
+          }
+          case "rg32float": {
+            const value = pixelValue(imageData, offset, "32float", 2);
+            return { r: value[0], g: value[1] };
+          }
+          case "rgba32uint": {
+            const value = pixelValue(imageData, offset, "32uint", 4);
+            return { r: value[0], g: value[1], b: value[2], a: value[3] };
+          }
+          case "rgba32sint": {
+            const value = pixelValue(imageData, offset, "32sint", 4);
+            return { r: value[0], g: value[1], b: value[2], a: value[3] };
+          }
+          case "rgba32float": {
+            const value = pixelValue(imageData, offset, "32float", 4);
+            return { r: value[0], g: value[1], b: value[2], a: value[3] };
+          }
+
+          case "rg11b10ufloat": {
+            const uintValue = new Uint32Array(imageData.buffer, offset, 1)[0];
+            const ri = uintValue & 0x7FF;
+            const gi = (uintValue & 0x3FF800) >> 11;
+            const bi = (uintValue & 0xFFC00000) >> 22;
+            const rf = float11ToFloat32(ri);
+            const gf = float11ToFloat32(gi);
+            const bf = float10ToFloat32(bi);
+            return { r: rf, g: gf, b: bf, a: 1.0 };
+          }
+        }
+      }
+      return null;
+    }
+
+    get format() {
+      return this.descriptor?.format ?? "<unknown format>";
+    }
+
+    get dimension() {
+      return this.descriptor?.dimension ?? "2d";
+    }
+
+    get width() {
+      const size = this.descriptor?.size;
+      if (size instanceof Array && size.length > 0) {
+        return size[0] ?? 0;
+      } else if (size instanceof Object) {
+        return size.width ?? 0;
+      }
+      return 0;
+    }
+
+    get height() {
+      const size = this.descriptor?.size;
+      if (size instanceof Array && size.length > 1) {
+        return size[1] ?? 1;
+      } else if (size instanceof Object) {
+        return size.height ?? 1;
+      }
+      return 0;
+    }
+
+    get depthOrArrayLayers() {
+      const size = this.descriptor?.size;
+      if (size instanceof Array && size.length > 2) {
+        return size[2] ?? 1;
+      } else if (size instanceof Object) {
+        return size.depthOrArrayLayers ?? 1;
+      }
+      return 0;
+    }
+
+    get mipLevelCount() {
+      return this.descriptor?.mipLevelCount ?? 1;
+    }
+
+    getMipSize(level) {
+      const mipLevelCount = this.mipLevelCount;
+      level = Math.max(Math.min(level, mipLevelCount - 1), 0);
+      const mipWidth = this.width >> level;
+      const mipHeight = this.height >> level;
+      const mipDepthOrArrayLayers = this.dimension === "3d" ? this.depthOrArrayLayers >> level : this.depthOrArrayLayers;
+      return [mipWidth, mipHeight, mipDepthOrArrayLayers];
+    }
+
+    get resolutionString() {
+      const width = this.width;
+      const height = this.height;
+      const depthOrArrayLayers = this.depthOrArrayLayers;
+      const dimension = this.dimension;
+      if (dimension === "1d") {
+        if (depthOrArrayLayers > 1) {
+          return `${width}x${depthOrArrayLayers}`;
+        }
+        return `${width}`;
+      }    
+      if (depthOrArrayLayers > 1) {
+        return `${width}x${height}x${depthOrArrayLayers}`;
+      }
+      return `${width}x${height}`;
+    }
+
+    get texelByteSize() {
+      const format = this.descriptor?.format;
+      const formatInfo = TextureFormatInfo[format];
+      if (!formatInfo) {
+        return 0;
+      }
+      if (formatInfo.isDepthStencil) {
+        return 4; // depth textures have r32float imageData
+      }
+      return formatInfo.bytesPerBlock;
+    }
+
+    get bytesPerRow() {
+      const width = this.width;
+      const texelByteSize = this.texelByteSize;
+      return (width * texelByteSize + 255) & ~0xff;
+    }
+
+    get isDepthStencil() {
+      const format = this.descriptor?.format;
+      const formatInfo = TextureFormatInfo[format];
+      if (!formatInfo) {
+        return false;
+      }
+      return formatInfo.isDepthStencil;
+    }
+
+    getGpuSize() {
+      const format = this.descriptor?.format;
+      const formatInfo = TextureFormatInfo[format];
+      const width = this.width;
+      if (!format || width <= 0 || !formatInfo) {
+        return -1;
+      }
+
+      const height = this.height;
+      const depthOrArrayLayers = this.depthOrArrayLayers;
+      const dimension = this.dimension;
+      const blockWidth = width / formatInfo.blockWidth;
+      const blockHeight = dimension === "1d" ? 1 : height / formatInfo.blockHeight;
+      const bytesPerBlock = formatInfo.bytesPerBlock;
+
+      return blockWidth * blockHeight * bytesPerBlock * depthOrArrayLayers;
+    }
+  }
+  Texture.className = "Texture";
+
+  class ValidationError extends GPUObject {
+    constructor(id, object, message, stacktrace) {
+      super(id, null, stacktrace);
+      this.message = message;
+      this.object = object ?? 0;
+    }
+  }
+  ValidationError.className = "ValidationError";
+
+  class RenderBundle extends GPUObject {
+    constructor(id, descriptor, stacktrace) {
+      super(id, stacktrace);
+      this.descriptor = descriptor;
+      this.commands = [];
+    }
+  }
+  RenderBundle.className = "RenderBundle";
+
+  class ObjectDatabase {
+    constructor(port) {
+      this.port = port;
+      this.frameTime = 0;
+      this.errorCount = 0;
+
+      this.allObjects = new Map();
+      this.adapters = new Map();
+      this.devices = new Map();
+      this.samplers = new Map();
+      this.textures = new Map();
+      this.textureViews = new Map();
+      this.buffers = new Map();
+      this.bindGroups = new Map();
+      this.bindGroupLayouts = new Map();
+      this.shaderModules = new Map();
+      this.pipelineLayouts = new Map();
+      this.renderPipelines = new Map();
+      this.computePipelines = new Map();
+      this.renderBundles = new Map();
+      this.pendingRenderPipelines = new Map();
+      this.pendingComputePipelines = new Map();
+      this.validationErrors = new Map();
+
+      this.capturedObjects = new Map();
+
+      this.inspectedObject = null;
+
+      this.onDeleteObject = new Signal();
+      this.onResolvePendingObject = new Signal();
+      this.onAddObject = new Signal();
+      this.onDeltaFrameTime = new Signal();
+      this.onEndFrame = new Signal();
+      this.onAdapterInfo = new Signal();
+      this.onObjectLabelChanged = new Signal();
+      this.onValidationError = new Signal();
+
+      this.totalTextureMemory = 0;
+      this.totalBufferMemory = 0;
+
+      this.deltaFrameTime = -1;
+
+      const self = this;
+
+      port.addListener((message) => {
+        switch (message.action) {
+          case Actions.DeltaTime:
+            this.deltaFrameTime = message.deltaTime;
+            this.onDeltaFrameTime.emit();
+            break;
+          case Actions.ValidationError: {
+            const errorMessage = message.message;
+            const stacktrace = message.stacktrace;
+            const objectId = message.id ?? 0;
+            if (self.validationErrors.has(errorMessage)) {
+              return;
+            }
+            const errorObj = new ValidationError(++self.errorCount, objectId, errorMessage, stacktrace);
+            self.validationErrors.set(errorMessage, errorObj);
+            self.onValidationError.emit(errorObj);
+            break;
+          }
+          case Actions.DeleteObject:
+            self._deleteObject(message.id);
+            break;
+          case Actions.DeleteObjects: {
+            const objects = message.idList;
+            for (const id of objects) {
+              self._deleteObject(id);
+            }
+            break;
+          }
+          case Actions.ResolveAsyncObject:
+            self._resolvePendingObject(message.id);
+            break;
+          case Actions.ObjectSetLabel:
+            self._setObjectLabel(message.id, message.label);
+            break;
+          case Actions.AddObject: {
+            const pending = !!message.pending;
+            const id = message.id;
+            const parent = message.parent;
+            const stacktrace = message.stacktrace ?? "";
+            let descriptor = null;
+            try {
+              descriptor = message.descriptor ? JSON.parse(message.descriptor) : null;
+            } catch (e) {
+              break;
+            }
+            switch (message.type) {
+              case "Adapter": {
+                const obj = new Adapter(id, descriptor, stacktrace);
+                self._addObject(obj, parent, pending);
+                break;
+              }
+              case "Device": {
+                const obj = new Device(id, descriptor, stacktrace);
+                self._addObject(obj, parent, pending);
+                break;
+              }
+              case "ShaderModule": {
+                const obj = new ShaderModule(id, descriptor, stacktrace);
+                self._addObject(obj, parent, pending);
+                obj.size = descriptor?.code?.length ?? 0;
+                break;
+              }
+              case "Buffer": {
+                const obj = new Buffer(id, descriptor, stacktrace);
+                self._addObject(obj, parent, pending);
+                obj.size = descriptor?.size ?? 0;
+                this.totalBufferMemory += obj.size;
+                break;
+              }
+              case "Texture": {
+                const prevTexture = self.textures.get(id);
+                if (prevTexture) {
+                  let size = prevTexture.getGpuSize();
+                  if (size != -1) {
+                    this.totalTextureMemory -= size;
+                  }
+                  prevTexture.descriptor = descriptor;
+                  size = prevTexture.getGpuSize();
+                  if (size != -1) {
+                    this.totalTextureMemory += size;
+                  }
+                  return;
+                }
+                const obj = new Texture(id, descriptor, stacktrace);
+                const size = obj.getGpuSize();
+                if (size != -1) {
+                  this.totalTextureMemory += size;
+                }
+                self._addObject(obj, parent, pending);
+                break;
+              }
+              case "TextureView": {
+                const prevView = self.textureViews.get(id);
+                if (prevView) {
+                  prevView.descriptor = descriptor;
+                  return;
+                }
+                const obj = new TextureView(id, parent, descriptor, stacktrace);
+                self._addObject(obj, parent, pending);
+                break;
+              }
+              case "Sampler": {
+                const obj = new Sampler(id, descriptor, stacktrace);
+                self._addObject(obj, parent, pending);
+                break;
+              }
+              case "BindGroup": {
+                const obj = new BindGroup(id, descriptor, stacktrace);
+                self._addObject(obj, parent, pending);
+                break;
+              }
+              case "BindGroupLayout": {
+                const obj = new BindGroupLayout(id, descriptor, stacktrace);
+                self._addObject(obj, parent, pending);
+                break;
+              }
+              case "RenderPipeline": {
+                const obj = new RenderPipeline(id, descriptor, stacktrace);
+                self._addObject(obj, parent, pending);
+                break;
+              }
+              case "ComputePipeline": {
+                const obj = new ComputePipeline(id, descriptor, stacktrace);
+                self._addObject(obj, parent, pending);
+                break;
+              }
+              case "PipelineLayout": {
+                const obj = new PipelineLayout(id, descriptor, stacktrace);
+                self._addObject(obj, parent, pending);
+                break;
+              }
+              case "RenderBundle": {
+                const obj = new RenderBundle(id, descriptor, stacktrace);
+                self._addObject(obj, parent, pending);
+                break;
+              
+              }
+            }
+            break;
+          }
+        }
+      });
+    }
+
+    requestTextureData(texture, mipLevel) {
+      if (texture.imageDataPending) {
+        return;
+      }
+      texture.imageDataPending = true;
+      this.port.postMessage({ action: PanelActions.RequestTexture, id: texture.id, mipLevel: mipLevel ?? 0 });
+    }
+
+    removeErrorsForObject(id) {
+      const map = this.validationErrors;
+      for (const key of map.keys()) {
+        const error = map.get(key);
+        if (error.object === id) {
+          map.delete(key);
+          this.onDeleteObject.emit(id, error);
+        }
+      }
+    }
+
+    findObjectErrors(id) {
+      const errors = [];
+      for (const error of this.validationErrors.values()) {
+        if (error.object === id) {
+          errors.push(error);
+        }
+      }
+      return errors;
+    }
+
+    _deleteOldRecycledObjects(objectList) {
+      const recycleTime = 200;
+      const time = performance.now();
+      const numBindGroups = objectList.length;
+      for (let i = numBindGroups - 1; i >= 0; --i) {
+        const obj = objectList[i];
+        if (!obj || (time - obj._deletionTime > recycleTime)) {
+          objectList = objectList.splice(i, 1);
+        }
+      }
+      return objectList;
+    }
+
+    reset() {
+      this.allObjects = new Map();
+      this.adapters = new Map();
+      this.devices = new Map();
+      this.samplers = new Map();
+      this.textures = new Map();
+      this.textureViews = new Map();
+      this.buffers = new Map();
+      this.bindGroups = new Map();
+      this.bindGroupLayouts = new Map();
+      this.shaderModules = new Map();
+      this.pipelineLayouts = new Map();
+      this.renderPipelines = new Map();
+      this.computePipelines = new Map();
+      this.renderBundles = new Map();
+      this.pendingRenderPipelines = new Map();
+      this.pendingComputePipelines = new Map();
+      this.frameTime = 0;
+      this.totalTextureMemory = 0;
+      this.totalBufferMemory = 0;
+    }
+
+    getObjectDependencies(object) {
+      const dependencies = [];
+      const id = object.id;
+
+      if (object instanceof ShaderModule) {
+        this.renderPipelines.forEach((rp) => {
+          const descriptor = rp.descriptor;
+          if (descriptor?.vertex?.module?.__id == id) {
+            dependencies.push(rp);
+          } else if (descriptor?.fragment?.module?.__id == id) {
+            dependencies.push(rp);
+          }
+        });
+        this.computePipelines.forEach((cp) => {
+          const descriptor = cp.descriptor;
+          if (descriptor?.compute?.module?.__id == id) {
+            dependencies.push(cp);
+          }
+        });
+      } else if (object instanceof Buffer || object instanceof Texture) {
+        const isTexture = object instanceof Texture;
+        this.bindGroups.forEach((bg) => {
+          const entries = bg.descriptor?.entries;
+          if (entries) {
+            for (const entry of entries) {
+              const resource = entry.resource;
+              if (isTexture && resource.constructor === String) {
+                if (resource.__id == id) {
+                  dependencies.push(bg);
+                  break;
+                }
+              } else if (resource?.buffer) {
+                const id = resource.buffer.__id;
+                if (id == id) {
+                  dependencies.push(bg);
+                }
+                break;
+              }
+            }
+          }
+        });
+      }
+      return dependencies;
+    }
+
+    getObject(id) {
+      if (id === undefined || id === null) {
+        return null;
+      }
+      if (this.inspectedObject?.id === id) {
+        return this.inspectedObject;
+      }
+      return this.allObjects.get(id) || this.capturedObjects.get(id);
+    }
+
+    getTextureFromView(view) {
+      if (!view) {
+        return null;
+      }
+      if (view.__texture) {
+        return view.__texture;
+      }
+      if (view.texture) {
+        view.__texture = this.getObject(view.texture);
+      }
+      return view.__texture;
+    }
+
+    clearCapturedObjects() {
+      this.capturedObjects.forEach((obj) => {
+        obj.decrementReferenceCount();
+      });
+      this.capturedObjects.clear();
+    }
+
+    _setObjectLabel(id, label) {
+      const object = this.getObject(id);
+      if (object) {
+        object.label = label;
+        this.onObjectLabelChanged.emit(id, object, label);
+      }
+    }
+
+    _addObject(object, parent, pending) {
+      const id = object.id;
+      this.allObjects.set(id, object);
+      if (object instanceof Adapter) {
+        this.adapters.set(id, object);
+      } else if (object instanceof Device) {
+        this.devices.set(id, object);
+      } else if (object instanceof Sampler) {
+        this.samplers.set(id, object);
+      } else if (object instanceof Texture) {
+        this.textures.set(id, object);
+      } else if (object instanceof TextureView) {
+        this.textureViews.set(id, object);
+        object.addDependency(this.getObject(object.texture.__id));
+        object.incrementDepenencyReferenceCount();
+      } else if (object instanceof Buffer) {
+        this.buffers.set(id, object);
+      } else if (object instanceof BindGroup) {
+        this.bindGroups.set(id, object);
+        object.addDependency(this.getObject(object.descriptor.layout.__id ));
+        for (const entry of object.descriptor.entries) {
+          if (entry.resource?.buffer) {
+            object.addDependency(this.getObject(entry.resource.buffer.__id));
+          } else {
+            object.addDependency(this.getObject(entry.resource.__id));
+          }
+        }
+        object.incrementDepenencyReferenceCount();
+      } else if (object instanceof BindGroupLayout) {
+        this.bindGroupLayouts.set(id, object);
+      } else if (object instanceof PipelineLayout) {
+        this.pipelineLayouts.set(id, object);
+      } else if (object instanceof ShaderModule) {
+        this.shaderModules.set(id, object);
+      } else if (object instanceof RenderPipeline) {
+        if (pending) {
+          this.pendingRenderPipelines.set(id, object);
+        } else {
+          this.renderPipelines.set(id, object);
+        }
+        object.addDependency(this.getObject(object.descriptor.layout.__id));
+        object.addDependency(this.getObject(object.descriptor.vertex?.module?.__id));
+        object.addDependency(this.getObject(object.descriptor.fragment?.module?.__id));
+        object.incrementDepenencyReferenceCount();
+      } else if (object instanceof ComputePipeline) {
+        this.computePipelines.set(id, object);
+        object.addDependency(this.getObject(object.descriptor.compute?.module?.__id));
+        object.incrementDepenencyReferenceCount();
+      } else if (object instanceof RenderBundle) {
+        this.renderBundles.set(id, object);
+        object.commands = object.descriptor?.commands ?? [];
+        if (object.descriptor?.commands) {
+          delete object.descriptor.commands;
+        }
+        for (const command of object.commands) {
+          command.object = object;
+          if (command.method === "setPipeline" ||
+              command.method === "setVertexBuffer" ||
+              command.method === "setIndexBuffer" ||
+              command.method === "drawIndirect" ||
+              command.method === "drawIndexedIndirect") {
+            object.addDependency(this.getObject(command.args[0].__id));
+          } else if (command.method === "setBindGroup") {
+            object.addDependency(this.getObject(command.args[1].__id));
+          }
+        }
+        object.incrementDepenencyReferenceCount();
+      }
+
+      this.onAddObject.emit(object, pending);
+    }
+
+    _resolvePendingObject(id) {
+      const object = this.allObjects.get(id);
+      if (object instanceof RenderPipeline) {
+        this.pendingRenderPipelines.delete(id);
+        this.renderPipelines.set(id, object);
+        this.onResolvePendingObject.emit(id, object);
+      } else if (object instanceof ComputePipeline) {
+        this.pendingComputePipelines.delete(id);
+        this.computePipelines.set(id, object);
+        this.onResolvePendingObject.emit(id, object);
+      }
+    }
+
+    _deleteObject(id) {
+      const object = this.allObjects.get(id);
+      if (!object) {
+        return;
+      }
+
+      const self = this;
+      object.decrementReferenceCount((obj) => {
+        if (obj === object) {
+          return;
+        }
+        self._deleteObject(obj.id);
+      });
+
+      if (object.referenceCount > 0) {
+        return;
+      }
+
+      object._deletionTime = performance.now();
+
+      if (object instanceof Adapter) {
+        this.adapters.delete(id, object);
+      } else if (object instanceof Device) {
+        this.devices.delete(id, object);
+      } else if (object instanceof Sampler) {
+        this.samplers.delete(id, object);
+      } else if (object instanceof Texture) {
+        this.textures.delete(id, object);
+        const size = object.getGpuSize();
+        if (size != -1) {
+          this.totalTextureMemory -= size;
+        }
+      } else if (object instanceof TextureView) {
+        this.textureViews.delete(id, object);
+      } else if (object instanceof Buffer) {
+        this.buffers.delete(id, object);
+        const size = object.size;
+        this.totalBufferMemory -= size ?? 0;
+      } else if (object instanceof BindGroup) {
+        this.bindGroups.delete(id, object);
+      } else if (object instanceof BindGroupLayout) {
+        this.bindGroupLayouts.delete(id, object);
+      } else if (object instanceof PipelineLayout) {
+        this.pipelineLayouts.delete(id, object);
+      } else if (object instanceof RenderBundle) {
+        this.renderBundles.delete(id, object);
+      } else if (object instanceof ShaderModule) {
+        object.isDestroyed = true;
+        this.shaderModules.delete(id, object);
+      } else if (object instanceof RenderPipeline) {
+        this.pendingRenderPipelines.delete(id, object);
+        this.renderPipelines.delete(id, object);
+      } else if (object instanceof ComputePipeline) {
+        this.computePipelines.set(id, object);
+        this.pendingComputePipelines.delete(id, object);
+      }
+
+      {
+        this.allObjects.delete(id);
+        this.onDeleteObject.emit(id, object);
+      }
+    }
+  }
+
+  class MessagePort {
+    constructor(name, tabId, listener) {
+      this.name = name;
+      this.tabId = tabId ?? 0;
+      this.listeners = [];
+      if (listener) {
+        this.listeners.push(listener);
+      }
+      this._port = null;
+      this.reset();
+    }
+
+    reset() {
+      const self = this;
+      this._port = chrome.runtime.connect({ name: this.name });
+      this._port.onDisconnect.addListener(() => {
+        self.reset();
+      });
+      this._port.onMessage.addListener((message) => {
+        for (const listener of self.listeners) {
+          listener(message);
+        }
+      });
+    }
+
+    addListener(listener) {
+      this.listeners.push(listener);
+    }
+
+    postMessage(message) {
+      message.__webgpuInspector = true;
+      if (this.tabId) {
+        message.tabId = this.tabId;
+      }
+      try {
+        this._port.postMessage(message);
+      } catch (e) {
+        this.reset();
+      }
+    }
+  }
+
+  class Pointer {
+    constructor(event) {
+      this.event = event;
+      this.pageX = event.pageX;
+      this.pageY = event.pageY;
+      this.clientX = event.clientX;
+      this.clientY = event.clientY;
+      this.id = event.pointerId;
+      this.type = event.pointerType;
+      this.buttons = event.buttons ?? -1;
+    }
+
+    getCoalesced() {
+      return this.event.getCoalescedEvents().map((p) => new Pointer(p));
+    }
+  }
+
+  /**
+   * A Widget is a wrapper for a DOM element.
+   */
+  class Widget {
+    constructor(element, parent, options) {
+      this.id = `${this.constructor.name}${Widget.id++}`;
+      if (element && element.constructor === String) {
+        element = document.createElement(element);
+      }
+
+      this._element = element;
+      if (element) {
+        this._element.id = this.id;
+        this._element.title = '';
+      }
+
+      if (parent && parent.constructor === Object) {
+        options = parent;
+        parent = null;
+      }
+
+      this._parent = null;
+      this.children = [];
+
+      /*this.hasFocus = false;
+      this.mouseX = 0;
+      this.mouseY = 0;
+      this.mousePageX = 0;
+      this.mousePageY = 0;
+
+      this._mouseDownEnabled = false;
+      this._mouseMoveEnabled = false;
+      this._mouseUpEnabled = false;
+      this._clickEnabled = false;
+      this._contextMenuEnabled = false;
+      this._doubleClickEnabled = false;
+      this._mouseWheelEnabled = false;
+      this._mouseOverEnabled = false;
+      this._mouseOutEnabled = false;
+      this._keyPressEnabled = false;
+      this._keyReleaseEnabled = false;
+      this._touchEventsEnabled = false;
+      this._pointerEventsEnabled = false;
+      this._isMouseDown = false;
+      // The button that is down during the onMouseDown event.
+      // This should be used during mouseMoveEvent, as MouseEvent.button isn't
+      // going to work on anything but Chrome.
+      this.mouseButton = -1;*/
+
+      // Latest state of the tracked pointers.
+      //this.currentPointers = [];
+
+      //this.enableContextMenuEvent();
+
+      if (parent) {
+        if (parent.constructor.isLayout) {
+          const stretch = options && options.stretch ? options.stretch : 0;
+          parent.add(this, stretch);
+        } else {
+          this.parent = parent;
+        }
+      }
+
+      if (options) {
+        this.configure(options);
+      }
+
+      if (this._element) {
+        this._element.widget = this;
+      }
+    }
+
+    configure(options) {
+      if (options.id) {
+        this._element.id = options.id;
+      }
+
+      if (options.class) {
+        if (options.class.constructor === String) {
+          this.classList.add(options.class);
+        } else {
+          this.classList.add(...options.class);
+        }
+      }
+
+      if (options.text !== undefined) {
+        this.text = options.text;
+      }
+
+      if (options.html !== undefined) {
+        this.html = options.html;
+      }
+
+      if (options.style !== undefined) {
+        this._element.style = options.style;
+      }
+
+      if (options.title !== undefined) {
+        this._element.title = options.title;
+      }
+
+      if (options.backgroundColor !== undefined) {
+        this._element.style.backgroundColor = options.backgroundColor;
+      }
+
+      if (options.color !== undefined) {
+        this._element.style.color = options.color;
+      }
+
+      if (options.type !== undefined) {
+        this._element.type = options.type;
+      }
+
+      if (options.children !== undefined) {
+        for (const c of options.children) {
+          this.appendChild(c);
+        }
+      }
+
+      if (options.disabled !== undefined) {
+        this._element.disabled = options.disabled;
+      }
+
+      if (options.tabIndex !== undefined) {
+        this._element.tabindex = options.tabindex;
+      }
+
+      if (options.zIndex !== undefined) {
+        this._element.style.zIndex = String(options.zIndex);
+      }
+
+      if (options.draggable !== undefined) {
+        this.draggable = options.draggable;
+      }
+
+      if (options.onClick !== undefined) {
+        this.addEventListener('click', options.onClick);
+      }
+
+      if (options.data !== undefined) {
+        this.data = options.data;
+      }
+
+      if (options.tooltip !== undefined) {
+        this.tooltip = options.tooltip;
+      }
+    }
+
+    /**
+     * @property {DOMElement?} element The HTML DOM element
+     */
+    get element() {
+      return this._element;
+    }
+
+    /**
+     * @property {Widget?} parent The parent widget of this widget.
+     */
+    get parent() {
+      return this._parent;
+    }
+
+    set parent(p) {
+      if (!p) {
+        if (this._parent) {
+          this._parent.removeChild(this);
+          return;
+        }
+      } else {
+        p.appendChild(this);
+      }
+
+      this.onResize();
+    }
+
+    get lastChild() {
+      return this.children[this.children.length - 1];
+    }
+
+    /**
+     * Insert a child widget before the given child widget.
+     * @param {*} newChild
+     * @param {*} refChild
+     */
+    insertBefore(newChild, refChild) {
+      const index = this.children.indexOf(refChild);
+      if (index === -1) {
+        this.appendChild(newChild);
+        return;
+      }
+      this.children.splice(index, 0, newChild);
+      this._element.insertBefore(newChild._element, refChild._element);
+    }
+
+    /**
+     * Insert a child widget after the given child widget.
+     * @param {Widget} newChild 
+     * @param {Widget} refChild 
+     */
+    insertAfter(newChild, refChild) {
+      let index = this.children.indexOf(refChild);
+      if (index === -1) {
+        this.appendChild(newChild);
+        return;
+      }
+      index++;
+      if (index >= this.children.length) {
+        this.appendChild(newChild);
+        return;
+      }
+      const refWidget = this.children[index];
+      this.children.splice(index, 0, newChild);
+      this._element.insertBefore(newChild._element, refWidget._element);
+    }
+
+    /**
+     * Add a child widget to this widget.
+     * @param {Widget} child
+     */
+    appendChild(child) {
+      if (child.parent === this) {
+        return;
+      }
+
+      // Remove the widget from its current parent.
+      if (child.parent) {
+        child.parent.removeChild(child);
+      }
+
+      // Add the widget to the children list.
+      child._parent = this;
+      this.children.push(child);
+      this._element.appendChild(child._element);
+
+      const w = this.window;
+      if (w) {
+        child._addedToWindow(w);
+      }
+
+      child.onResize();
+    }
+
+    remove() {
+      this.element.remove();
+    }
+
+    /**
+     * Remove a child widget.
+     * @param {Widget} child
+     */
+    removeChild(child) {
+      const index = this.children.indexOf(child);
+      if (index != -1) {
+        this.children.splice(index, 1);
+      }
+      child._parent = null;
+      this._element.removeChild(child._element);
+    }
+
+    /**
+     * Remove all children from this widget.
+     */
+    removeAllChildren() {
+      for (const child of this.children) {
+        child._parent = null;
+      }
+      this.children.length = 0;
+      while (this._element.firstChild) {
+        this._element.removeChild(this._element.lastChild);
+      }
+    }
+
+    /**
+     * Get the position of the element on the page.
+     * @return {Array}
+     */
+    getPagePosition() {
+      let lx = 0;
+      let ly = 0;
+      for (let el = this._element; el != null; el = el.offsetParent) {
+        lx += el.offsetLeft;
+        ly += el.offsetTop;
+      }
+      return [lx, ly];
+    }
+
+    /**
+     * Parse out the value from a CSS string
+     * @param {*} cssValue
+     */
+    static getCssValue(cssValue) {
+      if (!cssValue) {
+        cssValue = '0px';
+      }
+      if (cssValue.endsWith('%')) {
+        cssValue = cssValue.substring(0, cssValue.length - 1);
+      } else {
+        cssValue = cssValue.substring(0, cssValue.length - 2);
+      }
+      if (cssValue.includes('.')) {
+        return parseFloat(cssValue);
+      }
+      return parseInt(cssValue);
+    }
+
+    /**
+     * Return the size of a CSS property, like "padding", "Left", "Right"
+     * @param {*} style
+     * @param {*} property
+     * @param {*} d1
+     * @param {*} d2
+     */
+    static getStyleSize(style, property, d1, d2) {
+      const s1 = Widget.getCssValue(style[`${property}${d1}`]);
+      const s2 = Widget.getCssValue(style[`${property}${d2}`]);
+      return s1 + s2;
+    }
+
+    /**
+     * @property {number} width The width of the widget.
+     */
+    get width() {
+      return this._element.offsetWidth;
+    }
+
+    /**
+     * @property {number} height The height of the widget.
+     */
+    get height() {
+      return this._element.offsetHeight;
+    }
+
+    /**
+     * Get the bounding rect of the widget.
+     * @return {DOMRect}
+     */
+    getBoundingClientRect() {
+      return this._element.getBoundingClientRect();
+    }
+
+    /**
+     * @property {bool} visible Is the element visible?
+     */
+    get visible() {
+      let e = this;
+      while (e) {
+        if (e._element.style.display == 'none') {
+          return false;
+        }
+        e = e.parent;
+      }
+      return true;
+    }
+
+    onDomChanged() {}
+
+    domChanged() {
+      this.onDomChanged();
+      for (const c of this.children) {
+        c.domChanged();
+      }
+    }
+
+    /**
+     * @property {number} left The x position of the element.
+     */
+    get left() {
+      return this._element ? this._element.offsetLeft : 0;
+    }
+
+    /**
+     * @property {number} top The y position of the element.
+     */
+    get top() {
+      return this._element ? this._element.offsetTop : 0;
+    }
+
+    /**
+     * Set the position of the element.
+     */
+    setPosition(x, y, type) {
+      type = type || 'absolute';
+      this._element.style.position = type;
+      this._element.style.left = `${x}px`;
+      this._element.style.top = `${y}px`;
+    }
+
+    /**
+     * Resize the element.
+     */
+    resize(w, h) {
+      // style.width/height is only for the inner contents of the widget,
+      // not the full size of the widget including border and padding.
+      // Since the resize function wants to encompass the entire widget,
+      // we need to subtract the border and padding sizes from the size set
+      // to the style.
+      const rect = this.getBoundingClientRect();
+      const dx = this._element.offsetWidth - rect.width;
+      const dy = this._element.offsetHeight - rect.height;
+      this._element.style.width = `${w - dx}px`;
+      this._element.style.height = `${h - dy}px`;
+    }
+
+    onResize() {
+      for (const c of this.children) {
+        c.onResize();
+      }
+    }
+
+    /**
+     * @property {String} style The CSS style of the element.
+     */
+    get style() {
+      return this._element.style;
+    }
+
+    set style(v) {
+      this._element.style = v;
+    }
+
+    /**
+     * @property {Array} classList The CSS class set of the element.
+     */
+    get classList() {
+      return this._element.classList;
+    }
+
+    /**
+     * @property {String} text The inner text of the element.
+     */
+    get text() {
+      return this._element.innerText;
+    }
+
+    set text(s) {
+      this._element.innerText = s;
+    }
+
+    get textContent() {
+      return this._element.textContent;
+    }
+
+    set textContent(s) {
+      this._element.textContent = s;
+    }
+
+    get html() {
+      return this._element.innerHTML;
+    }
+
+    set html(v) {
+      this._element.innerHTML = v;
+    }
+
+    get title() {
+      return this._element.title;
+    }
+
+    set title(v) {
+      this._element.title = v;
+    }
+
+    get tooltip() {
+      return this._element.title;
+    }
+
+    set tooltip(v) {
+      this._element.title = v;
+    }
+
+    get disabled() {
+      return this._element.disabled;
+    }
+
+    set disabled(v) {
+      this._element.disabled = v;
+    }
+
+    get dataset() {
+      return this._element.dataset;
+    }
+
+    get tabIndex() {
+      return this._element.tabindex;
+    }
+
+    set tabIndex(v) {
+      this._element.tabIndex = v;
+    }
+
+    get zIndex() {
+      return parseInt(this._element.style.zorder);
+    }
+
+    set zIndex(v) {
+      this._element.style.zorder = String(v);
+    }
+
+    get draggable() {
+      return this._element.draggable;
+    }
+
+    set draggable(v) {
+      this._element.draggable = v;
+      if (v) {
+        this._dragStartEvent = this.dragStartEvent.bind(this);
+        this._dragEndEvent = this.dragEndEvent.bind(this);
+        this._dragEvent = this.dragEvent.bind(this);
+        this.addEventListener('drag', this._dragEvent);
+        this.addEventListener('dragstart', this._dragStartEvent);
+        this.addEventListener('dragend', this._dragEndEvent);
+      } else {
+        if (this._dragEvent) {
+          this.removeEventListener('drag', this._dragEvent);
+          this.removeEventListener('dragstart', this._dragStartEvent);
+          this.removeEventListener('dragend', this._dragEndEvent);
+        }
+      }
+    }
+
+    querySelector() {
+      return this._element.querySelector(...arguments);
+    }
+
+    addEventListener() {
+      return this._element.addEventListener(...arguments);
+    }
+
+    removeEventListener() {
+      return this._element.removeEventListener(...arguments);
+    }
+
+    dispatchEvent() {
+      return this._element.dispatchEvent(...arguments);
+    }
+
+    /**
+     * Repaint the widget.
+     * @param {bool} allDecendents
+     */
+    repaint(allDecendents = true) {
+      if (this.paintEvent) this.paintEvent();
+      if (allDecendents) {
+        for (const c of this.children) {
+          c.repaint(allDecendents);
+        }
+      }
+    }
+
+    _startResize() {
+      if (this.startResize) {
+        this.startResize();
+      }
+      for (const c of this.children) {
+        c._startResize();
+      }
+    }
+
+    _addedToWindow(w) {
+      if (this.onAddedToWindow) {
+        this.onAddedToWindow(w);
+      }
+      for (const c of this.children) {
+        c._addedToWindow(w);
+      }
+    }
+
+    get window() {
+      return Widget.window;
+    }
+
+    /**
+     * Start listening for mousePressEvent, mouseMoveEvent, and mouseReleaseEvent.
+     */
+    enableMouseEvents() {
+      if (!this._mouseDownEnabled && this._element) {
+        this._mouseDownEnabled = true;
+        this._element.addEventListener('mousedown', this._onMouseDown.bind(this));
+      }
+      if (!this._mouseMoveEnabled && this._element) {
+        this.__mouseMoveEnabled = true;
+        this._element.addEventListener('mousemove', this._onMouseMove.bind(this));
+      }
+      if (!this._mouseUpEnabled && this._element) {
+        this._mouseUpEnabled = true;
+        this._element.addEventListener('mouseup', this._onMouseUp.bind(this));
+      }
+    }
+
+    /**
+     * Start listening for mouseMoveEvent.
+     */
+    enableMouseMoveEvent() {
+      if (!this._mouseMoveEnabled && this._element) {
+        this.__mouseMoveEnabled = true;
+        this._element.addEventListener('mousemove', this._onMouseMove.bind(this));
+      }
+    }
+
+    /**
+     * Start listening for ContextMenu events.
+     */
+    enableContextMenuEvent() {
+      this.enableMouseMoveEvent();
+      if (!this._contextMenuEnabled && this._element) {
+        this._contextMenuEnabled = true;
+        this._element.addEventListener(
+          'contextmenu',
+          this._onContextMenu.bind(this)
+        );
+      }
+    }
+
+    /**
+     * Start listenening for Click events.
+     */
+    enableClickEvent() {
+      if (!this._clickEnabled && this._element) {
+        this.__clickEnabled = true;
+        this._element.addEventListener('click', this._onClick.bind(this));
+      }
+    }
+
+    /**
+     * Start listening for DoubleClick events.
+     */
+    enableDoubleClickEvent() {
+      //this.enableMouseMoveEvent();
+      if (!this._doubleClickEnabled && this._element) {
+        this._doubleClickEnabled = true;
+        this._element.addEventListener(
+          'dblclick',
+          this._onDoubleClick.bind(this)
+        );
+      }
+    }
+
+    /**
+     * Start listening for MouseWheel events.
+     */
+    enableMouseWheelEvent() {
+      if (!this._mouseWheelEnabled && this._element) {
+        this._mouseWheelEnabled = true;
+        this._element.addEventListener(
+          'mousewheel',
+          this._onMouseWheel.bind(this)
+        );
+      }
+    }
+
+    /**
+     * Start listening for when the mouse enters the widget.
+     */
+    enableEnterEvent() {
+      this.enableMouseMoveEvent();
+      if (!this._mouseOverEnabled && this._element) {
+        this._mouseOverEnabled = true;
+        this._element.addEventListener('mouseover', this._onMouseOver.bind(this));
+      }
+    }
+
+    /**
+     * Start listening for when the mouse leaves the widget.
+     */
+    enableLeaveEvent() {
+      this.enableMouseMoveEvent();
+      if (!this._mouseOutEnabled && this._element) {
+        this._mouseOutEnabled = true;
+        this._element.addEventListener('mouseout', this._onMouseOut.bind(this));
+      }
+    }
+
+    /**
+     * Enable listening for touch events.
+     */
+    enableTouchEvents() {
+      if (!this._touchEventsEnabled) {
+        this._touchEventsEnabled = true;
+        this._element.addEventListener(
+          'touchstart',
+          this._onTouchStart.bind(this)
+        );
+        this._element.addEventListener('touchend', this._onTouchEnd.bind(this));
+        this._element.addEventListener(
+          'touchcancel',
+          this._onTouchCancel.bind(this)
+        );
+        this._element.addEventListener('touchmove', this._onTouchMove.bind(this));
+        // Without this, Android Chrome will hijack touch events.
+        this.style.touchAction = 'none';
+      }
+    }
+
+    enablePointerEvents(bindToWindow) {
+      if (!this._pointerEventsEnabled) {
+        this._pointerEventsEnabled = true;
+        this._element.addEventListener(
+          'pointerdown',
+          this._onPointerDown.bind(this)
+        );
+        if (bindToWindow) {
+          window.addEventListener('pointermove', this._onPointerMove.bind(this));
+          window.addEventListener('pointerup', this._onPointerUp.bind(this));
+        } else {
+          this._element.addEventListener(
+            'pointermove',
+            this._onPointerMove.bind(this)
+          );
+          this._element.addEventListener(
+            'pointerup',
+            this._onPointerUp.bind(this)
+          );
+        }
+        // Without this, Android Chrome will hijack touch events.
+        this.style.touchAction = 'none';
+      }
+    }
+
+    _onPointerDown(e) {
+      this.hasFocus = true;
+      const pointer = new Pointer(e);
+      if (Widget.currentPointers.some((p) => p.id === pointer.id)) return;
+      Widget.currentPointers.push(pointer);
+      //this.element.setPointerCapture(e.pointerId);
+      const res = this.pointerDownEvent(e, Widget.currentPointers, pointer);
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    releasePointers() {
+      //for (let p of Widget.currentPointers)
+      //this.element.releasePointerCapture(p.id);
+      Widget.currentPointers.length = 0;
+    }
+
+    _onPointerMove(e) {
+      const pointer = new Pointer(e);
+
+      const index = Widget.currentPointers.findIndex((p) => p.id === pointer.id);
+      if (index !== -1) Widget.currentPointers[index] = pointer;
+
+      this.hasFocus = true;
+      const res = this.pointerMoveEvent(e, Widget.currentPointers, pointer);
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    _onPointerUp(e) {
+      const pointer = new Pointer(e);
+      //if (Widget.currentPointers.some((p) => p.id === pointer.id))
+      //this.element.releasePointerCapture(e.pointerId);
+      const index = Widget.currentPointers.findIndex((p) => p.id === pointer.id);
+      if (index != -1) {
+        Widget.currentPointers.splice(index, 1);
+      }
+
+      this.hasFocus = true;
+      const res = this.pointerUpEvent(e, Widget.currentPointers, pointer);
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    pointerDownEvent() {
+      return true;
+    }
+
+    pointerMoveEvent() {
+      return true;
+    }
+
+    pointerUpEvent() {
+      return true;
+    }
+
+    /**
+     * Start listening for KeyPress events.
+     */
+    enableKeyPressEvent() {
+      this.enableEnterEvent();
+      this.enableLeaveEvent();
+      this.enableMouseMoveEvent();
+      if (!this._keyPressEnabled) {
+        this._keyPressEnabled = true;
+        // key events seem to only work on the document level. That's
+        // why we enable enter/leave events, to filter the events to only
+        // accept events for the widget if the mouse is over the widget.
+        document.addEventListener('keydown', this._onKeyPress.bind(this));
+        //this.element.addEventListener("keydown", this._onKeyPress.bind(this));
+      }
+    }
+
+    /**
+     * Start listening for KeyRelease events.
+     */
+    enableKeyReleaseEvent() {
+      this.enableEnterEvent();
+      this.enableLeaveEvent();
+      this.enableMouseMoveEvent();
+      if (!this._keyReleaseEnabled) {
+        this._keyReleaseEnabled = true;
+        // key events seem to only work on the document level. That's
+        // why we enable enter/leave events, to filter the events to only
+        // accept events for the widget if the mouse is over the widget.
+        document.addEventListener('keyup', this._onKeyRelease.bind(this));
+        //this.element.addEventListener("keyup", this._onKeyRelease.bind(this));
+      }
+    }
+
+    /**
+     * Event called when the widget is to be drawn
+     */
+    //paintEvent() { }
+
+    /**
+     * Event called when a mouse button is pressed on the wdiget.
+     */
+    mousePressEvent() {
+      return false;
+    }
+
+    /**
+     * Event called when the mouse is moved over the widget.
+     * @param {*} e
+     */
+    mouseMoveEvent(e) {
+      //this.updatePositionFromEvent(e);
+      return false;
+    }
+
+    /**
+     * Event called when a mouse button is released over the widget.
+     */
+    mouseReleaseEvent() {
+      return false;
+    }
+
+    /**
+     * Event called when the widget recieves a ContextMenu event, usually from
+     * the right mouse button.
+     */
+    contextMenuEvent() {
+      return true;
+    }
+
+    /**
+     * Event called when a mouse button is clicked.
+     */
+    clickEvent() {
+      return true;
+    }
+
+    /**
+     * Event called when a mouse button is double clicked.
+     */
+    doubleClickEvent() {
+      return true;
+    }
+
+    /**
+     * Event called when a mouse wheel is scrolled.
+     */
+    mouseWheelEvent() {
+      return true;
+    }
+
+    /**
+     * Event called when the mouse enters the widget.
+     */
+    enterEvent() {
+      return true;
+    }
+
+    /**
+     * Event called when the mouse leaves the widget.
+     */
+    leaveEvent() {
+      return true;
+    }
+
+    /**
+     * Event called when a key is pressed on the widget.
+     */
+    keyPressEvent() {
+      return true;
+    }
+
+    /**
+     * Event called when a key is released on the widget.
+     */
+    keyReleaseEvent() {
+      return true;
+    }
+
+    /**
+     * Event called when a touch has started.
+     */
+    touchStartEvent() {}
+
+    /**
+     * Event called when a touch has ended.
+     */
+    touchEndEvent() {}
+
+    /**
+     * Event called when a touch has been canceled.
+     */
+    touchCancelEvent() {}
+
+    /**
+     * Event called when a touch has moved.
+     */
+    touchMoveEvent() {}
+
+    /**
+     * Event called when the element starts dragging.
+     */
+    dragStartEvent() {}
+
+    /**
+     * Event called when the element ends dragging.
+     */
+    dragEndEvent() {}
+
+    /**
+     * Event called when the element is dragging.
+     */
+    dragEvent() {}
+
+    /**
+     * Called to update the current tracked mouse position on the widget.
+     * @param {Event} e
+     */
+    updatePositionFromEvent(e) {
+      if (!this._element) {
+        return;
+      }
+
+      if (this.startMouseEvent) {
+        e.targetX = Math.max(
+          0,
+          Math.min(
+            this.element.clientWidth,
+            this.startMouseX + e.pageX - this.startMouseEvent.pageX
+          )
+        );
+
+        e.targetY = Math.max(
+          0,
+          Math.min(
+            this.element.clientHeight,
+            this.startMouseY + e.pageY - this.startMouseEvent.pageY
+          )
+        );
+      } else {
+        e.targetX = e.offsetX;
+        e.targetY = e.offsetY;
+      }
+
+      this.mouseX = e.offsetX;
+      this.mouseY = e.offsetY;
+      this.mousePageX = e.clientX;
+      this.mousePageY = e.clientY;
+
+      if (e.movementX === undefined) {
+        e.movementX = e.clientX - this.lastMouseX;
+        e.movementY = e.clientY - this.lastMouseY;
+      }
+
+      this.lastMouseX = e.clientX;
+      this.lastMouseY = e.clientY;
+    }
+
+    /**
+     * Event called when the mouse is pressed on the widget.
+     * @param {Event} e
+     */
+    _onMouseDown(e) {
+      this.startMouseEvent = e;
+      this.startMouseX = e.offsetX;
+      this.startMouseY = e.offsetY;
+      this.lastMouseX = e.clientX;
+      this.lastMouseY = e.clientY;
+      //this.updatePositionFromEvent(e);
+      this._isMouseDown = true;
+      this.mouseButton = e.button;
+      const res = this.mousePressEvent(e);
+      // If true is returned, prevent the event from propagating up and capture the mouse.
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+        //this.beginMouseCapture();
+      }
+      return res;
+    }
+
+    /**
+     * Event called when the mouse moves on the widget.
+     * @param {Event} e
+     */
+    _onMouseMove(e) {
+      //this.updatePositionFromEvent(e);
+      return this.mouseMoveEvent(e);
+    }
+
+    /**
+     * Event called when the mosue is released on the widget.
+     * @param {Event} e
+     */
+    _onMouseUp(e) {
+      //this.updatePositionFromEvent(e);
+      this.startMouseEvent = null;
+      if (!this._isMouseDown) {
+        return true;
+      }
+
+      this._isMouseDown = false;
+      const res = this.mouseReleaseEvent(e);
+
+      // if false is returned, prevent the event from propagating up.
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+
+      //this.endMouseCapture();
+      return res;
+    }
+
+    /**
+     * Called for a ContextMenu event.
+     * @param {Event} e
+     */
+    _onContextMenu(e) {
+      const res = this.contextMenuEvent(e);
+      // if false is returned, prevent the event from propagating up.
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+      return false;
+    }
+
+    /**
+     * Called fora  Click event.
+     * @param {Event} e
+     */
+    _onClick(e) {
+      const res = this.clickEvent(e);
+      // if false is returned, prevent the event from propagating up.
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    /**
+     * Called for a DoubleClick event.
+     * @param {Event} e
+     */
+    _onDoubleClick(e) {
+      const res = this.doubleClickEvent(e);
+      // if false is returned, prevent the event from propagating up.
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    /**
+     * Called for mouseWheel event.
+     * @param {Event} e
+     */
+    _onMouseWheel(e) {
+      if (e.type === 'wheel') {
+        e.wheel = -e.deltaY;
+      } else {
+        // in firefox deltaY is 1 while in Chrome is 120
+        e.wheel = e.wheelDeltaY != null ? e.wheelDeltaY : e.detail * -60;
+      }
+
+      // from stack overflow
+      // firefox doesnt have wheelDelta
+      e.delta =
+        e.wheelDelta !== undefined
+          ? e.wheelDelta / 40
+          : e.deltaY
+          ? -e.deltaY / 3
+          : 0;
+
+      const res = this.mouseWheelEvent(e);
+
+      // if false is returned, prevent the event from propagating up.
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    /**
+     * Called for a MouseOver event.
+     * @param {Event} e
+     */
+    _onMouseOver(e) {
+      this.hasFocus = true;
+      const res = this.enterEvent(e);
+      // if false is returned, prevent the event from propagating up.
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    /**
+     * Called for a MouseOut event.
+     * @param {Event} e
+     */
+    _onMouseOut(e) {
+      this.hasFocus = false;
+      const res = this.leaveEvent(e);
+      // if false is returned, prevent the event from propagating up.
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    /**
+     * Called for a KeyPress event.
+     * @param {Event} e
+     */
+    _onKeyPress(e) {
+      if (!this.hasFocus) {
+        return;
+      }
+      const res = this.keyPressEvent(e);
+      // if false is returned, prevent the event from propagating up.
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    /**
+     * Called for a KeyRelease event.
+     * @param {Event} e
+     */
+    _onKeyRelease(e) {
+      if (!this.hasFocus) {
+        return;
+      }
+      const res = this.keyReleaseEvent(e);
+      // if false is returned, prevent the event from propagating up.
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    /**
+     * Called for a touchstart event.
+     * @param {Event} e
+     */
+    _onTouchStart(e) {
+      this.hasFocus = true;
+      const res = this.touchStartEvent(e);
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    /**
+     * Called for a touchend event.
+     * @param {Event} e
+     */
+    _onTouchEnd(e) {
+      this.hasFocus = true;
+      const res = this.touchEndEvent(e);
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    /**
+     * Called for a touchcancel event.
+     * @param {Event} e
+     */
+    _onTouchCancel(e) {
+      this.hasFocus = true;
+      const res = this.touchCancelEvent(e);
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    /**
+     * Called for a touchmove event.
+     * @param {Event} e
+     */
+    _onTouchMove(e) {
+      this.hasFocus = true;
+      const res = this.touchMoveEvent(e);
+      if (!res) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }
+
+    trigger(eventName, params) {
+      const event = new CustomEvent(eventName, {
+        bubbles: true,
+        cancelable: true,
+        detail: params,
+      });
+
+      if (this.dispatchEvent) {
+        this.dispatchEvent(event);
+      }
+
+      return event;
+    }
+
+    disableDropEvents() {
+      if (!this._onDragEvent) {
+        return;
+      }
+
+      this.removeEventListener('dragenter', this._onDragEvent);
+      this.removeEventListener('drop', this._onDropEvent);
+      this.addEventListener('dragleave', this._onDragEvent);
+      this.addEventListener('dragover', this._onDragEvent);
+      this.addEventListener('drop', this._onDropEvent);
+
+      this._onDragEvent = null;
+      this._onDropEvent = null;
+    }
+
+    enableDropEvents() {
+      if (this._onDragEvent) {
+        return;
+      }
+
+      this._onDragEvent = this.onDragEvent.bind(this);
+      this._onDropEvent = this.onDropEvent.bind(this);
+
+      this.addEventListener('dragenter', this._onDragEvent);
+    }
+
+    onDragEvent(event) {
+      const element = this.element;
+
+      if (event.type == 'dragenter') {
+        element.addEventListener('dragleave', this._onDragEvent);
+        element.addEventListener('dragover', this._onDragEvent);
+        element.addEventListener('drop', this._onDropEvent);
+      }
+      if (event.type == 'dragenter' && this.dragEnterEvent) {
+        this.dragEnterEvent(event);
+      }
+      if (event.type == 'dragleave' && this.dragLeaveEvent) {
+        this.dragLeaveEvent(event);
+      }
+      if (event.type == 'dragover' && this.dragOverEvent) {
+        this.dragOverEvent(event);
+      }
+    }
+
+    onDropEvent(event) {
+      this.removeEventListener('dragleave', this._onDragEvent);
+      this.removeEventListener('dragover', this._onDragEvent);
+      this.removeEventListener('drop', this._onDropEvent);
+
+      if (this.dropEvent) {
+        this.dropEvent(event);
+      }
+    }
+  }
+
+  Widget.window = null;
+  Widget.currentPointers = [];
+  Widget.disablePaintingOnResize = false;
+  Widget.id = 0;
+
+  /**
+   * A generic DIV element, usually used as a container for other widgets.
+   */
+  class Div extends Widget {
+    constructor(parent, options) {
+      super('div', parent, options);
+    }
+  }
+
+  Div._idPrefix = 'DIV';
+
+  /**
+   * The handle widget for a tab panel.
+   */
+  class TabHandle extends Div {
+    constructor(title, page, parentWidget, parent, options) {
+      super(parent);
+
+      this.title = title;
+      this.page = page;
+      this.parentWidget = parentWidget;
+
+      this.classList.add("tab-handle", "disable-selection");
+
+      this.textElement = new Div(this, {
+        class: "tab-handle-text",
+        text: title,
+      });
+
+      this.draggable = true;
+
+      this.enableMouseEvents();
+      this.enableDoubleClickEvent();
+
+      this.configure(options);
+
+      this.enableDropEvents();
+    }
+
+    dragStartEvent() {
+      TabHandle.DragWidget = this;
+    }
+
+    dragEndEvent() {
+      TabHandle.DragWidget = null;
+    }
+
+    dragOverEvent(e) {
+      if (!TabHandle.DragWidget) {
+        return;
+      }
+
+      if (e.srcElement.classList.contains("tab-handle") &&
+        this !== TabHandle.DragWidget) {
+        if (e.layerX < this.width * 0.5) {
+          e.preventDefault();
+          this.style.borderRight = "";
+          this.style.borderLeft = "4px solid #fff";
+        } else {
+          e.preventDefault();
+          this.style.borderLeft = "";
+          this.style.borderRight = "4px solid #fff";
+        }
+      }
+    }
+
+    dropEvent(e) {
+      this.style.borderLeft = "";
+      this.style.borderRight = "";
+      if (e.srcElement.classList.contains("tab-handle")) {
+        if (e.layerX < this.width * 0.5) {
+          console.log("Insert Before");
+        } else {
+          console.log("Insert After");
+        }
+      }
+    }
+
+    dragEnterEvent() {
+      this.style.borderLeft = "";
+      this.style.borderRight = "";
+    }
+
+    dragLeaveEvent() {
+      this.style.borderLeft = "";
+      this.style.borderRight = "";
+    }
+
+    configure(options) {
+      if (!options) {
+        return;
+      }
+      super.configure(options);
+      if (options.displayCloseButton) {
+        this.closeButton = new Div(this, {
+          class: "tab-handle-close-button",
+        });
+        this.closeButton.title = "Close Tab";
+
+        // Set the close button text
+        const closeIcon = "icon-remove-sign";
+        this.closeButton.element.innerHTML = `<span class="${closeIcon}">x</span>`;
+        this.closeButton.addEventListener("click", () => {
+          this.parentWidget.closeTabHandle(this);
+        });
+      }
+    }
+
+    /**
+     * Is this tab currently active?
+     */
+    get isActive() {
+      return this.classList.contains("tab-handle-selected");
+    }
+
+    /**
+     * Set the active state of the tab (does not affect other tabs, which should
+     * be set as inactive).
+     */
+    set isActive(a) {
+      if (a == this.isActive) {
+        return;
+      }
+
+      if (a) {
+        this.classList.add("tab-handle-selected");
+        this.page.style.display = "block";
+        this.style.zIndex = "10";
+      } else {
+        this.classList.remove("tab-handle-selected");
+        this.page.style.display = "none";
+        this.style.zIndex = "0";
+      }
+    }
+
+    mousePressEvent(e) {
+      this.parentWidget.setHandleActive(this);
+    }
+
+    doubleClickEvent() {
+      //this.maximizePanel();
+    }
+
+    maximizePanel() {
+      //Widget.window.maximizePanelToggle(this.title, this.page.panel);
+    }
+  }
+
+  TabHandle._idPrefix = "TAB";
+
+  /**
+   * A single content area with multiple panels, each associated with a header in a list.
+   */
+  class TabPage extends Div {
+    constructor(panel, parent, options) {
+      super(parent, options);
+      this.classList.add('tab-page');
+      this.style.display = 'none';
+      this.panel = panel;
+      if (panel) {
+        panel.parent = this;
+        //panel.style.width = '100%';
+      }
+    }
+  }
+
+  TabPage._idPrefix = 'TABPAGE';
+  TabPage.isTabPage = true;
+
+  /**
+   * A TabWidget has multiple children widgets, only one of which is visible at a time. Selecting
+   * the active child is done via a header of tab handles.
+   */
+  class TabWidget$1 extends Div {
+    constructor(parent, options) {
+      super(parent);
+
+      this._activeTab = -1;
+      this.displayCloseButton = false;
+
+      this._element.classList.add('tab-widget');
+
+      this.headerElement = new Div(this);
+      this.headerElement.classList.add('tab-header');
+
+      this.iconsElement = new Div(this.headerElement);
+      this.iconsElement.classList.add('tab-icons');
+
+      this.tabListElement = new Div(this.headerElement);
+      this.tabListElement.classList.add('tab-handle-list-container');
+
+      this.contentElement = new Div(this);
+      this.contentElement.classList.add('tab-content');
+      this.contentElement.style.height = `calc(100% - ${this.headerElement.height}px)`;
+
+      if (options) {
+        this.configure(options);
+      }
+    }
+
+    configure(options) {
+      super.configure(options);
+
+      if (options.displayCloseButton !== undefined) {
+        this.displayCloseButton = options.displayCloseButton;
+      }
+
+      if (options.tabs !== undefined) {
+        for (const tab of options.tabs) {
+          this.addTab(tab.label, tab.contents);
+        }
+      }
+    }
+
+    /**
+     * Remove all of the icons.
+     */
+    clearIcons() {
+      this.iconsElement.children.length = 0;
+    }
+
+    /**
+     * Add a tab.
+     * @param {String} label
+     * @param {Widget} panel
+     */
+    addTab(label, panel) {
+      panel._tabLabel = label;
+      const page = new TabPage(panel, this.contentElement);
+      const handle = new TabHandle(label, page, this, this.tabListElement, {
+        displayCloseButton: this.displayCloseButton,
+      });
+
+      if (this.tabListElement.children.length == 1) {
+        this._activeTab = 0;
+        handle.isActive = true;
+        if (page) {
+          page.repaint(true);
+        }
+      }
+
+      panel.domChanged();
+    }
+
+    /**
+     * Close a tab.
+     * @param {TabHandle} handle
+     */
+    closeTabHandle(handle) {
+      const index = this.tabListElement.children.indexOf(handle);
+      if (index == -1) {
+        return;
+      }
+
+      const page = this.contentElement.children[index];
+      /*if (page) {
+        page.children[0].close();
+      }*/
+
+      this.tabListElement.removeChild(handle);
+      this.contentElement.removeChild(page);
+
+      if (this._activeTab == index) {
+        this._activeTab = -1;
+      }
+
+      if (this._activeTab == -1 && this.numTabs > 0) {
+        this.activeTab = 0;
+      }
+    }
+
+    /**
+     * @property {number} numTabs Return the number of tabs.
+     */
+    get numTabs() {
+      return this.tabListElement.children.length;
+    }
+
+    /**
+     * @property {number} activeTab Get the index of the active tab.
+     */
+    get activeTab() {
+      return this._activeTab;
+    }
+
+    /**
+     * Set the current active tab.
+     */
+    set activeTab(index) {
+      if (index < 0 || index > this.tabListElement.children.length) {
+        return;
+      }
+
+      for (let i = 0, l = this.tabListElement.children.length; i < l; ++i) {
+        const handle = this.tabListElement.children[i];
+        handle.isActive = i == index;
+      }
+
+      this._activeTab = index;
+
+      const page = this.contentElement.children[this._activeTab].children[0];
+      if (page) {
+        page.repaint(true);
+      }
+    }
+
+    isPanelVisible(panel) {
+      for (let i = 0, l = this.numTabs; i < l; ++i) {
+        const h = this.tabListElement.children[i];
+        const p = h.page.children[0];
+        if (panel === p) return this._activeTab == i;
+      }
+      return false;
+    }
+
+    setActivePanel(panel) {
+      for (let i = 0, l = this.numTabs; i < l; ++i) {
+        const h = this.tabListElement.children[i];
+        const p = h.page.children[0];
+        if (panel === p) this.activeTab = i;
+      }
+    }
+
+    /**
+     * Set the tab with the given [handle] has active.
+     * @param {TabHandle} handle
+     */
+    setHandleActive(handle) {
+      for (let i = 0, l = this.numTabs; i < l; ++i) {
+        const h = this.tabListElement.children[i];
+        if (h === handle) this.activeTab = i;
+      }
+    }
+
+    /**
+     * Find the TabWidget that contains the given widget, if any.
+     * If a TabWidget is found, then an array with the tab wiget and the actual tab panel
+     * is returned.
+     * @param {Widget} panel
+     * @return {Array?}
+     */
+    static findParentTabWidget(panel) {
+      let p = panel._parent;
+      while (p) {
+        if (p.constructor.isTabPage) {
+          return [p._parent._parent, p];
+        }
+        p = p._parent;
+      }
+      return null;
+    }
+  }
+
+  TabWidget$1._idPrefix = 'TABWIDGET';
+
+  class TextureUtils {
+    constructor(device) {
+      this.device = device;
+      this.blitShaderModule = device.createShaderModule({ code: TextureUtils.blitShader });
+      this.blit3dShaderModule = device.createShaderModule({ code: TextureUtils.blit3dShader });
+      this.multisampleBlitShaderModule = device.createShaderModule({ code: TextureUtils.multisampleBlitShader });
+      this.depthToFloatShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatShader });
+      this.depthToFloatMultisampleShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatMultisampleShader });
+      this.blitPipelines = {};
+      this.blitDepthPipelines = {};
+      this.bindGroupLayouts = new Map();
+      this.pipelineLayouts = new Map();
+      this.depthToFloatPipeline = null;
+      this.depthToFloatMSPipeline = null;
+
+      this.pointSampler = device.createSampler({
+          magFilter: 'nearest',
+          minFilter: 'nearest',
+      });
+
+      this.displayUniformBuffer = device.createBuffer({
+        size: 4 * 8,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+
+      this.displayBingGroupLayout = device.createBindGroupLayout({
+        entries: [
+          {
+            binding: 0,
+            visibility: GPUShaderStage.FRAGMENT,
+            buffer: {
+              type: "uniform"
+            }
+          }
+        ]
+      });
+
+      this.displayBindGroup = device.createBindGroup({
+        layout: this.displayBingGroupLayout,
+        entries: [
+          {
+            binding: 0,
+            resource: { buffer: this.displayUniformBuffer }
+          }
+        ]
+      });
+    }
+
+    copyDepthTexture(src, format, commandEncoder) {
+      const width = src.width;
+      const height = src.height;
+      const depthOrArrayLayers = src.depthOrArrayLayers;
+      const usage = src.usage | GPUTextureUsage.RENDER_TARGET | GPUTextureUsage.COPY_SRC;
+      const size = [width, height, depthOrArrayLayers];
+      format = format || "r32float";
+
+      const dst = this.device.createTexture({ format, size, usage });
+
+      for (let i = 0; i < depthOrArrayLayers; ++i) {
+        const srcView = src.createView({ dimension: "2d", aspect: "depth-only", baseArrayLayer: i, arrayLayerCount: 1 });
+        const dstView = dst.createView({ dimension: "2d", baseArrayLayer: i, arrayLayerCount: 1 });
+        this.convertDepthToFloat(srcView, src.sampleCount, dstView, format, commandEncoder);
+      }
+      
+      return dst;
+    }
+
+    copyMultisampledTexture(src) {
+      const width = src.width;
+      const height = src.height;
+      const format = src.format;
+      const usage = src.usage | GPUTextureUsage.RENDER_TARGET | GPUTextureUsage.COPY_SRC;
+      const size = [width, height, 1];
+      const dst = this.device.createTexture({ format, size, usage });
+
+      this.blitTexture(src.createView(), src.format, src.sampleCount, dst.createView(), format);
+
+      return dst;
+    }
+
+    blitTexture(srcView, srcFormat, sampleCount, dstView, dstFormat, display, dimension, layer) {
+      layer ??= 0;
+      dimension ??= "2d";
+      const sampleType = "unfilterable-float";
+
+      const bgLayoutKey = `${sampleType}#${sampleCount}#${dimension}`;
+
+      if (!this.bindGroupLayouts.has(bgLayoutKey)) {
+        const bindGroupLayout = this.device.createBindGroupLayout({
+          entries: [
+            {
+              binding: 0,
+              visibility: GPUShaderStage.FRAGMENT,
+              sampler: {
+                type: "non-filtering"
+              }
+            },
+            {
+              binding: 1,
+              visibility: GPUShaderStage.FRAGMENT,
+              texture: {
+                viewDimension: dimension,
+                sampleType: sampleType,
+                multisampled: sampleCount > 1
+              }
+            }
+          ]
+        });
+        this.bindGroupLayouts.set(bgLayoutKey, bindGroupLayout);
+
+        const pipelineLayout = this.device.createPipelineLayout({
+          bindGroupLayouts: [bindGroupLayout, this.displayBingGroupLayout]
+        });
+        this.pipelineLayouts.set(bgLayoutKey, pipelineLayout);
+      }
+
+      const formatInfo = TextureFormatInfo[srcFormat];
+      const numChannels = formatInfo?.channels ?? 4;
+
+      const bindGroupLayout = this.bindGroupLayouts.get(bgLayoutKey);
+      const pipelineLayout = this.pipelineLayouts.get(bgLayoutKey);
+
+      const pipelineKey = `${dstFormat}#${sampleType}#${sampleCount}#${dimension}`;
+      let pipeline = this.blitPipelines[pipelineKey];
+      if (!pipeline) {
+        const module = sampleCount > 1 ? this.multisampleBlitShaderModule : dimension === "3d" ? this.blit3dShaderModule : this.blitShaderModule;
+        pipeline = this.device.createRenderPipeline({
+          layout: pipelineLayout,
+          vertex: {
+            module,
+            entryPoint: 'vertexMain',
+          },
+          fragment: {
+            module: module,
+            entryPoint: 'fragmentMain',
+            targets: [ { format: dstFormat } ],
+          },
+          primitive: {
+            topology: 'triangle-list',
+          },
+        });
+        this.blitPipelines[pipelineKey] = pipeline;
+      }
+
+      const bindGroup = this.device.createBindGroup({
+        layout: bindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.pointSampler },
+          { binding: 1, resource: srcView }
+        ],
+      });
+      
+      const commandEncoder = this.device.createCommandEncoder();
+
+      const passDesc = {
+        colorAttachments: [{
+          view: dstView,
+          loadOp: 'clear',
+          storeOp: 'store'
+        }]
+      };
+
+      if (display) {
+        this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
+          new Float32Array([display.exposure, display.channels, numChannels, display.minRange, display.maxRange, layer, 0, 0]));
+      } else {
+        this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
+          new Float32Array([1, 0, numChannels, 0, 1, layer, 0, 0]));
+      }
+
+      const passEncoder = commandEncoder.beginRenderPass(passDesc);
+      passEncoder.setPipeline(pipeline);
+      passEncoder.setBindGroup(0, bindGroup);
+      passEncoder.setBindGroup(1, this.displayBindGroup);
+      passEncoder.draw(3);
+      passEncoder.end();
+      this.device.queue.submit([commandEncoder.finish()]);
+    }
+
+    convertDepthToFloat(fromTextureView, sampleCount, toTextureView, dstFormat, commandEncoder) {
+      if (sampleCount > 1) {
+        if (!this.depthToFloatMSPipeline) {
+          this.device.pushErrorScope('validation');
+    
+          this.depthToFloatBindGroupMSLayout = this.device.createBindGroupLayout({
+            entries: [
+              {
+                binding: 0,
+                visibility: GPUShaderStage.FRAGMENT,
+                texture: { sampleType: "depth", multisampled: true },
+              }
+            ]
+          });
+    
+          const pipelineLayout = this.device.createPipelineLayout({
+            bindGroupLayouts: [this.depthToFloatBindGroupMSLayout]
+          });
+    
+          const module = this.depthToFloatMultisampleShaderModule;
+          this.depthToFloatMSPipeline = this.device.createRenderPipeline({
+            layout: pipelineLayout,
+            vertex: {
+              module,
+              entryPoint: 'vertexMain',
+            },
+            fragment: {
+              module: module,
+              entryPoint: 'fragmentMain',
+              targets: [ { format: dstFormat } ],
+            },
+            primitive: {
+              topology: 'triangle-list',
+            },
+          });
+    
+          this.device.popErrorScope().then((result) => {
+            if (result) {
+              console.error(result.message);
+            }
+          });
+        }
+      } else if (!this.depthToFloatPipeline) {
+        this.device.pushErrorScope('validation');
+
+        this.depthToFloatBindGroupLayout = this.device.createBindGroupLayout({
+          entries: [
+            {
+              binding: 0,
+              visibility: GPUShaderStage.FRAGMENT,
+              texture: { sampleType: "depth" },
+            }
+          ]
+        });
+
+        const pipelineLayout = this.device.createPipelineLayout({
+          bindGroupLayouts: [this.depthToFloatBindGroupLayout]
+        });
+
+        const module = this.depthToFloatShaderModule;
+        this.depthToFloatPipeline = this.device.createRenderPipeline({
+          layout: pipelineLayout,
+          vertex: {
+            module,
+            entryPoint: 'vertexMain',
+          },
+          fragment: {
+            module: module,
+            entryPoint: 'fragmentMain',
+            targets: [ { format: dstFormat } ],
+          },
+          primitive: {
+            topology: 'triangle-list',
+          },
+        });
+
+        this.device.popErrorScope().then((result) => {
+          if (result) {
+            console.error(result.message);
+          }
+        });
+      }
+
+      this.device.pushErrorScope('validation');
+
+      const bindGroup = this.device.createBindGroup({
+        layout: sampleCount > 1 ? this.depthToFloatBindGroupMSLayout : this.depthToFloatBindGroupLayout,
+        entries: [ { binding: 0, resource: fromTextureView } ],
+      });
+
+      const doSubmit = !commandEncoder;
+
+      commandEncoder ??= this.device.createCommandEncoder();
+      const passEncoder = commandEncoder.beginRenderPass({
+        colorAttachments: [{
+          view: toTextureView,
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearColor: { r: 0, g: 0, b: 0, a: 0 }
+        }]
+      });
+
+      passEncoder.setPipeline(sampleCount > 1 ? this.depthToFloatMSPipeline : this.depthToFloatPipeline);
+      passEncoder.setBindGroup(0, bindGroup);
+      passEncoder.draw(3);
+      passEncoder.end();
+
+      if (doSubmit) {
+        this.device.queue.submit([commandEncoder.finish()]);
+      }
+
+      this.device.popErrorScope().then((result) => {
+        if (result) {
+          console.error(result.message);
+        }
+      });
+    }
+  }
+
+  TextureUtils.blitShader = `
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
+    vec4f(-1.0, 1.0, 0.0, 0.0),
+    vec4f(3.0, 1.0, 2.0, 0.0),
+    vec4f(-1.0, -3.0, 0.0, 2.0));
+  struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f
+  };
+  @vertex
+  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.uv = posTex[vertexIndex].zw;
+    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
+    return output;;
+  }
+  @group(0) @binding(0) var texSampler: sampler;
+  @group(0) @binding(1) var texture: texture_2d<f32>;
+  struct Display {
+    exposure: f32,
+    channels: f32,
+    numChannels: f32,
+    minRange: f32,
+    maxRange: f32,
+    _pad1: f32,
+    _pad2: f32,
+    _pad3: f32
+  };
+  @group(1) @binding(0) var<uniform> display: Display; 
+  @fragment
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+    var color = textureSample(texture, texSampler, input.uv);
+
+    if (display.numChannels == 1.0) {
+      if (display.minRange != display.maxRange) {
+        if (color.r < display.minRange) {
+          color = vec4f(0.0, 0.0, 0.0, 1);
+        } else if (color.r > display.maxRange) {
+          color = vec4f(1.0, 0.0, 0.0, 1);
+        } else {
+          color = vec4f((color.r - display.minRange) / (display.maxRange - display.minRange), 0.0, 0.0, 1);
+        }
+      }
+      color = vec4f(color.r, color.r, color.r, 1.0);
+    } else if (display.numChannels == 2.0) {
+      color = vec4f(color.r, color.g, 0.0, 1.0);
+    }
+
+    if (display.channels == 1.0) { // R
+      var rgb = color.rgb * display.exposure;
+      return vec4f(rgb.r, 0.0, 0.0, 1);
+    } else if (display.channels == 2.0) { // G
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, rgb.g, 0.0, 1);
+    } else if (display.channels == 3.0) { // B
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, 0.0, rgb.b, 1);
+    } else if (display.channels == 4.0) { // A
+      var a = color.a * display.exposure;
+      return vec4f(a, a, a, 1);
+    } else if (display.channels == 5.0) { // Luminance
+      var luminance = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));
+      var rgb = vec3f(luminance) * display.exposure;
+      return vec4f(rgb, 1);
+    }
+
+    // RGB
+    var rgb = color.rgb * display.exposure;
+    return vec4f(rgb, 1);
+  }
+`;
+
+  TextureUtils.blit3dShader = `
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
+    vec4f(-1.0, 1.0, 0.0, 0.0),
+    vec4f(3.0, 1.0, 2.0, 0.0),
+    vec4f(-1.0, -3.0, 0.0, 2.0));
+  struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f
+  };
+  @vertex
+  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.uv = posTex[vertexIndex].zw;
+    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
+    return output;;
+  }
+  @group(0) @binding(0) var texSampler: sampler;
+  @group(0) @binding(1) var texture: texture_3d<f32>;
+  struct Display {
+    exposure: f32,
+    channels: f32,
+    numChannels: f32,
+    minRange: f32,
+    maxRange: f32,
+    layer: f32,
+    _pad2: f32,
+    _pad3: f32
+  };
+  @group(1) @binding(0) var<uniform> display: Display; 
+  @fragment
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+    var color = textureSampleLevel(texture, texSampler, vec3f(input.uv, display.layer), 0.0);
+
+    if (display.numChannels == 1.0) {
+      if (display.minRange != display.maxRange) {
+        if (color.r < display.minRange) {
+          color = vec4f(0.0, 0.0, 0.0, 1);
+        } else if (color.r > display.maxRange) {
+          color = vec4f(1.0, 0.0, 0.0, 1);
+        } else {
+          color = vec4f((color.r - display.minRange) / (display.maxRange - display.minRange), 0.0, 0.0, 1);
+        }
+      }
+      color = vec4f(color.r, color.r, color.r, 1.0);
+    } else if (display.numChannels == 2.0) {
+      color = vec4f(color.r, color.g, 0.0, 1.0);
+    }
+
+    if (display.channels == 1.0) { // R
+      var rgb = color.rgb * display.exposure;
+      return vec4f(rgb.r, 0.0, 0.0, 1);
+    } else if (display.channels == 2.0) { // G
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, rgb.g, 0.0, 1);
+    } else if (display.channels == 3.0) { // B
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, 0.0, rgb.b, 1);
+    } else if (display.channels == 4.0) { // A
+      var a = color.a * display.exposure;
+      return vec4f(a, a, a, 1);
+    } else if (display.channels == 5.0) { // Luminance
+      var luminance = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));
+      var rgb = vec3f(luminance) * display.exposure;
+      return vec4f(rgb, 1);
+    }
+
+    // RGB
+    var rgb = color.rgb * display.exposure;
+    return vec4f(rgb, 1);
+  }
+`;
+
+  TextureUtils.multisampleBlitShader = `
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
+    vec4f(-1.0, 1.0, 0.0, 0.0),
+    vec4f(3.0, 1.0, 2.0, 0.0),
+    vec4f(-1.0, -3.0, 0.0, 2.0));
+  struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f
+  };
+  @vertex
+  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.uv = posTex[vertexIndex].zw;
+    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
+    return output;;
+  }
+  @group(0) @binding(0) var texSampler: sampler;
+  @group(0) @binding(1) var texture: texture_multisampled_2d<f32>;
+  struct Display {
+    exposure: f32,
+    channels: f32,
+    numChannels: f32,
+    minRange: f32,
+    maxRange: f32,
+    _pad1: f32,
+    _pad2: f32,
+    _pad3: f32
+  };
+  @group(1) @binding(0) var<uniform> display: Display; 
+  @fragment
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+    var coords = vec2i(input.uv * vec2f(textureDimensions(texture)));
+    var color = textureLoad(texture, coords, 0);
+    if (display.numChannels == 1.0) {
+      if (display.minRange != display.maxRange) {
+        if (color.r < display.minRange) {
+          color = vec4f(0.0, 0.0, 0.0, color.a);
+        } else if (color.r > display.maxRange) {
+          color = vec4f(1.0, 1.0, 1.0, color.a);
+        } else {
+          color = vec4f((color.r - display.minRange) / (display.maxRange - display.minRange), 0.0, 0.0, color.a);
+        }
+      }
+      color = vec4f(color.r, color.r, color.r, 1.0);
+    } else if (display.numChannels == 2.0) {
+      color = vec4f(color.r, color.g, 0.0, 1.0);
+    }
+    if (display.channels == 1.0) { // R
+      var rgb = color.rgb * display.exposure;
+      return vec4f(rgb.r, 0.0, 0.0, color.a);
+    } else if (display.channels == 2.0) { // G
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, rgb.g, 0.0, color.a);
+    } else if (display.channels == 3.0) { // B
+      var rgb = color.rgb * display.exposure;
+      return vec4f(0.0, 0.0, rgb.b, color.a);
+    } else if (display.channels == 4.0) { // A
+      var a = color.a * display.exposure;
+      return vec4f(a, a, a, color.a);
+    } else if (display.channels == 5.0) { // Luminance
+      var luminance = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));
+      var rgb = vec3f(luminance) * display.exposure;
+      return vec4f(rgb, color.a);
+    }
+
+    // RGB
+    var rgb = color.rgb * display.exposure;
+    return vec4f(rgb, color.a);
+  }`;
+
+  TextureUtils.depthToFloatShader = `
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
+    vec4f(-1.0, 1.0, 0.0, 0.0),
+    vec4f(3.0, 1.0, 2.0, 0.0),
+    vec4f(-1.0, -3.0, 0.0, 2.0));
+  struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv : vec2<f32>
+  };
+  @vertex
+  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.uv = posTex[vertexIndex].zw;
+    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
+    return output;;
+  }
+  
+  @binding(0) @group(0) var depth: texture_depth_2d;
+  @fragment
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
+    var depthSize = textureDimensions(depth);
+    var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),
+                           i32(f32(depthSize.y) * input.uv.y));
+    var d = textureLoad(depth, coords, 0);
+    return vec4<f32>(d, 0.0, 0.0, 1.0);
+  }`;
+
+  TextureUtils.depthToFloatMultisampleShader = `
+  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
+    vec4f(-1.0, 1.0, 0.0, 0.0),
+    vec4f(3.0, 1.0, 2.0, 0.0),
+    vec4f(-1.0, -3.0, 0.0, 2.0));
+  struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv : vec2<f32>
+  };
+  @vertex
+  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.uv = posTex[vertexIndex].zw;
+    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
+    return output;;
+  }
+  
+  @binding(0) @group(0) var depth: texture_depth_multisampled_2d;
+  @fragment
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
+    var depthSize = textureDimensions(depth);
+    var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),
+                           i32(f32(depthSize.y) * input.uv.y));
+    var d = textureLoad(depth, coords, 0);
+    return vec4<f32>(d, 0.0, 0.0, 1.0);
+  }`;
+
+  /**
+   * A window widget fills the entire browser window. It will resize with the
+   * browser. A Window can have an Overlay, which is a [Widget] that will be
+   * resized to fill the entire window, and can be used to create full screen
+   * modal editors.
+   */
+  class Window extends Widget {
+    constructor(options) {
+      super(document.body, options);
+      this._overlay = null;
+      this._onResizeCB = this.windowResized.bind(this);
+      window.addEventListener('resize', this._onResizeCB);
+      this.onWindowResized = new Signal();
+      Widget.window = this;
+    }
+
+    windowResized() {
+      this._onResize(window.innerWidth, window.innerHeight);
+    }
+
+    /**
+     * @property {number} width The width of the widget.
+     */
+    get width() {
+      return window.innerWidth;
+    }
+
+    /**
+     * @property {number} heihgt The height of the widget.
+     */
+    get height() {
+      return window.innerHeight;
+    }
+
+    /**
+     * @property {Widget?} overlay The active overlay widget, which covers the entire window
+     * temporarily.
+     */
+    get overlay() {
+      return this._overlay;
+    }
+
+    set overlay(v) {
+      if (this._overlay === v) {
+        return;
+      }
+
+      if (this._overlay !== null) {
+        this._element.removeChild(this._overlay._element);
+      }
+
+      this._overlay = v;
+
+      if (this._overlay) {
+        this._element.appendChild(this._overlay._element);
+        this._overlay.setPosition(0, 0, 'absolute');
+        this._overlay.resize(window.innerWidth, window.innerHeight);
+      }
+    }
+
+    /**
+     * The widget has been resized.
+     * @param {number} width
+     * @param {number} height
+     */
+    _onResize(width, height) {
+      this.onWindowResized.emit();
+      this.repaint();
+      if (this._element) {
+        if (this._overlay) {
+          this._overlay.resize(width, height);
+        }
+      }
+      this.onResize();
+    }
+  }
+
+  Window.isWindow = true;
+  Window._idPrefix = 'WINDOW';
+
+  class CaptureStatistics {
+    constructor() {
+      this.apiCalls = 0;
+
+      this.draw = 0;
+      this.drawIndirect = 0;
+      this.dispatch = 0;
+      
+      this.setVertexBuffer = 0;
+      this.setIndexBuffer = 0;
+      this.setBindGroup = 0;
+      this.uniformBuffers = 0;
+      this.storageBuffers = 0;
+      this.textures = 0;
+      this.samplers = 0;
+      this.setPipeline = 0;
+
+      this.vertexShaders = 0;
+      this.fragmentShaders = 0;
+      this.computeShaders = 0;
+
+      this.computePasses = 0;
+      this.renderPasses = 0;
+      this.colorAttachments = 0;
+      this.depthStencilAttachments = 0;
+      this.copyCommands = 0;
+      this.writeBuffer = 0;
+      this.bufferBytesWritten = 0;
+      this.writeTexture = 0;
+      //this.textureBytesWritten = 0;
+      this.totalBytesWritten = 0;
+
+      this.totalInstances = 0;
+      this.totalVertices = 0;
+      this.totalTriangles = 0;
+      this.totalLines = 0;
+      this.totalPoints = 0;
+
+      Object.defineProperty(this, '_lastPipeline', { enumerable: false, writable: true, value: 0 });
+    }
+
+    reset() {
+      this.apiCalls = 0;
+
+      this.draw = 0;
+      this.drawIndirect = 0;
+      this.dispatch = 0;
+      
+      this.setVertexBuffer = 0;
+      this.setIndexBuffer = 0;
+      this.setBindGroup = 0;
+      this.uniformBuffers = 0;
+      this.storageBuffers = 0;
+      this.textures = 0;
+      this.samplers = 0;
+      this.setPipeline = 0;
+
+      this.vertexShaders = 0;
+      this.fragmentShaders = 0;
+      this.computeShaders = 0;
+
+      this.computePasses = 0;
+      this.renderPasses = 0;
+      this.colorAttachments = 0;
+      this.depthStencilAttachments = 0;
+      this.copyCommands = 0;
+      this.writeBuffer = 0;
+      this.bufferBytesWritten = 0;
+      this.writeTexture = 0;
+      //this.textureBytesWritten = 0;
+      this.totalBytesWritten = 0;
+
+      this.totalInstances = 0;
+      this.totalVertices = 0;
+      this.totalTriangles = 0;
+      this.totalLines = 0;
+      this.totalPoints = 0;
+
+      this._lastPipeline = 0;
+    }
+
+    updateStats(database, command) {
+      this.apiCalls++;
+
+      const method = command.method;
+      const args = command.args;
+
+      if (method === "dispatchWorkgroups" || method === "dispatchWorkgroupsIndirect") {
+        this.dispatch++;
+      } else if (method === "draw" || method === "drawIndexed" || method === "drawIndirect" || method === "drawIndexedIndirect") {
+        this.draw++;
+        let vertexCount = 0;
+
+        if (method === "drawIndirect" || method === "drawIndexedIndirect") {
+          this.drawIndirect++;
+          // TODO the buffer data has not finished loading by the time these stats are collected
+          if (command.isBufferDataLoaded && command.bufferData) {
+            const bufferData = command.bufferData[0];
+            if (bufferData) {
+              const u32Array = new Uint32Array(bufferData.buffer);
+              vertexCount = u32Array[0];
+            }
+          }
+        } else {
+          vertexCount = parseInt(args[0] ?? 0) ?? 0;
+          this.totalInstances += parseInt(args[1] ?? 1);
+        }
+
+        this.totalVertices += vertexCount;
+
+        if (this._lastPipeline) {
+          const pipeline = database.getObject(this._lastPipeline.__id);
+          if (pipeline?.descriptor) {
+            const topology = pipeline.descriptor.primitive?.topology ?? "triangle-list";
+            if (topology === "triangle-list") {
+              const numTriangles = vertexCount / 3;
+              this.totalTriangles += numTriangles;
+            } else if (topology === "triangle-strip") {
+              const numTriangles = vertexCount - 2;
+              this.totalTriangles += numTriangles;
+            } else if (topology === "point-list") {
+              this.totalPoints += vertexCount;
+            } else if (topology === "line-list") {
+              this.totalLines += vertexCount / 2;
+            } else if (topology === "line-strip") {
+              this.totalLines += vertexCount - 1;
+            }
+          }
+        }
+      } else if (method === "setIndexBuffer") {
+        this.setIndexBuffer++;
+      } else if (method === "setVertexBuffer") {
+        this.setVertexBuffer++;
+      } else if (method === "setPipeline") {
+        this.setPipeline++;
+        this._lastPipeline = args[0];
+        const pipeline = database.getObject(args[0]?.__id);
+        if (pipeline) {
+          if (pipeline.descriptor.vertex) {
+            this.vertexShaders++;
+          }
+          if (pipeline.descriptor.fragment) {
+            this.fragmentShaders++;
+          }
+          if (pipeline.descriptor.compute) {
+            this.computeShaders++;
+          }
+        }
+      } else if (method === "setBindGroup") {
+        this.setBindGroup++;
+        const bindgroup = database.getObject(args[1]?.__id);
+        if (bindgroup) {
+          for (const entry of bindgroup.descriptor.entries) {
+            if (entry.resource?.buffer) {
+              const buffer = database.getObject(entry.resource.buffer.__id);
+              if (buffer) {
+                if (buffer.descriptor.usage & GPUBufferUsage.STORAGE) {
+                  this.storageBuffers++;
+                }
+                if (buffer.descriptor.usage & GPUBufferUsage.UNIFORM) {
+                  this.uniformBuffers++;
+                }
+              }
+            } else if (entry.resource?.__id) {
+              const resource = database.getObject(entry.resource.__id);
+              if (resource instanceof TextureView) {
+                this.textures++;
+              } else if (resource instanceof Sampler) {
+                this.samplers++;
+              }
+            }
+          }
+        }
+      } else if (method === "beginComputePass") {
+        this.computePasses++;
+      } else if (method === "beginRenderPass") {
+        this.renderPasses++;
+        const desc = args[0];
+        if (desc.colorAttachments) {
+          this.colorAttachments += desc.colorAttachments.length;
+        }
+        if (desc.depthStencilAttachment) {
+          this.depthStencilAttachments++;
+        }
+      } else if (method === "writeBuffer") {
+        this.writeBuffer++;
+        const data = args[2];
+        let dataLength = 0;
+        if (args[2].constructor === String) {
+          const dataTk = args[2].split(" ");
+          dataLength = parseInt(dataTk[dataTk.length - 1]);
+        } else if (data.length !== undefined) {
+          dataLength = data.length;
+        }
+        const offset = args.length > 3 ? args[3] : 0;
+        const size = args.length > 4 ? args[4] : dataLength - offset;
+        this.bufferBytesWritten += size;
+        this.totalBytesWritten += size;
+      } else if (method === "writeTexture") {
+        this.writeTexture++;
+        /*const data = args[1];
+        const size = data.length;
+        this.textureBytesWritten += size;
+        this.totalBytesWritten += size;*/
+      } else if (method === "copyBufferToBuffer" || method === "copyBufferToTexture" ||
+                 method === "copyTextureToBuffer" || method === "copyTextureToTexture") {
+        this.copyCommands++;
+      }
+    }
+  }
+
+  class Button extends Widget {
+    constructor(parent, options) {
+      super('button', parent);
+      this.classList.add('button');
+
+      this.callback = null;
+      this.onMouseDown = null;
+      this.onMouseUp = null;
+
+      this._click = this.click.bind(this);
+      this._mouseDown = this.mouseDown.bind(this);
+      this._mouseUp = this.mouseUp.bind(this);
+
+      this.element.addEventListener('click', this._click);
+      this.element.addEventListener('mousedown', this._mouseDown);
+      this.element.addEventListener('mouseup', this._mouseUp);
+
+      if (options) {
+        this.configure(options);
+      }
+    }
+
+    configure(options) {
+      super.configure(options);
+      if (options.callback) {
+        this.callback = options.callback;
+      }
+      if (options.mouseDown) {
+        this.onMouseDown = options.mouseDown;
+      }
+      if (options.mouseUp) {
+        this.onMouseUp = options.mouseUp;
+      }
+      if (options.label) {
+        this.text = options.label;
+      }
+    }
+
+    click(event) {
+      if (this.callback) {
+        this.callback.call(this, event);
+      }
+    }
+
+    mouseDown(event) {
+      if (this.onMouseDown) {
+        this.onMouseDown.call(this, event);
+      }
+    }
+
+    mouseUp(event) {
+      if (this.onMouseUp) {
+        this.onMouseUp.call(this, event);
+      }
+    }
+  }
+
+  /**
+   * A SPAN element widget.
+   */
+  class Span extends Widget {
+    constructor(parent, options) {
+      super('span', parent, options);
+    }
+  }
+
+  Span._idPrefix = 'SPAN';
+
+  /**
+   * A collapsable widget with a header and a body.
+   */
+  class Collapsable extends Widget {
+    constructor(parent, options) {
+      super('div', parent, options);
+
+      const collapsed = options.collapsed ?? false;
+
+      this.titleBar = new Div(this, { class: "title_bar" });
+      this.collapseButton = new Span(this.titleBar, { class: "collapsable_button", text: collapsed ? "+" : "-", style: "margin-right: 10px;" });
+      this.label = new Span(this.titleBar, { class: "object_type", text: options?.label ?? "" });
+      this.onExpanded = new Signal();
+      this.onCollapsed = new Signal();
+
+      this.body = new Div(this, { class: ["collapsable_body"] });
+      if (collapsed) {
+        this.body.element.className = "collapsable_body collapsed";
+      }
+
+      const self = this;
+
+      this.titleBar.element.onclick = function() {
+        if (self.collapseButton.text == "-") {
+          self.collapseButton.text = "+";
+          self.body.element.className = "collapsable_body collapsed";
+          self.onCollapsed.emit();
+        } else {
+          self.collapseButton.text = "-";
+          self.body.element.className = "collapsable_body";
+          self.onExpanded.emit();
+        }
+      };
+    }
+
+    expand() {
+      this.collapsed = false;
+    }
+
+    get collapsed() {
+      return this.collapseButton.text == "+";
+    }
+
+    set collapsed(value) {
+      if (this.collapsed == value) {
+        return;
+      }
+      if (value) {
+        this.collapseButton.text = "+";
+        this.body.element.className = "collapsable_body collapsed";
+        this.onCollapsed.emit();
+      } else {
+        this.collapseButton.text = "-";
+        this.body.element.className = "collapsable_body";
+        this.onExpanded.emit();
+      }
+    }
+  }
+
+  /**
+   * Base class for modal windows. A modal window takes over the main window while it is active.
+   */
+  class Dialog extends Div {
+    constructor(options) {
+      const title = options?.title ?? 'Dialog';
+
+      super({ class: options?.windowClass ?? 'dialog', title: title });
+
+      if (options?.width) {
+        this.style.width = `${options.width}px`;
+      }
+
+      const background =
+        options?.parent ?? new Div({ class: 'dialog-background' });
+
+      this.parent = background;
+
+      const header = new Div(this, { class: 'dialog-header', title });
+
+      if (!options?.noCloseButton) {
+        const closeButton = new Button(header, {
+          class: 'dialog-close-button',
+          text: 'x',
+          title: 'Close',
+        });
+
+        closeButton.addEventListener('mouseup', function (e) {
+          if (e.target === closeButton.element) {
+            Window.window.overlay = null;
+          }
+        });
+      }
+
+      this.title = new Span(header, { class: 'dialog-title', text: title });
+
+      this.body = new Div(this, { class: 'dialog-body' });
+
+      if (options?.body) {
+        this.body.appendChild(options.body);
+      }
+
+      if (!options?.parent) {
+        Window.window.overlay = background;
+      }
+
+      if (options?.draggable) {
+        let isDragging = false;
+        const rect = this.getBoundingClientRect();
+        let x = rect ? rect.left : 0;
+        let y = rect ? rect.top : 0;
+        this.style.position = 'absolute';
+        this.style.left = `${x}px`;
+        this.style.top = `${y}px`;
+
+        let prevX = 0;
+        let prevY = 0;
+        header.addEventListener('mousedown', function (e) {
+          isDragging = true;
+          prevX = e.clientX;
+          prevY = e.clientY;
+        });
+
+        const self = this;
+        document.addEventListener('mousemove', function (e) {
+          if (!isDragging) {
+            return;
+          }
+          const dx = e.clientX - prevX;
+          const dy = e.clientY - prevY;
+          x += dx;
+          y += dy;
+          prevX = e.clientX;
+          prevY = e.clientY;
+          self.style.left = `${x}px`;
+          self.style.top = `${y}px`;
+        });
+
+        document.addEventListener('mouseup', function () {
+          isDragging = false;
+        });
+      }
+    }
+
+    close() {
+      Window.window.overlay = null;
+    }
+  }
+
+  class Label extends Widget {
+    constructor(text, parent, options) {
+      super('label', parent, options);
+      this.classList.add('label');
+      this.text = text;
+    }
+
+    configure(options) {
+      if (!options) {
+        return;
+      }
+      super.configure(options);
+      if (options.for) {
+        this.for = options.for;
+      }
+    }
+
+    get for() {
+      return this._element.htmlFor;
+    }
+
+    set for(v) {
+      if (!v) {
+        this._element.htmlFor = '';
+      } else if (v.constructor === String) {
+        this._element.htmlFor = v;
+      } else {
+        this._element.htmlFor = v.id;
+      }
+    }
+  }
+
+  class Input extends Widget {
+    constructor(parent, options) {
+      super('input', parent, options);
+      this.onChange = new Signal();
+      this.onEdit = new Signal();
+      const self = this;
+
+      this.element.addEventListener('change', function () {
+        let v = self.type === 'checkbox' ? self.checked : self.value;
+        self.onChange.emit(v);
+        if (self._onChange) {
+          self._onChange(v);
+        }
+      });
+
+      this.element.addEventListener('input', function () {
+        let v = self.type === 'checkbox' ? self.checked : self.value;
+        self.onEdit.emit(v);
+        if (self._onEdit) {
+          self._onEdit(v);
+        }
+      });
+    }
+
+    configure(options) {
+      if (!options) {
+        return;
+      }
+      super.configure(options);
+
+      if (options.type !== undefined) {
+        this.type = options.type;
+      }
+
+      if (options.checked !== undefined) {
+        this.checked = options.checked;
+      }
+
+      if (options.value !== undefined) {
+        this.value = options.value;
+      }
+
+      if (options.label !== undefined) {
+        if (options.label.constructor === String) {
+          this.label = new Label(options.label, this.parent, {
+            for: this,
+          });
+        } else {
+          this.label = options.label;
+          this.label.for = this.id;
+        }
+      }
+
+      if (options.readOnly !== undefined) {
+        this.readOnly = options.readOnly;
+      }
+
+      if (options.onChange !== undefined) {
+        this._onChange = options.onChange;
+      }
+
+      if (options.onEdit !== undefined) {
+        this._onEdit = options.onEdit;
+      }
+    }
+
+    get type() {
+      return this._element.type;
+    }
+
+    set type(v) {
+      this._element.type = v;
+    }
+
+    get checked() {
+      return this._element.checked;
+    }
+
+    set checked(v) {
+      this._element.checked = v;
+    }
+
+    get indeterminate() {
+      return this._element.indeterminate;
+    }
+
+    set indeterminate(v) {
+      this._element.indeterminate = v;
+    }
+
+    get value() {
+      return this._element.value;
+    }
+
+    set value(v) {
+      this._element.value = v;
+    }
+
+    get readOnly() {
+      return this._element.readOnly;
+    }
+
+    set readOnly(v) {
+      this._element.readOnly = v;
+    }
+
+    focus() {
+      this._element.focus();
+    }
+
+    blur() {
+      this._element.blur();
+    }
+
+    select() {
+      this._element.select();
+    }
+  }
+
+  class TextInput extends Input {
+    constructor(parent, options) {
+      super(parent, options);
+      this.classList.add('text-input');
+      this.type = 'text';
+
+      this.enableKeyPressEvent();
+    }
+
+    configure(options) {
+      if (!options) return;
+      super.configure(options);
+      if (options.placeholder) {
+        this.placeholder = options.placeholder;
+      }
+    }
+
+    get placeholder() {
+      return this.element.placeholder;
+    }
+
+    set placeholder(v) {
+      this.element.placeholder = v;
+    }
+
+    keyPressEvent(e) {
+      if (e.keyCode === 27) {
+        // Escape
+        e.target.blur();
+      }
+      return true;
+    }
+  }
+
+  class NumberInput extends Span {
+    constructor(parent, options) {
+      super(parent, options);
+      this.classList.add('dragger');
+
+      options = options || {};
+
+      let isExpr = false;
+
+      let value = options.value;
+      if (value === null || value === undefined) {
+        value = 0;
+      } else if (value.constructor === String) {
+        isExpr = isNaN(value);
+        if (!isExpr) {
+          value = parseFloat(value);
+        }
+      } else if (value.constructor !== Number) {
+        value = 0;
+      }
+
+      const precision = options.precision != undefined ? options.precision : 3;
+
+      this.value = value;
+      this.precision = precision;
+      this.units = options.units ?? "";
+      this.disabled = !!options.disabled;
+      this.horizontal = !!options.horizontal;
+      this.linear = !!options.linear;
+      this.step = options.step ?? 1;
+      this.min = options.min ?? null;
+      this.max = options.max ?? null;
+      const container = new Span(this, { class: 'inputfield' });
+
+      if (options.full) {
+        container.classList.add('full');
+      }
+
+      if (this.disabled) {
+        container.classList.add('disabled');
+      }
+
+      const inputClass = options.inputClass || 'full';
+      const input = new TextInput(container, {
+        class: ['text', 'number', inputClass],
+        value: isExpr
+          ? value
+          : value.toFixed(precision) + (options.units ? options.units : ''),
+        onChange: options.onChange,
+      });
+      this.input = input;
+      input.ownerDocument = document;
+
+      if (this.disabled) {
+        input.disabled = true;
+      }
+
+      if (options.tabIndex) {
+        input.tabIndex = options.tabIndex;
+      }
+
+      input.addEventListener('keydown', function (e) {
+        if (e.keyCode == 38) {
+          innerInc(1, e);
+        } else if (e.keyCode == 40) {
+          innerInc(-1, e);
+        } else {
+          return;
+        }
+        e.stopPropagation();
+        e.preventDefault();
+        return true;
+      });
+
+      const dragger = new Span(container, { class: 'drag_widget' });
+      if (this.disabled) {
+        dragger.classList.add('disabled');
+      }
+
+      this.dragger = dragger;
+
+      dragger.addEventListener('mousedown', innerDown);
+      input.addEventListener('wheel', innerWheel, false);
+      input.addEventListener('mousewheel', innerWheel, false);
+
+      let docBinded = null;
+
+      const self = this;
+
+      function innerDown(e) {
+        if (isExpr) {
+          return;
+        }
+        docBinded = input.ownerDocument;
+
+        docBinded.removeEventListener('mousemove', innerMove);
+        docBinded.removeEventListener('mouseup', innerUp);
+
+        if (!self.disabled) {
+          if (self.element.requestPointerLock) {
+            self.element.requestPointerLock();
+          }
+          docBinded.addEventListener('mousemove', innerMove);
+          docBinded.addEventListener('mouseup', innerUp);
+
+          dragger.data = [e.screenX, e.screenY];
+
+          self.trigger('startDragging');
+        }
+
+        e.stopPropagation();
+        e.preventDefault();
+      }
+
+      function innerMove(e) {
+        if (isExpr) {
+          return;
+        }
+        const deltax = e.screenX - dragger.data[0];
+        const deltay = dragger.data[1] - e.screenY;
+        let diff = [deltax, deltay];
+        if (e.movementX !== undefined) {
+          diff = [e.movementX, -e.movementY];
+        }
+
+        dragger.data = [e.screenX, e.screenY];
+        const axis = self.horizontal ? 0 : 1;
+
+        innerInc(diff[axis], e);
+
+        e.stopPropagation();
+        e.preventDefault();
+        return false;
+      }
+
+      function innerWheel(e) {
+        if (isExpr) {
+          return;
+        }
+        if (document.activeElement !== this) {
+          return;
+        }
+        const delta =
+          e.wheelDelta !== undefined
+            ? e.wheelDelta
+            : e.deltaY
+            ? -e.deltaY / 3
+            : 0;
+        innerInc(delta > 0 ? 1 : -1, e);
+        e.stopPropagation();
+        e.preventDefault();
+      }
+
+      function innerUp(e) {
+        if (isExpr) {
+          return;
+        }
+        self.trigger('stopDragging');
+        const doc = docBinded || document;
+        docBinded = null;
+        doc.removeEventListener('mousemove', innerMove);
+        doc.removeEventListener('mouseup', innerUp);
+        if (doc.exitPointerLock) {
+          doc.exitPointerLock();
+        }
+        dragger.trigger('blur');
+        e.stopPropagation();
+        e.preventDefault();
+        return false;
+      }
+
+      function innerInc(v, e) {
+        if (isExpr) {
+          return;
+        }
+        if (!self.linear) {
+          v = v > 0 ? Math.pow(v, 1.2) : Math.pow(Math.abs(v), 1.2) * -1;
+        }
+
+        let scale = self.step ? self.step : 1.0;
+        if (e && e.shiftKey) {
+          scale *= 10;
+        } else if (e && e.ctrlKey) {
+          scale *= 0.1;
+        }
+
+        let value = parseFloat(input.value) + v * scale;
+
+        if (self.max !== null && value > self.max) {
+          value = self.max;
+        }
+
+        if (self.min !== null && value < self.min) {
+          value = self.min;
+        }
+
+        value = value.toFixed(self.precision);
+        if (self.units) {
+          value += self.units;
+        }
+        input.value = value;
+
+        input.trigger('change');
+      }
+    }
+
+    setRange(min, max) {
+      this.min = min;
+      this.max = max;
+    }
+
+    setValue(v, skipEvent) {
+      const isExpr = isNaN(v);
+      if (!isExpr) {
+        v = parseFloat(v);
+        if (this.min !== null && v < this.min) {
+          v = this.min;
+        }
+        if (this.max !== null && v > this.max) {
+          v = this.max;
+        }
+      }
+      if (this.value == v) {
+        return;
+      }
+      this.value = v;
+      if (!isExpr) {
+        if (this.precision) {
+          v = v.toFixed(this.precision);
+        }
+        if (this.units) {
+          v += this.units;
+        }
+      }
+      if (this.input.value != v) {
+        this.input.value = v;
+        if (!skipEvent) {
+          this.input.onChange.emit(v);
+        }
+      }
+    }
+
+    getValue() {
+      return this.value;
+    }
+  }
+
+  class TextArea extends Widget {
+    constructor(parent, options) {
+      super('textArea', parent, options);
+      this.element.spellcheck = false;
+      this.classList.add('text-area');
+
+      this.onChange = new Signal();
+      this.onEdit = new Signal();
+
+      const self = this;
+      this.element.addEventListener('change', function () {
+        let v = self.value;
+        self.onChange.emit(v);
+        if (self._onChange) {
+          self._onChange(v);
+        }
+      });
+
+      this.element.addEventListener('input', function () {
+        let v = self.value;
+        self.onEdit.emit(v);
+        if (self._onEdit) {
+          self._onEdit(v);
+        }
+      });
+    }
+
+    configure(options) {
+      if (!options) {
+        return;
+      }
+      super.configure(options);
+
+      if (options.value) {
+        this.value = options.value;
+      }
+
+      if (options.placeholder) {
+        this.placeholder = options.placeholder;
+      }
+
+      if (options.readOnly !== undefined) {
+        this.readOnly = options.readOnly;
+      }
+
+      if (options.onChange !== undefined) {
+        this._onChange = options.onChange;
+      }
+
+      if (options.onEdit !== undefined) {
+        this._onEdit = options.onEdit;
+      }
+    }
+
+    get value() {
+      return this._element.value;
+    }
+
+    set value(t) {
+      this._element.value = t;
+    }
+
+    get placeholder() {
+      return this._element.placeholder;
+    }
+
+    set placeholder(v) {
+      this._element.placeholder = v;
+    }
+
+    get readOnly() {
+      return this._element.readOnly;
+    }
+
+    set readOnly(v) {
+      this._element.readOnly = v;
+    }
+  }
+
+  function getFlagString(value, flags) {
+    function _addFlagString(flags, flag) {
+      return flags === "" ? flag : `${flags} | ${flag}`;
+    }
+    let flagStr = "";
+    for (const flagName in flags) {
+      const flag = flags[flagName];
+      if (value & flag) {
+        flagStr = _addFlagString(flagStr, flagName);
+      }
+    }
+    return flagStr;
+  }
+
+  class Select extends Widget {
+    constructor(parent, options) {
+      super('span', parent);
+      this.classList.add('select');
+
+      this.select = new Widget('select', this);
+      this.select.style.width = '100%';
+      this.select.style.height = '20px';
+      this.select.style.border = 'none';
+      this.select.style.display = 'inline-block';
+      this.select.classList.add('select');
+      this.onChange = new Signal();
+
+      const self = this;
+      this.select.element.addEventListener('change', function () {
+        if (self.selectEdit) {
+          self.selectEdit.value = self.select.element.value;
+        } else {
+          self.onChange.emit(self.value, self.index);
+          if (self._onChange) {
+            self._onChange(self.value, self.index);
+          }
+        }
+      });
+
+      if (options && options.editable) {
+        this.selectEdit = new TextInput(this, {
+          value: options.options[0],
+          style:
+            'position: absolute; top: 2px; left: 0px; width: calc(100% - 20px); height: 20px; border: none;',
+        });
+        this.selectEdit.onChange.addListener(function () {
+          self.onChange.emit(self.value);
+          if (self._onChange) {
+            self._onChange(self.value, self.index);
+          }
+        });
+      }
+
+      if (options) {
+        this.configure(options);
+      }
+
+      this.style.height = '20px';
+      this.style.position = 'relative';
+      this.style.minWidth = '50px';
+    }
+
+    get disabled() {
+      return super.disabled;
+    }
+
+    set disabled(v) {
+      super.disabled = v;
+      this.select.disabled = v;
+      if (this.selectEdit) {
+        this.selectEdit.disabled = v;
+      }
+    }
+
+    configure(options) {
+      if (!options) {
+        return;
+      }
+      super.configure(options);
+
+      if (options.options) {
+        for (const o of options.options) {
+          this.addOption(o);
+        }
+      }
+
+      if (options.label !== undefined) {
+        if (options.label.constructor === String) {
+          this.label = new Label(options.label, this.parent, {
+            fixedSize: 0,
+            for: this,
+          });
+        } else {
+          this.label = options.label;
+          this.label.for = this.id;
+          if (!this.label.parent) {
+            this.label.parent = this.parent;
+          }
+        }
+      }
+
+      if (options.value !== undefined) {
+        this.select.element.value = options.value;
+      }
+
+      if (options.index !== undefined) {
+        this.select.element.selectedIndex = options.index;
+        if (this.selectEdit) {
+          this.selectEdit.value = this.select.element.value;
+        }
+      }
+
+      if (options.onChange !== undefined) {
+        this._onChange = options.onChange;
+      }
+    }
+
+    get index() {
+      return this.select.element.selectedIndex;
+    }
+
+    set index(v) {
+      this.select.element.selectedIndex = v;
+    }
+
+    get value() {
+      if (this.selectEdit) {
+        return this.selectEdit.value;
+      }
+      return this.select.element.value;
+    }
+
+    set value(v) {
+      if (this.selectEdit) {
+        this.selectEdit.value = v;
+      } else {
+        this.select.element.value = v;
+      }
+    }
+
+    addOption(text) {
+      const o = document.createElement('option');
+      o.innerText = text;
+      this.select.element.add(o);
+    }
+
+    resize(width, height) {
+      if (!this._element) {
+        return;
+      }
+
+      // SELECT elements behave differently than other elements with resizing.
+      this.select.element.style.width = `${width}px`;
+      this.select.element.style.height = `${height}px`;
+
+      this.onResize();
+
+      if (!Widget.disablePaintingOnResize) {
+        this.paintEvent();
+      }
+    }
+  }
+
+  function getTypeName(type) {
+    if (type.isArray) {
+      return `array<${getTypeName(type.format)}>`;
+    }
+    if (type.isTemplate) {
+      return `${type.name}<${getTypeName(type.format)}>`;
+    }
+    return type.name;
+  }
+    
+  function getNestedStructs(type) {
+    if (type.isStruct) {
+      const nested = [];
+      for (const member of type.members) {
+        const structs = getNestedStructs(member.type);
+        nested.push(...structs);
+      }
+      nested.push(type);
+      return nested;
+    } else if (type.format !== undefined) {
+      return getNestedStructs(type.format);
+    }
+    return [];
+  }
+    
+  function _getStructFormat(struct) {
+    if (!struct?.members) {
+      return "";
+    }
+    let format = `struct ${struct.name} {\n`;
+    for (const member of struct.members) {
+      format += `  ${member.name}: ${getTypeName(member.type)},\n`;
+    }
+    format += "}\n";
+    return format;
+  }
+    
+  function getFormatFromReflection(type) {
+    if (type.isArray) {
+      return `array<${getFormatFromReflection(type.format)}>`;
+    }
+
+    if (type.isStruct) {
+      const structs = getNestedStructs(type);
+      let format = "";
+      for (const s of structs) {
+          format += _getStructFormat(s);
+      }
+      return format;
+    }
+
+    if (type.isTemplate) {
+      return `${type.name}<${getFormatFromReflection(type.format)}>`;
+    }
+
+    return type.name;
+  }
+
+  async function decodeDataUrl(dataUrl) {
+    const res = await fetch(dataUrl);
+    return new Uint8Array(await res.arrayBuffer());
+  }
+
+  class CaptureData {
+    constructor(objectDatabase) {
+      this.database = objectDatabase;
+
+      this.frameIndex = 0;
+      this.commands = [];
+      this.frameImageList = [];
+
+      this.onCaptureFrameResults = new Signal();
+      this.onUpdateCaptureStatus = new Signal();
+
+      this._loadedDataChunks = 0;
+      this._loadingImages = 0;
+      this._loadingBuffers = 0;
+      this._captureCount = 0;
+      this._pendingCommandBufferData = new Map();
+      this._timestampBuffer = null;
+      this._timestampChunkCount = 0;
+    }
+
+    captureTextureFrames(message) {
+      this._loadedDataChunks += message.chunkCount;
+      this._loadingImages += message.count ?? 0;
+      const textures = message.textures;
+      if (textures) {
+        for (const textureId of textures) {
+          const texture = this._getObject(textureId);
+          if (texture) {
+            texture.imageDataPending = true;
+          }
+        }
+      }
+    }
+
+    captureTextureDataChunk() {
+      this._loadedDataChunks--;
+    }
+
+    captureTextureLoaded() {
+      this._loadingImages--;
+    }
+
+    captureFrameResults(message) {
+      const frame = message.frame;
+      const count = message.count;
+      const batches = message.batches;
+      this.commands.length = count;
+      this.frameIndex = frame;
+      this._captureCount = batches;
+    }
+
+    captureFrameCommands(message) {
+      const commands = message.commands;
+      const index = message.index;
+      const count = message.count;
+      const frame = message.frame;
+      const pendingCommandBuffers = this._pendingCommandBufferData;
+      for (const ci in pendingCommandBuffers) {
+        const cmdData = pendingCommandBuffers[ci];
+        const cmd = commands[ci];
+        for (const m in cmdData) {
+          cmd[m] = cmdData[m];
+        }
+      }
+      this._pendingCommandBufferData.clear();
+      for (let i = 0, j = index; i < count; ++i, ++j) {
+        this.commands[j] = commands[i];
+      }
+      this._captureCount--;
+      if (this._captureCount === 0) {
+        this.onCaptureFrameResults.emit(frame, this.commands);
+      }
+    }
+
+    captureBuffers(message) {
+      this._loadingBuffers += message.count ?? 0;
+      this._loadedDataChunks += message.chunkCount;
+    }
+
+    captureBufferData(message) {
+      const id = message.commandId;
+      const entryIndex = message.entryIndex;
+      const offset = message.offset;
+      const size = message.size;
+      const index = message.index;
+      const count = message.count;
+      const chunk = message.chunk;
+      this._captureBufferData(id, entryIndex, offset, size, index, count, chunk);
+    }
+
+    getCaptureStatus() {
+      let text = "";
+      if (this._loadingImages || this._loadingBuffers || this._loadedDataChunks) {
+        text = "Loading ";
+
+        if (this._loadingImages) {
+          text += `Images: ${this._loadingImages} `;
+        }
+        if (this._loadingBuffers) {
+          text += `Buffers: ${this._loadingBuffers} `;
+        }
+        if (this._loadedDataChunks) {
+          text += `Data Chunks: ${this._loadedDataChunks} `;
+        }
+      }
+      return text;
+      //this._captureStatus.text = text;
+    }
+
+    _getObject(id) {
+      return this.database.getObject(id);
+    }
+
+    _captureBufferData(id, entryIndex, offset, size, index, count, chunk) {
+      if (id === -1000) {
+        // Timestamp buffer
+        if (this._timestampBuffer == null) {
+          this._timestampBuffer = new Uint8Array(size);
+          this._timestampChunkCount = count;
+        }
+        const self = this;
+        decodeDataUrl(chunk).then((chunkData) => {
+          self._timestampBuffer.set(chunkData, offset);
+          self._timestampChunkCount--;
+          if (self._timestampChunkCount === 0) {
+            let renderPassIndex = 0;
+            let computePassIndex = 0;
+
+            const timestampMap = new Array();
+
+            const timestampData = new BigInt64Array(self._timestampBuffer.buffer);
+            //console.log(timestampData.length / 2);
+
+            const firstTime = Number(timestampData[0]) / 1000000.0;
+
+            for (let i = 2, k = 0; i < timestampData.length; i += 2) {
+              const start = timestampData[i];
+              const end = timestampData[i + 1];
+              const duration = Number(end - start) / 1000000.0; // convert ns to ms
+              for (; k < self.commands.length; k++) {
+                const command = self.commands[k];
+                if (command.method === "beginRenderPass" ||
+                    command.method === "beginComputePass") {
+                  command.duration = duration;
+                  command.startTime = Number(start) / 1000000.0;
+                  command.endTime = Number(end) / 1000000.0;
+
+                  timestampMap.push(command);
+
+                  if (command.header) {
+                    if (command.method === "beginRenderPass") {
+                      const headerText = `Render Pass ${renderPassIndex} Duration: ${command.duration}ms`;
+                      command.header.text = headerText;
+                      renderPassIndex++;
+                    } else {
+                      const headerText = `Compute Pass ${computePassIndex} Duration: ${command.duration}ms`;
+                      command.header.text = headerText;
+                      computePassIndex++;
+                    }
+                  }
+
+                  k++;
+                  break;
+                }
+              }
+            }
+
+            timestampMap.sort((a, b) => { return a.startTime - b.startTime; });
+            for (const command of timestampMap) {
+              console.log(`${command.startTime - firstTime}: [${command.id}]: ${command.method} -> ${command.duration}ms`);
+            }
+
+            self.onUpdateCaptureStatus.emit();
+          }
+        }).catch((error) => {
+          console.error(error.message);
+          self.onUpdateCaptureStatus.emit();
+        });
+        return;
+      }
+
+      let command = this.commands[id];
+      if (!command) {
+        command = this._pendingCommandBufferData[id] ?? {};
+        this._pendingCommandBufferData[id] = command;
+      }
+
+      const self = this;
+      decodeDataUrl(chunk).then((chunkData) => {
+        const command = self.commands[id] ?? self._pendingCommandBufferData[id];
+        self._addDataMembersToCommand(command, entryIndex, size, count);
+        self._loadedDataChunks--;
+        try {
+          command.bufferData[entryIndex].set(chunkData, offset);
+          command.loadedDataChunks[entryIndex][index] = true;
+        } catch (e) {
+          console.log(e);
+          command.loadedDataChunks[entryIndex].length = 0;
+          command.isBufferDataLoaded[entryIndex] = false;
+        }
+
+        let loaded = true;
+        for (let i = 0; i < count; ++i) {
+          if (!command.loadedDataChunks[entryIndex][i]) {
+            loaded = false;
+            break;
+          }
+        }
+        command.isBufferDataLoaded[entryIndex] = loaded;
+
+        if (command.isBufferDataLoaded[entryIndex]) {
+          self._loadingBuffers--;
+          command.loadedDataChunks[entryIndex].length = 0;
+        }
+
+        self.onUpdateCaptureStatus.emit();
+      }).catch((error) => {
+        console.error(error);
+        self._loadedDataChunks--;
+        command.loadedDataChunks[entryIndex][index] = true;
+        let loaded = true;
+        for (let i = 0; i < count; ++i) {
+          if (!command.loadedDataChunks[entryIndex][i]) {
+            loaded = false;
+            break;
+          }
+        }
+        command.isBufferDataLoaded[entryIndex] = loaded;
+        if (command.isBufferDataLoaded[entryIndex]) {
+          self._loadingBuffers--;
+          command.loadedDataChunks[entryIndex].length = 0;
+        }
+
+        self.onUpdateCaptureStatus.emit();
+      });
+    }
+
+    _addDataMembersToCommand(command, entryIndex, size, count) {
+      if (!command.bufferData) {
+        command.bufferData = [];
+      }
+
+      if (!command.dataPending) {
+        command.dataPending = [];
+      }
+
+      if (!command.bufferData[entryIndex]) {
+        command.bufferData[entryIndex] = new Uint8Array(size);
+        command.dataPending[entryIndex] = true;
+      }
+
+      /*const bufferData = command.bufferData[entryIndex];
+      if (bufferData.length != size) {
+        console.log("!!!!!!!!!!!!!!! INVALID BUFFER SIZE", bufferData.length, size);
+        return;
+      }*/
+
+      if (!command.loadedDataChunks) {
+        command.loadedDataChunks = [];
+      }
+
+      if (!command.loadedDataChunks[entryIndex]) {
+        command.loadedDataChunks[entryIndex] = [];
+      }
+
+      if (command.loadedDataChunks[entryIndex].length !== count) {
+        command.loadedDataChunks[entryIndex].length = count;
+      }
+
+      if (!command.isBufferDataLoaded) {
+        command.isBufferDataLoaded = [];
+      }
+    }
+  }
+
+  /**
+   * A draggable bar to adjust sizes of elements in a splitter.
+   */
+  class SplitBar extends Div {
+    constructor(orientation, parent, options) {
+      super(parent, options);
+
+      this.orientation = orientation;
+      this._mousePressed = false;
+      this._mouseX = 0;
+      this._mouseY = 0;
+      this._prevWidget = null;
+      this._nextWidget = null;
+      this._splitIndex = 0;
+
+      this._element.classList.add('splitbar');
+
+      if (this.orientation == SplitBar.Horizontal) {
+        this._element.style.height = `${SplitBar.size}px`;
+        this._element.style.width = '100%';
+        this._element.style.cursor = 'n-resize';
+      } else {
+        this._element.style.width = `${SplitBar.size}px`;
+        this._element.style.height = '100%';
+        this._element.style.cursor = 'e-resize';
+      }
+
+      this.enablePointerEvents();
+    }
+
+    pointerDownEvent(e) {
+      this._mousePressed = true;
+      this._mouseX = e.clientX;
+      this._mouseY = e.clientY;
+      for (let i = 0; i < this.parent.children.length; ++i) {
+        let w = this.parent.children[i];
+        if (w === this) {
+          this._splitIndex = i;
+          this._prevWidget = this.parent.children[i - 1];
+          this._nextWidget = this.parent.children[i + 1];
+          break;
+        }
+      }
+      if (this._prevWidget) {
+        this._prevWidget._startResize();
+      }
+      if (this._nextWidget) {
+        this._nextWidget._startResize();
+      }
+
+      this.element.setPointerCapture(e.pointerId);
+    }
+
+    pointerMoveEvent(e) {
+      if (!this._mousePressed) {
+        return;
+      }
+
+      if (this.orientation === SplitBar.Horizontal) {
+        const dy = e.clientY - this._mouseY;
+        if (dy != 0) {
+          if (this.parent.mode === 0) {
+            const pct = dy / this.parent.height;
+            this.parent.position += pct;
+          } else {
+            this.parent.position += dy;
+          }
+        }
+      } else {
+        const dx = e.clientX - this._mouseX;
+        if (dx != 0) {
+          if (this.parent.mode === 0) {
+            const pct = dx / this.parent.width;
+            this.parent.position += pct;
+          } else {
+            this.parent.position += dx;
+          }
+        }
+      }
+
+      this._mouseX = e.clientX;
+      this._mouseY = e.clientY;
+
+      return false;
+    }
+
+    pointerUpEvent() {
+      this._prevWidget = null;
+      this._nextWidget = null;
+      this._mousePressed = false;
+      Widget.disablePaintingOnResize = false;
+      for (let w of this.parent.children) {
+        w.repaint(true);
+      }
+      return false;
+    }
+  }
+
+  SplitBar.isSplitBar = true;
+  SplitBar.Horizontal = 0;
+  SplitBar.Vertical = 1;
+  SplitBar.size = 6;
+
+  /**
+   * The children of this widget are arranged horizontally or vertically and separated by a
+   * draggable SplitBar.
+   */
+  class Split extends Div {
+    constructor(parent, options) {
+      super(parent);
+      this.classList.add('split', 'disable-selection');
+
+      this._direction = Split.Horizontal;
+      this._position = 0.5;
+      this.mode = Split.Percentage;
+
+      if (options) {
+        this.configure(options);
+      }
+
+      if (this._direction === Split.Horizontal) {
+        this.classList.add('hsplit');
+      } else {
+        this.classList.add('vsplit');
+      }
+    }
+
+    configure(options) {
+      if (options.direction !== undefined) {
+        this._direction = options.direction;
+      }
+
+      super.configure(options);
+
+      if (options.position !== undefined) {
+        this.position = options.position;
+        if (this.position > 1) {
+          this.mode = Split.Pixel;
+        }
+      }
+    }
+
+    get direction() {
+      return this._direction;
+    }
+
+    get position() {
+      return this._position;
+    }
+
+    set position(pos) {
+      this._position = pos;
+      this.updatePosition();
+    }
+
+    updatePosition() {
+      if (this.children.length < 3) {
+        return;
+      }
+
+      const numSplitBars = this.children.length - 2;
+      const splitBarSize = numSplitBars * SplitBar.size;
+
+      let splitPos;
+      let splitPos2;
+      if (this._position < 1) {
+        const pct = this._position * 100;
+        splitPos = `${pct}%`;
+        splitPos2 = `calc(${100 - pct}% - ${splitBarSize}px)`;
+      } else {
+        splitPos = `${this._position}px`;
+        splitPos2 = `calc(100% - ${this._position}px - ${splitBarSize}px)`;
+      }
+
+      if (this._direction == Split.Horizontal) {
+        this.children[0].style.width = splitPos;
+        this.children[0].element.width = '0';
+
+        this.children[2].style.width = splitPos2;
+        this.children[2].element.width = '0';
+      } else {
+        this.children[0].element.height = '0';
+        this.children[0].style.height = splitPos;
+
+        this.children[2].style.height = splitPos2;
+        this.children[2].element.height = '0';
+      }
+
+      this.onResize();
+    }
+
+    appendChild(child) {
+      if (this.direction == Split.Horizontal)
+        child.style.display = 'inline-block';
+
+      if (this.children.length == 0 || child.constructor.isSplitBar) {
+        if (this.children.length == 0) {
+          child.style.width = '100%';
+          child.style.height = '100%';
+        } else {
+          if (this._direction == Split.Horizontal) {
+            child.style.height = '100%';
+          } else {
+            child.style.width = '100%';
+          }
+        }
+        super.appendChild(child);
+        return;
+      }
+
+      const percent = (1 / (this.children.length + 1)) * 100;
+
+      new SplitBar(
+        this._direction == Split.Horizontal
+          ? SplitBar.Vertical
+          : SplitBar.Horizontal,
+        this
+      );
+
+      super.appendChild(child);
+
+      const numSplitBars = this.children.length - 2;
+      const splitBarSize = numSplitBars * SplitBar.size;
+
+      for (const c of this.children) {
+        if (!c.constructor.isSplitBar) {
+          if (c === this.children[this.children.length - 1]) {
+            if (this._direction == Split.Horizontal) {
+              c.element.width = '0';
+              c.style.height = '100%';
+              c.style.width = `calc(${100 - percent}% - ${splitBarSize}px)`;
+            } else {
+              c.element.height = '0';
+              c.style.width = '100%';
+              c.style.height = `calc(${100 - percent}% - ${splitBarSize}px)`;
+            }
+          } else {
+            if (this._direction == Split.Horizontal) {
+              c.style.width = `${percent}%`;
+            } else {
+              c.style.height = `${percent}%`;
+            }
+          }
+        }
+
+        c.onResize();
+      }
+
+      if (this._position != 0.5) {
+        this.updatePosition();
+      }
+    }
+  }
+
+  Split.Horizontal = 0;
+  Split.Vertical = 1;
+  Split.Percentage = 0;
+  Split.Pixel = 1;
+
+  class Img extends Widget {
+    constructor(parent, options) {
+      super('img', parent, options);
+    }
+
+    get src() {
+      return this.element.src;
+    }
+
+    set src(v) {
+      this.element.src = v;
+    }
+
+    configure(options) {
+      if (!options) {
+        return;
+      }
+      super.configure(options);
+      if (options.src !== undefined) {
+        this.element.src = options.src;
+      }
+    }
+  }
+
   class ParseContext$1 {
       constructor() {
           this.constants = new Map();
@@ -10509,14 +21317,16 @@ var __webgpu_inspector_window = (function (exports) {
       get line() { return this.node.line; }
   }
   class GotoCommand extends Command {
-      constructor(condition, position) {
+      constructor(condition, position, line) {
           super();
+          this.lineNo = -1;
           this.condition = condition;
           this.position = position;
+          this.lineNo = line;
       }
       get line() {
           var _a, _b;
-          return (_b = (_a = this.condition) === null || _a === void 0 ? void 0 : _a.line) !== null && _b !== void 0 ? _b : -1;
+          return (_b = (_a = this.condition) === null || _a === void 0 ? void 0 : _a.line) !== null && _b !== void 0 ? _b : this.lineNo;
       }
   }
   class BlockCommand extends Command {
@@ -11257,12 +22067,12 @@ var __webgpu_inspector_window = (function (exports) {
                   for (const call of functionCalls) {
                       state.commands.push(new CallExprCommand(call, statement));
                   }
-                  let conditionCmd = new GotoCommand(statement.condition, 0);
+                  let conditionCmd = new GotoCommand(statement.condition, 0, statement.line);
                   state.commands.push(conditionCmd);
                   if (statement.body.length > 0) {
                       state.commands.push(new BlockCommand(statement.body));
                   }
-                  const gotoEnd = new GotoCommand(null, 0);
+                  const gotoEnd = new GotoCommand(null, 0, statement.line);
                   state.commands.push(gotoEnd);
                   for (const elseIf of statement.elseif) {
                       conditionCmd.position = state.commands.length;
@@ -11271,7 +22081,7 @@ var __webgpu_inspector_window = (function (exports) {
                       for (const call of functionCalls) {
                           state.commands.push(new CallExprCommand(call, statement));
                       }
-                      conditionCmd = new GotoCommand(elseIf.condition, 0);
+                      conditionCmd = new GotoCommand(elseIf.condition, 0, elseIf.line);
                       state.commands.push(conditionCmd);
                       if (elseIf.body.length > 0) {
                           state.commands.push(new BlockCommand(elseIf.body));
@@ -11291,12 +22101,14 @@ var __webgpu_inspector_window = (function (exports) {
                   for (const call of functionCalls) {
                       state.commands.push(new CallExprCommand(call, statement));
                   }
-                  const conditionCmd = new GotoCommand(statement.condition, 0);
+                  const conditionCmd = new GotoCommand(statement.condition, 0, statement.line);
                   state.commands.push(conditionCmd);
+                  let lastLine = statement.line;
                   if (statement.body.length > 0) {
                       state.commands.push(new BlockCommand(statement.body));
+                      lastLine = statement.body[statement.body.length - 1].line;
                   }
-                  state.commands.push(new GotoCommand(statement.condition, 0));
+                  state.commands.push(new GotoCommand(statement.condition, 0, lastLine));
                   state.commands.push(new BreakTargetCommand(statement.id));
                   conditionCmd.position = state.commands.length;
               }
@@ -11315,17 +22127,19 @@ var __webgpu_inspector_window = (function (exports) {
                       for (const call of functionCalls) {
                           state.commands.push(new CallExprCommand(call, statement));
                       }
-                      conditionCmd = new GotoCommand(statement.condition, 0);
+                      conditionCmd = new GotoCommand(statement.condition, 0, statement.line);
                       state.commands.push(conditionCmd);
                   }
+                  let lastLine = statement.line;
                   if (statement.body.length > 0) {
                       state.commands.push(new BlockCommand(statement.body));
+                      lastLine = statement.body[statement.body.length - 1].line;
                   }
                   if (statement.increment) {
                       state.commands.push(new ContinueTargetCommand(statement.id));
                       state.commands.push(new StatementCommand(statement.increment));
                   }
-                  state.commands.push(new GotoCommand(null, conditionPos));
+                  state.commands.push(new GotoCommand(null, conditionPos, lastLine));
                   state.commands.push(new BreakTargetCommand(statement.id));
                   conditionCmd.position = state.commands.length;
               }
@@ -11334,10 +22148,12 @@ var __webgpu_inspector_window = (function (exports) {
                   if (!statement.continuing) {
                       state.commands.push(new ContinueTargetCommand(statement.id));
                   }
+                  let lastLine = statement.line;
                   if (statement.body.length > 0) {
                       state.commands.push(new BlockCommand(statement.body));
+                      lastLine = statement.body[statement.body.length - 1].line;
                   }
-                  state.commands.push(new GotoCommand(null, loopStartPos));
+                  state.commands.push(new GotoCommand(null, loopStartPos, lastLine));
                   state.commands.push(new BreakTargetCommand(statement.id));
               }
               else if (statement instanceof Continuing) {
@@ -11352,17 +22168,7 @@ var __webgpu_inspector_window = (function (exports) {
               }
               else if (statement instanceof StaticAssert) {
                   state.commands.push(new StatementCommand(statement));
-              } /* else if (statement instanceof AST.Override) {
-                  continue;
-              } else if (statement instanceof AST.Alias) {
-                  continue;
-              } else if (statement instanceof AST.Struct) {
-                  continue;
-              } else if (statement instanceof AST.Diagnostic) {
-                  continue;
-              } else if (statement instanceof AST.Requires) {
-                  continue;
-              }*/
+              }
               else {
                   console.error(`TODO: statement type ${statement.constructor.name}`);
               }
@@ -11411,5145 +22217,6 @@ var __webgpu_inspector_window = (function (exports) {
               console.error(`TODO: expression type ${node.constructor.name}`);
           }
       }
-  }
-
-  class ShaderModule extends GPUObject {
-    constructor(id, descriptor, stacktrace) {
-      super(id, descriptor, stacktrace);
-      this._reflection = null;
-      this.descriptor = descriptor;
-      this.hasVertexEntries = descriptor?.code ? descriptor.code.indexOf("@vertex") != -1 : false;
-      this.hasFragmentEntries = descriptor?.code ? descriptor.code.indexOf("@fragment") != -1 : false;
-      this.hasComputeEntries = descriptor?.code ? descriptor.code.indexOf("@compute") != -1 : false;
-      this.replacementCode = null;
-
-      this.isDestroyed = false;
-    }
-
-    get code() {
-      return this.replacementCode ?? this.descriptor?.code ?? "";
-    }
-
-    get reflection() {
-      if (this._reflection === null) {
-        try {
-          this._reflection = new WgslReflect(this.code);
-        } catch (e) {
-          this._reflection = null;
-        }
-      }
-      return this._reflection;
-    }
-  }
-  ShaderModule.className = "ShaderModule";
-
-  class TextureView extends GPUObject {
-    constructor(id, texture, descriptor, stacktrace) {
-      super(id, descriptor, stacktrace);
-      this.descriptor = descriptor;
-      this.texture = texture;
-    }
-  }
-  TextureView.className = "TextureView";
-
-  const TextureFormatInfo = {
-      "r8unorm": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
-      "r8snorm": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
-      "r8uint": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
-      "r8sint": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
-      "rg8unorm": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
-      "rg8snorm": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
-      "rg8uint": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
-      "rg8sint": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
-
-      "rgba8unorm": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-      "rgba8unorm-srgb": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-      "rgba8snorm": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-      "rgba8uint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-      "rgba8sint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-      "bgra8unorm": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-      "bgra8unorm-srgb": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-
-      "r16uint": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
-      "r16sint": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
-      "r16float": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
-
-      "rg16uint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
-      "rg16sint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
-      "rg16float": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
-
-      "rgba16uint": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-      "rgba16sint": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-      "rgba16float": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-
-      "r32uint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
-      "r32sint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
-      "r32float": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 1 },
-
-      "rg32uint": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
-      "rg32sint": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
-      "rg32float": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 2 },
-
-      "rgba32uint": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-      "rgba32sint": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-      "rgba32float": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-      "rgb10a2uint": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-      "rgb10a2unorm": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-      "rg11b10ufloat": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-
-      // Depth Stencil Formats
-      "stencil8": { "bytesPerBlock": 1, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": false, "hasStencil": true, "channels": 1 }, // bytesPerBlock is actually 1-4
-      "depth16unorm": { "bytesPerBlock": 2, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": false, "channels": 1 },
-      "depth24plus": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": false, "depthOnlyFormat": "depth32float", "channels": 1 },
-      "depth24plus-stencil8": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": true, "depthOnlyFormat": "depth32float", "channels": 1 }, // bytesPerBlock is actually 4-8
-      "depth32float": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": false, "channels": 1 },
-      "depth32float-stencil8": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "isDepthStencil": true, "hasDepth": true, "hasStencil": true, "stencilOnlyFormat": "depth32float", "channels": 1 }, // bytesPerBlock is actually 5-8
-
-      // Packed Formats
-      "rgb9e5ufloat": { "bytesPerBlock": 4, "blockWidth": 1, "blockHeight": 1, "isCompressed": false, "channels": 4 },
-
-      // Compressed Formats
-      "bc1-rgba-unorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "bc1-rgba-unorm-srgb": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "bc2-rgba-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "bc2-rgba-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "bc3-rgba-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "bc3-rgba-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-
-      "bc4-r-unorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 1 },
-      "bc4-r-snorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 1 },
-
-      "bc5-rg-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 2 },
-      "bc5-rg-snorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 2 },
-
-      "bc6h-rgb-ufloat": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "bc6h-rgb-float": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "bc7-rgba-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "bc7-rgba-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      
-      "etc2-rgb8unorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "etc2-rgb8unorm-srgb": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "etc2-rgb8a1unorm": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "etc2-rgb8a1unorm-srgb": { "bytesPerBlock": 8, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "etc2-rgba8unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "etc2-rgba8unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      
-      "eac-r11unorm": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": true, "channels": 1 },
-      "eac-r11snorm": { "bytesPerBlock": 8, "blockWidth": 1, "blockHeight": 1, "isCompressed": true, "channels": 1 },
-
-      "eac-rg11unorm": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": true, "channels": 2 },
-      "eac-rg11snorm": { "bytesPerBlock": 16, "blockWidth": 1, "blockHeight": 1, "isCompressed": true, "channels": 2 },
-
-      "astc-4x4-unorm": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "astc-4x4-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 4, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "astc-5x4-unorm": { "bytesPerBlock": 16, "blockWidth": 5, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "astc-5x4-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 5, "blockHeight": 4, "isCompressed": true, "channels": 4 },
-      "astc-5x5-unorm": { "bytesPerBlock": 16, "blockWidth": 5, "blockHeight": 5, "isCompressed": true, "channels": 4 },
-      "astc-5x5-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 5, "blockHeight": 5, "isCompressed": true, "channels": 4 },
-      "astc-6x5-unorm": { "bytesPerBlock": 16, "blockWidth": 6, "blockHeight": 5, "isCompressed": true, "channels": 4 },
-      "astc-6x5-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 6, "blockHeight": 5, "isCompressed": true, "channels": 4 },
-      "astc-6x6-unorm": { "bytesPerBlock": 16, "blockWidth": 6, "blockHeight": 6, "isCompressed": true, "channels": 4 },
-      "astc-6x6-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 6, "blockHeight": 6, "isCompressed": true, "channels": 4 },
-      "astc-8x5-unorm": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 5, "isCompressed": true, "channels": 4 },
-      "astc-8x5-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 5, "isCompressed": true, "channels": 4 },
-      "astc-8x6-unorm": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 6, "isCompressed": true, "channels": 4 },
-      "astc-8x6-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 6, "isCompressed": true, "channels": 4 },
-      "astc-8x8-unorm": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 8, "isCompressed": true, "channels": 4 },
-      "astc-8x8-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 8, "blockHeight": 8, "isCompressed": true, "channels": 4 },
-      "astc-10x5-unorm": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 5, "isCompressed": true, "channels": 4 },
-      "astc-10x5-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 5, "isCompressed": true, "channels": 4 },
-      "astc-10x6-unorm": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 6, "isCompressed": true, "channels": 4 },
-      "astc-10x6-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 6, "isCompressed": true, "channels": 4 },
-      "astc-10x8-unorm": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 8, "isCompressed": true, "channels": 4 },
-      "astc-10x8-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 8, "isCompressed": true, "channels": 4 },
-      "astc-10x10-unorm": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 10, "isCompressed": true, "channels": 4 },
-      "astc-10x10-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 10, "blockHeight": 10, "isCompressed": true, "channels": 4 },
-      "astc-12x10-unorm": { "bytesPerBlock": 16, "blockWidth": 12, "blockHeight": 10, "isCompressed": true, "channels": 4 },
-      "astc-12x10-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 12, "blockHeight": 10, "isCompressed": true, "channels": 4 },
-      "astc-12x12-unorm": { "bytesPerBlock": 16, "blockWidth": 12, "blockHeight": 12, "isCompressed": true, "channels": 4 },
-      "astc-12x12-unorm-srgb": { "bytesPerBlock": 16, "blockWidth": 12, "blockHeight": 12, "isCompressed": true, "channels": 4 },
-  };
-
-  // From https://stackoverflow.com/questions/5678432/decompressing-half-precision-floats-in-javascript
-  function float16ToFloat32(float16) {
-      var s = (float16 & 0x8000) >> 15;
-      var e = (float16 & 0x7C00) >> 10;
-      var f = float16 & 0x03FF;
-
-      if (e == 0) {
-        return (s ? -1:1) * Math.pow(2, -14) * (f / Math.pow(2, 10));
-      } else if (e == 0x1F) {
-        return f ? NaN : ((s ? -1 : 1) * Infinity);
-      }
-
-      return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + (f / Math.pow(2, 10)));
-  }
-
-  const uint32 = new Uint32Array(1);
-  const uint32ToFloat32 = new Float32Array(uint32.buffer, 0, 1);
-
-  function float11ToFloat32(f11) {
-    const u32 = (((((f11) >> 6) & 0x1F) + (127 - 15)) << 23) | (((f11) & 0x3F) << 17);
-    uint32[0] = u32;
-    return uint32ToFloat32[0];
-  }
-
-  function float10ToFloat32(f10) {
-    const u32 = (((((f10) >> 5) & 0x1F) + (127 - 15)) << 23) | (((f10) & 0x1F) << 18);
-    uint32[0] = u32;
-    return uint32ToFloat32[0];
-  }
-
-  class Texture extends GPUObject {
-    constructor(id, descriptor, stacktrace) {
-      super(id, descriptor, stacktrace);
-      this.descriptor = descriptor;
-      this.imageData = null;
-      this.loadedImageDataChunks = [];
-      this.imageDataPending = false;
-      this.isImageDataLoaded = false;
-      this.gpuTexture = null;
-      this._layerRanges = null;
-
-      this.display = {
-        exposure: 1,
-        channels: 0,
-        minRnage: 0,
-        maxRange: 1,
-        mipLevel: 0
-      };
-    }
-
-    get layerRanges() {
-      if (this._layerRanges === null) {
-        const formatInfo = TextureFormatInfo[this.format];
-        if (formatInfo.isDepthStencil) {
-          const lr = [];
-          const numLayers = this.depthOrArrayLayers;
-          const width = this.width;
-            const height = this.height;
-          for (let layer = 0; layer < numLayers; ++layer) {
-            let min = null;
-            let max = null;
-            for (let y = 0; y < height; ++y) {
-              for (let x = 0; x < width; ++x) {
-                const pixel = this.getPixel(x, y, layer);
-                if (min === null || pixel.r < min) {
-                  min = pixel.r;
-                }
-                if (max === null || pixel.r > max) {
-                  max = pixel.r;
-                }
-              }
-            }
-            lr.push({ min, max });
-          }
-          this._layerRanges = lr;
-        }
-      }
-      return this._layerRanges
-    }
-
-    getPixel(x, y, z, mipLevel) {
-      mipLevel ??= 0;
-      mipLevel = Math.max(Math.min(mipLevel, this.mipLevelCount - 1), 0);
-      function pixelValue(imageData, offset, format, numChannels) {
-        const value = [null, null, null, null];
-        for (let i = 0; i < numChannels; ++i) {
-          switch (format) {
-            case "8unorm":
-              value[i] = imageData[offset] / 255;
-              offset++;
-              break;
-            case "8snorm":
-              value[i] = (imageData[offset] / 255) * 2 - 1;
-              offset++;
-              break;
-            case "8uint":
-              value[i] = imageData[offset];
-              offset++;
-              break;
-            case "8sint":
-              value[i] = imageData[offset] - 127;
-              offset++;
-              break;
-            case "16uint":
-              value[i] = imageData[offset] | (imageData[offset + 1] << 8);
-              offset += 2;
-              break;
-            case "16sint":
-              value[i] = (imageData[offset] | (imageData[offset + 1] << 8)) - 32768;
-              offset += 2;
-              break;
-            case "16float":
-              value[i] = float16ToFloat32(imageData[offset] | (imageData[offset + 1] << 8));
-              offset += 2;
-              break;
-            case "32uint":
-              value[i] = imageData[offset] | (imageData[offset + 1] << 8) | (imageData[offset + 2] << 16) | (imageData[offset + 3] << 24);
-              offset += 4;
-              break;
-            case "32sint":
-              value[i] = (imageData[offset] | (imageData[offset + 1] << 8) | (imageData[offset + 2] << 16) | (imageData[offset + 3] << 24)) | 0;
-              offset += 4;
-              break;
-            case "32float":
-              value[i] = new Float32Array(imageData.buffer, offset, 1)[0];
-              offset += 4;
-              break;
-          }
-        }
-        return value;
-      }
-
-      if (this.imageData) {
-        const bytesPerRow = this.bytesPerRow >> mipLevel;
-        const height = this.height >> mipLevel;
-        const offset = (z * bytesPerRow * height) + y * bytesPerRow + x * this.texelByteSize;
-        const imageData = this.imageData;
-        switch (this.format) {
-          case "r8unorm": {
-            const value = pixelValue(imageData, offset, "8unorm", 1);
-            return { r: value[0] };
-          }
-          case "r8snorm": {
-            const value = pixelValue(imageData, offset, "8snorm", 1);
-            return { r: value[0] };
-          }
-          case "r8uint": {
-            const value = pixelValue(imageData, offset, "8uint", 1);
-            return { r: value[0] };
-          }
-          case "r8sint": {
-            const value = pixelValue(imageData, offset, "8sint", 1);
-            return { r: value[0] };
-          }
-
-          case "rg8unorm": {
-            const value = pixelValue(imageData, offset, "8unorm", 2);
-            return { r: value[0], g: value[1] };
-          }
-          case "rg8snorm": {
-            const value = pixelValue(imageData, offset, "8snorm", 2);
-            return { r: value[0], g: value[1] };
-          }
-          case "rg8uint": {
-            const value = pixelValue(imageData, offset, "8uint", 2);
-            return { r: value[0], g: value[1] };
-          }
-          case "rg8sint": {
-            const value = pixelValue(imageData, offset, "8sint", 2);
-            return { r: value[0], g: value[1] };
-          }
-          
-          case "rgba8unorm-srgb":
-          case "rgba8unorm": {
-            const value = pixelValue(imageData, offset, "8unorm", 4);
-            return { r: value[0], g: value[1], b: value[2], a: value[3] };
-          }
-          case "rgba8snorm": {
-            const value = pixelValue(imageData, offset, "8snorm", 4);
-            return { r: value[0], g: value[1], b: value[2], a: value[3] };
-          }
-          case "rgba8uint": {
-            const value = pixelValue(imageData, offset, "8uint", 4);
-            return { r: value[0], g: value[1], b: value[2], a: value[3] };
-          }
-          case "rgba8sint": {
-            const value = pixelValue(imageData, offset, "8sint", 4);
-            return { r: value[0], g: value[1], b: value[2], a: value[3] };
-          }
-
-          case "bgra8unorm-srgb":
-          case "bgra8unorm": {
-            const value = pixelValue(imageData, offset, "8unorm", 4);
-            return { r: value[2], g: value[1], b: value[0], a: value[3] };
-          }
-
-          case "r16uint": {
-            const value = pixelValue(imageData, offset, "16uint", 1);
-            return { r: value[0] };
-          }
-          case "r16sint": {
-            const value = pixelValue(imageData, offset, "16sint", 1);
-            return { r: value[0] };
-          }
-          case "r16float": {
-            const value = pixelValue(imageData, offset, "16float", 1);
-            return { r: value[0] };
-          }
-
-          case "rg16uint": {
-            const value = pixelValue(imageData, offset, "16uint", 2);
-            return { r: value[0], g: value[1] };
-          }
-          case "rg16sint": {
-            const value = pixelValue(imageData, offset, "16sint", 2);
-            return { r: value[0], g: value[1] };
-          }
-          case "rg16float": {
-            const value = pixelValue(imageData, offset, "16float", 2);
-            return { r: value[0], g: value[1] };
-          }
-
-          case "rgba16uint": {
-            const value = pixelValue(imageData, offset, "16uint", 4);
-            return { r: value[0], g: value[1], b: value[2], a: value[3] };
-          }
-          case "rgba16sint": {
-            const value = pixelValue(imageData, offset, "16sint", 4);
-            return { r: value[0], g: value[1], b: value[2], a: value[3] };
-          }
-          case "rgba16float": {
-            const value = pixelValue(imageData, offset, "16float", 4);
-            return { r: value[0], g: value[1], b: value[2], a: value[3] };
-          }
-
-          case "r32uint": {
-            const value = pixelValue(imageData, offset, "32uint", 1);
-            return { r: value[0] };
-          }
-          case "r32sint": {
-            const value = pixelValue(imageData, offset, "32sint", 1);
-            return { r: value[0] };
-          }
-          case "depth16unorm": // depth formats get conerted to r32float
-          case "depth24plus":
-          case "depth24plus-stencil8":
-          case "depth32float":
-          case "depth32float-stencil8":
-          case "r32float": {
-            const value = pixelValue(imageData, offset, "32float", 1);
-            return { r: value[0] };
-          }
-          case "rg32uint": {
-            const value = pixelValue(imageData, offset, "32uint", 2);
-            return { r: value[0], g: value[1] };
-          }
-          case "rg32sint": {
-            const value = pixelValue(imageData, offset, "32sint", 2);
-            return { r: value[0], g: value[1] };
-          }
-          case "rg32float": {
-            const value = pixelValue(imageData, offset, "32float", 2);
-            return { r: value[0], g: value[1] };
-          }
-          case "rgba32uint": {
-            const value = pixelValue(imageData, offset, "32uint", 4);
-            return { r: value[0], g: value[1], b: value[2], a: value[3] };
-          }
-          case "rgba32sint": {
-            const value = pixelValue(imageData, offset, "32sint", 4);
-            return { r: value[0], g: value[1], b: value[2], a: value[3] };
-          }
-          case "rgba32float": {
-            const value = pixelValue(imageData, offset, "32float", 4);
-            return { r: value[0], g: value[1], b: value[2], a: value[3] };
-          }
-
-          case "rg11b10ufloat": {
-            const uintValue = new Uint32Array(imageData.buffer, offset, 1)[0];
-            const ri = uintValue & 0x7FF;
-            const gi = (uintValue & 0x3FF800) >> 11;
-            const bi = (uintValue & 0xFFC00000) >> 22;
-            const rf = float11ToFloat32(ri);
-            const gf = float11ToFloat32(gi);
-            const bf = float10ToFloat32(bi);
-            return { r: rf, g: gf, b: bf, a: 1.0 };
-          }
-        }
-      }
-      return null;
-    }
-
-    get format() {
-      return this.descriptor?.format ?? "<unknown format>";
-    }
-
-    get dimension() {
-      return this.descriptor?.dimension ?? "2d";
-    }
-
-    get width() {
-      const size = this.descriptor?.size;
-      if (size instanceof Array && size.length > 0) {
-        return size[0] ?? 0;
-      } else if (size instanceof Object) {
-        return size.width ?? 0;
-      }
-      return 0;
-    }
-
-    get height() {
-      const size = this.descriptor?.size;
-      if (size instanceof Array && size.length > 1) {
-        return size[1] ?? 1;
-      } else if (size instanceof Object) {
-        return size.height ?? 1;
-      }
-      return 0;
-    }
-
-    get depthOrArrayLayers() {
-      const size = this.descriptor?.size;
-      if (size instanceof Array && size.length > 2) {
-        return size[2] ?? 1;
-      } else if (size instanceof Object) {
-        return size.depthOrArrayLayers ?? 1;
-      }
-      return 0;
-    }
-
-    get mipLevelCount() {
-      return this.descriptor?.mipLevelCount ?? 1;
-    }
-
-    getMipSize(level) {
-      const mipLevelCount = this.mipLevelCount;
-      level = Math.max(Math.min(level, mipLevelCount - 1), 0);
-      const mipWidth = this.width >> level;
-      const mipHeight = this.height >> level;
-      const mipDepthOrArrayLayers = this.dimension === "3d" ? this.depthOrArrayLayers >> level : this.depthOrArrayLayers;
-      return [mipWidth, mipHeight, mipDepthOrArrayLayers];
-    }
-
-    get resolutionString() {
-      const width = this.width;
-      const height = this.height;
-      const depthOrArrayLayers = this.depthOrArrayLayers;
-      const dimension = this.dimension;
-      if (dimension === "1d") {
-        if (depthOrArrayLayers > 1) {
-          return `${width}x${depthOrArrayLayers}`;
-        }
-        return `${width}`;
-      }    
-      if (depthOrArrayLayers > 1) {
-        return `${width}x${height}x${depthOrArrayLayers}`;
-      }
-      return `${width}x${height}`;
-    }
-
-    get texelByteSize() {
-      const format = this.descriptor?.format;
-      const formatInfo = TextureFormatInfo[format];
-      if (!formatInfo) {
-        return 0;
-      }
-      if (formatInfo.isDepthStencil) {
-        return 4; // depth textures have r32float imageData
-      }
-      return formatInfo.bytesPerBlock;
-    }
-
-    get bytesPerRow() {
-      const width = this.width;
-      const texelByteSize = this.texelByteSize;
-      return (width * texelByteSize + 255) & ~0xff;
-    }
-
-    get isDepthStencil() {
-      const format = this.descriptor?.format;
-      const formatInfo = TextureFormatInfo[format];
-      if (!formatInfo) {
-        return false;
-      }
-      return formatInfo.isDepthStencil;
-    }
-
-    getGpuSize() {
-      const format = this.descriptor?.format;
-      const formatInfo = TextureFormatInfo[format];
-      const width = this.width;
-      if (!format || width <= 0 || !formatInfo) {
-        return -1;
-      }
-
-      const height = this.height;
-      const depthOrArrayLayers = this.depthOrArrayLayers;
-      const dimension = this.dimension;
-      const blockWidth = width / formatInfo.blockWidth;
-      const blockHeight = dimension === "1d" ? 1 : height / formatInfo.blockHeight;
-      const bytesPerBlock = formatInfo.bytesPerBlock;
-
-      return blockWidth * blockHeight * bytesPerBlock * depthOrArrayLayers;
-    }
-  }
-  Texture.className = "Texture";
-
-  class ValidationError extends GPUObject {
-    constructor(id, object, message, stacktrace) {
-      super(id, null, stacktrace);
-      this.message = message;
-      this.object = object ?? 0;
-    }
-  }
-  ValidationError.className = "ValidationError";
-
-  class RenderBundle extends GPUObject {
-    constructor(id, descriptor, stacktrace) {
-      super(id, stacktrace);
-      this.descriptor = descriptor;
-      this.commands = [];
-    }
-  }
-  RenderBundle.className = "RenderBundle";
-
-  class ObjectDatabase {
-    constructor(port) {
-      this.port = port;
-      this.frameTime = 0;
-      this.errorCount = 0;
-
-      this.allObjects = new Map();
-      this.adapters = new Map();
-      this.devices = new Map();
-      this.samplers = new Map();
-      this.textures = new Map();
-      this.textureViews = new Map();
-      this.buffers = new Map();
-      this.bindGroups = new Map();
-      this.bindGroupLayouts = new Map();
-      this.shaderModules = new Map();
-      this.pipelineLayouts = new Map();
-      this.renderPipelines = new Map();
-      this.computePipelines = new Map();
-      this.renderBundles = new Map();
-      this.pendingRenderPipelines = new Map();
-      this.pendingComputePipelines = new Map();
-      this.validationErrors = new Map();
-
-      this.capturedObjects = new Map();
-
-      this.inspectedObject = null;
-
-      this.onDeleteObject = new Signal();
-      this.onResolvePendingObject = new Signal();
-      this.onAddObject = new Signal();
-      this.onDeltaFrameTime = new Signal();
-      this.onEndFrame = new Signal();
-      this.onAdapterInfo = new Signal();
-      this.onObjectLabelChanged = new Signal();
-      this.onValidationError = new Signal();
-
-      this.totalTextureMemory = 0;
-      this.totalBufferMemory = 0;
-
-      this.deltaFrameTime = -1;
-
-      const self = this;
-
-      port.addListener((message) => {
-        switch (message.action) {
-          case Actions.DeltaTime:
-            this.deltaFrameTime = message.deltaTime;
-            this.onDeltaFrameTime.emit();
-            break;
-          case Actions.ValidationError: {
-            const errorMessage = message.message;
-            const stacktrace = message.stacktrace;
-            const objectId = message.id ?? 0;
-            if (self.validationErrors.has(errorMessage)) {
-              return;
-            }
-            const errorObj = new ValidationError(++self.errorCount, objectId, errorMessage, stacktrace);
-            self.validationErrors.set(errorMessage, errorObj);
-            self.onValidationError.emit(errorObj);
-            break;
-          }
-          case Actions.DeleteObject:
-            self._deleteObject(message.id);
-            break;
-          case Actions.DeleteObjects: {
-            const objects = message.idList;
-            for (const id of objects) {
-              self._deleteObject(id);
-            }
-            break;
-          }
-          case Actions.ResolveAsyncObject:
-            self._resolvePendingObject(message.id);
-            break;
-          case Actions.ObjectSetLabel:
-            self._setObjectLabel(message.id, message.label);
-            break;
-          case Actions.AddObject: {
-            const pending = !!message.pending;
-            const id = message.id;
-            const parent = message.parent;
-            const stacktrace = message.stacktrace ?? "";
-            let descriptor = null;
-            try {
-              descriptor = message.descriptor ? JSON.parse(message.descriptor) : null;
-            } catch (e) {
-              break;
-            }
-            switch (message.type) {
-              case "Adapter": {
-                const obj = new Adapter(id, descriptor, stacktrace);
-                self._addObject(obj, parent, pending);
-                break;
-              }
-              case "Device": {
-                const obj = new Device(id, descriptor, stacktrace);
-                self._addObject(obj, parent, pending);
-                break;
-              }
-              case "ShaderModule": {
-                const obj = new ShaderModule(id, descriptor, stacktrace);
-                self._addObject(obj, parent, pending);
-                obj.size = descriptor?.code?.length ?? 0;
-                break;
-              }
-              case "Buffer": {
-                const obj = new Buffer(id, descriptor, stacktrace);
-                self._addObject(obj, parent, pending);
-                obj.size = descriptor?.size ?? 0;
-                this.totalBufferMemory += obj.size;
-                break;
-              }
-              case "Texture": {
-                const prevTexture = self.textures.get(id);
-                if (prevTexture) {
-                  let size = prevTexture.getGpuSize();
-                  if (size != -1) {
-                    this.totalTextureMemory -= size;
-                  }
-                  prevTexture.descriptor = descriptor;
-                  size = prevTexture.getGpuSize();
-                  if (size != -1) {
-                    this.totalTextureMemory += size;
-                  }
-                  return;
-                }
-                const obj = new Texture(id, descriptor, stacktrace);
-                const size = obj.getGpuSize();
-                if (size != -1) {
-                  this.totalTextureMemory += size;
-                }
-                self._addObject(obj, parent, pending);
-                break;
-              }
-              case "TextureView": {
-                const prevView = self.textureViews.get(id);
-                if (prevView) {
-                  prevView.descriptor = descriptor;
-                  return;
-                }
-                const obj = new TextureView(id, parent, descriptor, stacktrace);
-                self._addObject(obj, parent, pending);
-                break;
-              }
-              case "Sampler": {
-                const obj = new Sampler(id, descriptor, stacktrace);
-                self._addObject(obj, parent, pending);
-                break;
-              }
-              case "BindGroup": {
-                const obj = new BindGroup(id, descriptor, stacktrace);
-                self._addObject(obj, parent, pending);
-                break;
-              }
-              case "BindGroupLayout": {
-                const obj = new BindGroupLayout(id, descriptor, stacktrace);
-                self._addObject(obj, parent, pending);
-                break;
-              }
-              case "RenderPipeline": {
-                const obj = new RenderPipeline(id, descriptor, stacktrace);
-                self._addObject(obj, parent, pending);
-                break;
-              }
-              case "ComputePipeline": {
-                const obj = new ComputePipeline(id, descriptor, stacktrace);
-                self._addObject(obj, parent, pending);
-                break;
-              }
-              case "PipelineLayout": {
-                const obj = new PipelineLayout(id, descriptor, stacktrace);
-                self._addObject(obj, parent, pending);
-                break;
-              }
-              case "RenderBundle": {
-                const obj = new RenderBundle(id, descriptor, stacktrace);
-                self._addObject(obj, parent, pending);
-                break;
-              
-              }
-            }
-            break;
-          }
-        }
-      });
-    }
-
-    requestTextureData(texture, mipLevel) {
-      if (texture.imageDataPending) {
-        return;
-      }
-      texture.imageDataPending = true;
-      this.port.postMessage({ action: PanelActions.RequestTexture, id: texture.id, mipLevel: mipLevel ?? 0 });
-    }
-
-    removeErrorsForObject(id) {
-      const map = this.validationErrors;
-      for (const key of map.keys()) {
-        const error = map.get(key);
-        if (error.object === id) {
-          map.delete(key);
-          this.onDeleteObject.emit(id, error);
-        }
-      }
-    }
-
-    findObjectErrors(id) {
-      const errors = [];
-      for (const error of this.validationErrors.values()) {
-        if (error.object === id) {
-          errors.push(error);
-        }
-      }
-      return errors;
-    }
-
-    _deleteOldRecycledObjects(objectList) {
-      const recycleTime = 200;
-      const time = performance.now();
-      const numBindGroups = objectList.length;
-      for (let i = numBindGroups - 1; i >= 0; --i) {
-        const obj = objectList[i];
-        if (!obj || (time - obj._deletionTime > recycleTime)) {
-          objectList = objectList.splice(i, 1);
-        }
-      }
-      return objectList;
-    }
-
-    reset() {
-      this.allObjects = new Map();
-      this.adapters = new Map();
-      this.devices = new Map();
-      this.samplers = new Map();
-      this.textures = new Map();
-      this.textureViews = new Map();
-      this.buffers = new Map();
-      this.bindGroups = new Map();
-      this.bindGroupLayouts = new Map();
-      this.shaderModules = new Map();
-      this.pipelineLayouts = new Map();
-      this.renderPipelines = new Map();
-      this.computePipelines = new Map();
-      this.renderBundles = new Map();
-      this.pendingRenderPipelines = new Map();
-      this.pendingComputePipelines = new Map();
-      this.frameTime = 0;
-      this.totalTextureMemory = 0;
-      this.totalBufferMemory = 0;
-    }
-
-    getObjectDependencies(object) {
-      const dependencies = [];
-      const id = object.id;
-
-      if (object instanceof ShaderModule) {
-        this.renderPipelines.forEach((rp) => {
-          const descriptor = rp.descriptor;
-          if (descriptor?.vertex?.module?.__id == id) {
-            dependencies.push(rp);
-          } else if (descriptor?.fragment?.module?.__id == id) {
-            dependencies.push(rp);
-          }
-        });
-        this.computePipelines.forEach((cp) => {
-          const descriptor = cp.descriptor;
-          if (descriptor?.compute?.module?.__id == id) {
-            dependencies.push(cp);
-          }
-        });
-      } else if (object instanceof Buffer || object instanceof Texture) {
-        const isTexture = object instanceof Texture;
-        this.bindGroups.forEach((bg) => {
-          const entries = bg.descriptor?.entries;
-          if (entries) {
-            for (const entry of entries) {
-              const resource = entry.resource;
-              if (isTexture && resource.constructor === String) {
-                if (resource.__id == id) {
-                  dependencies.push(bg);
-                  break;
-                }
-              } else if (resource?.buffer) {
-                const id = resource.buffer.__id;
-                if (id == id) {
-                  dependencies.push(bg);
-                }
-                break;
-              }
-            }
-          }
-        });
-      }
-      return dependencies;
-    }
-
-    getObject(id) {
-      if (id === undefined || id === null) {
-        return null;
-      }
-      if (this.inspectedObject?.id === id) {
-        return this.inspectedObject;
-      }
-      return this.allObjects.get(id) || this.capturedObjects.get(id);
-    }
-
-    getTextureFromView(view) {
-      if (!view) {
-        return null;
-      }
-      if (view.__texture) {
-        return view.__texture;
-      }
-      if (view.texture) {
-        view.__texture = this.getObject(view.texture);
-      }
-      return view.__texture;
-    }
-
-    clearCapturedObjects() {
-      this.capturedObjects.forEach((obj) => {
-        obj.decrementReferenceCount();
-      });
-      this.capturedObjects.clear();
-    }
-
-    _setObjectLabel(id, label) {
-      const object = this.getObject(id);
-      if (object) {
-        object.label = label;
-        this.onObjectLabelChanged.emit(id, object, label);
-      }
-    }
-
-    _addObject(object, parent, pending) {
-      const id = object.id;
-      this.allObjects.set(id, object);
-      if (object instanceof Adapter) {
-        this.adapters.set(id, object);
-      } else if (object instanceof Device) {
-        this.devices.set(id, object);
-      } else if (object instanceof Sampler) {
-        this.samplers.set(id, object);
-      } else if (object instanceof Texture) {
-        this.textures.set(id, object);
-      } else if (object instanceof TextureView) {
-        this.textureViews.set(id, object);
-        object.addDependency(this.getObject(object.texture.__id));
-        object.incrementDepenencyReferenceCount();
-      } else if (object instanceof Buffer) {
-        this.buffers.set(id, object);
-      } else if (object instanceof BindGroup) {
-        this.bindGroups.set(id, object);
-        object.addDependency(this.getObject(object.descriptor.layout.__id ));
-        for (const entry of object.descriptor.entries) {
-          if (entry.resource?.buffer) {
-            object.addDependency(this.getObject(entry.resource.buffer.__id));
-          } else {
-            object.addDependency(this.getObject(entry.resource.__id));
-          }
-        }
-        object.incrementDepenencyReferenceCount();
-      } else if (object instanceof BindGroupLayout) {
-        this.bindGroupLayouts.set(id, object);
-      } else if (object instanceof PipelineLayout) {
-        this.pipelineLayouts.set(id, object);
-      } else if (object instanceof ShaderModule) {
-        this.shaderModules.set(id, object);
-      } else if (object instanceof RenderPipeline) {
-        if (pending) {
-          this.pendingRenderPipelines.set(id, object);
-        } else {
-          this.renderPipelines.set(id, object);
-        }
-        object.addDependency(this.getObject(object.descriptor.layout.__id));
-        object.addDependency(this.getObject(object.descriptor.vertex?.module?.__id));
-        object.addDependency(this.getObject(object.descriptor.fragment?.module?.__id));
-        object.incrementDepenencyReferenceCount();
-      } else if (object instanceof ComputePipeline) {
-        this.computePipelines.set(id, object);
-        object.addDependency(this.getObject(object.descriptor.compute?.module?.__id));
-        object.incrementDepenencyReferenceCount();
-      } else if (object instanceof RenderBundle) {
-        this.renderBundles.set(id, object);
-        object.commands = object.descriptor?.commands ?? [];
-        if (object.descriptor?.commands) {
-          delete object.descriptor.commands;
-        }
-        for (const command of object.commands) {
-          command.object = object;
-          if (command.method === "setPipeline" ||
-              command.method === "setVertexBuffer" ||
-              command.method === "setIndexBuffer" ||
-              command.method === "drawIndirect" ||
-              command.method === "drawIndexedIndirect") {
-            object.addDependency(this.getObject(command.args[0].__id));
-          } else if (command.method === "setBindGroup") {
-            object.addDependency(this.getObject(command.args[1].__id));
-          }
-        }
-        object.incrementDepenencyReferenceCount();
-      }
-
-      this.onAddObject.emit(object, pending);
-    }
-
-    _resolvePendingObject(id) {
-      const object = this.allObjects.get(id);
-      if (object instanceof RenderPipeline) {
-        this.pendingRenderPipelines.delete(id);
-        this.renderPipelines.set(id, object);
-        this.onResolvePendingObject.emit(id, object);
-      } else if (object instanceof ComputePipeline) {
-        this.pendingComputePipelines.delete(id);
-        this.computePipelines.set(id, object);
-        this.onResolvePendingObject.emit(id, object);
-      }
-    }
-
-    _deleteObject(id) {
-      const object = this.allObjects.get(id);
-      if (!object) {
-        return;
-      }
-
-      const self = this;
-      object.decrementReferenceCount((obj) => {
-        if (obj === object) {
-          return;
-        }
-        self._deleteObject(obj.id);
-      });
-
-      if (object.referenceCount > 0) {
-        return;
-      }
-
-      object._deletionTime = performance.now();
-
-      if (object instanceof Adapter) {
-        this.adapters.delete(id, object);
-      } else if (object instanceof Device) {
-        this.devices.delete(id, object);
-      } else if (object instanceof Sampler) {
-        this.samplers.delete(id, object);
-      } else if (object instanceof Texture) {
-        this.textures.delete(id, object);
-        const size = object.getGpuSize();
-        if (size != -1) {
-          this.totalTextureMemory -= size;
-        }
-      } else if (object instanceof TextureView) {
-        this.textureViews.delete(id, object);
-      } else if (object instanceof Buffer) {
-        this.buffers.delete(id, object);
-        const size = object.size;
-        this.totalBufferMemory -= size ?? 0;
-      } else if (object instanceof BindGroup) {
-        this.bindGroups.delete(id, object);
-      } else if (object instanceof BindGroupLayout) {
-        this.bindGroupLayouts.delete(id, object);
-      } else if (object instanceof PipelineLayout) {
-        this.pipelineLayouts.delete(id, object);
-      } else if (object instanceof RenderBundle) {
-        this.renderBundles.delete(id, object);
-      } else if (object instanceof ShaderModule) {
-        object.isDestroyed = true;
-        this.shaderModules.delete(id, object);
-      } else if (object instanceof RenderPipeline) {
-        this.pendingRenderPipelines.delete(id, object);
-        this.renderPipelines.delete(id, object);
-      } else if (object instanceof ComputePipeline) {
-        this.computePipelines.set(id, object);
-        this.pendingComputePipelines.delete(id, object);
-      }
-
-      {
-        this.allObjects.delete(id);
-        this.onDeleteObject.emit(id, object);
-      }
-    }
-  }
-
-  class MessagePort {
-    constructor(name, tabId, listener) {
-      this.name = name;
-      this.tabId = tabId ?? 0;
-      this.listeners = [];
-      if (listener) {
-        this.listeners.push(listener);
-      }
-      this._port = null;
-      this.reset();
-    }
-
-    reset() {
-      const self = this;
-      this._port = chrome.runtime.connect({ name: this.name });
-      this._port.onDisconnect.addListener(() => {
-        self.reset();
-      });
-      this._port.onMessage.addListener((message) => {
-        for (const listener of self.listeners) {
-          listener(message);
-        }
-      });
-    }
-
-    addListener(listener) {
-      this.listeners.push(listener);
-    }
-
-    postMessage(message) {
-      message.__webgpuInspector = true;
-      if (this.tabId) {
-        message.tabId = this.tabId;
-      }
-      try {
-        this._port.postMessage(message);
-      } catch (e) {
-        this.reset();
-      }
-    }
-  }
-
-  class Pointer {
-    constructor(event) {
-      this.event = event;
-      this.pageX = event.pageX;
-      this.pageY = event.pageY;
-      this.clientX = event.clientX;
-      this.clientY = event.clientY;
-      this.id = event.pointerId;
-      this.type = event.pointerType;
-      this.buttons = event.buttons ?? -1;
-    }
-
-    getCoalesced() {
-      return this.event.getCoalescedEvents().map((p) => new Pointer(p));
-    }
-  }
-
-  /**
-   * A Widget is a wrapper for a DOM element.
-   */
-  class Widget {
-    constructor(element, parent, options) {
-      this.id = `${this.constructor.name}${Widget.id++}`;
-      if (element && element.constructor === String) {
-        element = document.createElement(element);
-      }
-
-      this._element = element;
-      if (element) {
-        this._element.id = this.id;
-        this._element.title = '';
-      }
-
-      if (parent && parent.constructor === Object) {
-        options = parent;
-        parent = null;
-      }
-
-      this._parent = null;
-      this.children = [];
-
-      /*this.hasFocus = false;
-      this.mouseX = 0;
-      this.mouseY = 0;
-      this.mousePageX = 0;
-      this.mousePageY = 0;
-
-      this._mouseDownEnabled = false;
-      this._mouseMoveEnabled = false;
-      this._mouseUpEnabled = false;
-      this._clickEnabled = false;
-      this._contextMenuEnabled = false;
-      this._doubleClickEnabled = false;
-      this._mouseWheelEnabled = false;
-      this._mouseOverEnabled = false;
-      this._mouseOutEnabled = false;
-      this._keyPressEnabled = false;
-      this._keyReleaseEnabled = false;
-      this._touchEventsEnabled = false;
-      this._pointerEventsEnabled = false;
-      this._isMouseDown = false;
-      // The button that is down during the onMouseDown event.
-      // This should be used during mouseMoveEvent, as MouseEvent.button isn't
-      // going to work on anything but Chrome.
-      this.mouseButton = -1;*/
-
-      // Latest state of the tracked pointers.
-      //this.currentPointers = [];
-
-      //this.enableContextMenuEvent();
-
-      if (parent) {
-        if (parent.constructor.isLayout) {
-          const stretch = options && options.stretch ? options.stretch : 0;
-          parent.add(this, stretch);
-        } else {
-          this.parent = parent;
-        }
-      }
-
-      if (options) {
-        this.configure(options);
-      }
-
-      if (this._element) {
-        this._element.widget = this;
-      }
-    }
-
-    configure(options) {
-      if (options.id) {
-        this._element.id = options.id;
-      }
-
-      if (options.class) {
-        if (options.class.constructor === String) {
-          this.classList.add(options.class);
-        } else {
-          this.classList.add(...options.class);
-        }
-      }
-
-      if (options.text !== undefined) {
-        this.text = options.text;
-      }
-
-      if (options.html !== undefined) {
-        this.html = options.html;
-      }
-
-      if (options.style !== undefined) {
-        this._element.style = options.style;
-      }
-
-      if (options.title !== undefined) {
-        this._element.title = options.title;
-      }
-
-      if (options.backgroundColor !== undefined) {
-        this._element.style.backgroundColor = options.backgroundColor;
-      }
-
-      if (options.color !== undefined) {
-        this._element.style.color = options.color;
-      }
-
-      if (options.type !== undefined) {
-        this._element.type = options.type;
-      }
-
-      if (options.children !== undefined) {
-        for (const c of options.children) {
-          this.appendChild(c);
-        }
-      }
-
-      if (options.disabled !== undefined) {
-        this._element.disabled = options.disabled;
-      }
-
-      if (options.tabIndex !== undefined) {
-        this._element.tabindex = options.tabindex;
-      }
-
-      if (options.zIndex !== undefined) {
-        this._element.style.zIndex = String(options.zIndex);
-      }
-
-      if (options.draggable !== undefined) {
-        this.draggable = options.draggable;
-      }
-
-      if (options.onClick !== undefined) {
-        this.addEventListener('click', options.onClick);
-      }
-
-      if (options.data !== undefined) {
-        this.data = options.data;
-      }
-
-      if (options.tooltip !== undefined) {
-        this.tooltip = options.tooltip;
-      }
-    }
-
-    /**
-     * @property {DOMElement?} element The HTML DOM element
-     */
-    get element() {
-      return this._element;
-    }
-
-    /**
-     * @property {Widget?} parent The parent widget of this widget.
-     */
-    get parent() {
-      return this._parent;
-    }
-
-    set parent(p) {
-      if (!p) {
-        if (this._parent) {
-          this._parent.removeChild(this);
-          return;
-        }
-      } else {
-        p.appendChild(this);
-      }
-
-      this.onResize();
-    }
-
-    get lastChild() {
-      return this.children[this.children.length - 1];
-    }
-
-    /**
-     * Insert a child widget before the given child widget.
-     * @param {*} newChild
-     * @param {*} refChild
-     */
-    insertBefore(newChild, refChild) {
-      const index = this.children.indexOf(refChild);
-      if (index === -1) {
-        this.appendChild(newChild);
-        return;
-      }
-      this.children.splice(index, 0, newChild);
-      this._element.insertBefore(newChild._element, refChild._element);
-    }
-
-    /**
-     * Insert a child widget after the given child widget.
-     * @param {Widget} newChild 
-     * @param {Widget} refChild 
-     */
-    insertAfter(newChild, refChild) {
-      let index = this.children.indexOf(refChild);
-      if (index === -1) {
-        this.appendChild(newChild);
-        return;
-      }
-      index++;
-      if (index >= this.children.length) {
-        this.appendChild(newChild);
-        return;
-      }
-      const refWidget = this.children[index];
-      this.children.splice(index, 0, newChild);
-      this._element.insertBefore(newChild._element, refWidget._element);
-    }
-
-    /**
-     * Add a child widget to this widget.
-     * @param {Widget} child
-     */
-    appendChild(child) {
-      if (child.parent === this) {
-        return;
-      }
-
-      // Remove the widget from its current parent.
-      if (child.parent) {
-        child.parent.removeChild(child);
-      }
-
-      // Add the widget to the children list.
-      child._parent = this;
-      this.children.push(child);
-      this._element.appendChild(child._element);
-
-      const w = this.window;
-      if (w) {
-        child._addedToWindow(w);
-      }
-
-      child.onResize();
-    }
-
-    remove() {
-      this.element.remove();
-    }
-
-    /**
-     * Remove a child widget.
-     * @param {Widget} child
-     */
-    removeChild(child) {
-      const index = this.children.indexOf(child);
-      if (index != -1) {
-        this.children.splice(index, 1);
-      }
-      child._parent = null;
-      this._element.removeChild(child._element);
-    }
-
-    /**
-     * Remove all children from this widget.
-     */
-    removeAllChildren() {
-      for (const child of this.children) {
-        child._parent = null;
-      }
-      this.children.length = 0;
-      while (this._element.firstChild) {
-        this._element.removeChild(this._element.lastChild);
-      }
-    }
-
-    /**
-     * Get the position of the element on the page.
-     * @return {Array}
-     */
-    getPagePosition() {
-      let lx = 0;
-      let ly = 0;
-      for (let el = this._element; el != null; el = el.offsetParent) {
-        lx += el.offsetLeft;
-        ly += el.offsetTop;
-      }
-      return [lx, ly];
-    }
-
-    /**
-     * Parse out the value from a CSS string
-     * @param {*} cssValue
-     */
-    static getCssValue(cssValue) {
-      if (!cssValue) {
-        cssValue = '0px';
-      }
-      if (cssValue.endsWith('%')) {
-        cssValue = cssValue.substring(0, cssValue.length - 1);
-      } else {
-        cssValue = cssValue.substring(0, cssValue.length - 2);
-      }
-      if (cssValue.includes('.')) {
-        return parseFloat(cssValue);
-      }
-      return parseInt(cssValue);
-    }
-
-    /**
-     * Return the size of a CSS property, like "padding", "Left", "Right"
-     * @param {*} style
-     * @param {*} property
-     * @param {*} d1
-     * @param {*} d2
-     */
-    static getStyleSize(style, property, d1, d2) {
-      const s1 = Widget.getCssValue(style[`${property}${d1}`]);
-      const s2 = Widget.getCssValue(style[`${property}${d2}`]);
-      return s1 + s2;
-    }
-
-    /**
-     * @property {number} width The width of the widget.
-     */
-    get width() {
-      return this._element.offsetWidth;
-    }
-
-    /**
-     * @property {number} height The height of the widget.
-     */
-    get height() {
-      return this._element.offsetHeight;
-    }
-
-    /**
-     * Get the bounding rect of the widget.
-     * @return {DOMRect}
-     */
-    getBoundingClientRect() {
-      return this._element.getBoundingClientRect();
-    }
-
-    /**
-     * @property {bool} visible Is the element visible?
-     */
-    get visible() {
-      let e = this;
-      while (e) {
-        if (e._element.style.display == 'none') {
-          return false;
-        }
-        e = e.parent;
-      }
-      return true;
-    }
-
-    onDomChanged() {}
-
-    domChanged() {
-      this.onDomChanged();
-      for (const c of this.children) {
-        c.domChanged();
-      }
-    }
-
-    /**
-     * @property {number} left The x position of the element.
-     */
-    get left() {
-      return this._element ? this._element.offsetLeft : 0;
-    }
-
-    /**
-     * @property {number} top The y position of the element.
-     */
-    get top() {
-      return this._element ? this._element.offsetTop : 0;
-    }
-
-    /**
-     * Set the position of the element.
-     */
-    setPosition(x, y, type) {
-      type = type || 'absolute';
-      this._element.style.position = type;
-      this._element.style.left = `${x}px`;
-      this._element.style.top = `${y}px`;
-    }
-
-    /**
-     * Resize the element.
-     */
-    resize(w, h) {
-      // style.width/height is only for the inner contents of the widget,
-      // not the full size of the widget including border and padding.
-      // Since the resize function wants to encompass the entire widget,
-      // we need to subtract the border and padding sizes from the size set
-      // to the style.
-      const rect = this.getBoundingClientRect();
-      const dx = this._element.offsetWidth - rect.width;
-      const dy = this._element.offsetHeight - rect.height;
-      this._element.style.width = `${w - dx}px`;
-      this._element.style.height = `${h - dy}px`;
-    }
-
-    onResize() {
-      for (const c of this.children) {
-        c.onResize();
-      }
-    }
-
-    /**
-     * @property {String} style The CSS style of the element.
-     */
-    get style() {
-      return this._element.style;
-    }
-
-    set style(v) {
-      this._element.style = v;
-    }
-
-    /**
-     * @property {Array} classList The CSS class set of the element.
-     */
-    get classList() {
-      return this._element.classList;
-    }
-
-    /**
-     * @property {String} text The inner text of the element.
-     */
-    get text() {
-      return this._element.innerText;
-    }
-
-    set text(s) {
-      this._element.innerText = s;
-    }
-
-    get textContent() {
-      return this._element.textContent;
-    }
-
-    set textContent(s) {
-      this._element.textContent = s;
-    }
-
-    get html() {
-      return this._element.innerHTML;
-    }
-
-    set html(v) {
-      this._element.innerHTML = v;
-    }
-
-    get title() {
-      return this._element.title;
-    }
-
-    set title(v) {
-      this._element.title = v;
-    }
-
-    get tooltip() {
-      return this._element.title;
-    }
-
-    set tooltip(v) {
-      this._element.title = v;
-    }
-
-    get disabled() {
-      return this._element.disabled;
-    }
-
-    set disabled(v) {
-      this._element.disabled = v;
-    }
-
-    get dataset() {
-      return this._element.dataset;
-    }
-
-    get tabIndex() {
-      return this._element.tabindex;
-    }
-
-    set tabIndex(v) {
-      this._element.tabIndex = v;
-    }
-
-    get zIndex() {
-      return parseInt(this._element.style.zorder);
-    }
-
-    set zIndex(v) {
-      this._element.style.zorder = String(v);
-    }
-
-    get draggable() {
-      return this._element.draggable;
-    }
-
-    set draggable(v) {
-      this._element.draggable = v;
-      if (v) {
-        this._dragStartEvent = this.dragStartEvent.bind(this);
-        this._dragEndEvent = this.dragEndEvent.bind(this);
-        this._dragEvent = this.dragEvent.bind(this);
-        this.addEventListener('drag', this._dragEvent);
-        this.addEventListener('dragstart', this._dragStartEvent);
-        this.addEventListener('dragend', this._dragEndEvent);
-      } else {
-        if (this._dragEvent) {
-          this.removeEventListener('drag', this._dragEvent);
-          this.removeEventListener('dragstart', this._dragStartEvent);
-          this.removeEventListener('dragend', this._dragEndEvent);
-        }
-      }
-    }
-
-    querySelector() {
-      return this._element.querySelector(...arguments);
-    }
-
-    addEventListener() {
-      return this._element.addEventListener(...arguments);
-    }
-
-    removeEventListener() {
-      return this._element.removeEventListener(...arguments);
-    }
-
-    dispatchEvent() {
-      return this._element.dispatchEvent(...arguments);
-    }
-
-    /**
-     * Repaint the widget.
-     * @param {bool} allDecendents
-     */
-    repaint(allDecendents = true) {
-      if (this.paintEvent) this.paintEvent();
-      if (allDecendents) {
-        for (const c of this.children) {
-          c.repaint(allDecendents);
-        }
-      }
-    }
-
-    _startResize() {
-      if (this.startResize) {
-        this.startResize();
-      }
-      for (const c of this.children) {
-        c._startResize();
-      }
-    }
-
-    _addedToWindow(w) {
-      if (this.onAddedToWindow) {
-        this.onAddedToWindow(w);
-      }
-      for (const c of this.children) {
-        c._addedToWindow(w);
-      }
-    }
-
-    get window() {
-      return Widget.window;
-    }
-
-    /**
-     * Start listening for mousePressEvent, mouseMoveEvent, and mouseReleaseEvent.
-     */
-    enableMouseEvents() {
-      if (!this._mouseDownEnabled && this._element) {
-        this._mouseDownEnabled = true;
-        this._element.addEventListener('mousedown', this._onMouseDown.bind(this));
-      }
-      if (!this._mouseMoveEnabled && this._element) {
-        this.__mouseMoveEnabled = true;
-        this._element.addEventListener('mousemove', this._onMouseMove.bind(this));
-      }
-      if (!this._mouseUpEnabled && this._element) {
-        this._mouseUpEnabled = true;
-        this._element.addEventListener('mouseup', this._onMouseUp.bind(this));
-      }
-    }
-
-    /**
-     * Start listening for mouseMoveEvent.
-     */
-    enableMouseMoveEvent() {
-      if (!this._mouseMoveEnabled && this._element) {
-        this.__mouseMoveEnabled = true;
-        this._element.addEventListener('mousemove', this._onMouseMove.bind(this));
-      }
-    }
-
-    /**
-     * Start listening for ContextMenu events.
-     */
-    enableContextMenuEvent() {
-      this.enableMouseMoveEvent();
-      if (!this._contextMenuEnabled && this._element) {
-        this._contextMenuEnabled = true;
-        this._element.addEventListener(
-          'contextmenu',
-          this._onContextMenu.bind(this)
-        );
-      }
-    }
-
-    /**
-     * Start listenening for Click events.
-     */
-    enableClickEvent() {
-      if (!this._clickEnabled && this._element) {
-        this.__clickEnabled = true;
-        this._element.addEventListener('click', this._onClick.bind(this));
-      }
-    }
-
-    /**
-     * Start listening for DoubleClick events.
-     */
-    enableDoubleClickEvent() {
-      //this.enableMouseMoveEvent();
-      if (!this._doubleClickEnabled && this._element) {
-        this._doubleClickEnabled = true;
-        this._element.addEventListener(
-          'dblclick',
-          this._onDoubleClick.bind(this)
-        );
-      }
-    }
-
-    /**
-     * Start listening for MouseWheel events.
-     */
-    enableMouseWheelEvent() {
-      if (!this._mouseWheelEnabled && this._element) {
-        this._mouseWheelEnabled = true;
-        this._element.addEventListener(
-          'mousewheel',
-          this._onMouseWheel.bind(this)
-        );
-      }
-    }
-
-    /**
-     * Start listening for when the mouse enters the widget.
-     */
-    enableEnterEvent() {
-      this.enableMouseMoveEvent();
-      if (!this._mouseOverEnabled && this._element) {
-        this._mouseOverEnabled = true;
-        this._element.addEventListener('mouseover', this._onMouseOver.bind(this));
-      }
-    }
-
-    /**
-     * Start listening for when the mouse leaves the widget.
-     */
-    enableLeaveEvent() {
-      this.enableMouseMoveEvent();
-      if (!this._mouseOutEnabled && this._element) {
-        this._mouseOutEnabled = true;
-        this._element.addEventListener('mouseout', this._onMouseOut.bind(this));
-      }
-    }
-
-    /**
-     * Enable listening for touch events.
-     */
-    enableTouchEvents() {
-      if (!this._touchEventsEnabled) {
-        this._touchEventsEnabled = true;
-        this._element.addEventListener(
-          'touchstart',
-          this._onTouchStart.bind(this)
-        );
-        this._element.addEventListener('touchend', this._onTouchEnd.bind(this));
-        this._element.addEventListener(
-          'touchcancel',
-          this._onTouchCancel.bind(this)
-        );
-        this._element.addEventListener('touchmove', this._onTouchMove.bind(this));
-        // Without this, Android Chrome will hijack touch events.
-        this.style.touchAction = 'none';
-      }
-    }
-
-    enablePointerEvents(bindToWindow) {
-      if (!this._pointerEventsEnabled) {
-        this._pointerEventsEnabled = true;
-        this._element.addEventListener(
-          'pointerdown',
-          this._onPointerDown.bind(this)
-        );
-        if (bindToWindow) {
-          window.addEventListener('pointermove', this._onPointerMove.bind(this));
-          window.addEventListener('pointerup', this._onPointerUp.bind(this));
-        } else {
-          this._element.addEventListener(
-            'pointermove',
-            this._onPointerMove.bind(this)
-          );
-          this._element.addEventListener(
-            'pointerup',
-            this._onPointerUp.bind(this)
-          );
-        }
-        // Without this, Android Chrome will hijack touch events.
-        this.style.touchAction = 'none';
-      }
-    }
-
-    _onPointerDown(e) {
-      this.hasFocus = true;
-      const pointer = new Pointer(e);
-      if (Widget.currentPointers.some((p) => p.id === pointer.id)) return;
-      Widget.currentPointers.push(pointer);
-      //this.element.setPointerCapture(e.pointerId);
-      const res = this.pointerDownEvent(e, Widget.currentPointers, pointer);
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    releasePointers() {
-      //for (let p of Widget.currentPointers)
-      //this.element.releasePointerCapture(p.id);
-      Widget.currentPointers.length = 0;
-    }
-
-    _onPointerMove(e) {
-      const pointer = new Pointer(e);
-
-      const index = Widget.currentPointers.findIndex((p) => p.id === pointer.id);
-      if (index !== -1) Widget.currentPointers[index] = pointer;
-
-      this.hasFocus = true;
-      const res = this.pointerMoveEvent(e, Widget.currentPointers, pointer);
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    _onPointerUp(e) {
-      const pointer = new Pointer(e);
-      //if (Widget.currentPointers.some((p) => p.id === pointer.id))
-      //this.element.releasePointerCapture(e.pointerId);
-      const index = Widget.currentPointers.findIndex((p) => p.id === pointer.id);
-      if (index != -1) {
-        Widget.currentPointers.splice(index, 1);
-      }
-
-      this.hasFocus = true;
-      const res = this.pointerUpEvent(e, Widget.currentPointers, pointer);
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    pointerDownEvent() {
-      return true;
-    }
-
-    pointerMoveEvent() {
-      return true;
-    }
-
-    pointerUpEvent() {
-      return true;
-    }
-
-    /**
-     * Start listening for KeyPress events.
-     */
-    enableKeyPressEvent() {
-      this.enableEnterEvent();
-      this.enableLeaveEvent();
-      this.enableMouseMoveEvent();
-      if (!this._keyPressEnabled) {
-        this._keyPressEnabled = true;
-        // key events seem to only work on the document level. That's
-        // why we enable enter/leave events, to filter the events to only
-        // accept events for the widget if the mouse is over the widget.
-        document.addEventListener('keydown', this._onKeyPress.bind(this));
-        //this.element.addEventListener("keydown", this._onKeyPress.bind(this));
-      }
-    }
-
-    /**
-     * Start listening for KeyRelease events.
-     */
-    enableKeyReleaseEvent() {
-      this.enableEnterEvent();
-      this.enableLeaveEvent();
-      this.enableMouseMoveEvent();
-      if (!this._keyReleaseEnabled) {
-        this._keyReleaseEnabled = true;
-        // key events seem to only work on the document level. That's
-        // why we enable enter/leave events, to filter the events to only
-        // accept events for the widget if the mouse is over the widget.
-        document.addEventListener('keyup', this._onKeyRelease.bind(this));
-        //this.element.addEventListener("keyup", this._onKeyRelease.bind(this));
-      }
-    }
-
-    /**
-     * Event called when the widget is to be drawn
-     */
-    //paintEvent() { }
-
-    /**
-     * Event called when a mouse button is pressed on the wdiget.
-     */
-    mousePressEvent() {
-      return false;
-    }
-
-    /**
-     * Event called when the mouse is moved over the widget.
-     * @param {*} e
-     */
-    mouseMoveEvent(e) {
-      //this.updatePositionFromEvent(e);
-      return false;
-    }
-
-    /**
-     * Event called when a mouse button is released over the widget.
-     */
-    mouseReleaseEvent() {
-      return false;
-    }
-
-    /**
-     * Event called when the widget recieves a ContextMenu event, usually from
-     * the right mouse button.
-     */
-    contextMenuEvent() {
-      return true;
-    }
-
-    /**
-     * Event called when a mouse button is clicked.
-     */
-    clickEvent() {
-      return true;
-    }
-
-    /**
-     * Event called when a mouse button is double clicked.
-     */
-    doubleClickEvent() {
-      return true;
-    }
-
-    /**
-     * Event called when a mouse wheel is scrolled.
-     */
-    mouseWheelEvent() {
-      return true;
-    }
-
-    /**
-     * Event called when the mouse enters the widget.
-     */
-    enterEvent() {
-      return true;
-    }
-
-    /**
-     * Event called when the mouse leaves the widget.
-     */
-    leaveEvent() {
-      return true;
-    }
-
-    /**
-     * Event called when a key is pressed on the widget.
-     */
-    keyPressEvent() {
-      return true;
-    }
-
-    /**
-     * Event called when a key is released on the widget.
-     */
-    keyReleaseEvent() {
-      return true;
-    }
-
-    /**
-     * Event called when a touch has started.
-     */
-    touchStartEvent() {}
-
-    /**
-     * Event called when a touch has ended.
-     */
-    touchEndEvent() {}
-
-    /**
-     * Event called when a touch has been canceled.
-     */
-    touchCancelEvent() {}
-
-    /**
-     * Event called when a touch has moved.
-     */
-    touchMoveEvent() {}
-
-    /**
-     * Event called when the element starts dragging.
-     */
-    dragStartEvent() {}
-
-    /**
-     * Event called when the element ends dragging.
-     */
-    dragEndEvent() {}
-
-    /**
-     * Event called when the element is dragging.
-     */
-    dragEvent() {}
-
-    /**
-     * Called to update the current tracked mouse position on the widget.
-     * @param {Event} e
-     */
-    updatePositionFromEvent(e) {
-      if (!this._element) {
-        return;
-      }
-
-      if (this.startMouseEvent) {
-        e.targetX = Math.max(
-          0,
-          Math.min(
-            this.element.clientWidth,
-            this.startMouseX + e.pageX - this.startMouseEvent.pageX
-          )
-        );
-
-        e.targetY = Math.max(
-          0,
-          Math.min(
-            this.element.clientHeight,
-            this.startMouseY + e.pageY - this.startMouseEvent.pageY
-          )
-        );
-      } else {
-        e.targetX = e.offsetX;
-        e.targetY = e.offsetY;
-      }
-
-      this.mouseX = e.offsetX;
-      this.mouseY = e.offsetY;
-      this.mousePageX = e.clientX;
-      this.mousePageY = e.clientY;
-
-      if (e.movementX === undefined) {
-        e.movementX = e.clientX - this.lastMouseX;
-        e.movementY = e.clientY - this.lastMouseY;
-      }
-
-      this.lastMouseX = e.clientX;
-      this.lastMouseY = e.clientY;
-    }
-
-    /**
-     * Event called when the mouse is pressed on the widget.
-     * @param {Event} e
-     */
-    _onMouseDown(e) {
-      this.startMouseEvent = e;
-      this.startMouseX = e.offsetX;
-      this.startMouseY = e.offsetY;
-      this.lastMouseX = e.clientX;
-      this.lastMouseY = e.clientY;
-      //this.updatePositionFromEvent(e);
-      this._isMouseDown = true;
-      this.mouseButton = e.button;
-      const res = this.mousePressEvent(e);
-      // If true is returned, prevent the event from propagating up and capture the mouse.
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-        //this.beginMouseCapture();
-      }
-      return res;
-    }
-
-    /**
-     * Event called when the mouse moves on the widget.
-     * @param {Event} e
-     */
-    _onMouseMove(e) {
-      //this.updatePositionFromEvent(e);
-      return this.mouseMoveEvent(e);
-    }
-
-    /**
-     * Event called when the mosue is released on the widget.
-     * @param {Event} e
-     */
-    _onMouseUp(e) {
-      //this.updatePositionFromEvent(e);
-      this.startMouseEvent = null;
-      if (!this._isMouseDown) {
-        return true;
-      }
-
-      this._isMouseDown = false;
-      const res = this.mouseReleaseEvent(e);
-
-      // if false is returned, prevent the event from propagating up.
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-
-      //this.endMouseCapture();
-      return res;
-    }
-
-    /**
-     * Called for a ContextMenu event.
-     * @param {Event} e
-     */
-    _onContextMenu(e) {
-      const res = this.contextMenuEvent(e);
-      // if false is returned, prevent the event from propagating up.
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-      return false;
-    }
-
-    /**
-     * Called fora  Click event.
-     * @param {Event} e
-     */
-    _onClick(e) {
-      const res = this.clickEvent(e);
-      // if false is returned, prevent the event from propagating up.
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    /**
-     * Called for a DoubleClick event.
-     * @param {Event} e
-     */
-    _onDoubleClick(e) {
-      const res = this.doubleClickEvent(e);
-      // if false is returned, prevent the event from propagating up.
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    /**
-     * Called for mouseWheel event.
-     * @param {Event} e
-     */
-    _onMouseWheel(e) {
-      if (e.type === 'wheel') {
-        e.wheel = -e.deltaY;
-      } else {
-        // in firefox deltaY is 1 while in Chrome is 120
-        e.wheel = e.wheelDeltaY != null ? e.wheelDeltaY : e.detail * -60;
-      }
-
-      // from stack overflow
-      // firefox doesnt have wheelDelta
-      e.delta =
-        e.wheelDelta !== undefined
-          ? e.wheelDelta / 40
-          : e.deltaY
-          ? -e.deltaY / 3
-          : 0;
-
-      const res = this.mouseWheelEvent(e);
-
-      // if false is returned, prevent the event from propagating up.
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    /**
-     * Called for a MouseOver event.
-     * @param {Event} e
-     */
-    _onMouseOver(e) {
-      this.hasFocus = true;
-      const res = this.enterEvent(e);
-      // if false is returned, prevent the event from propagating up.
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    /**
-     * Called for a MouseOut event.
-     * @param {Event} e
-     */
-    _onMouseOut(e) {
-      this.hasFocus = false;
-      const res = this.leaveEvent(e);
-      // if false is returned, prevent the event from propagating up.
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    /**
-     * Called for a KeyPress event.
-     * @param {Event} e
-     */
-    _onKeyPress(e) {
-      if (!this.hasFocus) {
-        return;
-      }
-      const res = this.keyPressEvent(e);
-      // if false is returned, prevent the event from propagating up.
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    /**
-     * Called for a KeyRelease event.
-     * @param {Event} e
-     */
-    _onKeyRelease(e) {
-      if (!this.hasFocus) {
-        return;
-      }
-      const res = this.keyReleaseEvent(e);
-      // if false is returned, prevent the event from propagating up.
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    /**
-     * Called for a touchstart event.
-     * @param {Event} e
-     */
-    _onTouchStart(e) {
-      this.hasFocus = true;
-      const res = this.touchStartEvent(e);
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    /**
-     * Called for a touchend event.
-     * @param {Event} e
-     */
-    _onTouchEnd(e) {
-      this.hasFocus = true;
-      const res = this.touchEndEvent(e);
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    /**
-     * Called for a touchcancel event.
-     * @param {Event} e
-     */
-    _onTouchCancel(e) {
-      this.hasFocus = true;
-      const res = this.touchCancelEvent(e);
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    /**
-     * Called for a touchmove event.
-     * @param {Event} e
-     */
-    _onTouchMove(e) {
-      this.hasFocus = true;
-      const res = this.touchMoveEvent(e);
-      if (!res) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }
-
-    trigger(eventName, params) {
-      const event = new CustomEvent(eventName, {
-        bubbles: true,
-        cancelable: true,
-        detail: params,
-      });
-
-      if (this.dispatchEvent) {
-        this.dispatchEvent(event);
-      }
-
-      return event;
-    }
-
-    disableDropEvents() {
-      if (!this._onDragEvent) {
-        return;
-      }
-
-      this.removeEventListener('dragenter', this._onDragEvent);
-      this.removeEventListener('drop', this._onDropEvent);
-      this.addEventListener('dragleave', this._onDragEvent);
-      this.addEventListener('dragover', this._onDragEvent);
-      this.addEventListener('drop', this._onDropEvent);
-
-      this._onDragEvent = null;
-      this._onDropEvent = null;
-    }
-
-    enableDropEvents() {
-      if (this._onDragEvent) {
-        return;
-      }
-
-      this._onDragEvent = this.onDragEvent.bind(this);
-      this._onDropEvent = this.onDropEvent.bind(this);
-
-      this.addEventListener('dragenter', this._onDragEvent);
-    }
-
-    onDragEvent(event) {
-      const element = this.element;
-
-      if (event.type == 'dragenter') {
-        element.addEventListener('dragleave', this._onDragEvent);
-        element.addEventListener('dragover', this._onDragEvent);
-        element.addEventListener('drop', this._onDropEvent);
-      }
-      if (event.type == 'dragenter' && this.dragEnterEvent) {
-        this.dragEnterEvent(event);
-      }
-      if (event.type == 'dragleave' && this.dragLeaveEvent) {
-        this.dragLeaveEvent(event);
-      }
-      if (event.type == 'dragover' && this.dragOverEvent) {
-        this.dragOverEvent(event);
-      }
-    }
-
-    onDropEvent(event) {
-      this.removeEventListener('dragleave', this._onDragEvent);
-      this.removeEventListener('dragover', this._onDragEvent);
-      this.removeEventListener('drop', this._onDropEvent);
-
-      if (this.dropEvent) {
-        this.dropEvent(event);
-      }
-    }
-  }
-
-  Widget.window = null;
-  Widget.currentPointers = [];
-  Widget.disablePaintingOnResize = false;
-  Widget.id = 0;
-
-  /**
-   * A generic DIV element, usually used as a container for other widgets.
-   */
-  class Div extends Widget {
-    constructor(parent, options) {
-      super('div', parent, options);
-    }
-  }
-
-  Div._idPrefix = 'DIV';
-
-  /**
-   * The handle widget for a tab panel.
-   */
-  class TabHandle extends Div {
-    constructor(title, page, parentWidget, parent, options) {
-      super(parent);
-
-      this.title = title;
-      this.page = page;
-      this.parentWidget = parentWidget;
-
-      this.classList.add("tab-handle", "disable-selection");
-
-      this.textElement = new Div(this, {
-        class: "tab-handle-text",
-        text: title,
-      });
-
-      this.draggable = true;
-
-      this.enableMouseEvents();
-      this.enableDoubleClickEvent();
-
-      this.configure(options);
-
-      this.enableDropEvents();
-    }
-
-    dragStartEvent() {
-      TabHandle.DragWidget = this;
-    }
-
-    dragEndEvent() {
-      TabHandle.DragWidget = null;
-    }
-
-    dragOverEvent(e) {
-      if (!TabHandle.DragWidget) {
-        return;
-      }
-
-      if (e.srcElement.classList.contains("tab-handle") &&
-        this !== TabHandle.DragWidget) {
-        if (e.layerX < this.width * 0.5) {
-          e.preventDefault();
-          this.style.borderRight = "";
-          this.style.borderLeft = "4px solid #fff";
-        } else {
-          e.preventDefault();
-          this.style.borderLeft = "";
-          this.style.borderRight = "4px solid #fff";
-        }
-      }
-    }
-
-    dropEvent(e) {
-      this.style.borderLeft = "";
-      this.style.borderRight = "";
-      if (e.srcElement.classList.contains("tab-handle")) {
-        if (e.layerX < this.width * 0.5) {
-          console.log("Insert Before");
-        } else {
-          console.log("Insert After");
-        }
-      }
-    }
-
-    dragEnterEvent() {
-      this.style.borderLeft = "";
-      this.style.borderRight = "";
-    }
-
-    dragLeaveEvent() {
-      this.style.borderLeft = "";
-      this.style.borderRight = "";
-    }
-
-    configure(options) {
-      if (!options) {
-        return;
-      }
-      super.configure(options);
-      if (options.displayCloseButton) {
-        this.closeButton = new Div(this, {
-          class: "tab-handle-close-button",
-        });
-        this.closeButton.title = "Close Tab";
-
-        // Set the close button text
-        const closeIcon = "icon-remove-sign";
-        this.closeButton.element.innerHTML = `<span class="${closeIcon}">x</span>`;
-        this.closeButton.addEventListener("click", () => {
-          this.parentWidget.closeTabHandle(this);
-        });
-      }
-    }
-
-    /**
-     * Is this tab currently active?
-     */
-    get isActive() {
-      return this.classList.contains("tab-handle-selected");
-    }
-
-    /**
-     * Set the active state of the tab (does not affect other tabs, which should
-     * be set as inactive).
-     */
-    set isActive(a) {
-      if (a == this.isActive) {
-        return;
-      }
-
-      if (a) {
-        this.classList.add("tab-handle-selected");
-        this.page.style.display = "block";
-        this.style.zIndex = "10";
-      } else {
-        this.classList.remove("tab-handle-selected");
-        this.page.style.display = "none";
-        this.style.zIndex = "0";
-      }
-    }
-
-    mousePressEvent(e) {
-      this.parentWidget.setHandleActive(this);
-    }
-
-    doubleClickEvent() {
-      //this.maximizePanel();
-    }
-
-    maximizePanel() {
-      //Widget.window.maximizePanelToggle(this.title, this.page.panel);
-    }
-  }
-
-  TabHandle._idPrefix = "TAB";
-
-  /**
-   * A single content area with multiple panels, each associated with a header in a list.
-   */
-  class TabPage extends Div {
-    constructor(panel, parent, options) {
-      super(parent, options);
-      this.classList.add('tab-page');
-      this.style.display = 'none';
-      this.panel = panel;
-      if (panel) {
-        panel.parent = this;
-        //panel.style.width = '100%';
-      }
-    }
-  }
-
-  TabPage._idPrefix = 'TABPAGE';
-  TabPage.isTabPage = true;
-
-  /**
-   * A TabWidget has multiple children widgets, only one of which is visible at a time. Selecting
-   * the active child is done via a header of tab handles.
-   */
-  class TabWidget$1 extends Div {
-    constructor(parent, options) {
-      super(parent);
-
-      this._activeTab = -1;
-      this.displayCloseButton = false;
-
-      this._element.classList.add('tab-widget');
-
-      this.headerElement = new Div(this);
-      this.headerElement.classList.add('tab-header');
-
-      this.iconsElement = new Div(this.headerElement);
-      this.iconsElement.classList.add('tab-icons');
-
-      this.tabListElement = new Div(this.headerElement);
-      this.tabListElement.classList.add('tab-handle-list-container');
-
-      this.contentElement = new Div(this);
-      this.contentElement.classList.add('tab-content');
-      this.contentElement.style.height = `calc(100% - ${this.headerElement.height}px)`;
-
-      if (options) {
-        this.configure(options);
-      }
-    }
-
-    configure(options) {
-      super.configure(options);
-
-      if (options.displayCloseButton !== undefined) {
-        this.displayCloseButton = options.displayCloseButton;
-      }
-
-      if (options.tabs !== undefined) {
-        for (const tab of options.tabs) {
-          this.addTab(tab.label, tab.contents);
-        }
-      }
-    }
-
-    /**
-     * Remove all of the icons.
-     */
-    clearIcons() {
-      this.iconsElement.children.length = 0;
-    }
-
-    /**
-     * Add a tab.
-     * @param {String} label
-     * @param {Widget} panel
-     */
-    addTab(label, panel) {
-      panel._tabLabel = label;
-      const page = new TabPage(panel, this.contentElement);
-      const handle = new TabHandle(label, page, this, this.tabListElement, {
-        displayCloseButton: this.displayCloseButton,
-      });
-
-      if (this.tabListElement.children.length == 1) {
-        this._activeTab = 0;
-        handle.isActive = true;
-        if (page) {
-          page.repaint(true);
-        }
-      }
-
-      panel.domChanged();
-    }
-
-    /**
-     * Close a tab.
-     * @param {TabHandle} handle
-     */
-    closeTabHandle(handle) {
-      const index = this.tabListElement.children.indexOf(handle);
-      if (index == -1) {
-        return;
-      }
-
-      const page = this.contentElement.children[index];
-      /*if (page) {
-        page.children[0].close();
-      }*/
-
-      this.tabListElement.removeChild(handle);
-      this.contentElement.removeChild(page);
-
-      if (this._activeTab == index) {
-        this._activeTab = -1;
-      }
-
-      if (this._activeTab == -1 && this.numTabs > 0) {
-        this.activeTab = 0;
-      }
-    }
-
-    /**
-     * @property {number} numTabs Return the number of tabs.
-     */
-    get numTabs() {
-      return this.tabListElement.children.length;
-    }
-
-    /**
-     * @property {number} activeTab Get the index of the active tab.
-     */
-    get activeTab() {
-      return this._activeTab;
-    }
-
-    /**
-     * Set the current active tab.
-     */
-    set activeTab(index) {
-      if (index < 0 || index > this.tabListElement.children.length) {
-        return;
-      }
-
-      for (let i = 0, l = this.tabListElement.children.length; i < l; ++i) {
-        const handle = this.tabListElement.children[i];
-        handle.isActive = i == index;
-      }
-
-      this._activeTab = index;
-
-      const page = this.contentElement.children[this._activeTab].children[0];
-      if (page) {
-        page.repaint(true);
-      }
-    }
-
-    isPanelVisible(panel) {
-      for (let i = 0, l = this.numTabs; i < l; ++i) {
-        const h = this.tabListElement.children[i];
-        const p = h.page.children[0];
-        if (panel === p) return this._activeTab == i;
-      }
-      return false;
-    }
-
-    setActivePanel(panel) {
-      for (let i = 0, l = this.numTabs; i < l; ++i) {
-        const h = this.tabListElement.children[i];
-        const p = h.page.children[0];
-        if (panel === p) this.activeTab = i;
-      }
-    }
-
-    /**
-     * Set the tab with the given [handle] has active.
-     * @param {TabHandle} handle
-     */
-    setHandleActive(handle) {
-      for (let i = 0, l = this.numTabs; i < l; ++i) {
-        const h = this.tabListElement.children[i];
-        if (h === handle) this.activeTab = i;
-      }
-    }
-
-    /**
-     * Find the TabWidget that contains the given widget, if any.
-     * If a TabWidget is found, then an array with the tab wiget and the actual tab panel
-     * is returned.
-     * @param {Widget} panel
-     * @return {Array?}
-     */
-    static findParentTabWidget(panel) {
-      let p = panel._parent;
-      while (p) {
-        if (p.constructor.isTabPage) {
-          return [p._parent._parent, p];
-        }
-        p = p._parent;
-      }
-      return null;
-    }
-  }
-
-  TabWidget$1._idPrefix = 'TABWIDGET';
-
-  class TextureUtils {
-    constructor(device) {
-      this.device = device;
-      this.blitShaderModule = device.createShaderModule({ code: TextureUtils.blitShader });
-      this.blit3dShaderModule = device.createShaderModule({ code: TextureUtils.blit3dShader });
-      this.multisampleBlitShaderModule = device.createShaderModule({ code: TextureUtils.multisampleBlitShader });
-      this.depthToFloatShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatShader });
-      this.depthToFloatMultisampleShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatMultisampleShader });
-      this.blitPipelines = {};
-      this.blitDepthPipelines = {};
-      this.bindGroupLayouts = new Map();
-      this.pipelineLayouts = new Map();
-      this.depthToFloatPipeline = null;
-      this.depthToFloatMSPipeline = null;
-
-      this.pointSampler = device.createSampler({
-          magFilter: 'nearest',
-          minFilter: 'nearest',
-      });
-
-      this.displayUniformBuffer = device.createBuffer({
-        size: 4 * 8,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-      });
-
-      this.displayBingGroupLayout = device.createBindGroupLayout({
-        entries: [
-          {
-            binding: 0,
-            visibility: GPUShaderStage.FRAGMENT,
-            buffer: {
-              type: "uniform"
-            }
-          }
-        ]
-      });
-
-      this.displayBindGroup = device.createBindGroup({
-        layout: this.displayBingGroupLayout,
-        entries: [
-          {
-            binding: 0,
-            resource: { buffer: this.displayUniformBuffer }
-          }
-        ]
-      });
-    }
-
-    copyDepthTexture(src, format, commandEncoder) {
-      const width = src.width;
-      const height = src.height;
-      const depthOrArrayLayers = src.depthOrArrayLayers;
-      const usage = src.usage | GPUTextureUsage.RENDER_TARGET | GPUTextureUsage.COPY_SRC;
-      const size = [width, height, depthOrArrayLayers];
-      format = format || "r32float";
-
-      const dst = this.device.createTexture({ format, size, usage });
-
-      for (let i = 0; i < depthOrArrayLayers; ++i) {
-        const srcView = src.createView({ dimension: "2d", aspect: "depth-only", baseArrayLayer: i, arrayLayerCount: 1 });
-        const dstView = dst.createView({ dimension: "2d", baseArrayLayer: i, arrayLayerCount: 1 });
-        this.convertDepthToFloat(srcView, src.sampleCount, dstView, format, commandEncoder);
-      }
-      
-      return dst;
-    }
-
-    copyMultisampledTexture(src) {
-      const width = src.width;
-      const height = src.height;
-      const format = src.format;
-      const usage = src.usage | GPUTextureUsage.RENDER_TARGET | GPUTextureUsage.COPY_SRC;
-      const size = [width, height, 1];
-      const dst = this.device.createTexture({ format, size, usage });
-
-      this.blitTexture(src.createView(), src.format, src.sampleCount, dst.createView(), format);
-
-      return dst;
-    }
-
-    blitTexture(srcView, srcFormat, sampleCount, dstView, dstFormat, display, dimension, layer) {
-      layer ??= 0;
-      dimension ??= "2d";
-      const sampleType = "unfilterable-float";
-
-      const bgLayoutKey = `${sampleType}#${sampleCount}#${dimension}`;
-
-      if (!this.bindGroupLayouts.has(bgLayoutKey)) {
-        const bindGroupLayout = this.device.createBindGroupLayout({
-          entries: [
-            {
-              binding: 0,
-              visibility: GPUShaderStage.FRAGMENT,
-              sampler: {
-                type: "non-filtering"
-              }
-            },
-            {
-              binding: 1,
-              visibility: GPUShaderStage.FRAGMENT,
-              texture: {
-                viewDimension: dimension,
-                sampleType: sampleType,
-                multisampled: sampleCount > 1
-              }
-            }
-          ]
-        });
-        this.bindGroupLayouts.set(bgLayoutKey, bindGroupLayout);
-
-        const pipelineLayout = this.device.createPipelineLayout({
-          bindGroupLayouts: [bindGroupLayout, this.displayBingGroupLayout]
-        });
-        this.pipelineLayouts.set(bgLayoutKey, pipelineLayout);
-      }
-
-      const formatInfo = TextureFormatInfo[srcFormat];
-      const numChannels = formatInfo?.channels ?? 4;
-
-      const bindGroupLayout = this.bindGroupLayouts.get(bgLayoutKey);
-      const pipelineLayout = this.pipelineLayouts.get(bgLayoutKey);
-
-      const pipelineKey = `${dstFormat}#${sampleType}#${sampleCount}#${dimension}`;
-      let pipeline = this.blitPipelines[pipelineKey];
-      if (!pipeline) {
-        const module = sampleCount > 1 ? this.multisampleBlitShaderModule : dimension === "3d" ? this.blit3dShaderModule : this.blitShaderModule;
-        pipeline = this.device.createRenderPipeline({
-          layout: pipelineLayout,
-          vertex: {
-            module,
-            entryPoint: 'vertexMain',
-          },
-          fragment: {
-            module: module,
-            entryPoint: 'fragmentMain',
-            targets: [ { format: dstFormat } ],
-          },
-          primitive: {
-            topology: 'triangle-list',
-          },
-        });
-        this.blitPipelines[pipelineKey] = pipeline;
-      }
-
-      const bindGroup = this.device.createBindGroup({
-        layout: bindGroupLayout,
-        entries: [
-          { binding: 0, resource: this.pointSampler },
-          { binding: 1, resource: srcView }
-        ],
-      });
-      
-      const commandEncoder = this.device.createCommandEncoder();
-
-      const passDesc = {
-        colorAttachments: [{
-          view: dstView,
-          loadOp: 'clear',
-          storeOp: 'store'
-        }]
-      };
-
-      if (display) {
-        this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
-          new Float32Array([display.exposure, display.channels, numChannels, display.minRange, display.maxRange, layer, 0, 0]));
-      } else {
-        this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
-          new Float32Array([1, 0, numChannels, 0, 1, layer, 0, 0]));
-      }
-
-      const passEncoder = commandEncoder.beginRenderPass(passDesc);
-      passEncoder.setPipeline(pipeline);
-      passEncoder.setBindGroup(0, bindGroup);
-      passEncoder.setBindGroup(1, this.displayBindGroup);
-      passEncoder.draw(3);
-      passEncoder.end();
-      this.device.queue.submit([commandEncoder.finish()]);
-    }
-
-    convertDepthToFloat(fromTextureView, sampleCount, toTextureView, dstFormat, commandEncoder) {
-      if (sampleCount > 1) {
-        if (!this.depthToFloatMSPipeline) {
-          this.device.pushErrorScope('validation');
-    
-          this.depthToFloatBindGroupMSLayout = this.device.createBindGroupLayout({
-            entries: [
-              {
-                binding: 0,
-                visibility: GPUShaderStage.FRAGMENT,
-                texture: { sampleType: "depth", multisampled: true },
-              }
-            ]
-          });
-    
-          const pipelineLayout = this.device.createPipelineLayout({
-            bindGroupLayouts: [this.depthToFloatBindGroupMSLayout]
-          });
-    
-          const module = this.depthToFloatMultisampleShaderModule;
-          this.depthToFloatMSPipeline = this.device.createRenderPipeline({
-            layout: pipelineLayout,
-            vertex: {
-              module,
-              entryPoint: 'vertexMain',
-            },
-            fragment: {
-              module: module,
-              entryPoint: 'fragmentMain',
-              targets: [ { format: dstFormat } ],
-            },
-            primitive: {
-              topology: 'triangle-list',
-            },
-          });
-    
-          this.device.popErrorScope().then((result) => {
-            if (result) {
-              console.error(result.message);
-            }
-          });
-        }
-      } else if (!this.depthToFloatPipeline) {
-        this.device.pushErrorScope('validation');
-
-        this.depthToFloatBindGroupLayout = this.device.createBindGroupLayout({
-          entries: [
-            {
-              binding: 0,
-              visibility: GPUShaderStage.FRAGMENT,
-              texture: { sampleType: "depth" },
-            }
-          ]
-        });
-
-        const pipelineLayout = this.device.createPipelineLayout({
-          bindGroupLayouts: [this.depthToFloatBindGroupLayout]
-        });
-
-        const module = this.depthToFloatShaderModule;
-        this.depthToFloatPipeline = this.device.createRenderPipeline({
-          layout: pipelineLayout,
-          vertex: {
-            module,
-            entryPoint: 'vertexMain',
-          },
-          fragment: {
-            module: module,
-            entryPoint: 'fragmentMain',
-            targets: [ { format: dstFormat } ],
-          },
-          primitive: {
-            topology: 'triangle-list',
-          },
-        });
-
-        this.device.popErrorScope().then((result) => {
-          if (result) {
-            console.error(result.message);
-          }
-        });
-      }
-
-      this.device.pushErrorScope('validation');
-
-      const bindGroup = this.device.createBindGroup({
-        layout: sampleCount > 1 ? this.depthToFloatBindGroupMSLayout : this.depthToFloatBindGroupLayout,
-        entries: [ { binding: 0, resource: fromTextureView } ],
-      });
-
-      const doSubmit = !commandEncoder;
-
-      commandEncoder ??= this.device.createCommandEncoder();
-      const passEncoder = commandEncoder.beginRenderPass({
-        colorAttachments: [{
-          view: toTextureView,
-          loadOp: 'clear',
-          storeOp: 'store',
-          clearColor: { r: 0, g: 0, b: 0, a: 0 }
-        }]
-      });
-
-      passEncoder.setPipeline(sampleCount > 1 ? this.depthToFloatMSPipeline : this.depthToFloatPipeline);
-      passEncoder.setBindGroup(0, bindGroup);
-      passEncoder.draw(3);
-      passEncoder.end();
-
-      if (doSubmit) {
-        this.device.queue.submit([commandEncoder.finish()]);
-      }
-
-      this.device.popErrorScope().then((result) => {
-        if (result) {
-          console.error(result.message);
-        }
-      });
-    }
-  }
-
-  TextureUtils.blitShader = `
-  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
-    vec4f(-1.0, 1.0, 0.0, 0.0),
-    vec4f(3.0, 1.0, 2.0, 0.0),
-    vec4f(-1.0, -3.0, 0.0, 2.0));
-  struct VertexOutput {
-    @builtin(position) position: vec4f,
-    @location(0) uv: vec2f
-  };
-  @vertex
-  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-    var output: VertexOutput;
-    output.uv = posTex[vertexIndex].zw;
-    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
-    return output;;
-  }
-  @group(0) @binding(0) var texSampler: sampler;
-  @group(0) @binding(1) var texture: texture_2d<f32>;
-  struct Display {
-    exposure: f32,
-    channels: f32,
-    numChannels: f32,
-    minRange: f32,
-    maxRange: f32,
-    _pad1: f32,
-    _pad2: f32,
-    _pad3: f32
-  };
-  @group(1) @binding(0) var<uniform> display: Display; 
-  @fragment
-  fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
-    var color = textureSample(texture, texSampler, input.uv);
-
-    if (display.numChannels == 1.0) {
-      if (display.minRange != display.maxRange) {
-        if (color.r < display.minRange) {
-          color = vec4f(0.0, 0.0, 0.0, 1);
-        } else if (color.r > display.maxRange) {
-          color = vec4f(1.0, 0.0, 0.0, 1);
-        } else {
-          color = vec4f((color.r - display.minRange) / (display.maxRange - display.minRange), 0.0, 0.0, 1);
-        }
-      }
-      color = vec4f(color.r, color.r, color.r, 1.0);
-    } else if (display.numChannels == 2.0) {
-      color = vec4f(color.r, color.g, 0.0, 1.0);
-    }
-
-    if (display.channels == 1.0) { // R
-      var rgb = color.rgb * display.exposure;
-      return vec4f(rgb.r, 0.0, 0.0, 1);
-    } else if (display.channels == 2.0) { // G
-      var rgb = color.rgb * display.exposure;
-      return vec4f(0.0, rgb.g, 0.0, 1);
-    } else if (display.channels == 3.0) { // B
-      var rgb = color.rgb * display.exposure;
-      return vec4f(0.0, 0.0, rgb.b, 1);
-    } else if (display.channels == 4.0) { // A
-      var a = color.a * display.exposure;
-      return vec4f(a, a, a, 1);
-    } else if (display.channels == 5.0) { // Luminance
-      var luminance = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));
-      var rgb = vec3f(luminance) * display.exposure;
-      return vec4f(rgb, 1);
-    }
-
-    // RGB
-    var rgb = color.rgb * display.exposure;
-    return vec4f(rgb, 1);
-  }
-`;
-
-  TextureUtils.blit3dShader = `
-  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
-    vec4f(-1.0, 1.0, 0.0, 0.0),
-    vec4f(3.0, 1.0, 2.0, 0.0),
-    vec4f(-1.0, -3.0, 0.0, 2.0));
-  struct VertexOutput {
-    @builtin(position) position: vec4f,
-    @location(0) uv: vec2f
-  };
-  @vertex
-  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-    var output: VertexOutput;
-    output.uv = posTex[vertexIndex].zw;
-    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
-    return output;;
-  }
-  @group(0) @binding(0) var texSampler: sampler;
-  @group(0) @binding(1) var texture: texture_3d<f32>;
-  struct Display {
-    exposure: f32,
-    channels: f32,
-    numChannels: f32,
-    minRange: f32,
-    maxRange: f32,
-    layer: f32,
-    _pad2: f32,
-    _pad3: f32
-  };
-  @group(1) @binding(0) var<uniform> display: Display; 
-  @fragment
-  fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
-    var color = textureSampleLevel(texture, texSampler, vec3f(input.uv, display.layer), 0.0);
-
-    if (display.numChannels == 1.0) {
-      if (display.minRange != display.maxRange) {
-        if (color.r < display.minRange) {
-          color = vec4f(0.0, 0.0, 0.0, 1);
-        } else if (color.r > display.maxRange) {
-          color = vec4f(1.0, 0.0, 0.0, 1);
-        } else {
-          color = vec4f((color.r - display.minRange) / (display.maxRange - display.minRange), 0.0, 0.0, 1);
-        }
-      }
-      color = vec4f(color.r, color.r, color.r, 1.0);
-    } else if (display.numChannels == 2.0) {
-      color = vec4f(color.r, color.g, 0.0, 1.0);
-    }
-
-    if (display.channels == 1.0) { // R
-      var rgb = color.rgb * display.exposure;
-      return vec4f(rgb.r, 0.0, 0.0, 1);
-    } else if (display.channels == 2.0) { // G
-      var rgb = color.rgb * display.exposure;
-      return vec4f(0.0, rgb.g, 0.0, 1);
-    } else if (display.channels == 3.0) { // B
-      var rgb = color.rgb * display.exposure;
-      return vec4f(0.0, 0.0, rgb.b, 1);
-    } else if (display.channels == 4.0) { // A
-      var a = color.a * display.exposure;
-      return vec4f(a, a, a, 1);
-    } else if (display.channels == 5.0) { // Luminance
-      var luminance = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));
-      var rgb = vec3f(luminance) * display.exposure;
-      return vec4f(rgb, 1);
-    }
-
-    // RGB
-    var rgb = color.rgb * display.exposure;
-    return vec4f(rgb, 1);
-  }
-`;
-
-  TextureUtils.multisampleBlitShader = `
-  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
-    vec4f(-1.0, 1.0, 0.0, 0.0),
-    vec4f(3.0, 1.0, 2.0, 0.0),
-    vec4f(-1.0, -3.0, 0.0, 2.0));
-  struct VertexOutput {
-    @builtin(position) position: vec4f,
-    @location(0) uv: vec2f
-  };
-  @vertex
-  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-    var output: VertexOutput;
-    output.uv = posTex[vertexIndex].zw;
-    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
-    return output;;
-  }
-  @group(0) @binding(0) var texSampler: sampler;
-  @group(0) @binding(1) var texture: texture_multisampled_2d<f32>;
-  struct Display {
-    exposure: f32,
-    channels: f32,
-    numChannels: f32,
-    minRange: f32,
-    maxRange: f32,
-    _pad1: f32,
-    _pad2: f32,
-    _pad3: f32
-  };
-  @group(1) @binding(0) var<uniform> display: Display; 
-  @fragment
-  fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
-    var coords = vec2i(input.uv * vec2f(textureDimensions(texture)));
-    var color = textureLoad(texture, coords, 0);
-    if (display.numChannels == 1.0) {
-      if (display.minRange != display.maxRange) {
-        if (color.r < display.minRange) {
-          color = vec4f(0.0, 0.0, 0.0, color.a);
-        } else if (color.r > display.maxRange) {
-          color = vec4f(1.0, 1.0, 1.0, color.a);
-        } else {
-          color = vec4f((color.r - display.minRange) / (display.maxRange - display.minRange), 0.0, 0.0, color.a);
-        }
-      }
-      color = vec4f(color.r, color.r, color.r, 1.0);
-    } else if (display.numChannels == 2.0) {
-      color = vec4f(color.r, color.g, 0.0, 1.0);
-    }
-    if (display.channels == 1.0) { // R
-      var rgb = color.rgb * display.exposure;
-      return vec4f(rgb.r, 0.0, 0.0, color.a);
-    } else if (display.channels == 2.0) { // G
-      var rgb = color.rgb * display.exposure;
-      return vec4f(0.0, rgb.g, 0.0, color.a);
-    } else if (display.channels == 3.0) { // B
-      var rgb = color.rgb * display.exposure;
-      return vec4f(0.0, 0.0, rgb.b, color.a);
-    } else if (display.channels == 4.0) { // A
-      var a = color.a * display.exposure;
-      return vec4f(a, a, a, color.a);
-    } else if (display.channels == 5.0) { // Luminance
-      var luminance = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));
-      var rgb = vec3f(luminance) * display.exposure;
-      return vec4f(rgb, color.a);
-    }
-
-    // RGB
-    var rgb = color.rgb * display.exposure;
-    return vec4f(rgb, color.a);
-  }`;
-
-  TextureUtils.depthToFloatShader = `
-  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
-    vec4f(-1.0, 1.0, 0.0, 0.0),
-    vec4f(3.0, 1.0, 2.0, 0.0),
-    vec4f(-1.0, -3.0, 0.0, 2.0));
-  struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) uv : vec2<f32>
-  };
-  @vertex
-  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-    var output: VertexOutput;
-    output.uv = posTex[vertexIndex].zw;
-    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
-    return output;;
-  }
-  
-  @binding(0) @group(0) var depth: texture_depth_2d;
-  @fragment
-  fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
-    var depthSize = textureDimensions(depth);
-    var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),
-                           i32(f32(depthSize.y) * input.uv.y));
-    var d = textureLoad(depth, coords, 0);
-    return vec4<f32>(d, 0.0, 0.0, 1.0);
-  }`;
-
-  TextureUtils.depthToFloatMultisampleShader = `
-  var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
-    vec4f(-1.0, 1.0, 0.0, 0.0),
-    vec4f(3.0, 1.0, 2.0, 0.0),
-    vec4f(-1.0, -3.0, 0.0, 2.0));
-  struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) uv : vec2<f32>
-  };
-  @vertex
-  fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-    var output: VertexOutput;
-    output.uv = posTex[vertexIndex].zw;
-    output.position = vec4f(posTex[vertexIndex].xy, 0.0, 1.0);
-    return output;;
-  }
-  
-  @binding(0) @group(0) var depth: texture_depth_multisampled_2d;
-  @fragment
-  fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
-    var depthSize = textureDimensions(depth);
-    var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),
-                           i32(f32(depthSize.y) * input.uv.y));
-    var d = textureLoad(depth, coords, 0);
-    return vec4<f32>(d, 0.0, 0.0, 1.0);
-  }`;
-
-  /**
-   * A window widget fills the entire browser window. It will resize with the
-   * browser. A Window can have an Overlay, which is a [Widget] that will be
-   * resized to fill the entire window, and can be used to create full screen
-   * modal editors.
-   */
-  class Window extends Widget {
-    constructor(options) {
-      super(document.body, options);
-      this._overlay = null;
-      this._onResizeCB = this.windowResized.bind(this);
-      window.addEventListener('resize', this._onResizeCB);
-      this.onWindowResized = new Signal();
-      Widget.window = this;
-    }
-
-    windowResized() {
-      this._onResize(window.innerWidth, window.innerHeight);
-    }
-
-    /**
-     * @property {number} width The width of the widget.
-     */
-    get width() {
-      return window.innerWidth;
-    }
-
-    /**
-     * @property {number} heihgt The height of the widget.
-     */
-    get height() {
-      return window.innerHeight;
-    }
-
-    /**
-     * @property {Widget?} overlay The active overlay widget, which covers the entire window
-     * temporarily.
-     */
-    get overlay() {
-      return this._overlay;
-    }
-
-    set overlay(v) {
-      if (this._overlay === v) {
-        return;
-      }
-
-      if (this._overlay !== null) {
-        this._element.removeChild(this._overlay._element);
-      }
-
-      this._overlay = v;
-
-      if (this._overlay) {
-        this._element.appendChild(this._overlay._element);
-        this._overlay.setPosition(0, 0, 'absolute');
-        this._overlay.resize(window.innerWidth, window.innerHeight);
-      }
-    }
-
-    /**
-     * The widget has been resized.
-     * @param {number} width
-     * @param {number} height
-     */
-    _onResize(width, height) {
-      this.onWindowResized.emit();
-      this.repaint();
-      if (this._element) {
-        if (this._overlay) {
-          this._overlay.resize(width, height);
-        }
-      }
-      this.onResize();
-    }
-  }
-
-  Window.isWindow = true;
-  Window._idPrefix = 'WINDOW';
-
-  class CaptureStatistics {
-    constructor() {
-      this.apiCalls = 0;
-
-      this.draw = 0;
-      this.drawIndirect = 0;
-      this.dispatch = 0;
-      
-      this.setVertexBuffer = 0;
-      this.setIndexBuffer = 0;
-      this.setBindGroup = 0;
-      this.uniformBuffers = 0;
-      this.storageBuffers = 0;
-      this.textures = 0;
-      this.samplers = 0;
-      this.setPipeline = 0;
-
-      this.vertexShaders = 0;
-      this.fragmentShaders = 0;
-      this.computeShaders = 0;
-
-      this.computePasses = 0;
-      this.renderPasses = 0;
-      this.colorAttachments = 0;
-      this.depthStencilAttachments = 0;
-      this.copyCommands = 0;
-      this.writeBuffer = 0;
-      this.bufferBytesWritten = 0;
-      this.writeTexture = 0;
-      //this.textureBytesWritten = 0;
-      this.totalBytesWritten = 0;
-
-      this.totalInstances = 0;
-      this.totalVertices = 0;
-      this.totalTriangles = 0;
-      this.totalLines = 0;
-      this.totalPoints = 0;
-
-      Object.defineProperty(this, '_lastPipeline', { enumerable: false, writable: true, value: 0 });
-    }
-
-    reset() {
-      this.apiCalls = 0;
-
-      this.draw = 0;
-      this.drawIndirect = 0;
-      this.dispatch = 0;
-      
-      this.setVertexBuffer = 0;
-      this.setIndexBuffer = 0;
-      this.setBindGroup = 0;
-      this.uniformBuffers = 0;
-      this.storageBuffers = 0;
-      this.textures = 0;
-      this.samplers = 0;
-      this.setPipeline = 0;
-
-      this.vertexShaders = 0;
-      this.fragmentShaders = 0;
-      this.computeShaders = 0;
-
-      this.computePasses = 0;
-      this.renderPasses = 0;
-      this.colorAttachments = 0;
-      this.depthStencilAttachments = 0;
-      this.copyCommands = 0;
-      this.writeBuffer = 0;
-      this.bufferBytesWritten = 0;
-      this.writeTexture = 0;
-      //this.textureBytesWritten = 0;
-      this.totalBytesWritten = 0;
-
-      this.totalInstances = 0;
-      this.totalVertices = 0;
-      this.totalTriangles = 0;
-      this.totalLines = 0;
-      this.totalPoints = 0;
-
-      this._lastPipeline = 0;
-    }
-
-    updateStats(database, command) {
-      this.apiCalls++;
-
-      const method = command.method;
-      const args = command.args;
-
-      if (method === "dispatchWorkgroups" || method === "dispatchWorkgroupsIndirect") {
-        this.dispatch++;
-      } else if (method === "draw" || method === "drawIndexed" || method === "drawIndirect" || method === "drawIndexedIndirect") {
-        this.draw++;
-        let vertexCount = 0;
-
-        if (method === "drawIndirect" || method === "drawIndexedIndirect") {
-          this.drawIndirect++;
-          // TODO the buffer data has not finished loading by the time these stats are collected
-          if (command.isBufferDataLoaded && command.bufferData) {
-            const bufferData = command.bufferData[0];
-            if (bufferData) {
-              const u32Array = new Uint32Array(bufferData.buffer);
-              vertexCount = u32Array[0];
-            }
-          }
-        } else {
-          vertexCount = parseInt(args[0] ?? 0) ?? 0;
-          this.totalInstances += parseInt(args[1] ?? 1);
-        }
-
-        this.totalVertices += vertexCount;
-
-        if (this._lastPipeline) {
-          const pipeline = database.getObject(this._lastPipeline.__id);
-          if (pipeline?.descriptor) {
-            const topology = pipeline.descriptor.primitive?.topology ?? "triangle-list";
-            if (topology === "triangle-list") {
-              const numTriangles = vertexCount / 3;
-              this.totalTriangles += numTriangles;
-            } else if (topology === "triangle-strip") {
-              const numTriangles = vertexCount - 2;
-              this.totalTriangles += numTriangles;
-            } else if (topology === "point-list") {
-              this.totalPoints += vertexCount;
-            } else if (topology === "line-list") {
-              this.totalLines += vertexCount / 2;
-            } else if (topology === "line-strip") {
-              this.totalLines += vertexCount - 1;
-            }
-          }
-        }
-      } else if (method === "setIndexBuffer") {
-        this.setIndexBuffer++;
-      } else if (method === "setVertexBuffer") {
-        this.setVertexBuffer++;
-      } else if (method === "setPipeline") {
-        this.setPipeline++;
-        this._lastPipeline = args[0];
-        const pipeline = database.getObject(args[0]?.__id);
-        if (pipeline) {
-          if (pipeline.descriptor.vertex) {
-            this.vertexShaders++;
-          }
-          if (pipeline.descriptor.fragment) {
-            this.fragmentShaders++;
-          }
-          if (pipeline.descriptor.compute) {
-            this.computeShaders++;
-          }
-        }
-      } else if (method === "setBindGroup") {
-        this.setBindGroup++;
-        const bindgroup = database.getObject(args[1]?.__id);
-        if (bindgroup) {
-          for (const entry of bindgroup.descriptor.entries) {
-            if (entry.resource?.buffer) {
-              const buffer = database.getObject(entry.resource.buffer.__id);
-              if (buffer) {
-                if (buffer.descriptor.usage & GPUBufferUsage.STORAGE) {
-                  this.storageBuffers++;
-                }
-                if (buffer.descriptor.usage & GPUBufferUsage.UNIFORM) {
-                  this.uniformBuffers++;
-                }
-              }
-            } else if (entry.resource?.__id) {
-              const resource = database.getObject(entry.resource.__id);
-              if (resource instanceof TextureView) {
-                this.textures++;
-              } else if (resource instanceof Sampler) {
-                this.samplers++;
-              }
-            }
-          }
-        }
-      } else if (method === "beginComputePass") {
-        this.computePasses++;
-      } else if (method === "beginRenderPass") {
-        this.renderPasses++;
-        const desc = args[0];
-        if (desc.colorAttachments) {
-          this.colorAttachments += desc.colorAttachments.length;
-        }
-        if (desc.depthStencilAttachment) {
-          this.depthStencilAttachments++;
-        }
-      } else if (method === "writeBuffer") {
-        this.writeBuffer++;
-        const data = args[2];
-        let dataLength = 0;
-        if (args[2].constructor === String) {
-          const dataTk = args[2].split(" ");
-          dataLength = parseInt(dataTk[dataTk.length - 1]);
-        } else if (data.length !== undefined) {
-          dataLength = data.length;
-        }
-        const offset = args.length > 3 ? args[3] : 0;
-        const size = args.length > 4 ? args[4] : dataLength - offset;
-        this.bufferBytesWritten += size;
-        this.totalBytesWritten += size;
-      } else if (method === "writeTexture") {
-        this.writeTexture++;
-        /*const data = args[1];
-        const size = data.length;
-        this.textureBytesWritten += size;
-        this.totalBytesWritten += size;*/
-      } else if (method === "copyBufferToBuffer" || method === "copyBufferToTexture" ||
-                 method === "copyTextureToBuffer" || method === "copyTextureToTexture") {
-        this.copyCommands++;
-      }
-    }
-  }
-
-  class Button extends Widget {
-    constructor(parent, options) {
-      super('button', parent);
-      this.classList.add('button');
-
-      this.callback = null;
-      this.onMouseDown = null;
-      this.onMouseUp = null;
-
-      this._click = this.click.bind(this);
-      this._mouseDown = this.mouseDown.bind(this);
-      this._mouseUp = this.mouseUp.bind(this);
-
-      this.element.addEventListener('click', this._click);
-      this.element.addEventListener('mousedown', this._mouseDown);
-      this.element.addEventListener('mouseup', this._mouseUp);
-
-      if (options) {
-        this.configure(options);
-      }
-    }
-
-    configure(options) {
-      super.configure(options);
-      if (options.callback) {
-        this.callback = options.callback;
-      }
-      if (options.mouseDown) {
-        this.onMouseDown = options.mouseDown;
-      }
-      if (options.mouseUp) {
-        this.onMouseUp = options.mouseUp;
-      }
-      if (options.label) {
-        this.text = options.label;
-      }
-    }
-
-    click(event) {
-      if (this.callback) {
-        this.callback.call(this, event);
-      }
-    }
-
-    mouseDown(event) {
-      if (this.onMouseDown) {
-        this.onMouseDown.call(this, event);
-      }
-    }
-
-    mouseUp(event) {
-      if (this.onMouseUp) {
-        this.onMouseUp.call(this, event);
-      }
-    }
-  }
-
-  /**
-   * A SPAN element widget.
-   */
-  class Span extends Widget {
-    constructor(parent, options) {
-      super('span', parent, options);
-    }
-  }
-
-  Span._idPrefix = 'SPAN';
-
-  /**
-   * A collapsable widget with a header and a body.
-   */
-  class Collapsable extends Widget {
-    constructor(parent, options) {
-      super('div', parent, options);
-
-      const collapsed = options.collapsed ?? false;
-
-      this.titleBar = new Div(this, { class: "title_bar" });
-      this.collapseButton = new Span(this.titleBar, { class: "collapsable_button", text: collapsed ? "+" : "-", style: "margin-right: 10px;" });
-      this.label = new Span(this.titleBar, { class: "object_type", text: options?.label ?? "" });
-      this.onExpanded = new Signal();
-      this.onCollapsed = new Signal();
-
-      this.body = new Div(this, { class: ["collapsable_body"] });
-      if (collapsed) {
-        this.body.element.className = "collapsable_body collapsed";
-      }
-
-      const self = this;
-
-      this.titleBar.element.onclick = function() {
-        if (self.collapseButton.text == "-") {
-          self.collapseButton.text = "+";
-          self.body.element.className = "collapsable_body collapsed";
-          self.onCollapsed.emit();
-        } else {
-          self.collapseButton.text = "-";
-          self.body.element.className = "collapsable_body";
-          self.onExpanded.emit();
-        }
-      };
-    }
-
-    expand() {
-      this.collapsed = false;
-    }
-
-    get collapsed() {
-      return this.collapseButton.text == "+";
-    }
-
-    set collapsed(value) {
-      if (this.collapsed == value) {
-        return;
-      }
-      if (value) {
-        this.collapseButton.text = "+";
-        this.body.element.className = "collapsable_body collapsed";
-        this.onCollapsed.emit();
-      } else {
-        this.collapseButton.text = "-";
-        this.body.element.className = "collapsable_body";
-        this.onExpanded.emit();
-      }
-    }
-  }
-
-  /**
-   * Base class for modal windows. A modal window takes over the main window while it is active.
-   */
-  class Dialog extends Div {
-    constructor(options) {
-      const title = options?.title ?? 'Dialog';
-
-      super({ class: options?.windowClass ?? 'dialog', title: title });
-
-      if (options?.width) {
-        this.style.width = `${options.width}px`;
-      }
-
-      const background =
-        options?.parent ?? new Div({ class: 'dialog-background' });
-
-      this.parent = background;
-
-      const header = new Div(this, { class: 'dialog-header', title });
-
-      if (!options?.noCloseButton) {
-        const closeButton = new Button(header, {
-          class: 'dialog-close-button',
-          text: 'x',
-          title: 'Close',
-        });
-
-        closeButton.addEventListener('mouseup', function (e) {
-          if (e.target === closeButton.element) {
-            Window.window.overlay = null;
-          }
-        });
-      }
-
-      this.title = new Span(header, { class: 'dialog-title', text: title });
-
-      this.body = new Div(this, { class: 'dialog-body' });
-
-      if (options?.body) {
-        this.body.appendChild(options.body);
-      }
-
-      if (!options?.parent) {
-        Window.window.overlay = background;
-      }
-
-      if (options?.draggable) {
-        let isDragging = false;
-        const rect = this.getBoundingClientRect();
-        let x = rect ? rect.left : 0;
-        let y = rect ? rect.top : 0;
-        this.style.position = 'absolute';
-        this.style.left = `${x}px`;
-        this.style.top = `${y}px`;
-
-        let prevX = 0;
-        let prevY = 0;
-        header.addEventListener('mousedown', function (e) {
-          isDragging = true;
-          prevX = e.clientX;
-          prevY = e.clientY;
-        });
-
-        const self = this;
-        document.addEventListener('mousemove', function (e) {
-          if (!isDragging) {
-            return;
-          }
-          const dx = e.clientX - prevX;
-          const dy = e.clientY - prevY;
-          x += dx;
-          y += dy;
-          prevX = e.clientX;
-          prevY = e.clientY;
-          self.style.left = `${x}px`;
-          self.style.top = `${y}px`;
-        });
-
-        document.addEventListener('mouseup', function () {
-          isDragging = false;
-        });
-      }
-    }
-
-    close() {
-      Window.window.overlay = null;
-    }
-  }
-
-  class Label extends Widget {
-    constructor(text, parent, options) {
-      super('label', parent, options);
-      this.classList.add('label');
-      this.text = text;
-    }
-
-    configure(options) {
-      if (!options) {
-        return;
-      }
-      super.configure(options);
-      if (options.for) {
-        this.for = options.for;
-      }
-    }
-
-    get for() {
-      return this._element.htmlFor;
-    }
-
-    set for(v) {
-      if (!v) {
-        this._element.htmlFor = '';
-      } else if (v.constructor === String) {
-        this._element.htmlFor = v;
-      } else {
-        this._element.htmlFor = v.id;
-      }
-    }
-  }
-
-  class Input extends Widget {
-    constructor(parent, options) {
-      super('input', parent, options);
-      this.onChange = new Signal();
-      this.onEdit = new Signal();
-      const self = this;
-
-      this.element.addEventListener('change', function () {
-        let v = self.type === 'checkbox' ? self.checked : self.value;
-        self.onChange.emit(v);
-        if (self._onChange) {
-          self._onChange(v);
-        }
-      });
-
-      this.element.addEventListener('input', function () {
-        let v = self.type === 'checkbox' ? self.checked : self.value;
-        self.onEdit.emit(v);
-        if (self._onEdit) {
-          self._onEdit(v);
-        }
-      });
-    }
-
-    configure(options) {
-      if (!options) {
-        return;
-      }
-      super.configure(options);
-
-      if (options.type !== undefined) {
-        this.type = options.type;
-      }
-
-      if (options.checked !== undefined) {
-        this.checked = options.checked;
-      }
-
-      if (options.value !== undefined) {
-        this.value = options.value;
-      }
-
-      if (options.label !== undefined) {
-        if (options.label.constructor === String) {
-          this.label = new Label(options.label, this.parent, {
-            for: this,
-          });
-        } else {
-          this.label = options.label;
-          this.label.for = this.id;
-        }
-      }
-
-      if (options.readOnly !== undefined) {
-        this.readOnly = options.readOnly;
-      }
-
-      if (options.onChange !== undefined) {
-        this._onChange = options.onChange;
-      }
-
-      if (options.onEdit !== undefined) {
-        this._onEdit = options.onEdit;
-      }
-    }
-
-    get type() {
-      return this._element.type;
-    }
-
-    set type(v) {
-      this._element.type = v;
-    }
-
-    get checked() {
-      return this._element.checked;
-    }
-
-    set checked(v) {
-      this._element.checked = v;
-    }
-
-    get indeterminate() {
-      return this._element.indeterminate;
-    }
-
-    set indeterminate(v) {
-      this._element.indeterminate = v;
-    }
-
-    get value() {
-      return this._element.value;
-    }
-
-    set value(v) {
-      this._element.value = v;
-    }
-
-    get readOnly() {
-      return this._element.readOnly;
-    }
-
-    set readOnly(v) {
-      this._element.readOnly = v;
-    }
-
-    focus() {
-      this._element.focus();
-    }
-
-    blur() {
-      this._element.blur();
-    }
-
-    select() {
-      this._element.select();
-    }
-  }
-
-  class TextInput extends Input {
-    constructor(parent, options) {
-      super(parent, options);
-      this.classList.add('text-input');
-      this.type = 'text';
-
-      this.enableKeyPressEvent();
-    }
-
-    configure(options) {
-      if (!options) return;
-      super.configure(options);
-      if (options.placeholder) {
-        this.placeholder = options.placeholder;
-      }
-    }
-
-    get placeholder() {
-      return this.element.placeholder;
-    }
-
-    set placeholder(v) {
-      this.element.placeholder = v;
-    }
-
-    keyPressEvent(e) {
-      if (e.keyCode === 27) {
-        // Escape
-        e.target.blur();
-      }
-      return true;
-    }
-  }
-
-  class NumberInput extends Span {
-    constructor(parent, options) {
-      super(parent, options);
-      this.classList.add('dragger');
-
-      options = options || {};
-
-      let isExpr = false;
-
-      let value = options.value;
-      if (value === null || value === undefined) {
-        value = 0;
-      } else if (value.constructor === String) {
-        isExpr = isNaN(value);
-        if (!isExpr) {
-          value = parseFloat(value);
-        }
-      } else if (value.constructor !== Number) {
-        value = 0;
-      }
-
-      const precision = options.precision != undefined ? options.precision : 3;
-
-      this.value = value;
-      this.precision = precision;
-      this.units = options.units ?? "";
-      this.disabled = !!options.disabled;
-      this.horizontal = !!options.horizontal;
-      this.linear = !!options.linear;
-      this.step = options.step ?? 1;
-      this.min = options.min ?? null;
-      this.max = options.max ?? null;
-      const container = new Span(this, { class: 'inputfield' });
-
-      if (options.full) {
-        container.classList.add('full');
-      }
-
-      if (this.disabled) {
-        container.classList.add('disabled');
-      }
-
-      const inputClass = options.inputClass || 'full';
-      const input = new TextInput(container, {
-        class: ['text', 'number', inputClass],
-        value: isExpr
-          ? value
-          : value.toFixed(precision) + (options.units ? options.units : ''),
-        onChange: options.onChange,
-      });
-      this.input = input;
-      input.ownerDocument = document;
-
-      if (this.disabled) {
-        input.disabled = true;
-      }
-
-      if (options.tabIndex) {
-        input.tabIndex = options.tabIndex;
-      }
-
-      input.addEventListener('keydown', function (e) {
-        if (e.keyCode == 38) {
-          innerInc(1, e);
-        } else if (e.keyCode == 40) {
-          innerInc(-1, e);
-        } else {
-          return;
-        }
-        e.stopPropagation();
-        e.preventDefault();
-        return true;
-      });
-
-      const dragger = new Span(container, { class: 'drag_widget' });
-      if (this.disabled) {
-        dragger.classList.add('disabled');
-      }
-
-      this.dragger = dragger;
-
-      dragger.addEventListener('mousedown', innerDown);
-      input.addEventListener('wheel', innerWheel, false);
-      input.addEventListener('mousewheel', innerWheel, false);
-
-      let docBinded = null;
-
-      const self = this;
-
-      function innerDown(e) {
-        if (isExpr) {
-          return;
-        }
-        docBinded = input.ownerDocument;
-
-        docBinded.removeEventListener('mousemove', innerMove);
-        docBinded.removeEventListener('mouseup', innerUp);
-
-        if (!self.disabled) {
-          if (self.element.requestPointerLock) {
-            self.element.requestPointerLock();
-          }
-          docBinded.addEventListener('mousemove', innerMove);
-          docBinded.addEventListener('mouseup', innerUp);
-
-          dragger.data = [e.screenX, e.screenY];
-
-          self.trigger('startDragging');
-        }
-
-        e.stopPropagation();
-        e.preventDefault();
-      }
-
-      function innerMove(e) {
-        if (isExpr) {
-          return;
-        }
-        const deltax = e.screenX - dragger.data[0];
-        const deltay = dragger.data[1] - e.screenY;
-        let diff = [deltax, deltay];
-        if (e.movementX !== undefined) {
-          diff = [e.movementX, -e.movementY];
-        }
-
-        dragger.data = [e.screenX, e.screenY];
-        const axis = self.horizontal ? 0 : 1;
-
-        innerInc(diff[axis], e);
-
-        e.stopPropagation();
-        e.preventDefault();
-        return false;
-      }
-
-      function innerWheel(e) {
-        if (isExpr) {
-          return;
-        }
-        if (document.activeElement !== this) {
-          return;
-        }
-        const delta =
-          e.wheelDelta !== undefined
-            ? e.wheelDelta
-            : e.deltaY
-            ? -e.deltaY / 3
-            : 0;
-        innerInc(delta > 0 ? 1 : -1, e);
-        e.stopPropagation();
-        e.preventDefault();
-      }
-
-      function innerUp(e) {
-        if (isExpr) {
-          return;
-        }
-        self.trigger('stopDragging');
-        const doc = docBinded || document;
-        docBinded = null;
-        doc.removeEventListener('mousemove', innerMove);
-        doc.removeEventListener('mouseup', innerUp);
-        if (doc.exitPointerLock) {
-          doc.exitPointerLock();
-        }
-        dragger.trigger('blur');
-        e.stopPropagation();
-        e.preventDefault();
-        return false;
-      }
-
-      function innerInc(v, e) {
-        if (isExpr) {
-          return;
-        }
-        if (!self.linear) {
-          v = v > 0 ? Math.pow(v, 1.2) : Math.pow(Math.abs(v), 1.2) * -1;
-        }
-
-        let scale = self.step ? self.step : 1.0;
-        if (e && e.shiftKey) {
-          scale *= 10;
-        } else if (e && e.ctrlKey) {
-          scale *= 0.1;
-        }
-
-        let value = parseFloat(input.value) + v * scale;
-
-        if (self.max !== null && value > self.max) {
-          value = self.max;
-        }
-
-        if (self.min !== null && value < self.min) {
-          value = self.min;
-        }
-
-        value = value.toFixed(self.precision);
-        if (self.units) {
-          value += self.units;
-        }
-        input.value = value;
-
-        input.trigger('change');
-      }
-    }
-
-    setRange(min, max) {
-      this.min = min;
-      this.max = max;
-    }
-
-    setValue(v, skipEvent) {
-      const isExpr = isNaN(v);
-      if (!isExpr) {
-        v = parseFloat(v);
-        if (this.min !== null && v < this.min) {
-          v = this.min;
-        }
-        if (this.max !== null && v > this.max) {
-          v = this.max;
-        }
-      }
-      if (this.value == v) {
-        return;
-      }
-      this.value = v;
-      if (!isExpr) {
-        if (this.precision) {
-          v = v.toFixed(this.precision);
-        }
-        if (this.units) {
-          v += this.units;
-        }
-      }
-      if (this.input.value != v) {
-        this.input.value = v;
-        if (!skipEvent) {
-          this.input.onChange.emit(v);
-        }
-      }
-    }
-
-    getValue() {
-      return this.value;
-    }
-  }
-
-  class TextArea extends Widget {
-    constructor(parent, options) {
-      super('textArea', parent, options);
-      this.element.spellcheck = false;
-      this.classList.add('text-area');
-
-      this.onChange = new Signal();
-      this.onEdit = new Signal();
-
-      const self = this;
-      this.element.addEventListener('change', function () {
-        let v = self.value;
-        self.onChange.emit(v);
-        if (self._onChange) {
-          self._onChange(v);
-        }
-      });
-
-      this.element.addEventListener('input', function () {
-        let v = self.value;
-        self.onEdit.emit(v);
-        if (self._onEdit) {
-          self._onEdit(v);
-        }
-      });
-    }
-
-    configure(options) {
-      if (!options) {
-        return;
-      }
-      super.configure(options);
-
-      if (options.value) {
-        this.value = options.value;
-      }
-
-      if (options.placeholder) {
-        this.placeholder = options.placeholder;
-      }
-
-      if (options.readOnly !== undefined) {
-        this.readOnly = options.readOnly;
-      }
-
-      if (options.onChange !== undefined) {
-        this._onChange = options.onChange;
-      }
-
-      if (options.onEdit !== undefined) {
-        this._onEdit = options.onEdit;
-      }
-    }
-
-    get value() {
-      return this._element.value;
-    }
-
-    set value(t) {
-      this._element.value = t;
-    }
-
-    get placeholder() {
-      return this._element.placeholder;
-    }
-
-    set placeholder(v) {
-      this._element.placeholder = v;
-    }
-
-    get readOnly() {
-      return this._element.readOnly;
-    }
-
-    set readOnly(v) {
-      this._element.readOnly = v;
-    }
-  }
-
-  function getFlagString(value, flags) {
-    function _addFlagString(flags, flag) {
-      return flags === "" ? flag : `${flags} | ${flag}`;
-    }
-    let flagStr = "";
-    for (const flagName in flags) {
-      const flag = flags[flagName];
-      if (value & flag) {
-        flagStr = _addFlagString(flagStr, flagName);
-      }
-    }
-    return flagStr;
-  }
-
-  class Select extends Widget {
-    constructor(parent, options) {
-      super('span', parent);
-      this.classList.add('select');
-
-      this.select = new Widget('select', this);
-      this.select.style.width = '100%';
-      this.select.style.height = '20px';
-      this.select.style.border = 'none';
-      this.select.style.display = 'inline-block';
-      this.select.classList.add('select');
-      this.onChange = new Signal();
-
-      const self = this;
-      this.select.element.addEventListener('change', function () {
-        if (self.selectEdit) {
-          self.selectEdit.value = self.select.element.value;
-        } else {
-          self.onChange.emit(self.value, self.index);
-          if (self._onChange) {
-            self._onChange(self.value, self.index);
-          }
-        }
-      });
-
-      if (options && options.editable) {
-        this.selectEdit = new TextInput(this, {
-          value: options.options[0],
-          style:
-            'position: absolute; top: 2px; left: 0px; width: calc(100% - 20px); height: 20px; border: none;',
-        });
-        this.selectEdit.onChange.addListener(function () {
-          self.onChange.emit(self.value);
-          if (self._onChange) {
-            self._onChange(self.value, self.index);
-          }
-        });
-      }
-
-      if (options) {
-        this.configure(options);
-      }
-
-      this.style.height = '20px';
-      this.style.position = 'relative';
-      this.style.minWidth = '50px';
-    }
-
-    get disabled() {
-      return super.disabled;
-    }
-
-    set disabled(v) {
-      super.disabled = v;
-      this.select.disabled = v;
-      if (this.selectEdit) {
-        this.selectEdit.disabled = v;
-      }
-    }
-
-    configure(options) {
-      if (!options) {
-        return;
-      }
-      super.configure(options);
-
-      if (options.options) {
-        for (const o of options.options) {
-          this.addOption(o);
-        }
-      }
-
-      if (options.label !== undefined) {
-        if (options.label.constructor === String) {
-          this.label = new Label(options.label, this.parent, {
-            fixedSize: 0,
-            for: this,
-          });
-        } else {
-          this.label = options.label;
-          this.label.for = this.id;
-          if (!this.label.parent) {
-            this.label.parent = this.parent;
-          }
-        }
-      }
-
-      if (options.value !== undefined) {
-        this.select.element.value = options.value;
-      }
-
-      if (options.index !== undefined) {
-        this.select.element.selectedIndex = options.index;
-        if (this.selectEdit) {
-          this.selectEdit.value = this.select.element.value;
-        }
-      }
-
-      if (options.onChange !== undefined) {
-        this._onChange = options.onChange;
-      }
-    }
-
-    get index() {
-      return this.select.element.selectedIndex;
-    }
-
-    set index(v) {
-      this.select.element.selectedIndex = v;
-    }
-
-    get value() {
-      if (this.selectEdit) {
-        return this.selectEdit.value;
-      }
-      return this.select.element.value;
-    }
-
-    set value(v) {
-      if (this.selectEdit) {
-        this.selectEdit.value = v;
-      } else {
-        this.select.element.value = v;
-      }
-    }
-
-    addOption(text) {
-      const o = document.createElement('option');
-      o.innerText = text;
-      this.select.element.add(o);
-    }
-
-    resize(width, height) {
-      if (!this._element) {
-        return;
-      }
-
-      // SELECT elements behave differently than other elements with resizing.
-      this.select.element.style.width = `${width}px`;
-      this.select.element.style.height = `${height}px`;
-
-      this.onResize();
-
-      if (!Widget.disablePaintingOnResize) {
-        this.paintEvent();
-      }
-    }
-  }
-
-  function getTypeName(type) {
-    if (type.isArray) {
-      return `array<${getTypeName(type.format)}>`;
-    }
-    if (type.isTemplate) {
-      return `${type.name}<${getTypeName(type.format)}>`;
-    }
-    return type.name;
-  }
-    
-  function getNestedStructs(type) {
-    if (type.isStruct) {
-      const nested = [];
-      for (const member of type.members) {
-        const structs = getNestedStructs(member.type);
-        nested.push(...structs);
-      }
-      nested.push(type);
-      return nested;
-    } else if (type.format !== undefined) {
-      return getNestedStructs(type.format);
-    }
-    return [];
-  }
-    
-  function _getStructFormat(struct) {
-    if (!struct?.members) {
-      return "";
-    }
-    let format = `struct ${struct.name} {\n`;
-    for (const member of struct.members) {
-      format += `  ${member.name}: ${getTypeName(member.type)},\n`;
-    }
-    format += "}\n";
-    return format;
-  }
-    
-  function getFormatFromReflection(type) {
-    if (type.isArray) {
-      return `array<${getFormatFromReflection(type.format)}>`;
-    }
-
-    if (type.isStruct) {
-      const structs = getNestedStructs(type);
-      let format = "";
-      for (const s of structs) {
-          format += _getStructFormat(s);
-      }
-      return format;
-    }
-
-    if (type.isTemplate) {
-      return `${type.name}<${getFormatFromReflection(type.format)}>`;
-    }
-
-    return type.name;
-  }
-
-  async function decodeDataUrl(dataUrl) {
-    const res = await fetch(dataUrl);
-    return new Uint8Array(await res.arrayBuffer());
-  }
-
-  class CaptureData {
-    constructor(objectDatabase) {
-      this.database = objectDatabase;
-
-      this.frameIndex = 0;
-      this.commands = [];
-      this.frameImageList = [];
-
-      this.onCaptureFrameResults = new Signal();
-      this.onUpdateCaptureStatus = new Signal();
-
-      this._loadedDataChunks = 0;
-      this._loadingImages = 0;
-      this._loadingBuffers = 0;
-      this._captureCount = 0;
-      this._pendingCommandBufferData = new Map();
-      this._timestampBuffer = null;
-      this._timestampChunkCount = 0;
-    }
-
-    captureTextureFrames(message) {
-      this._loadedDataChunks += message.chunkCount;
-      this._loadingImages += message.count ?? 0;
-      const textures = message.textures;
-      if (textures) {
-        for (const textureId of textures) {
-          const texture = this._getObject(textureId);
-          if (texture) {
-            texture.imageDataPending = true;
-          }
-        }
-      }
-    }
-
-    captureTextureDataChunk() {
-      this._loadedDataChunks--;
-    }
-
-    captureTextureLoaded() {
-      this._loadingImages--;
-    }
-
-    captureFrameResults(message) {
-      const frame = message.frame;
-      const count = message.count;
-      const batches = message.batches;
-      this.commands.length = count;
-      this.frameIndex = frame;
-      this._captureCount = batches;
-    }
-
-    captureFrameCommands(message) {
-      const commands = message.commands;
-      const index = message.index;
-      const count = message.count;
-      const frame = message.frame;
-      const pendingCommandBuffers = this._pendingCommandBufferData;
-      for (const ci in pendingCommandBuffers) {
-        const cmdData = pendingCommandBuffers[ci];
-        const cmd = commands[ci];
-        for (const m in cmdData) {
-          cmd[m] = cmdData[m];
-        }
-      }
-      this._pendingCommandBufferData.clear();
-      for (let i = 0, j = index; i < count; ++i, ++j) {
-        this.commands[j] = commands[i];
-      }
-      this._captureCount--;
-      if (this._captureCount === 0) {
-        this.onCaptureFrameResults.emit(frame, this.commands);
-      }
-    }
-
-    captureBuffers(message) {
-      this._loadingBuffers += message.count ?? 0;
-      this._loadedDataChunks += message.chunkCount;
-    }
-
-    captureBufferData(message) {
-      const id = message.commandId;
-      const entryIndex = message.entryIndex;
-      const offset = message.offset;
-      const size = message.size;
-      const index = message.index;
-      const count = message.count;
-      const chunk = message.chunk;
-      this._captureBufferData(id, entryIndex, offset, size, index, count, chunk);
-    }
-
-    getCaptureStatus() {
-      let text = "";
-      if (this._loadingImages || this._loadingBuffers || this._loadedDataChunks) {
-        text = "Loading ";
-
-        if (this._loadingImages) {
-          text += `Images: ${this._loadingImages} `;
-        }
-        if (this._loadingBuffers) {
-          text += `Buffers: ${this._loadingBuffers} `;
-        }
-        if (this._loadedDataChunks) {
-          text += `Data Chunks: ${this._loadedDataChunks} `;
-        }
-      }
-      return text;
-      //this._captureStatus.text = text;
-    }
-
-    _getObject(id) {
-      return this.database.getObject(id);
-    }
-
-    _captureBufferData(id, entryIndex, offset, size, index, count, chunk) {
-      if (id === -1000) {
-        // Timestamp buffer
-        if (this._timestampBuffer == null) {
-          this._timestampBuffer = new Uint8Array(size);
-          this._timestampChunkCount = count;
-        }
-        const self = this;
-        decodeDataUrl(chunk).then((chunkData) => {
-          self._timestampBuffer.set(chunkData, offset);
-          self._timestampChunkCount--;
-          if (self._timestampChunkCount === 0) {
-            let renderPassIndex = 0;
-            let computePassIndex = 0;
-
-            const timestampMap = new Array();
-
-            const timestampData = new BigInt64Array(self._timestampBuffer.buffer);
-            //console.log(timestampData.length / 2);
-
-            const firstTime = Number(timestampData[0]) / 1000000.0;
-
-            for (let i = 2, k = 0; i < timestampData.length; i += 2) {
-              const start = timestampData[i];
-              const end = timestampData[i + 1];
-              const duration = Number(end - start) / 1000000.0; // convert ns to ms
-              for (; k < self.commands.length; k++) {
-                const command = self.commands[k];
-                if (command.method === "beginRenderPass" ||
-                    command.method === "beginComputePass") {
-                  command.duration = duration;
-                  command.startTime = Number(start) / 1000000.0;
-                  command.endTime = Number(end) / 1000000.0;
-
-                  timestampMap.push(command);
-
-                  if (command.header) {
-                    if (command.method === "beginRenderPass") {
-                      const headerText = `Render Pass ${renderPassIndex} Duration: ${command.duration}ms`;
-                      command.header.text = headerText;
-                      renderPassIndex++;
-                    } else {
-                      const headerText = `Compute Pass ${computePassIndex} Duration: ${command.duration}ms`;
-                      command.header.text = headerText;
-                      computePassIndex++;
-                    }
-                  }
-
-                  k++;
-                  break;
-                }
-              }
-            }
-
-            timestampMap.sort((a, b) => { return a.startTime - b.startTime; });
-            for (const command of timestampMap) {
-              console.log(`${command.startTime - firstTime}: [${command.id}]: ${command.method} -> ${command.duration}ms`);
-            }
-
-            self.onUpdateCaptureStatus.emit();
-          }
-        }).catch((error) => {
-          console.error(error.message);
-          self.onUpdateCaptureStatus.emit();
-        });
-        return;
-      }
-
-      let command = this.commands[id];
-      if (!command) {
-        command = this._pendingCommandBufferData[id] ?? {};
-        this._pendingCommandBufferData[id] = command;
-      }
-
-      const self = this;
-      decodeDataUrl(chunk).then((chunkData) => {
-        const command = self.commands[id] ?? self._pendingCommandBufferData[id];
-        self._addDataMembersToCommand(command, entryIndex, size, count);
-        self._loadedDataChunks--;
-        try {
-          command.bufferData[entryIndex].set(chunkData, offset);
-          command.loadedDataChunks[entryIndex][index] = true;
-        } catch (e) {
-          console.log(e);
-          command.loadedDataChunks[entryIndex].length = 0;
-          command.isBufferDataLoaded[entryIndex] = false;
-        }
-
-        let loaded = true;
-        for (let i = 0; i < count; ++i) {
-          if (!command.loadedDataChunks[entryIndex][i]) {
-            loaded = false;
-            break;
-          }
-        }
-        command.isBufferDataLoaded[entryIndex] = loaded;
-
-        if (command.isBufferDataLoaded[entryIndex]) {
-          self._loadingBuffers--;
-          command.loadedDataChunks[entryIndex].length = 0;
-        }
-
-        self.onUpdateCaptureStatus.emit();
-      }).catch((error) => {
-        console.error(error);
-        self._loadedDataChunks--;
-        command.loadedDataChunks[entryIndex][index] = true;
-        let loaded = true;
-        for (let i = 0; i < count; ++i) {
-          if (!command.loadedDataChunks[entryIndex][i]) {
-            loaded = false;
-            break;
-          }
-        }
-        command.isBufferDataLoaded[entryIndex] = loaded;
-        if (command.isBufferDataLoaded[entryIndex]) {
-          self._loadingBuffers--;
-          command.loadedDataChunks[entryIndex].length = 0;
-        }
-
-        self.onUpdateCaptureStatus.emit();
-      });
-    }
-
-    _addDataMembersToCommand(command, entryIndex, size, count) {
-      if (!command.bufferData) {
-        command.bufferData = [];
-      }
-
-      if (!command.dataPending) {
-        command.dataPending = [];
-      }
-
-      if (!command.bufferData[entryIndex]) {
-        command.bufferData[entryIndex] = new Uint8Array(size);
-        command.dataPending[entryIndex] = true;
-      }
-
-      /*const bufferData = command.bufferData[entryIndex];
-      if (bufferData.length != size) {
-        console.log("!!!!!!!!!!!!!!! INVALID BUFFER SIZE", bufferData.length, size);
-        return;
-      }*/
-
-      if (!command.loadedDataChunks) {
-        command.loadedDataChunks = [];
-      }
-
-      if (!command.loadedDataChunks[entryIndex]) {
-        command.loadedDataChunks[entryIndex] = [];
-      }
-
-      if (command.loadedDataChunks[entryIndex].length !== count) {
-        command.loadedDataChunks[entryIndex].length = count;
-      }
-
-      if (!command.isBufferDataLoaded) {
-        command.isBufferDataLoaded = [];
-      }
-    }
-  }
-
-  /**
-   * A draggable bar to adjust sizes of elements in a splitter.
-   */
-  class SplitBar extends Div {
-    constructor(orientation, parent, options) {
-      super(parent, options);
-
-      this.orientation = orientation;
-      this._mousePressed = false;
-      this._mouseX = 0;
-      this._mouseY = 0;
-      this._prevWidget = null;
-      this._nextWidget = null;
-      this._splitIndex = 0;
-
-      this._element.classList.add('splitbar');
-
-      if (this.orientation == SplitBar.Horizontal) {
-        this._element.style.height = `${SplitBar.size}px`;
-        this._element.style.width = '100%';
-        this._element.style.cursor = 'n-resize';
-      } else {
-        this._element.style.width = `${SplitBar.size}px`;
-        this._element.style.height = '100%';
-        this._element.style.cursor = 'e-resize';
-      }
-
-      this.enablePointerEvents();
-    }
-
-    pointerDownEvent(e) {
-      this._mousePressed = true;
-      this._mouseX = e.clientX;
-      this._mouseY = e.clientY;
-      for (let i = 0; i < this.parent.children.length; ++i) {
-        let w = this.parent.children[i];
-        if (w === this) {
-          this._splitIndex = i;
-          this._prevWidget = this.parent.children[i - 1];
-          this._nextWidget = this.parent.children[i + 1];
-          break;
-        }
-      }
-      if (this._prevWidget) {
-        this._prevWidget._startResize();
-      }
-      if (this._nextWidget) {
-        this._nextWidget._startResize();
-      }
-
-      this.element.setPointerCapture(e.pointerId);
-    }
-
-    pointerMoveEvent(e) {
-      if (!this._mousePressed) {
-        return;
-      }
-
-      if (this.orientation === SplitBar.Horizontal) {
-        const dy = e.clientY - this._mouseY;
-        if (dy != 0) {
-          if (this.parent.mode === 0) {
-            const pct = dy / this.parent.height;
-            this.parent.position += pct;
-          } else {
-            this.parent.position += dy;
-          }
-        }
-      } else {
-        const dx = e.clientX - this._mouseX;
-        if (dx != 0) {
-          if (this.parent.mode === 0) {
-            const pct = dx / this.parent.width;
-            this.parent.position += pct;
-          } else {
-            this.parent.position += dx;
-          }
-        }
-      }
-
-      this._mouseX = e.clientX;
-      this._mouseY = e.clientY;
-
-      return false;
-    }
-
-    pointerUpEvent() {
-      this._prevWidget = null;
-      this._nextWidget = null;
-      this._mousePressed = false;
-      Widget.disablePaintingOnResize = false;
-      for (let w of this.parent.children) {
-        w.repaint(true);
-      }
-      return false;
-    }
-  }
-
-  SplitBar.isSplitBar = true;
-  SplitBar.Horizontal = 0;
-  SplitBar.Vertical = 1;
-  SplitBar.size = 6;
-
-  /**
-   * The children of this widget are arranged horizontally or vertically and separated by a
-   * draggable SplitBar.
-   */
-  class Split extends Div {
-    constructor(parent, options) {
-      super(parent);
-      this.classList.add('split', 'disable-selection');
-
-      this._direction = Split.Horizontal;
-      this._position = 0.5;
-      this.mode = Split.Percentage;
-
-      if (options) {
-        this.configure(options);
-      }
-
-      if (this._direction === Split.Horizontal) {
-        this.classList.add('hsplit');
-      } else {
-        this.classList.add('vsplit');
-      }
-    }
-
-    configure(options) {
-      if (options.direction !== undefined) {
-        this._direction = options.direction;
-      }
-
-      super.configure(options);
-
-      if (options.position !== undefined) {
-        this.position = options.position;
-        if (this.position > 1) {
-          this.mode = Split.Pixel;
-        }
-      }
-    }
-
-    get direction() {
-      return this._direction;
-    }
-
-    get position() {
-      return this._position;
-    }
-
-    set position(pos) {
-      this._position = pos;
-      this.updatePosition();
-    }
-
-    updatePosition() {
-      if (this.children.length < 3) {
-        return;
-      }
-
-      const numSplitBars = this.children.length - 2;
-      const splitBarSize = numSplitBars * SplitBar.size;
-
-      let splitPos;
-      let splitPos2;
-      if (this._position < 1) {
-        const pct = this._position * 100;
-        splitPos = `${pct}%`;
-        splitPos2 = `calc(${100 - pct}% - ${splitBarSize}px)`;
-      } else {
-        splitPos = `${this._position}px`;
-        splitPos2 = `calc(100% - ${this._position}px - ${splitBarSize}px)`;
-      }
-
-      if (this._direction == Split.Horizontal) {
-        this.children[0].style.width = splitPos;
-        this.children[0].element.width = '0';
-
-        this.children[2].style.width = splitPos2;
-        this.children[2].element.width = '0';
-      } else {
-        this.children[0].element.height = '0';
-        this.children[0].style.height = splitPos;
-
-        this.children[2].style.height = splitPos2;
-        this.children[2].element.height = '0';
-      }
-
-      this.onResize();
-    }
-
-    appendChild(child) {
-      if (this.direction == Split.Horizontal)
-        child.style.display = 'inline-block';
-
-      if (this.children.length == 0 || child.constructor.isSplitBar) {
-        if (this.children.length == 0) {
-          child.style.width = '100%';
-          child.style.height = '100%';
-        } else {
-          if (this._direction == Split.Horizontal) {
-            child.style.height = '100%';
-          } else {
-            child.style.width = '100%';
-          }
-        }
-        super.appendChild(child);
-        return;
-      }
-
-      const percent = (1 / (this.children.length + 1)) * 100;
-
-      new SplitBar(
-        this._direction == Split.Horizontal
-          ? SplitBar.Vertical
-          : SplitBar.Horizontal,
-        this
-      );
-
-      super.appendChild(child);
-
-      const numSplitBars = this.children.length - 2;
-      const splitBarSize = numSplitBars * SplitBar.size;
-
-      for (const c of this.children) {
-        if (!c.constructor.isSplitBar) {
-          if (c === this.children[this.children.length - 1]) {
-            if (this._direction == Split.Horizontal) {
-              c.element.width = '0';
-              c.style.height = '100%';
-              c.style.width = `calc(${100 - percent}% - ${splitBarSize}px)`;
-            } else {
-              c.element.height = '0';
-              c.style.width = '100%';
-              c.style.height = `calc(${100 - percent}% - ${splitBarSize}px)`;
-            }
-          } else {
-            if (this._direction == Split.Horizontal) {
-              c.style.width = `${percent}%`;
-            } else {
-              c.style.height = `${percent}%`;
-            }
-          }
-        }
-
-        c.onResize();
-      }
-
-      if (this._position != 0.5) {
-        this.updatePosition();
-      }
-    }
-  }
-
-  Split.Horizontal = 0;
-  Split.Vertical = 1;
-  Split.Percentage = 0;
-  Split.Pixel = 1;
-
-  class Img extends Widget {
-    constructor(parent, options) {
-      super('img', parent, options);
-    }
-
-    get src() {
-      return this.element.src;
-    }
-
-    set src(v) {
-      this.element.src = v;
-    }
-
-    configure(options) {
-      if (!options) {
-        return;
-      }
-      super.configure(options);
-      if (options.src !== undefined) {
-        this.element.src = options.src;
-      }
-    }
   }
 
   // These are filled with ranges (rangeFrom[i] up to but not including
@@ -45518,7 +51185,7 @@ var __webgpu_inspector_window = (function (exports) {
 
     _setBufferFormat(type, typeName, format, skipStructEncapsulation = false, radix = 10) {
       try {
-        let reflect = new WgslReflect(format);
+        let reflect = new WgslReflect$1(format);
         if (reflect) {
           for (const struct of reflect.structs) {
             if (struct.name === typeName) {
@@ -45623,7 +51290,7 @@ var __webgpu_inspector_window = (function (exports) {
         return resource.type.replacement || resource.type;
       }
 
-      if (resource.resourceType === ResourceType.Uniform) {
+      if (resource.resourceType === ResourceType$1.Uniform) {
         const typeName = this._getTypeName(resource.type);
         new Div(parentWidget, { text: `UNIFORM: ${resource.name}: ${typeName}` });
 
@@ -45632,7 +51299,7 @@ var __webgpu_inspector_window = (function (exports) {
         bufferDataUI.parent = parentWidget;
 
         this._showBufferDataType(bufferDataUI, resourceType(resource), bufferData);
-      } else if (resource.resourceType === ResourceType.Storage) {
+      } else if (resource.resourceType === ResourceType$1.Storage) {
         const typeName = this._getTypeName(resource.type);
         new Div(parentWidget, { text: `STORAGE ${resource.access}: ${resource.name}: ${typeName}` });
 
