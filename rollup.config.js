@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import * as path from "node:path";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
-import { terser } from "rollup-plugin-terser";
+import terser from "@rollup/plugin-terser";
 import copy from "rollup-plugin-copy";
 import fg from 'fast-glob';
 import { SourceMapConsumer, SourceNode } from 'source-map'
@@ -86,7 +86,7 @@ function build(name, input, dst, file, copyFiles, watchInclude) {
         }
       },
       nodeResolve(),
-      /*terser({
+      terser({
         ecma: 2020,
         compress: {
           module: true,
@@ -97,7 +97,7 @@ function build(name, input, dst, file, copyFiles, watchInclude) {
           drop_debugger: false
         },
         output: { quote_style: 1 }
-      })*/
+      })
     ]
   };
 
