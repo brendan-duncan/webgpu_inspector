@@ -14,6 +14,7 @@ export const Actions = {
   CaptureTextureFrames: "webgpu_inspect_capture_texture_frames",
   CaptureTextureData: "webgpu_inspect_capture_texture_data",
   CaptureBufferData: "webgpu_inspect_capture_buffer_data",
+  WriteBuffer: "wrebgpu_inspect_write_buffer",
 
   Recording: "webgpu_record_recording",
   RecordingCommand: "webgpu_record_command",

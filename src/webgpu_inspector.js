@@ -2107,14 +2107,16 @@ export let webgpuInspector = null;
     return _origFetch(url, init);
   };
 
-  const _origImportScripts = self.importScripts;
-  self.importScripts = function () {
-    const args = [...arguments];
-    for (let i = 0; i < args.length; ++i) {
-      args[i] = _getFixedUrl(args[i]);
-    }
-    return _origImportScripts(...args);
-  };
+  if (self.importScripts) {
+    const _origImportScripts = self.importScripts;
+    self.importScripts = function () {
+      const args = [...arguments];
+      for (let i = 0; i < args.length; ++i) {
+        args[i] = _getFixedUrl(args[i]);
+      }
+      return _origImportScripts(...args); 
+    };
+  }
 
   URL = new Proxy(URL, {
    construct(target, args, newTarget) {

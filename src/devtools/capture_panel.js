@@ -85,7 +85,7 @@ export class CapturePanel {
       self.captureFrameCount = Math.max(value, 1);
     } });
 
-    this.maxBufferSize = 10 * (1024 * 1024);
+    this.maxBufferSize = 1 * (1024 * 1024);
     new Span(controlBar, { text: "Max Buffer Size (Bytes):", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });
     new NumberInput(controlBar, { value: this.maxBufferSize, min: 1, step: 1, precision: 0, style: "display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;", onChange: (value) => {
       self.maxBufferSize = Math.max(value, 1);

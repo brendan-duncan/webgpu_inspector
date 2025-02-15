@@ -400,6 +400,9 @@ export class ShaderDebugger extends Div {
     }
 
     _createVariableDiv(v, parent) {
+        if (!v.value) {
+            return;
+        }
         const div = new Div(parent);
         const type = v.value.typeInfo;
         let typeName = type.name;
