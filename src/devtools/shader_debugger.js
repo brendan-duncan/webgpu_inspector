@@ -367,18 +367,20 @@ export class ShaderDebugger extends Div {
             const bindGroup = {};
             bindGroups[index] = bindGroup;
 
+            const bgObj = this.database.getObject(bgCmd.args[1].__id);
+
             if (bg.bufferData !== undefined) {
                 const bufferData = bg.bufferData;
-                let binding = 0;
+                let index = 0;
                 for (const buffer of bufferData) {
                     if (buffer) {
+                        const binding = bgObj.descriptor.entries[index].binding;
                         bindGroup[binding] = buffer;
                     }
-                    binding++;
+                    index++;
                 }
-            } 
+            }
 
-            const bgObj = this.database.getObject(bgCmd.args[1].__id);
             for (const b of bgObj.descriptor.entries) {
                 const binding = b.binding;
                 if (bindGroup[binding] !== undefined) {
