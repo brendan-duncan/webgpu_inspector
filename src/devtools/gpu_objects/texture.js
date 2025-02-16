@@ -143,7 +143,7 @@ export class Texture extends GPUObject {
           const value = pixelValue(imageData, offset, "8sint", 2);
           return { r: value[0], g: value[1] };
         }
-        
+
         case "rgba8unorm-srgb":
         case "rgba8unorm": {
           const value = pixelValue(imageData, offset, "8unorm", 4);
@@ -325,7 +325,7 @@ export class Texture extends GPUObject {
         return `${width}x${depthOrArrayLayers}`;
       }
       return `${width}`;
-    }    
+    }
     if (depthOrArrayLayers > 1) {
       return `${width}x${height}x${depthOrArrayLayers}`;
     }

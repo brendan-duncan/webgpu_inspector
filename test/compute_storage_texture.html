@@ -1,0 +1,96 @@
+<html>
+<body>
+  <canvas id="canvas" width="800" height="600"></canvas>
+<script type="module">
+async function main() {
+    const adapter = await navigator.gpu?.requestAdapter();
+    const hasBGRA8unormStorage = adapter.features.has('bgra8unorm-storage');
+    const device = await adapter?.requestDevice({
+      requiredFeatures: hasBGRA8unormStorage
+        ? ['bgra8unorm-storage']
+        : [],
+    });
+    if (!device) {
+      fail('need a browser that supports WebGPU');
+      return;
+    }
+
+    const canvas = document.querySelector('canvas');
+    const context = canvas.getContext('webgpu');
+    const presentationFormat = hasBGRA8unormStorage
+      ? navigator.gpu.getPreferredCanvasFormat()
+      : 'rgba8unorm';
+    context.configure({
+      device,
+      format: presentationFormat,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING,
+    });
+
+    const code = `
+     @group(0) @binding(0) var tex: texture_storage_2d<${presentationFormat}, write>;
+
+      @compute @workgroup_size(1) fn cs(
+        @builtin(global_invocation_id) id : vec3u
+      )  {
+        let size = textureDimensions(tex);
+        let center = vec2f(size) / 2.0;
+        let pos = id.xy;
+        let dist = distance(vec2f(pos), center);
+        let stripe = dist / 32.0 % 2.0;
+        let red = vec4f(1, 0, 0, 1);
+        let cyan = vec4f(0, 1, 1, 1);
+        let color = select(red, cyan, stripe < 1.0);
+        textureStore(tex, pos, color);
+      }
+    `;
+
+    const module = device.createShaderModule({code});
+    const pipeline = device.createComputePipeline({
+      label: 'circles in storage texture',
+      layout: 'auto',
+      compute: {
+        module,
+      },
+    });
+
+    const texture = context.getCurrentTexture();
+
+    const bindGroup = device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: texture.createView() },
+      ],
+    });
+
+    const encoder = device.createCommandEncoder({ label: 'our encoder' });
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(texture.width, texture.height);
+    pass.end();
+
+    const commandBuffer = encoder.finish();
+    device.queue.submit([commandBuffer]);
+
+    // An explicit device.destroy() will tell the webgpu_inspector to stop capturing,
+    // otherwise it will stop capturing when the device is garbage collected.
+    // There isn't a good way to identify that the page is finished executing to know
+    // the capture is finished.
+    device.destroy();
+  }
+
+  function log(...args) {
+    const elem = document.createElement('pre');
+    elem.textContent = args.join(' ');
+    document.body.appendChild(elem);
+  }
+
+  function fail(msg) {
+    // eslint-disable-next-line no-alert
+    alert(msg);
+  }
+
+  main();
+</script>
+</body>
+</html>

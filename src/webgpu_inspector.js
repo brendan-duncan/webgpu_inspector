@@ -564,6 +564,8 @@ export let webgpuInspector = null;
         const toDestroy = [...this._toDestroy];
         this._toDestroy.length = 0;
 
+        this._pendingMapCount += captureBuffers.length + captureTextures.length;
+
         object.onSubmittedWorkDone().then( async () => {
           self.disableRecording();
 
@@ -696,7 +698,7 @@ export let webgpuInspector = null;
                 // This is a canvas texture view
                 const texture = entry.resource.__texture;
                 if (texture.__frameIndex < this._frameIndex) {
-                  const message = `A BindGroup(${object.__id}) with an expired canvs texture is being used.`;
+                  const message = `A BindGroup(${object.__id}) with an expired canvas texture is being used.`;
                   this._postMessage({ "action": Actions.ValidationError, id: 0, message, stacktrace });
                 }
               }
@@ -1481,7 +1483,7 @@ export let webgpuInspector = null;
       if (method === "setBindGroup") {
         newArgs = [];
         const binding = a[0];
-       const bindGroup = a[1];
+        const bindGroup = a[1];
         newArgs.push(binding);
         newArgs.push(bindGroup);
         // handle dynamic offsets data, converting buffer views to Uint32Array
@@ -1548,6 +1550,12 @@ export let webgpuInspector = null;
                 this._captureBuffersCount++;
                 this._updateStatusMessage();
               }
+            } else if (entry?.resource instanceof GPUTextureView) {
+              if (!object.__captureTextureViews) {
+                object.__captureTextureViews = new Set();
+              }
+              object.__captureTextureViews.add(entry.resource);
+              this._updateStatusMessage();
             }
           }
         }
@@ -1713,7 +1721,6 @@ export let webgpuInspector = null;
 
         this._mappedTextureBufferCount++;
         const self = this;
-        this._pendingMapCount++;
         tempBuffer.mapAsync(GPUMapMode.READ).then(() => {
           self._mappedTextureBufferCount--;
           self._updateStatusMessage();
@@ -1837,7 +1844,6 @@ export let webgpuInspector = null;
           "chunkCount": totalChunks });
       }
 
-      let count = buffers.length;
       for (const bufferInfo of buffers) {
         const tempBuffer = bufferInfo.tempBuffer;
         const commandId = bufferInfo.commandId;
@@ -1845,7 +1851,6 @@ export let webgpuInspector = null;
         const self = this;
         this._mappedBufferCount++;
         this._updateStatusMessage();
-        this._pendingMapCount++;
         tempBuffer.mapAsync(GPUMapMode.READ).then(() => {
           self._mappedBufferCount--;
           self._updateStatusMessage();

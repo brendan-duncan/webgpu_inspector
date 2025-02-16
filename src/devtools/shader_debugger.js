@@ -4,6 +4,10 @@ import { Split } from "./widget/split.js";
 import { Img } from "./widget/img.js";
 import { Collapsable } from "./widget/collapsable.js";
 import { WgslDebug } from "wgsl_reflect/wgsl_debugger.module.js";
+import {
+    Texture,
+    TextureView,
+  } from "./gpu_objects/index.js";
 
 import { EditorView } from "codemirror";
 import { keymap, highlightSpecialChars, drawSelection, dropCursor, gutter, GutterMarker,
@@ -358,14 +362,40 @@ export class ShaderDebugger extends Div {
 
         this.pipelineState.bindGroups.forEach((bgCmd) => {
             const index = bgCmd.args[0];
-            //const bg = this.database.getObject(bgCmd.args[1].__id);
-            const bufferData = this.pipelineState.bindGroups[index].bufferData;
-            let binding = 0;
-            const bindgroup = {};
-            for (const buffer of bufferData) {
-                bindgroup[binding++] = buffer;
+            const bg = this.pipelineState.bindGroups[index];
+
+            const bindGroup = {};
+            bindGroups[index] = bindGroup;
+
+            if (bg.bufferData !== undefined) {
+                const bufferData = bg.bufferData;
+                let binding = 0;
+                for (const buffer of bufferData) {
+                    if (buffer) {
+                        bindGroup[binding] = buffer;
+                    }
+                    binding++;
+                }
+            } 
+
+            const bgObj = this.database.getObject(bgCmd.args[1].__id);
+            for (const b of bgObj.descriptor.entries) {
+                const binding = b.binding;
+                if (bindGroup[binding] !== undefined) {
+                    continue
+                }
+
+                const resource = this.database.getObject(b.resource.__id);
+                if (resource instanceof TextureView) {
+                    const texture = resource.__texture;
+                    if (!texture.imageData) {
+                        console.log("No image data for texture", texture);
+                        continue;
+                    }
+                    const size = [texture.width, texture.height, texture.depthOrArrayLayers];
+                    bindGroup[binding] = { texture: texture.imageData, size };
+                }
             }
-            bindGroups[index] = bindgroup;
         });
 
         if (!this.debugger) {
