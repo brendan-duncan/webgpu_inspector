@@ -1911,7 +1911,7 @@ export class CapturePanel {
               //children: [ new Img(null, { title: "Debug Shader", src: "img/debug.svg", style: "width: 15px; height: 15px; filter: invert(1);" }) ],
               text: "Debug",
               title: "Debug Shader", style: "background-color: rgb(90, 40, 40);", callback: () => {
-                self._debugShader(command, parentCommand);
+                self._debugShader(command, computeEntry, parentCommand);
             } });
           }
           const code = computeModule.descriptor.code;
@@ -1923,14 +1923,14 @@ export class CapturePanel {
     }
   }
 
-  _debugShader(command, parentCommand) {
+  _debugShader(command, entry, parentCommand) {
     const args = command.args;
     const id = args[0]?.__id;
     const pipeline = this._getObject(id);
     const desc = pipeline.descriptor;
     const computeId = desc.compute?.module?.__id;
-    const editor = new ShaderDebugger(parentCommand, this._captureData, this.database, this, { style: "overflow: clip;" });
-    this._captureTab.addTab(`Compute Module ID:${computeId}`, editor);
+    const editor = new ShaderDebugger(parentCommand, entry, this._captureData, this.database, this, { style: "overflow: clip;" });
+    this._captureTab.addTab(`Compute Module ID:${computeId}: ${entry}`, editor);
     this._captureTab.setActivePanel(editor);
   }
 

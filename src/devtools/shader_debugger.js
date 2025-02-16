@@ -158,7 +158,7 @@ const shaderEditorSetup = (() => [
 ])();
 
 export class ShaderDebugger extends Div {
-    constructor(command, data, database, capturePanel, options) {
+    constructor(command, entry, data, database, capturePanel, options) {
         super(null, options);
         this._element.classList.add('shader-debugger');
 
@@ -166,6 +166,7 @@ export class ShaderDebugger extends Div {
         this.command = command;
         this.captureData = data;
         this.database = database;
+        this.entry = entry;
 
         this.pipelineState = this.capturePanel._getPipelineState(command);
         const computePass = this.pipelineState.pipeline;
@@ -351,9 +352,16 @@ export class ShaderDebugger extends Div {
             return;
         }
 
-        const kernel = reflection.entry.compute[0];
+        let kernel = null;
+        if (this.entry) {
+            kernel = reflection.entry.compute.find((k) => k.name === this.entry);
+        }
+
         if (!kernel) {
-            return;
+            kernel = reflection.entry.compute[0]
+            if (!kernel) {
+                return;
+            }
         }
 
         const kernelName = kernel.name;
