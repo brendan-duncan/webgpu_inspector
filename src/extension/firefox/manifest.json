@@ -3,7 +3,7 @@
 
   "name": "WebGPU Inspector",
   "short_name": "webgpu_inspector",
-  "version": "0.10.0",
+  "version": "0.11.0",
   
   "description": "WebGPU Inspector Debugging Tools",
   "author": "Brendan Duncan",

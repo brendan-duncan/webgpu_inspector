@@ -1,3 +1,8 @@
+## v0.11.0
+
+* Compute shader debugger (experimental)
+* Fix worker inspection error from importScripts, causing some pages to fail when inspected.
+
 ## v0.10.0
 
 * Fix shader parse issue with literal values like "-1f".
