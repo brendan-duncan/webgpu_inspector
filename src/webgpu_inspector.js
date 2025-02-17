@@ -1640,23 +1640,23 @@ export let webgpuInspector = null;
 
       if (method === "beginRenderPass") {
         if (args[0]?.colorAttachments?.length > 0) {
-          result.__captureTextureViews = new Set();
+          result.__captureRenderPassTextures = new Set();
           for (const attachment of args[0].colorAttachments) {
             if (!attachment) {
               continue;
             }
             const captureTextureView = attachment.resolveTarget ?? attachment.view;
-            result.__captureTextureViews.add(captureTextureView);
+            result.__captureRenderPassTextures.add(captureTextureView);
           }
         }
         result.__descriptor = args[0];
         if (args[0]?.depthStencilAttachment) {
-          if (!result.__captureTextureViews) {
-            result.__captureTextureViews = new Set();
+          if (!result.__captureRenderPassTextures) {
+            result.__captureRenderPassTextures = new Set();
           }
           const attachment = args[0].depthStencilAttachment;
           const captureTextureView = attachment.resolveTarget ?? attachment.view;
-          result.__captureTextureViews.add(captureTextureView);
+          result.__captureRenderPassTextures.add(captureTextureView);
         }
         this._inComputePass = false;
         result.__commandEncoder = object;
@@ -1670,12 +1670,30 @@ export let webgpuInspector = null;
           this._recordCaptureBuffers(commandEncoder, object.__captureBuffers);
           this._updateStatusMessage();
         }
-        if (object.__captureTextureViews?.size > 0) {
+
+        const textures = new Set();
+        if (object.__captureRenderPassTextures?.size > 0) {
           let passId = this._frameRenderPassCount * maxColorAttachments;
+          for (const captureTextureView of object.__captureRenderPassTextures) {
+            const texture = captureTextureView.__texture;
+            if (texture) {
+              if (!textures.has(texture)) {
+                this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, passId++);
+                textures.add(texture);
+              }
+            }
+          }
+          object.__captureRenderPassTextures.clear();
+        }
+        if (object.__captureTextureViews?.size > 0) {
           for (const captureTextureView of object.__captureTextureViews) {
             const texture = captureTextureView.__texture;
             if (texture) {
-              this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, passId++);
+              if (!textures.has(texture)) {
+                // TODO: capture texture view mip levels
+                this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, -1);
+                textures.add(texture);
+              }
             }
           }
           object.__captureTextureViews.clear();
@@ -1698,7 +1716,7 @@ export let webgpuInspector = null;
     }
 
     _sendCaptureTextureBuffers(buffers) {
-     const textures = [];
+      const textures = [];
       for (const textureBuffer of buffers) {
         textures.push(textureBuffer.id);
       }
