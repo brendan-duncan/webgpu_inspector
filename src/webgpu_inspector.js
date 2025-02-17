@@ -1671,16 +1671,12 @@ export let webgpuInspector = null;
           this._updateStatusMessage();
         }
 
-        const textures = new Set();
         if (object.__captureRenderPassTextures?.size > 0) {
           let passId = this._frameRenderPassCount * maxColorAttachments;
           for (const captureTextureView of object.__captureRenderPassTextures) {
             const texture = captureTextureView.__texture;
             if (texture) {
-              if (!textures.has(texture)) {
-                this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, passId++);
-                textures.add(texture);
-              }
+              this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, passId++);
             }
           }
           object.__captureRenderPassTextures.clear();
@@ -1689,11 +1685,8 @@ export let webgpuInspector = null;
           for (const captureTextureView of object.__captureTextureViews) {
             const texture = captureTextureView.__texture;
             if (texture) {
-              if (!textures.has(texture)) {
-                // TODO: capture texture view mip levels
-                this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, -1);
-                textures.add(texture);
-              }
+              // TODO: capture texture view mip levels
+              this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, -1);
             }
           }
           object.__captureTextureViews.clear();
@@ -1946,6 +1939,12 @@ export let webgpuInspector = null;
       let formatInfo = format ? TextureFormatInfo[format] : undefined;
       if (!formatInfo) { // GPUExternalTexture?
         return;
+      }
+
+      for (const captureTexture of this._captureTexturedBuffers) {
+        if (captureTexture.id === id && captureTexture.passId === passId && captureTexture.mipLevel === mipLevel) {
+          return;
+        }
       }
 
       if (formatInfo.isDepthStencil) {
