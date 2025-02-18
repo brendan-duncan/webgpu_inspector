@@ -17,22 +17,47 @@
 
 Capture all rendering commands used to render a frame, letting you inspect each command, as well as providing information about the rendering state at each command. It also captures the image results of each render pass.
 
-#### Note
-
-Your rendering loop needs be using requestAnimationFrame for Capture to work, as Capture uses that to identify what commands to capture for a frame.
-
-![Capture](images/capture.png)
+<a href="images/capture.png">
+<img src="images/capture.png" style="width:800px">
+</a>
 
 ## Capturing Frame Data
 ###### [Back to top](#capture)
 
 Press the **Capture** button to capture a frame from the page.
 
+### Capture Mode
+
+Capture has two modes: **Immediate** and **Specific Frame**.
+
+#### Immediate Capture
+
 ![Capture Button](images/capture_button.png)
+
+Immediate capture will record the current frame on the page.
+
+**Frames** indicates how many frames to capture.
+
+#### Specific Frame Capture
+
+![Capture Button](images/capture_specific_frame.png)
+
+Specific frame capture will record a specific frame from the load of the page. Using this capture mode will cause the page to refresh, and start recording at the indicated frame.
+
+A start frame of **0** will record all commands from the start of the page load, including those outside of a requestAnimationFrame frame. This allows you to capture commands for pages that do not use requestAnimationFrame.
+
+**Frames** indicates how many frames to capture once it has started recording.
+
+For pages that do not use requestAnimationFrame, the Frames valu does not do anything. In that case, recording will continue until the GPU device has been destroyed or gabage collected, or you press the inspector overlay on the page to stop the recording.
 
 #### Max Buffer Size
 
 The **Max Buffer Size** value specifies the maximum buffer size Capture will record, for Uniform and Storage buffers. Sending buffer data to the DevTools panel can be slow, so limiting the buffer size can help capture performance. Large buffers are typically used for storage buffers.
+
+#### Note
+
+Frame capture works best when requestAnimationFrame is used, as Capture uses that to identify what commands to capture for a frame. Immediate capture will not work without requestAnimationFrame. In that case, use **Specific Frame** capture with frame 0, to start recording after page load.
+
 
 ## Frame Commands
 ###### [Back to top](#capture)
