@@ -4,10 +4,7 @@ import { Split } from "./widget/split.js";
 import { Img } from "./widget/img.js";
 import { Collapsable } from "./widget/collapsable.js";
 import { WgslDebug } from "wgsl_reflect/wgsl_debugger.module.js";
-import {
-    Texture,
-    TextureView,
-  } from "./gpu_objects/index.js";
+import { TextureView } from "./gpu_objects/index.js";
 
 import { EditorView } from "codemirror";
 import { keymap, highlightSpecialChars, drawSelection, dropCursor, gutter, GutterMarker,
@@ -17,7 +14,7 @@ import { defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatchi
   foldGutter, foldKeymap } from "@codemirror/language";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { searchKeymap, openSearchPanel  } from "@codemirror/search";
-import {  completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { lintKeymap } from "@codemirror/lint";
 import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
 import { cobalt } from 'thememirror';
@@ -162,6 +159,9 @@ export class ShaderDebugger extends Div {
         super(null, options);
         this._element.classList.add('shader-debugger');
 
+        this._hotkeyEvent = this.hotkeyEvent.bind(this);
+        document.addEventListener("keydown", this._hotkeyEvent);
+
         this.capturePanel = capturePanel;
         this.command = command;
         this.captureData = data;
@@ -218,8 +218,8 @@ export class ShaderDebugger extends Div {
         });
 
         new Button(this.controls, {
-            children: [ new Img(null, { title: "Debug Shader", src: "img/debug.svg", style: "width: 15px; height: 15px; filter: invert(1);" }) ],
-            title: "Debug Shader",
+            children: [ new Img(null, { title: "Debug Shader (F8)", src: "img/debug.svg", style: "width: 15px; height: 15px; filter: invert(1);" }) ],
+            title: "Debug Shader (F8)",
             onClick: () => {
                 this.debug();
             }
@@ -228,8 +228,8 @@ export class ShaderDebugger extends Div {
         new Div(this.controls, { style: "flex-grow: 1;" });
 
         this.continueButton = new Button(this.controls, {
-            children: [new Img(null, { title: "Continue", src: "img/debug-continue-small.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
-            title: "Continue",
+            children: [new Img(null, { title: "Continue (F5)", src: "img/debug-continue-small.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
+            title: "Continue (F5)",
             style: "background-color: #777;",
             onClick: () => {
                 this.pauseContinue();
@@ -237,32 +237,32 @@ export class ShaderDebugger extends Div {
         });
 
         new Button(this.controls, {
-            children: [new Img(null, { title: "Step Over", src: "img/debug-step-over.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
-            title: "Step Over",
+            children: [new Img(null, { title: "Step Over (F10)", src: "img/debug-step-over.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
+            title: "Step Over (F10)",
             style: "background-color: #777;",
             onClick: () => {
                 this.stepOver();
             }
         });
         new Button(this.controls, {
-            children: [new Img(null, { title: "Step Into", src: "img/debug-step-into.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
-            title: "Step Into",
+            children: [new Img(null, { title: "Step Into (F11)", src: "img/debug-step-into.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
+            title: "Step Into (F11)",
             style: "background-color: #777;",
             onClick: () => {
                 this.stepInto();
             }
         });
         new Button(this.controls, {
-            children: [new Img(null, { title: "Step Out", src: "img/debug-step-out.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
-            title: "Step Out",
+            children: [new Img(null, { title: "Step Out (F12)", src: "img/debug-step-out.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
+            title: "Step Out (F12)",
             style: "background-color: #777;",
             onClick: () => {
                 this.stepOut();
             }
         });
         new Button(this.controls, {
-            children: [new Img(null, { title: "Restart", src: "img/debug-restart.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
-            title: "Restart",
+            children: [new Img(null, { title: "Restart (F7)", src: "img/debug-restart.svg", style: "width: 15px; height: 15px; filter: invert(1);" })],
+            title: "Restart (F7)",
             style: "background-color: #777;",
             onClick: () => {
                 this.restart();
@@ -295,6 +295,36 @@ export class ShaderDebugger extends Div {
         this.callstack = new Collapsable(this.watch, { collapsed: false, label: `Callstack` });;
 
         this.debug();
+    }
+
+    onDestroy() {
+        document.removeEventListener("keydown", this._hotkeyEvent);
+    }
+
+    hotkeyEvent(e) {
+        if (this.display === "none") {
+            return;
+        }
+
+        if (e.key === "F5") {
+            this.pauseContinue();
+            e.preventDefault();
+        } else if (e.key === "F10") {
+            this.stepOver();
+            e.preventDefault();
+        } else if (e.key === "F11") {
+            this.stepInto();
+            e.preventDefault();
+        } else if (e.key === "F12") {
+            this.stepOut();
+            e.preventDefault();
+        } else if (e.key === "F8") {
+            this.debug();
+            e.preventDefault();
+        } else if (e.key === "F7") {
+            this.restart();
+            e.preventDefault();
+        }
     }
 
     toggleBreakpoint(lineNo) {

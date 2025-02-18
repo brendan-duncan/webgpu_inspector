@@ -54,8 +54,8 @@ The **Thread ID** is the **global_invocation_id** of the thread you wish to debu
 The **global_invocation_id** is based on the **dispatch workgroup_id** from the dispatch 
 workgroup counts, and the local_invocation_id from the **workgroup_size** of the shader.
 
-Enter the global_invocation_id you wish to debug and press the debug icon to start debugging
-that invocation.
+Enter the global_invocation_id you wish to debug and press the <img src="images/shader_debugger_controls_start.png" style="width:45px"> button to start debugging
+that invocation.  Keyboard shortcut: **F8**
 
 ### Debugger Controls
 
@@ -65,16 +65,16 @@ The shader debugger will start paused on the first statement of the compute shad
 The toolbar at the top gives controls for stepping through the shader.
 
 <img src="images/shader_debugger_controls_play_pause.png" style="width:45px"> Run from the current position all the way through to the end,
-or until a breakpoint has been reached.
+or until a breakpoint has been reached. Pressing this button again will pause the execution. Keyboard shortcut: **F5**
 
-<img src="images/shader_debugger_controls_step_over.png" style="width:45px"> Execute the current statement, stepping over any function calls.
+<img src="images/shader_debugger_controls_step_over.png" style="width:45px"> Execute the current statement, stepping over any function calls.  Keyboard shortcut: **F10**
 
-<img src="images/shader_debugger_controls_step_into.png" style="width:45px"> Execute the current statement, stepping into any function calls.
+<img src="images/shader_debugger_controls_step_into.png" style="width:45px"> Execute the current statement, stepping into any function calls.  Keyboard shortcut: **F11**
 
 <img src="images/shader_debugger_controls_step_out.png" style="width:45px"> Run from the current position until the current block or function
-has completed.
+has completed.  Keyboard shortcut: **F12**
 
-<img src="images/shader_debugger_controls_restart.png" style="width:45px"> Restart debugging the shader from the beginning.
+<img src="images/shader_debugger_controls_restart.png" style="width:45px"> Restart debugging the shader from the beginning.  Keyboard shortcut: **F7**
 
 <div style="background-color: #ffedcc; color: #000; border-radius: 5px;">
 <div style="background-color: #f0b37e; color: #fff; padding-left: 5px; padding-right: 5px;"><b>Note</b></div>
