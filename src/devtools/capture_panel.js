@@ -4,6 +4,7 @@ import {
   TextureView
 } from "./gpu_objects/index.js";
 import { Button } from "./widget/button.js";
+import { Checkbox } from "./widget/checkbox.js";
 import { Collapsable } from "./widget/collapsable.js";
 import { Dialog } from "./widget/dialog.js";
 import { Div } from "./widget/div.js";
@@ -43,7 +44,8 @@ export class CapturePanel {
         this._captureData.onUpdateCaptureStatus.addListener(self._updateCaptureStatus, self);
 
         const frame = self.captureMode === 0 ? -1 : self.captureSpecificFrame;
-        self.port.postMessage({ action: PanelActions.Capture, captureFrameCount: this.captureFrameCount, maxBufferSize: self.maxBufferSize, frame });
+        const maxBufferSize = self.useMaxBufferSize ? self.maxBufferSize : -1;
+        self.port.postMessage({ action: PanelActions.Capture, captureFrameCount: this.captureFrameCount, maxBufferSize, frame });
       } catch (e) {
         console.error(e.message);
       }
@@ -86,10 +88,20 @@ export class CapturePanel {
     } });
 
     this.maxBufferSize = 1 * (1024 * 1024);
-    new Span(controlBar, { text: "Max Buffer Size (Bytes):", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });
-    new NumberInput(controlBar, { value: this.maxBufferSize, min: 1, step: 1, precision: 0, style: "display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;", onChange: (value) => {
+    this.useMaxBufferSize = false;
+    const useMaxBufferSizeBtn = new Checkbox(controlBar, { value: this.useMaxBufferSize, title: "Use Max Buffer Size", 
+      label: "Max Buffer Size (Bytes):", style: "margin-left: 10px; vertical-align: middle; margin-right: 5px;"});
+    const maxBufferSizeInput = new NumberInput(controlBar, { value: this.maxBufferSize, min: 1, step: 1, precision: 0,
+        style: "display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;", onChange: (value) => {
       self.maxBufferSize = Math.max(value, 1);
     } });
+
+
+    maxBufferSizeInput.disabled = !this.useMaxBufferSize;
+    useMaxBufferSizeBtn.input.onChange.addListener((value) => {
+      this.useMaxBufferSize = value;
+      maxBufferSizeInput.disabled = !value;
+    });
 
     new Span(controlBar, {  style: "" });
 

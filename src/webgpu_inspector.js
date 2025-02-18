@@ -1537,7 +1537,7 @@ export let webgpuInspector = null;
               const origSize = entry.resource.size ?? (buffer.size - offset);
               const size = alignTo(origSize, 4);
 
-              if (size < this._captureMaxBufferSize) {
+              if (this._captureMaxBufferSize < 0 || size <= this._captureMaxBufferSize) {
                 if (usesDynamicOffset && dynamicOffsets !== null) {
                   offset = mappedDynamicOffsets[dynamicOffsetIndex++];
                 }
