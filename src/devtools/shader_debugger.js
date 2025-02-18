@@ -8,7 +8,7 @@ import { TextureView } from "./gpu_objects/index.js";
 
 import { EditorView } from "codemirror";
 import { keymap, highlightSpecialChars, drawSelection, dropCursor, gutter, GutterMarker,
-  crosshairCursor, lineNumbers, Decoration } from "@codemirror/view";
+  crosshairCursor, lineNumbers, Decoration, hoverTooltip } from "@codemirror/view";
 import { EditorState, StateField, StateEffect, RangeSet } from "@codemirror/state";
 import { defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
   foldGutter, foldKeymap } from "@codemirror/language";
@@ -122,9 +122,48 @@ const lineHighlightMark = Decoration.line({
     attributes: {style: 'background-color:rgb(64, 73, 14)'},
 });
 
+const tooltipHover = hoverTooltip((view, pos, side) => {
+    const { from, to, text } = view.state.doc.lineAt(pos)
+    let start = pos;
+    let end = pos
+    while (start > from && /\w/.test(text[start - from - 1])) {
+        start--;
+    }
+    while (end < to && /\w/.test(text[end - from])) {
+        end++;
+    }
+    if (start == pos && side < 0 || end == pos && side > 0) {
+      return null;
+    }
+
+    const dbg = view.debugger;
+    const context = dbg.debugger.context;
+    const variables = context.variables;
+    const name = text.slice(start - from, end - from);
+    const variable = variables.get(name);
+    if (!variable) {
+        return null;
+    }
+
+    const tip = `${name}: ${variable.value}`;
+
+    return {
+      pos: start,
+      end,
+      above: true,
+      create(view) {
+        const dom = document.createElement("div");
+        dom.className = "cm-tooltip";
+        dom.textContent = tip;
+        return { dom };
+      }
+    }
+  })
+
 const shaderEditorSetup = (() => [
     breakpointGutter,
     debugLineHighlight,
+    tooltipHover,
     lineNumbers(),
     //highlightActiveLineGutter(),
     highlightSpecialChars(),

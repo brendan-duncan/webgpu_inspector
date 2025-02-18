@@ -1590,3 +1590,13 @@ ol::-webkit-scrollbar-thumb:hover {
   line-height: 16px;
   font-size: 12pt;
 }
+
+.cm-tooltip {
+  background-color: rgba(220, 220, 160, 0.95);
+  color: #000;
+  overflow: hidden;
+  border-radius: 5px 5px 5px 5px;
+  padding: 5px;
+  line-height: 16px;
+  font-size: 12pt;
+}
