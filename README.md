@@ -31,6 +31,7 @@ WebGPU Inspector provides the following capabilities:
 * A live view of all GPU objects and inspect their details.
 * Capture all GPU commands used to render a frame, along with render pass output images, textures, buffer data, render state.
 * Edit shaders live on the page.
+* [Debug shaders](docs/shader_debugger.md)
 * Inspect storage and uniform buffers used for draw and dispatch calls.
 * Inspect textures, including pixel values.
 * Plot frame times and object allocations over time.

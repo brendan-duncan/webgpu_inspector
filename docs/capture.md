@@ -10,6 +10,7 @@
 * [Uniform and Storage Buffer Inspection](#uniform-and-storage-buffer-inspection)
     * [Formatting Buffer Data](formatting_buffer_data.md)
 * [Frame Stats](#frame-stats)
+* [Shader Debugger](#shader-debugger)
 
 ## Introduction
 ###### [Back to top](#capture)
@@ -114,4 +115,15 @@ The Capture tool can provide various statistics about the capture. Press the **F
 
 <a href="images/capture_frame_stats.png">
 <img src="images/capture_frame_stats.png" style="width:512px">
+</a>
+
+## Shader Debugger
+###### [Back to top](#capture)
+
+Frame captures include the ability to debug shaders. This is an experimental feature, with only compute shaders currently supported.
+
+**[Shader Debugger](shader_debugger.md)**
+
+<a href="shader_debugger.md">
+<img src="images/shader_debugger.png" style="width:800px">
 </a>
