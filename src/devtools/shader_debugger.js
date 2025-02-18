@@ -3,7 +3,7 @@ import { Span } from "./widget/span.js";
 import { Split } from "./widget/split.js";
 import { Img } from "./widget/img.js";
 import { Collapsable } from "./widget/collapsable.js";
-import { WgslDebug } from "wgsl_reflect/wgsl_debugger.module.js";
+import { WgslDebug, WgslParser } from "wgsl_reflect/wgsl_debugger.module.js";
 import { TextureView } from "./gpu_objects/index.js";
 
 import { EditorView } from "codemirror";
@@ -126,17 +126,40 @@ const tooltipHover = hoverTooltip((view, pos, side) => {
     const { from, to, text } = view.state.doc.lineAt(pos)
     let start = pos;
     let end = pos
-    while (start > from && /\w/.test(text[start - from - 1])) {
+    while (start > from && /[\w.\[\]]/.test(text[start - from - 1])) {
         start--;
     }
     while (end < to && /\w/.test(text[end - from])) {
+        end++;
+    }
+    if (text[end] === "[") {
+        let bracketCount = 1;
+        while (end < to && bracketCount > 0) {
+            end++;
+            if (text[end] === "[") {
+                bracketCount++;
+            } if (text[end] === "]") {
+                bracketCount--;
+            }
+        }
         end++;
     }
     if (start == pos && side < 0 || end == pos && side > 0) {
       return null;
     }
 
-    const name = text.slice(start - from, end - from);
+    let name = text.slice(start - from, end - from);
+
+    if (/[.\[\]]/.test(name)) {
+        const fullName = name;
+        const match = fullName.match(/^(\w+)/);
+        if (match) {
+            name = match[1];
+            // TODO: build a postfix expression of array indices and field accesses
+            // to inspect the individual array elements and struct fields
+        }
+    }
+
     const dbg = view.debugger;
     const context = dbg.debugger.context;
     const variable = context.getVariableValue(name);
@@ -144,7 +167,7 @@ const tooltipHover = hoverTooltip((view, pos, side) => {
         return null;
     }
 
-    const tip = `${name}: ${variable.typeInfo.name} = ${variable.value}`;
+    const tip = `${name}: ${variable.typeInfo.name} = ${variable.toString()}`;
 
     return {
       pos: start,
