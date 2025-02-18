@@ -136,16 +136,15 @@ const tooltipHover = hoverTooltip((view, pos, side) => {
       return null;
     }
 
+    const name = text.slice(start - from, end - from);
     const dbg = view.debugger;
     const context = dbg.debugger.context;
-    const variables = context.variables;
-    const name = text.slice(start - from, end - from);
-    const variable = variables.get(name);
+    const variable = context.getVariableValue(name);
     if (!variable) {
         return null;
     }
 
-    const tip = `${name}: ${variable.value}`;
+    const tip = `${name}: ${variable.typeInfo.name} = ${variable.value}`;
 
     return {
       pos: start,
