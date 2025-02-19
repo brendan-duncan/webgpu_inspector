@@ -3,7 +3,7 @@ import { Span } from "./widget/span.js";
 import { Split } from "./widget/split.js";
 import { Img } from "./widget/img.js";
 import { Collapsable } from "./widget/collapsable.js";
-import { WgslDebug, WgslParser } from "wgsl_reflect/wgsl_debugger.module.js";
+import { WgslDebug } from "wgsl_reflect/wgsl_reflect.module.js";
 import { TextureView } from "./gpu_objects/index.js";
 
 import { EditorView } from "codemirror";
