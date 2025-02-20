@@ -70,11 +70,12 @@ const shaderEditorSetup = (() => [
 ])();
 
 export class InspectPanel {
-  constructor(window, parent) {
-    this.window = window;
+  constructor(win, parent) {
+    this.window = win;
 
     const self = this;
-    const controlBar = new Div(parent, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px; font-size: 10pt;" });
+    const _controlBar = new Div(parent, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px; font-size: 10pt; display: flex;" });
+    const controlBar = new Div(_controlBar);
 
     this.inspectButton = new Button(controlBar, { label: "Start", style: "background-color: #575;", callback: () => {
       try {
@@ -87,6 +88,12 @@ export class InspectPanel {
     this.uiFrameTime = new Span(stats, { style: "width: 140px; overflow: hidden;" });
     this.uiTotalTextureMemory = new Span(stats, { style: "margin-left: 20px;" });
     this.uiTotalBufferMemory = new Span(stats, { style: "margin-left: 20px;" });
+
+    new Span(_controlBar, { style: "flex-grow: 2;" });
+
+    new Button(_controlBar, { label: "Help", style: "margin-left: 20px; background-color: #557;", callback: () => {
+      window.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/inspect.md", "_blank");
+    }});
 
     this.plots = new Div(parent, { style: "display: flex; flex-direction: row; margin-bottom: 10px; height: 30px;" });
     new Span(this.plots, { text: "Frame Time", style: "color: #ccc; padding-top: 5px; margin-right: 10px; font-size: 10pt;"});
@@ -116,7 +123,7 @@ export class InspectPanel {
     this.database.onValidationError.addListener(this._validationError, this);
     this.database.onResolvePendingObject.addListener(this._resolvePendingObject, this);
 
-    window.onTextureLoaded.addListener(this._textureLoaded, this);
+    this.window.onTextureLoaded.addListener(this._textureLoaded, this);
 
     // Periodically clean up old recycled widgets.
     const cleanupInterval = 2000;

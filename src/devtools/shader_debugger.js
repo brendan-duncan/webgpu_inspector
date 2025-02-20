@@ -332,6 +332,15 @@ export class ShaderDebugger extends Div {
 
         new Div(this.controls, { style: "flex-grow: 2;" });
 
+        new Button(this.controls, {
+            text: "Help",
+            title: "Help",
+            style: "background-color: #777;",
+            onClick: () => {
+                window.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/shader_debugger.md", "_blank");
+            }
+        });
+
         const editorPanel = new Div(this, { style: "height: 100%;" });
 
         const split = new Split(editorPanel, { direction: Split.Horizontal, position: 0.7 });

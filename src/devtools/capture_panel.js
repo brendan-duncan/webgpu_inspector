@@ -25,17 +25,19 @@ import { ShaderDebugger } from "./shader_debugger.js";
 const _inspectButtonStyle = "background-color: rgb(40, 40, 40);";
 
 export class CapturePanel {
-  constructor(window, parent) {
-    this.window = window;
+  constructor(win, parent) {
+    this.window = win;
 
     const self = this;
-    const port = window.port;
+    const port = win.port;
 
     this.statistics = new CaptureStatistics();
 
     this._captureData = null;
 
-    const controlBar = new Div(parent, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
+    const _controlBar = new Div(parent, { style: "display: flex; background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
+
+    const controlBar = new Div(_controlBar, { style: "" });
 
     new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => {
       try {
@@ -109,10 +111,16 @@ export class CapturePanel {
     this._captureStats = new Button(controlBar, { label: "Frame Stats", style: "display: none;" });
     this._captureStatus = new Span(controlBar, { style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
 
+    new Div(_controlBar, { style: "flex-grow: 2;" });
+
+    new Button(_controlBar, { label: "Help", style: "margin-left: 20px; background-color: #557;", callback: () => {
+      window.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/capture.md", "_blank");
+    }});
+
     this._capturePanel = new Div(parent, { style: "overflow: hidden; white-space: nowrap; height: calc(-85px + 100vh); display: flex;" });
 
-    window.onTextureLoaded.addListener(this._textureLoaded, this);
-    window.onTextureDataChunkLoaded.addListener(this._textureDataChunkLoaded, this);
+    this.window.onTextureLoaded.addListener(this._textureLoaded, this);
+    this.window.onTextureDataChunkLoaded.addListener(this._textureDataChunkLoaded, this);
 
     this._frameImageList = [];
     this._lastSelectedCommand = null;
