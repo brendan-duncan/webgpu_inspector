@@ -499,13 +499,21 @@ export class ShaderDebugger extends Div {
             }
         });
 
+        const pipeline = this.database.getObject(this.pipelineState.pipeline.args[0].__id);
+        const constants = pipeline?.descriptor?.compute?.constants;
+
+        const options = {};
+        if (constants) {
+            options.constants = constants;
+        }
+
         if (!this.debugger) {
             const code = this.module.descriptor.code;
             this.debugger = new WgslDebug(code, this.runStateChanged.bind(this));
         } else {
             this.debugger.reset();
         }
-        this.debugger.debugWorkgroup(kernelName, [idx, idy, idz], dispatchCount, bindGroups);
+        this.debugger.debugWorkgroup(kernelName, [idx, idy, idz], dispatchCount, bindGroups, options);
         this.update();
     }
 
@@ -536,9 +544,12 @@ export class ShaderDebugger extends Div {
         }
         const div = new Div(parent);
         const type = v.value.typeInfo;
-        let typeName = type.name;
-        if (type.format) {
-            typeName = `${typeName}<${type.format.name}>`;
+        let typeName = "x32";
+        if (type) {
+            typeName = type.name;
+            if (type.format) {
+                typeName = `${typeName}<${type.format.name}>`;
+            }
         }
         new Span(div, { text: v.name, class: "watch-var-name" });
         new Span(div, { text: typeName, class: "watch-var-type" });
