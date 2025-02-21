@@ -503,7 +503,7 @@ export class ShaderDebugger extends Div {
                         continue;
                     }
                     const size = [texture.width, texture.height, texture.depthOrArrayLayers];
-                    bindGroup[binding] = { texture: texture.imageData, size };
+                    bindGroup[binding] = { texture: texture.imageData, size, view: resource.descriptor, descriptor: texture.descriptor };
                 }
             }
         });
