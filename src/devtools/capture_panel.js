@@ -1427,7 +1427,11 @@ export class CapturePanel {
       if (computeId) {
         const module = this._getObject(computeId);
         if (module?.reflection) {
-          const resource = module.reflection.findResource(group, binding);
+          let entry = desc.compute.entryPoint ?? "";
+          if (!entry) {
+            entry = module.reflection.entries.compute[0].name;
+          }
+          const resource = module.reflection.findResource(group, binding, entry);
           if (resource) {
             return resource;
           }
@@ -1435,15 +1439,29 @@ export class CapturePanel {
       } else if (vertexId !== undefined && vertexId === fragmentId) {
         const module = this._getObject(vertexId);
         if (module?.reflection) {
-          const resource = module.reflection.findResource(group, binding);
+          let entry = desc.vertex?.entryPoint ?? "";
+          if (!entry) {
+            entry = module.reflection.entries.vertex[0].name;
+          }
+          let resource = module.reflection.findResource(group, binding, entry);
           if (resource) {
             return resource;
           }
+
+          entry = desc.fragment?.entryPoint ?? "";
+          if (!entry) {
+            entry = module.reflection.entries.fragment[0].name;
+          }
+          resource = module.reflection.findResource(group, binding, entry)
         }
       } else {
         const vertexModule = this._getObject(vertexId);
         if (vertexModule?.reflection) {
-          const resource = vertexModule.reflection.findResource(group, binding);
+          let entry = desc.vertex?.entryPoint ?? "";
+          if (!entry) {
+            entry = module.reflection.entries.vertex[0].name;
+          }
+          const resource = vertexModule.reflection.findResource(group, binding, entry);
           if (resource) {
             return resource;
           }
@@ -1451,7 +1469,11 @@ export class CapturePanel {
 
         const fragmentModule = this._getObject(fragmentId);
         if (fragmentModule?.reflection) {
-          const resource = fragmentModule.reflection.findResource(group, binding);
+          let entry = desc.fragment?.entryPoint ?? "";
+          if (!entry) {
+            entry = module.reflection.entries.fragment[0].name;
+          }
+          const resource = fragmentModule.reflection.findResource(group, binding, entry);
           if (resource) {
             return resource;
           }
