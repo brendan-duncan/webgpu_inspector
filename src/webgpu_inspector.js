@@ -19,7 +19,7 @@ export let webgpuInspector = null;
   const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 
   // How much data should we send to the panel via message as a chunk.
-  // Messages can't send that much data .
+  // Messages can't send that much data.
   const maxDataChunkSize = (1024 * 1024) / 4; // 256KB
   const maxBufferCaptureSize = (1024 * 1024) / 4; // 256KB
   const maxColorAttachments = 10;
@@ -260,7 +260,7 @@ export let webgpuInspector = null;
 
     createStatusElements() {
       const statusContainer = _document.createElement("div");
-      statusContainer.style = "position: absolute; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt;";
+      statusContainer.style = "position: absolute; top: 0px; left: 0px; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt;";
       _document.body.insertBefore(statusContainer, _document.body.firstChild);
 
       this._inspectingStatus = _document.createElement("div");
@@ -1686,6 +1686,11 @@ export let webgpuInspector = null;
             const texture = captureTextureView.__texture;
             if (texture) {
               // TODO: capture texture view mip levels
+              //const mipLevelCount = captureTextureView.mipLevelCount ?? texture.mipLevelCount ?? 1;
+              //const baseMipLevel = captureTextureView.baseMipLevel ?? 0;
+              /*for (let mipLevel = baseMipLevel; mipLevel < mipLevelCount; ++mipLevel) {
+                this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, -1, mipLevel);
+              }*/
               this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, -1);
             }
           }
