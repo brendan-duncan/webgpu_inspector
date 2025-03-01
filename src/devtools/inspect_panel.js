@@ -847,11 +847,6 @@ export class InspectPanel {
       const loadButton = new Button(descriptionBox, { label: "Load", callback: () => {
         self.database.requestTextureData(object, object.display?.mipLevel ?? 0);
       }});
-      /*if (object.dimension !== "2d") {
-        loadButton.disabled = true;
-        loadButton.style = "background-color: #733; color: #fff;";
-        loadButton.tooltip = "Only 2d textures can currently be previewed.";
-      }*/
       if (object.gpuTexture) {
         this._createTexturePreview(object, descriptionBox);
       } else if (!loadButton.disabled) {
@@ -873,12 +868,6 @@ export class InspectPanel {
         const loadButton = new Button(textureGrp.body, { label: "Load", callback: () => {
           self.database.requestTextureData(texture);
         }});
-
-        /*if (texture.dimension !== "2d") {
-          loadButton.disabled = true;
-          loadButton.style = "background-color: #733; color: #fff;";
-          loadButton.tooltip = "Only 2d textures can currently be previewed.";
-        }*/
 
         if (texture.gpuTexture) {
           this._createTexturePreview(texture, textureGrp.body);
@@ -910,11 +899,6 @@ export class InspectPanel {
   }
 
   _createTexturePreview(texture, parent, width, height) {
-    // Can only preview 2d textures for now
-    /*if (texture.dimension !== "2d") {
-      return;
-    }*/
-
     const mipLevel = Math.max(Math.min(texture.display.mipLevel || 0, texture.mipLevelCount), 0);
 
     width ??= (texture.width >> mipLevel) || texture.width;
@@ -946,7 +930,11 @@ export class InspectPanel {
           document.body.removeChild(self._tooltip);
           self._tooltip = null;
         }
-        self.database.requestTextureData(texture, texture.display.mipLevel || 0);
+        if (texture.isMipLevelLoaded(texture.display.mipLevel)) {
+          displayChanged.emit();
+        } else {
+          self.database.requestTextureData(texture, texture.display.mipLevel || 0);
+        }
       } });
 
     new Span(controls, { text:  "Exposure", style: "margin-right: 3px; font-size: 9pt; color: #bbb;" });
@@ -966,7 +954,7 @@ export class InspectPanel {
         displayChanged.emit();
       } });
 
-    if (!this._toolTip) {
+    if (!this._tooltip) {
       this._tooltip = document.createElement('pre');
       document.body.appendChild(this._tooltip);
       this._tooltip.classList.add('inspector-tooltip');
@@ -1017,7 +1005,7 @@ export class InspectPanel {
         if (this._tooltip) {
           const x = event.offsetX;
           const y = event.offsetY;
-          const pixel = texture.getPixel(x, y, layer, this.display?.mipLevel ?? 0);
+          const pixel = texture.getPixel(x, y, layer, texture.display?.mipLevel ?? 0);
           this._tooltip.style.left = `${event.pageX + 10}px`;
           this._tooltip.style.top = `${event.pageY + 10}px`;
           const pixelStr = getPixelString(pixel);
@@ -1052,7 +1040,24 @@ export class InspectPanel {
 
       const self = this;
       displayChanged.addListener(() => {
+        const mipLevel = texture.display.mipLevel;
+        const width = (texture.width >> mipLevel) || texture.width;
+        const height = (texture.height >> mipLevel) || texture.height;
+
+        canvas.element.width = width;
+        canvas.element.height = height;
+
         const canvasTexture = context.getCurrentTexture();
+        const viewDesc = {
+          aspect: "all",
+          dimension: texture.descriptor.dimension,
+          baseArrayLayer: texture.descriptor.dimension == "3d" ? 0 : layer,
+          layerArrayCount: 1,
+          baseMipLevel: mipLevel,
+          mipLevelCount: 1 };
+  
+        const srcView = texture.gpuTexture.object.createView(viewDesc);
+
         self.textureUtils.blitTexture(srcView, texture.format, 1, canvasTexture.createView(), format, texture.display);
       });
     }

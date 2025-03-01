@@ -346,6 +346,7 @@ export class ShaderDebugger extends Div {
         const split = new Split(editorPanel, { direction: Split.Horizontal, position: 0.7 });
         const pane1 = new Span(split, { style: "flex-grow: 1; height: calc(100% - 35px); overflow: auto;" });
         const pane2 = new Span(split, { style: "flex-grow: 1; height: calc(100% - 35px); overflow: auto;" });
+        split.updatePosition();
 
         this.editorView = new EditorView({
             doc: code,
@@ -358,7 +359,7 @@ export class ShaderDebugger extends Div {
 
         openSearchPanel(this.editorView);
 
-        this.watch = new Div(pane2, { style: "overflow: auto; background-color: #333; color: #bbb; height: 100%;" });
+        this.watch = new Div(pane2, { style: "overflow: auto; background-color: #333; color: #bbb; width: 100%; height: 100%;" });
 
         this.variables = new Collapsable(this.watch, { collapsed: false, label: `Variables` });;
         this.globals = new Collapsable(this.watch, { collapsed: false, label: `Globals` });;
@@ -498,12 +499,29 @@ export class ShaderDebugger extends Div {
                 const resource = this.database.getObject(b.resource.__id);
                 if (resource instanceof TextureView) {
                     const texture = resource.__texture;
-                    if (!texture.imageData) {
+                    let dataSize = 0;
+                    for (const d of texture.imageData) {
+                        if (d) {
+                            dataSize += d.length;
+                        }
+                    }
+
+                    if (!dataSize) {
                         console.log("No image data for texture", texture);
                         continue;
                     }
+
+                    const imageData = new Uint8Array(dataSize);
+                    let offset = 0;
+                    for (const d of texture.imageData) {
+                        if (d) {
+                            imageData.set(d, offset);
+                            offset += d.length;
+                        }
+                    }
+
                     const size = [texture.width, texture.height, texture.depthOrArrayLayers];
-                    bindGroup[binding] = { texture: texture.imageData, size, view: resource.descriptor, descriptor: texture.descriptor };
+                    bindGroup[binding] = { texture: imageData, size, view: resource.descriptor, descriptor: texture.descriptor };
                 }
             }
         });

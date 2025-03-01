@@ -109,13 +109,17 @@ export class InspectorWindow extends Window {
       return;
     }
 
-    if (object.loadedImageDataChunks.length != count) {
-      object.loadedImageDataChunks.length = count;
-      object.isImageDataLoaded = false;
+    if (object.loadedImageDataChunks[mipLevel] === undefined) {
+      object.loadedImageDataChunks[mipLevel] = [];
     }
 
-    if (!(object.imageData instanceof Uint8Array) || (object.imageData.length != size)) {
-      object.imageData = new Uint8Array(size);
+    if (object.loadedImageDataChunks[mipLevel].length != count) {
+      object.loadedImageDataChunks[mipLevel].length = count;
+      object.isImageDataLoaded[mipLevel] = false;
+    }
+
+    if (!(object.imageData[mipLevel] instanceof Uint8Array) || (object.imageData[mipLevel].length != size)) {
+      object.imageData[mipLevel] = new Uint8Array(size);
       object.dataLoadTime = 0;
       object._startTime = [];
     }
@@ -129,27 +133,28 @@ export class InspectorWindow extends Window {
       object.dataLoadTime += dt;
       //console.log(`TEXTURE CHUNK ${dt}ms size:${data.length} chunkSize:${chunk.length}`);
       self.onTextureDataChunkLoaded.emit(id, passId, mipLevel, offset, size, index, count, chunk);
-      object.loadedImageDataChunks[index] = 1;
+      object.loadedImageDataChunks[mipLevel][index] = 1;
       try {
-        object.imageData.set(data, offset);
+        //console.log("TEXTURE IMAGE DATA", id, passId, mipLevel, offset, data.length, object.imageData[mipLevel].length);
+        object.imageData[mipLevel].set(data, offset);
       } catch (e) {
-        console.log("TEXTURE IMAGE DATA SET ERROR", id, passId, mipLevel, offset, data.length, object.imageData.length);
-        object.loadedImageDataChunks.length = 0;
-        object.isImageDataLoaded = false;
+        console.log("TEXTURE IMAGE DATA SET ERROR", id, passId, mipLevel, offset, data.length, object.imageData[mipLevel].length);
+        object.loadedImageDataChunks[mipLevel].length = 0;
+        object.isImageDataLoaded[mipLevel] = false;
       }
   
       let loaded = true;
       for (let i = 0; i < count; ++i) {
-        if (!object.loadedImageDataChunks[i]) {
+        if (!object.loadedImageDataChunks[mipLevel][i]) {
           loaded = false;
           break;
         }
       }
-      object.isImageDataLoaded = loaded;
+      object.isImageDataLoaded[mipLevel] = loaded;
   
-      if (object.isImageDataLoaded) {
-        object.loadedImageDataChunks.length = 0;
-        object.imageDataPending = false;
+      if (object.isImageDataLoaded[mipLevel]) {
+        object.loadedImageDataChunks[mipLevel].length = 0;
+        object.imageDataPending[mipLevel] = false;
         this._createTexture(object, passId, mipLevel);
       }
     });
@@ -165,9 +170,9 @@ export class InspectorWindow extends Window {
     const sampleCount = texture.descriptor.sampleCount;
     const formatInfo = TextureFormatInfo[format];
 
-    if (texture.gpuTexture) {
+    /*if (texture.gpuTexture) {
       texture.gpuTexture.removeReference();
-    }
+    }*/
 
     const gpuFormat = formatInfo.isDepthStencil ? "r32float" : format;
     texture.descriptor.format = gpuFormat;
@@ -177,9 +182,13 @@ export class InspectorWindow extends Window {
     const bytesPerRow = (texture.bytesPerRow) >> mipLevel;
     const rowsPerImage = (texture.height) >> mipLevel;
 
-    const gpuTexture = this.device.createTexture(texture.descriptor);
+    if (!texture.gpuTexture) {
+      const gpuTexture = this.device.createTexture(texture.descriptor);
+      texture.gpuTexture = new GPUObjectRef(gpuTexture);
+    }
 
-    texture.gpuTexture = new GPUObjectRef(gpuTexture);
+    //const gpuTexture = this.device.createTexture(texture.descriptor);
+    //texture.gpuTexture = new GPUObjectRef(gpuTexture);
     texture.descriptor.usage = usage;
     texture.descriptor.format = format;
     texture.descriptor.sampleCount = sampleCount;
@@ -191,7 +200,7 @@ export class InspectorWindow extends Window {
         texture: texture.gpuTexture.object,
         mipLevel
       },
-      texture.imageData,
+      texture.imageData[mipLevel],
       {
         offset: 0,
         bytesPerRow,

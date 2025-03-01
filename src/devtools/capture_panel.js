@@ -1429,7 +1429,7 @@ export class CapturePanel {
         if (module?.reflection) {
           let entry = desc.compute.entryPoint ?? "";
           if (!entry) {
-            entry = module.reflection.entries.compute[0].name;
+            entry = module.reflection.entry.compute[0].name;
           }
           const resource = module.reflection.findResource(group, binding, entry);
           if (resource) {
@@ -1441,7 +1441,7 @@ export class CapturePanel {
         if (module?.reflection) {
           let entry = desc.vertex?.entryPoint ?? "";
           if (!entry) {
-            entry = module.reflection.entries.vertex[0].name;
+            entry = module.reflection.entry.vertex[0].name;
           }
           let resource = module.reflection.findResource(group, binding, entry);
           if (resource) {
@@ -1450,7 +1450,7 @@ export class CapturePanel {
 
           entry = desc.fragment?.entryPoint ?? "";
           if (!entry) {
-            entry = module.reflection.entries.fragment[0].name;
+            entry = module.reflection.entry.fragment[0].name;
           }
           resource = module.reflection.findResource(group, binding, entry)
         }
@@ -1459,7 +1459,7 @@ export class CapturePanel {
         if (vertexModule?.reflection) {
           let entry = desc.vertex?.entryPoint ?? "";
           if (!entry) {
-            entry = module.reflection.entries.vertex[0].name;
+            entry = vertexModule.reflection.entry.vertex[0].name;
           }
           const resource = vertexModule.reflection.findResource(group, binding, entry);
           if (resource) {
@@ -1471,7 +1471,7 @@ export class CapturePanel {
         if (fragmentModule?.reflection) {
           let entry = desc.fragment?.entryPoint ?? "";
           if (!entry) {
-            entry = module.reflection.entries.fragment[0].name;
+            entry = fragmentModule.reflection.entry.fragment[0].name;
           }
           const resource = fragmentModule.reflection.findResource(group, binding, entry);
           if (resource) {

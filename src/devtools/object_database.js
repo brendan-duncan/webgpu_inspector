@@ -191,10 +191,10 @@ export class ObjectDatabase {
   }
 
   requestTextureData(texture, mipLevel) {
-    if (texture.imageDataPending) {
+    if (texture.imageDataPending[mipLevel]) {
       return;
     }
-    texture.imageDataPending = true;
+    texture.imageDataPending[mipLevel] = true;
     this.port.postMessage({ action: PanelActions.RequestTexture, id: texture.id, mipLevel: mipLevel ?? 0 });
   }
 

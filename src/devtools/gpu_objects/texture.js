@@ -6,10 +6,10 @@ export class Texture extends GPUObject {
   constructor(id, descriptor, stacktrace) {
     super(id, descriptor, stacktrace);
     this.descriptor = descriptor;
-    this.imageData = null;
+    this.imageData = [];
     this.loadedImageDataChunks = [];
-    this.imageDataPending = false;
-    this.isImageDataLoaded = false;
+    this.imageDataPending = [];
+    this.isImageDataLoaded = [];
     this.gpuTexture = null;
     this._layerRanges = null;
 
@@ -20,6 +20,10 @@ export class Texture extends GPUObject {
       maxRange: 1,
       mipLevel: 0
     };
+  }
+
+  isMipLevelLoaded(mipLevel) {
+    return this.imageData.length >= mipLevel && this.imageData[mipLevel] !== undefined;
   }
 
   get layerRanges() {
@@ -104,11 +108,11 @@ export class Texture extends GPUObject {
       return value;
     }
 
-    if (this.imageData) {
+    if (this.imageData[mipLevel]) {
       const bytesPerRow = this.bytesPerRow >> mipLevel;
       const height = this.height >> mipLevel;
       const offset = (z * bytesPerRow * height) + y * bytesPerRow + x * this.texelByteSize;
-      const imageData = this.imageData;
+      const imageData = this.imageData[mipLevel];
       switch (this.format) {
         case "r8unorm": {
           const value = pixelValue(imageData, offset, "8unorm", 1);

@@ -30,7 +30,7 @@ export class CaptureData {
       for (const textureId of textures) {
         const texture = this._getObject(textureId);
         if (texture) {
-          texture.imageDataPending = true;
+          texture.imageDataPending[0] = true;
         }
       }
     }

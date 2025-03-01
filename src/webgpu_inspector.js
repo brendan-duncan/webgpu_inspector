@@ -1685,13 +1685,11 @@ export let webgpuInspector = null;
           for (const captureTextureView of object.__captureTextureViews) {
             const texture = captureTextureView.__texture;
             if (texture) {
-              // TODO: capture texture view mip levels
-              //const mipLevelCount = captureTextureView.mipLevelCount ?? texture.mipLevelCount ?? 1;
-              //const baseMipLevel = captureTextureView.baseMipLevel ?? 0;
-              /*for (let mipLevel = baseMipLevel; mipLevel < mipLevelCount; ++mipLevel) {
+              const mipLevelCount = captureTextureView.mipLevelCount ?? texture.mipLevelCount ?? 1;
+              const baseMipLevel = captureTextureView.baseMipLevel ?? 0;
+              for (let mipLevel = baseMipLevel; mipLevel < mipLevelCount; ++mipLevel) {
                 this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, -1, mipLevel);
-              }*/
-              this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, -1);
+              }
             }
           }
           object.__captureTextureViews.clear();
