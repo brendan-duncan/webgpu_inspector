@@ -1023,7 +1023,7 @@ export class InspectPanel {
 
       const viewDesc = {
         aspect: "all",
-        dimension: texture.descriptor.dimension,
+        dimension: texture.descriptor.dimension ?? "2d",
         baseArrayLayer: texture.descriptor.dimension == "3d" ? 0 : layer,
         layerArrayCount: 1,
         baseMipLevel: mipLevel,
