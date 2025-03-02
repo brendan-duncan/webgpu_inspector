@@ -549,7 +549,15 @@ export let webgpuInspector = null;
             const mipLevel = tex?.mipLevel ?? 0;
             if (id > 0 || rendersToCanvas) {
               const texture = tex?.texture || self._trackedObjects.get(id)?.deref();
-              self._captureTextureBuffer(object.__device, null, texture, undefined, mipLevel);
+              if (mipLevel === -1) {
+                const mipLevelCount = texture.mipLevelCount ?? 1;
+                const baseMipLevel = 0;
+                for (let mipLevel = baseMipLevel; mipLevel < mipLevelCount; ++mipLevel) {
+                  self._captureTextureBuffer(object.__device, null, texture, undefined, mipLevel);
+                }
+              } else {
+                self._captureTextureBuffer(object.__device, null, texture, undefined, mipLevel);
+              }
               self._captureTextureRequest.delete(id);
             }
           });
@@ -1049,7 +1057,7 @@ export let webgpuInspector = null;
         const ref = this._trackedObjects.get(textureId);
         const texture = ref?.deref();
         if (texture instanceof GPUTexture) {
-          this._captureTextureRequest.set(textureId, {texture, mipLevel});
+          this._captureTextureRequest.set(textureId, { texture, mipLevel });
         }
       }
     }
@@ -1690,6 +1698,7 @@ export let webgpuInspector = null;
               const baseMipLevel = captureTextureView.baseMipLevel ?? 0;
               for (let mipLevel = baseMipLevel; mipLevel < mipLevelCount; ++mipLevel) {
                 this._captureTextureBuffer(commandEncoder?.__device, commandEncoder, texture, -1, mipLevel);
+                break; // Just capture the first mip level for now.
               }
             }
           }
@@ -1991,7 +2000,7 @@ export let webgpuInspector = null;
       const bytesPerRow = (width * texelByteSize + 255) & ~0xff;
       const rowsPerImage = height;
       const bufferSize = bytesPerRow * rowsPerImage * depthOrArrayLayers;
-      if (!bufferSize) {
+      if (!bufferSize || width < formatInfo.blockWidth || height < formatInfo.blockHeight) {
         return;
       }
       const copySize = { width, height, depthOrArrayLayers };
