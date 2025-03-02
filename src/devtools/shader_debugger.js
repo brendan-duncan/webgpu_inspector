@@ -499,29 +499,8 @@ export class ShaderDebugger extends Div {
                 const resource = this.database.getObject(b.resource.__id);
                 if (resource instanceof TextureView) {
                     const texture = resource.__texture;
-                    let dataSize = 0;
-                    for (const d of texture.imageData) {
-                        if (d) {
-                            dataSize += d.length;
-                        }
-                    }
-
-                    if (!dataSize) {
-                        console.log("No image data for texture", texture);
-                        continue;
-                    }
-
-                    const imageData = new Uint8Array(dataSize);
-                    let offset = 0;
-                    for (const d of texture.imageData) {
-                        if (d) {
-                            imageData.set(d, offset);
-                            offset += d.length;
-                        }
-                    }
-
                     const size = [texture.width, texture.height, texture.depthOrArrayLayers];
-                    bindGroup[binding] = { texture: imageData, size, view: resource.descriptor, descriptor: texture.descriptor };
+                    bindGroup[binding] = { texture: texture.imageData, size, view: resource.descriptor, descriptor: texture.descriptor };
                 }
             }
         });

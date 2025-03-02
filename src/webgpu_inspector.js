@@ -1681,6 +1681,7 @@ export let webgpuInspector = null;
           }
           object.__captureRenderPassTextures.clear();
         }
+
         if (object.__captureTextureViews?.size > 0) {
           for (const captureTextureView of object.__captureTextureViews) {
             const texture = captureTextureView.__texture;
