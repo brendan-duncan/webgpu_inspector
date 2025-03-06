@@ -513,12 +513,8 @@ export class ShaderDebugger extends Div {
             options.constants = constants;
         }
 
-        if (!this.debugger) {
-            const code = this.module.descriptor.code;
-            this.debugger = new WgslDebug(code, this.runStateChanged.bind(this));
-        } else {
-            this.debugger.reset();
-        }
+        const code = this.module.descriptor.code;
+        this.debugger = new WgslDebug(code, this.runStateChanged.bind(this));
         this.debugger.debugWorkgroup(kernelName, [idx, idy, idz], dispatchCount, bindGroups, options);
         this.update();
     }
@@ -568,6 +564,7 @@ export class ShaderDebugger extends Div {
         }
 
         const cmd = this.debugger.currentCommand;
+        console.log(cmd);
         if (cmd !== null && !this.debugger.isRunning) {
             const line = cmd.line;
             if (line > -1) {
