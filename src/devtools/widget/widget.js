@@ -192,6 +192,7 @@ export class Widget {
     }
     this.children.splice(index, 0, newChild);
     this._element.insertBefore(newChild._element, refChild._element);
+    newChild._parent = this;
   }
 
   /**

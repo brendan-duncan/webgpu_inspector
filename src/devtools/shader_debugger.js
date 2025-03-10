@@ -564,7 +564,6 @@ export class ShaderDebugger extends Div {
         }
 
         const cmd = this.debugger.currentCommand;
-        console.log(cmd);
         if (cmd !== null && !this.debugger.isRunning) {
             const line = cmd.line;
             if (line > -1) {

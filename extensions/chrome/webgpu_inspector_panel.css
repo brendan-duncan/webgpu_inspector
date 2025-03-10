@@ -1213,6 +1213,177 @@ ol::-webkit-scrollbar-thumb:hover {
   padding-left: 5px;
 }
 
+/* ---------------------------------------- */
+
+.collapse-button
+{
+    font-size: 0.8em;
+    width: 0.9em;
+    /*height: 0.9em;*/
+    margin-left: -1px;
+    margin-right: 5px;
+    /*margin-bottom: 2px;
+    line-height: 1em;*/
+    display: inline-block;
+    text-align: center;
+    color: #79A;
+    /*margin-top: 2px;*/
+    -moz-user-select: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.collapse-button.empty
+{
+    margin-left: 2px;
+    width: 0.4em;
+    height: 0.4em;
+    color: #36A;
+    background-color: #467;
+    /* Hide the text. */
+    text-indent: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.collapse-button:hover
+{
+    color: white;
+}
+
+/* ---------------------------------------- */
+
+li.tree-item
+{
+    list-style-type: none;
+    cursor: pointer;
+    /*-moz-user-select: none;
+    -webkit-user-select: none;
+    user-select: none;*/
+    display: flex;
+    flex-direction: row;
+    line-height: 28px;
+    font-size: 10pt;
+}
+
+li.tree-item:nth-child(even)
+{
+    background-color: rgba(0,0,0,0.1);
+}
+
+li.tree-item:hover
+{
+    background-color: #444;
+}
+
+li.tree-item.root_item
+{
+    background: transparent;
+    padding-left: 0px;
+}
+
+li.tree-item div.tree-item-title
+{
+    color: #ccc;
+    min-width: 100px;
+    white-space: nowrap;
+    display: flex;
+    width: 100%;
+}
+
+li.tree-item div.tree-item-title .precontent
+{
+    /*display: inline-block;*/
+}
+
+li.tree-item div.tree-item-title .indent
+{
+    /*display: inline-block;*/
+}
+
+li.tree-item div.tree-item-title .collapse
+{
+    /*display: inline-block;*/
+}
+
+li.tree-item div.tree-item-title .icon
+{
+    /*display: inline-block;*/
+}
+
+li.tree-item div.tree-item-title .content
+{
+    /*display: inline-block;*/
+    display: flex;
+    flex: 1;
+}
+
+li.tree-item div.tree-item-title .postcontent
+{
+    /*display: inline-block;*/
+}
+
+li.tree-item div.tree-item-title .content:hover
+{
+    color: white;
+}
+
+li.tree-item.itemselected  div.tree-item-title .content
+{
+    color: #EC6;
+}
+
+li.tree-item.semiselected div.tree-item-title .content
+{
+    color: #A96;
+}
+
+li.tree-item div.tree-item-title.dragover .content
+{
+    background-color: #EC6;
+    color: black;
+    /*padding: 3px;*/
+    border-radius: 2px;
+    /*font-size: 2em;*/
+}
+
+.dragover
+{
+    border-bottom: 2px solid #aaa;
+}
+
+ul.tree-item-children
+{
+    margin: 0;
+    padding: 0;
+    margin-left: -2px;
+    list-style-type: none;
+}
+
+li.tree-item .tree-item-title .precontent
+{
+    margin-right: 4px;
+}
+
+li.tree-item .tree-item-title .postcontent
+{
+    margin-left: 4px;
+}
+
+li.tree-item.hidden, li.tree-item.filtered
+{
+    display: none;
+}
+
+li.tree-item .expandbutton
+{
+    display: inline-block;
+}
+
+.hidden
+{
+    display: none;
+}
 
 /* ---------------------------------------- */
 .info-panel {
@@ -1233,6 +1404,37 @@ ol::-webkit-scrollbar-thumb:hover {
 }
 
 /* ---------------------------------------- */
+
+.watch-row {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+}
+
+.watch-row-name {
+  min-width: 200px;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-right: 1px solid #000;
+}
+
+.watch-row-type {
+  min-width: 150px;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-right: 1px solid #000;
+  padding-left: 10px;
+}
+
+.watch-row-value {
+  padding-left: 10px;
+  flex: 1;
+  text-overflow: ellipsis;
+}
 
 .shader-debugger {
   overflow: auto;

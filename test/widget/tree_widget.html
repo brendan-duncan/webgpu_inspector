@@ -1,0 +1,94 @@
+<html>
+    <body>
+        <link href="../../src/extension/webgpu_inspector_panel.css" rel="stylesheet" type="text/css">
+        <script type="module">
+            import { TreeWidget } from '../../src/devtools/widget/tree_widget.js';
+            import { Window } from '../../src/devtools/widget/window.js';
+            import { Span } from '../../src/devtools/widget/span.js';
+            import { Button } from '../../src/devtools/widget/button.js';
+            import { ShaderWatchView } from '../../src/devtools/shader_watch_view.js';
+            import { WgslDebug, PointerData, TypedData, StructInfo, ArrayInfo,
+                ArrayIndex, StringExpr } from "../../node_modules/wgsl_reflect/wgsl_reflect.module.js";
+
+            function main() {
+                const window = new Window();
+
+                const particleCount = 100000;
+
+                const shader = `
+                    struct Particle {
+                        position: vec3<f32>,
+                        velocity: vec3<f32>
+                    }
+                    struct System {
+                        active_index: i32,
+                        timestep: f32,
+                        particles: array<Particle,${particleCount}>
+                    }
+                    @group(0) @binding(0) var<storage,read_write> particles: array<Particle,${particleCount}>;
+                    @group(0) @binding(1) var<storage,read_write> system: System;
+
+                    fn foo() {
+                        let a: vec3<f32> = vec3<f32>(1.0, 2.0, 3.0);
+                        let b: vec3<f32> = vec3<f32>(4.0, 5.0, 6.0);
+                        let c: vec3<f32> = a + b;
+                        return c;
+                    }
+
+                    @compute @workgroup_size(1)
+                    fn main(@builtin(global_invocation_id) id: vec3u) {
+                        // Form a pointer to a specific Particle in storage memory.
+                        let active_particle: ptr<storage,Particle,read_write> =
+                            &system.particles[id.x];
+
+                        let x = foo();
+                        let delta_position: vec3<f32> = (*active_particle).velocity * system.timestep;
+                        let current_position: vec3<f32>  = (*active_particle).position;
+                        (*active_particle).position = delta_position + current_position;
+                    }`;
+
+                // Verify the emulated dispatch has the same results as the WebGPU dispatch.
+                const particles = new Float32Array(32 * particleCount);
+                const buffer = new Float32Array(32 * particleCount + 4);
+                buffer[0] = 0; // active_index
+                buffer[1] = 1; // timestep
+                for (let i = 0, j = 3; i < particleCount; ++i, j += 8) {
+                    particles[i * 8 + 0] = i;
+                    particles[i * 8 + 1] = i + 1;
+                    particles[i * 8 + 2] = i + 2;
+                    particles[i * 8 + 3] = i + 3;
+                    particles[i * 8 + 4] = i + 4;
+                    particles[i * 8 + 5] = i + 5;
+                    particles[i * 8 + 6] = i + 6;
+                    particles[i * 8 + 7] = i + 7;
+
+                    buffer[j + 0] = i;
+                    buffer[j + 1] = i + 1;
+                    buffer[j + 2] = i + 2;
+                    buffer[j + 3] = i + 3;
+
+                    buffer[j + 4] = i + 4;
+                    buffer[j + 5] = i + 5;
+                    buffer[j + 6] = i + 6;
+                    buffer[j + 7] = i + 7;
+                }
+                const bg = {0: {0: particles, 1: buffer}};
+
+                const dbg = new WgslDebug(shader);
+                dbg.debugWorkgroup("main", [0, 0, 0], particleCount, bg);
+
+                const context = dbg.context;
+
+                const btn = new Button(window, { label: "Step Next", callback: () => {
+                    dbg.stepNext();
+                    watch.update(dbg._exec, dbg.context);
+                } });
+
+                const watch = new ShaderWatchView(window);
+                watch.initialize(dbg._exec, context);
+            }
+
+            main();
+        </script>
+    </body>
+</html>
