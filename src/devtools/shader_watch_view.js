@@ -1,7 +1,8 @@
 import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
 import { TreeWidget } from "./widget/tree_widget.js";
-import { PointerData, TypedData, StructInfo, ArrayInfo, ArrayIndex, StringExpr } from "../../../node_modules/wgsl_reflect/wgsl_reflect.module.js";
+//import { PointerData, TypedData, StructInfo, ArrayInfo, ArrayIndex, StringExpr } from "../../../node_modules/wgsl_reflect/wgsl_reflect.module.js";
+import { PointerData, TypedData, StructInfo, ArrayInfo, ArrayIndex, StringExpr } from "wgsl_reflect/wgsl_reflect.module.js";
 
 export class ShaderWatchView extends Div {
     constructor(parent, options) {
@@ -61,14 +62,17 @@ export class ShaderWatchView extends Div {
             const row = new Span(null, { class: "watch-row"});
             const name = new Span(row, { class: "watch-row-name"});
             name.textContent = variable.name;
+            name.title = name.textContent;
 
             const type = new Span(row, { class: "watch-row-type"});
             type.textContent = variable.value.typeInfo.getTypeName();
+            type.title = type.textContent;
 
             const value = new Span(row, { class: "watch-row-value"});
 
             let varData = variable.value;
             value.textContent = varData.toString();
+            value.title = value.textContent;
 
             const variableData = {
                 id: `${variable.id}`,
@@ -116,12 +120,15 @@ export class ShaderWatchView extends Div {
                 const arrayRow = new Span(null, { class: "watch-row"});
                 const arrayIndex = new Span(arrayRow, { class: "watch-row-name" });
                 arrayIndex.textContent = `[${startIndex + i}]`;
+                arrayIndex.title = arrayIndex.textContent;
 
                 const arrayType = new Span(arrayRow, { class: "watch-row-type" });
                 arrayType.textContent = varData.typeInfo.format.getTypeName();
+                arrayType.title = arrayType.textContent;
 
                 const arrayValue = new Span(arrayRow, { class: "watch-row-value" });
                 arrayValue.textContent = subData?.toString() ?? "null";
+                arrayValue.title = arrayValue.textContent;
 
                 const item = {
                     id: `${parent.id}[${startIndex + i}]`,
@@ -152,9 +159,11 @@ export class ShaderWatchView extends Div {
                 const arrayRow = new Span(null, { class: "watch-row"});
                 const arrayIndex = new Span(arrayRow, { class: "watch-row-name"});
                 arrayIndex.textContent = `[${j} - ${j + itemCount - 1}]`;
+                arrayIndex.title = arrayIndex.textContent;
 
                 const arrayType = new Span(arrayRow, { class: "watch-row-type"});
                 arrayType.textContent = varData.typeInfo.format.getTypeName();
+                arrayType.title = arrayType.textContent;
 
                 const arrayValue = new Span(arrayRow, { class: "watch-row-value"});
                 arrayValue.textContent = `[...]`;
@@ -210,14 +219,17 @@ export class ShaderWatchView extends Div {
                 const memberRow = new Span(null, { class: "watch-row"});
                 const memberName = new Span(memberRow, { class: "watch-row-name"});
                 memberName.textContent = member.name;
+                memberName.title = memberName.textContent;
 
                 const memberType = new Span(memberRow, { class: "watch-row-type"});
                 memberType.textContent = member.type.getTypeName();
+                memberType.title = memberType.textContent;
 
                 const subData = varData.getSubData(exec, postfix, context);
 
                 const memberValue = new Span(memberRow, { class: "watch-row-value"});
                 memberValue.textContent = subData?.toString() ?? "null";
+                memberValue.textContent = memberValue.textContent;
 
                 const item = {
                     id: `${parent.id}.${member.name}`,

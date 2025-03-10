@@ -1421,8 +1421,8 @@ li.tree-item .expandbutton
 }
 
 .watch-row-type {
-  min-width: 150px;
-  max-width: 150px;
+  min-width: 120px;
+  max-width: 120px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

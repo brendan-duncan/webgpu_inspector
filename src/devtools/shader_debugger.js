@@ -5,6 +5,7 @@ import { Img } from "./widget/img.js";
 import { Collapsable } from "./widget/collapsable.js";
 import { WgslDebug } from "wgsl_reflect/wgsl_reflect.module.js";
 import { TextureView } from "./gpu_objects/index.js";
+import { ShaderWatchView } from "./shader_watch_view.js";
 
 import { EditorView } from "codemirror";
 import { keymap, highlightSpecialChars, drawSelection, dropCursor, gutter, GutterMarker,
@@ -362,7 +363,8 @@ export class ShaderDebugger extends Div {
         this.watch = new Div(pane2, { style: "overflow: auto; background-color: #333; color: #bbb; width: 100%; height: 100%;" });
 
         this.variables = new Collapsable(this.watch, { collapsed: false, label: `Variables` });;
-        this.globals = new Collapsable(this.watch, { collapsed: false, label: `Globals` });;
+        this.watchVariables = new ShaderWatchView(this.variables.body);
+        //this.globals = new Collapsable(this.watch, { collapsed: false, label: `Globals` });;
         this.callstack = new Collapsable(this.watch, { collapsed: false, label: `Callstack` });;
 
         this.debug();
@@ -575,19 +577,21 @@ export class ShaderDebugger extends Div {
             this._highlightLine(0);
         }
 
-        this.variables.body.removeAllChildren();
-        this.globals.body.removeAllChildren();
+        //this.variables.body.removeAllChildren();
+        //this.globals.body.removeAllChildren();
         this.callstack.body.removeAllChildren();
+
+        this.watchVariables.update(this.debugger._exec, this.debugger.context);
 
         let state = this.debugger.currentState;
         if (state === null) {
             const context = this.debugger.context;
             const currentFunctionName = context.currentFunctionName;
-            new Div(this.variables.body, { text: currentFunctionName || "<shader>", style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
+            //new Div(this.variables.body, { text: currentFunctionName || "<shader>", style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
 
             new Div(this.callstack.body, { text: currentFunctionName || "<shader>", style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
 
-            context.variables.forEach((v, name) => {
+            /*context.variables.forEach((v, name) => {
                 if (!name.startsWith("@")) {
                     this._createVariableDiv(v, this.variables.body);
                 }
@@ -597,7 +601,7 @@ export class ShaderDebugger extends Div {
                 if (name.startsWith("@")) {
                     this._createVariableDiv(v, this.globals.body);
                 }
-            });
+            });*/
         } else {
             let lastState = state;
             let lastFunctionName = null;
@@ -605,7 +609,7 @@ export class ShaderDebugger extends Div {
                 const context = state.context;
                 const currentFunctionName = context.currentFunctionName || "<shader>";
 
-                new Div(this.variables.body, { text: currentFunctionName, style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
+                //new Div(this.variables.body, { text: currentFunctionName, style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
 
                 if (currentFunctionName !== lastFunctionName) {
                     new Div(this.callstack.body, { text: currentFunctionName, style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
@@ -613,24 +617,24 @@ export class ShaderDebugger extends Div {
 
                 lastFunctionName = currentFunctionName;
 
-                context.variables.forEach((v, name) => {
+                /*context.variables.forEach((v, name) => {
                     if (!name.startsWith("@")) {
                         this._createVariableDiv(v, this.variables.body);
                     }
-                });
+                });*/
 
                 lastState = state;
                 state = state.parent;
             }
 
-            if (lastState) {
+            /*if (lastState) {
                 const context = lastState.context;
                 context.variables.forEach((v, name) => {
                     if (name.startsWith("@")) {
                         this._createVariableDiv(v, this.globals.body);
                     }
                 });
-            }
+            }*/
         }
     }
 
