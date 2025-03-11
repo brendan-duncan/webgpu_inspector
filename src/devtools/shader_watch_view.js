@@ -210,7 +210,8 @@ export class ShaderWatchView extends Div {
         if (varData instanceof PointerData) {
             this.populateTree(parent, varData.reference, indent, exec, context);
         } else if (varData.typeInfo instanceof ArrayInfo) {
-            const count = varData.typeInfo.count;
+            const count = varData.typeInfo.count ||
+                    ((varData.buffer.byteLength - varData.offset) / varData.typeInfo.stride);
             this.populateArray(parent, varData, indent, 0, count, exec, context);
         } else if (varData.typeInfo instanceof StructInfo) {
             for (const member of varData.typeInfo.members) {
