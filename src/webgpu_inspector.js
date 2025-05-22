@@ -251,10 +251,11 @@ export let webgpuInspector = null;
             this._captureData = null;
           }
           _sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
-          if (this._captureData) {
-            this._initCaptureData();
-          }
         }
+      }
+
+      if (this._captureData) {
+        this._initCaptureData();
       }
     }
 
@@ -1188,10 +1189,11 @@ export let webgpuInspector = null;
           }
           _sessionStorage.removeItem(webgpuInspectorCaptureFrameKey);
 
-          if (this._captureData) {
-            this._initCaptureData();
-          }
         }
+      }
+
+      if (this._captureData) {
+        this._initCaptureData();
       }
 
       if (this._captureFrameCount <= 0) {
