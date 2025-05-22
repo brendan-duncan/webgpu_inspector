@@ -111,11 +111,8 @@ function injectScriptNode(name, url, attributes) {
 }
 
 // Fallback for browsers which don't support the "world" property on content_scripts
-if (
-  navigator.userAgent.indexOf("Chrom") === -1 && (
-    navigator.userAgent.indexOf("Safari") !== -1 || navigator.userAgent.indexOf("Firefox") !== -1
-  )
-) {
+if (navigator.userAgent.indexOf("Chrom") === -1 &&
+  (navigator.userAgent.indexOf("Safari") !== -1 || navigator.userAgent.indexOf("Firefox") !== -1)) {
   if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
     console.log("[WebGPU Inspector] Fallback injection")
 

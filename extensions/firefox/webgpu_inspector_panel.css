@@ -140,6 +140,13 @@ body {
   padding-left: 10px;
 }
 
+.collapsable_body * {
+  user-select: text;
+  -moz-user-select: text;
+  -webkit-user-select: text;
+  -ms-user-select: text;
+}
+
 .collapsable_button {
   font-family: monospace;
   font-size: 14pt;
