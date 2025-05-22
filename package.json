@@ -36,7 +36,7 @@
     "codemirror": "^6.0.1",
     "thememirror": "^2.0.1",
     "webgpu_recorder": "^1.2.0",
-    "wgsl_reflect": "file:../wgsl_reflect"
+    "wgsl_reflect": "brendan-duncan/wgsl_reflect"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.2.3",
