@@ -1,6 +1,6 @@
 {
   "name": "webgpu_inspector",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "WebGPU Inspection Debugger",
   "author": "Brendan Duncan",
   "license": "MIT",

@@ -1,3 +1,11 @@
+## v0.13.0
+
+* Fix frame capture for content running in a worker thread.
+
+## v0.12.0
+
+* Various shader reflection library fixes.
+
 ## v0.11.0
 
 * Compute shader debugger (experimental)
