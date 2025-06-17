@@ -1639,6 +1639,7 @@ li.tree-item .expandbutton
 
 .capture_methodName {
   font-weight: bold;
+  color: #fff;
 }
 
 .capture_method_args {
