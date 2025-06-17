@@ -762,9 +762,12 @@ export let webgpuInspector = null;
         const info = {
           vendor: adapter.info.vendor,
           device: adapter.info.device,
+          architecture: adapter.info.architecture,
+          subgroupMinSize: adapter.info.subgroupMinSize,
+          subgroupMaxSize: adapter.info.subgroupMaxSize,
           description: adapter.info.description,
-          features: self._gpuToArray(adapter.info.features),
-          limits: self._gpuToObject(adapter.info.limits),
+          features: self._gpuToArray(adapter.features),
+          limits: self._gpuToObject(adapter.limits),
           isFallbackAdapter: adapter.info.isFallbackAdapter,
           wgslFeatures: self._gpuToArray(navigator.gpu.wgslLanguageFeatures)
         };
