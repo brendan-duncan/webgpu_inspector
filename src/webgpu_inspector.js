@@ -1753,10 +1753,12 @@ export let webgpuInspector = null;
         tempBuffer.mapAsync(GPUMapMode.READ).then(() => {
           self._mappedTextureBufferCount--;
           self._updateStatusMessage();
+          self.disableRecording();
           const range = tempBuffer.getMappedRange();
           const data = new Uint8Array(range);
           self._sendTextureData(id, passId, data, mipLevel);
           tempBuffer.destroy();
+          self.enableRecording();
           self._pendingMapFinished();
         }).catch((e) => {
           console.error(e);
@@ -1846,10 +1848,12 @@ export let webgpuInspector = null;
       const self = this;
       this._pendingMapCount++;
       buffer.mapAsync(GPUMapMode.READ).then(() => {
+        self.disableRecording();
         const range = buffer.getMappedRange();
         const data = new Uint8Array(range);
         self._sendBufferData(-1000, -1000, data);
         buffer.destroy();
+        self.enableRecording();
         self._pendingMapFinished();
      }).catch((error) => {
         console.error(error);
@@ -1882,11 +1886,13 @@ export let webgpuInspector = null;
         this._updateStatusMessage();
         tempBuffer.mapAsync(GPUMapMode.READ).then(() => {
           self._mappedBufferCount--;
+          self.disableRecording();
           self._updateStatusMessage();
           const range = tempBuffer.getMappedRange();
           const data = new Uint8Array(range);
           self._sendBufferData(commandId, entryIndex, data);
           tempBuffer.destroy();
+          self.enableRecording();
           self._pendingMapFinished();
         }).catch((error) => {
           console.error(error);
