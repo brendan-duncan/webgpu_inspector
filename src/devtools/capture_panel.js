@@ -657,10 +657,12 @@ export class CapturePanel {
 
     function getName(id, className) {
       if (id === undefined) {
-        return "";
+        return "<>";
       }
       const obj = self._getObject(id);
-      if (obj) {
+      if (obj?.label) {
+        return className ? `${className}("${obj.label}", id:${obj.idName})` : `"${obj.label}"(id:${obj.idName})`;
+      } else if (obj?.name) {
         return `${obj.label || obj.name}(id:${obj.idName})`;
       }
       return className ?
@@ -700,9 +702,16 @@ export class CapturePanel {
           }
         }
       }
-
+    } else if (method === "requestAdapter") {
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUAdapter")}` });
+    } else if (method === "requestDevice") {
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUAdapter")} => ${getName(command.result, "GPUDevice")}` });
     } else if (method === "createRenderPipeline") {
-      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPURenderPipeline")}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.result, "GPURenderPipeline")}` });
+    } else if (method === "getBindGroupLayout") {
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPipeline")} => ${getName(command.result, "GPUBindGroupLayout")}` });
+    } else if (method === "createComputePipeline") {
+      new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUComputePipeline")}` });
     } else if (method === "createBindGroup") {
       new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUBindGroup")}` });
     } else if (method === "createBindGroupLayout") {
@@ -720,9 +729,9 @@ export class CapturePanel {
     } else if (method === "finish") {
       new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)} => ${getName(command.result, "GPUCommandBuffer")}` });
     } if (method === "getMappedRange") {
-      new Span(cmd, { class: "capture_method_args", text: getName(command.object) });
+      new Span(cmd, { class: "capture_method_args", text: getName(command.object, "GPUBuffer") });
     } else if (method === "unmap") {
-      new Span(cmd, { class: "capture_method_args", text: getName(command.object) });
+      new Span(cmd, { class: "capture_method_args", text: getName(command.object, "GPUBuffer") });
     } else if (method === "copyBufferToBuffer") {
       new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.__id, "GPUBuffer")} srcOffset:${args[1]} dest:${getName(args[2]?.__id, "GPUBuffer")} destOffset:${args[3]} size:${args[4]}` });
     } else if (method === "clearBuffer") {
@@ -734,13 +743,13 @@ export class CapturePanel {
     } else if (method === "copyTextureToTexture") {
       new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.texture.__id, "GPUTexture")} dest:${getName(args[1]?.texture.__id, "GPUTexture")}` });
     } else if (method === "setViewport") {
-      new Span(cmd, { class: "capture_method_args", text: `x:${args[0]} y:${args[1]} w:${args[2]} h:${args[3]} minZ:${args[4]} maxZ:${args[5]}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPassEncoder")} x:${args[0]} y:${args[1]} w:${args[2]} h:${args[3]} minZ:${args[4]} maxZ:${args[5]}` });
     } else if (method === "setScissorRect") {
-      new Span(cmd, { class: "capture_method_args", text: `x:${args[0]} y:${args[1]} w:${args[2]} h:${args[3]}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPassEncoder")} x:${args[0]} y:${args[1]} w:${args[2]} h:${args[3]}` });
     } else if (method === "setStencilReference") {
-      new Span(cmd, { class: "capture_method_args", text: `reference:${args[0]}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPassEncoder")} reference:${args[0]}` });
     } else if (method === "setBindGroup") {
-      new Span(cmd, { class: "capture_method_args", text: `index:${args[0]} bindGroup:${getName(args[1]?.__id, "GPUBindGroup")}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPassEncoder")} index:${args[0]} bindGroup:${getName(args[1]?.__id, "GPUBindGroup")}` });
       const bg = this._getObject(args[1]?.__id);
       if (bg) {
         for (const entry of bg.descriptor.entries) {
@@ -763,23 +772,23 @@ export class CapturePanel {
         new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id, "GPUBuffer")} offset:${args[1]} data:${args[2]?.length} Bytes` });
       }
     } else if (method === "setPipeline") {
-      new Span(cmd, { class: "capture_method_args", text: `renderPipeline:${getName(args[0]?.__id, "GPURenderPipeline")}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPassEncoder")} renderPipeline:${getName(args[0]?.__id, "GPURenderPipeline")}` });
     } else if (method === "setVertexBuffer") {
-      new Span(cmd, { class: "capture_method_args", text: `slot:${args[0]} buffer:${getName(args[1]?.__id, "GPUBuffer")} offset:${args[2] ?? 0}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPassEncoder")} slot:${args[0]} buffer:${getName(args[1]?.__id, "GPUBuffer")} offset:${args[2] ?? 0}` });
     } else if (method === "setIndexBuffer") {
-      new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id, "GPUBuffer")} indexFormat:${args[1]} offset:${args[2] ?? 0}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPassEncoder")} buffer:${getName(args[0]?.__id, "GPUBuffer")} indexFormat:${args[1]} offset:${args[2] ?? 0}` });
     } else if (method === "drawIndexed") {
-      new Span(cmd, { class: "capture_method_args", text: `indexCount:${args[0]} instanceCount:${args[1] ?? 1} firstIndex:${args[2] ?? 0} baseVertex:${args[3] ?? 0} firstInstance:${args[4] ?? 0}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPassEncoder")} indexCount:${args[0]} instanceCount:${args[1] ?? 1} firstIndex:${args[2] ?? 0} baseVertex:${args[3] ?? 0} firstInstance:${args[4] ?? 0}` });
     } else if (method === "draw") {
-      new Span(cmd, { class: "capture_method_args", text: `vertexCount:${args[0]} instanceCount:${args[1] ?? 1} firstVertex:${args[2] ?? 0} firstInstance:${args[3] ?? 0}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPassEncoder")} vertexCount:${args[0]} instanceCount:${args[1] ?? 1} firstVertex:${args[2] ?? 0} firstInstance:${args[3] ?? 0}` });
     } else if (method === "drawIndirect") {
-      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id, "GPUBuffer")} offset:${args[1]}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPassEncoder")} indirectBuffer:${getName(args[0]?.__id, "GPUBuffer")} offset:${args[1]}` });
     } else if (method === "drawIndexedIndirect") {
-      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id, "GPUBuffer")} offset:${args[1]}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPassEncoder")} indirectBuffer:${getName(args[0]?.__id, "GPUBuffer")} offset:${args[1]}` });
     } else if (method === "dispatchWorkgroups") {
-      new Span(cmd, { class: "capture_method_args", text: `countX:${args[0]} countY:${args[1] ?? 1} countZ:${args[2] ?? 1}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPassEncoder")} countX:${args[0]} countY:${args[1] ?? 1} countZ:${args[2] ?? 1}` });
     } else if (method === "dispatchWorkgroupsIndirect") {
-      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id, "GPUBuffer")} offset:${args[1]}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUPassEncoder")} indirectBuffer:${getName(args[0]?.__id, "GPUBuffer")} offset:${args[1]}` });
     } else if (method === "pushDebugGroup") {
       debugGroupLabelStack.push(args[0]);
       new Span(cmd, { class: "capture_method_args", text: args[0] });
@@ -787,7 +796,7 @@ export class CapturePanel {
       const label = debugGroupLabelStack.pop();
       new Span(cmd, { class: "capture_method_args", text: label });
     } else if (method === "createView") {
-      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object)} => ${getName(command.result, "GPUTextureView")}` });
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, "GPUTexture")} => ${getName(command.result, "GPUTextureView")}` });
     } else if (method === "beginRenderPass") {
       new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)} => ${getName(command.result, "GPURenderPassEncoder")}` });
     } else if (method === "beginComputePass") {
