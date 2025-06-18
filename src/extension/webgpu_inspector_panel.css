@@ -1504,6 +1504,7 @@ li.tree-item .expandbutton
   font-size: 14px;
   line-height: 28px;
   cursor: default;
+  overflow: hidden;
 }
 
 .capture_frameContents {

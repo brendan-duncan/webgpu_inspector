@@ -6,6 +6,9 @@ import { Widget } from './widget.js';
 export class Span extends Widget {
   constructor(parent, options) {
     super('span', parent, options);
+    if (options?.text && !options?.tooltip) {
+      this.tooltip = options.text;
+    }
   }
 }
 

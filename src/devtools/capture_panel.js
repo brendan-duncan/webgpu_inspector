@@ -661,11 +661,11 @@ export class CapturePanel {
       }
       const obj = self._getObject(id);
       if (obj) {
-        return `${obj.label || obj.name}(${obj.idName})`;
+        return `${obj.label || obj.name}(id:${obj.idName})`;
       }
       return className ?
-          `${className}(${id})` :
-          `${id}`;
+          `${className}(id:${id})` :
+          `id:${id}`;
     }
 
     new Span(cmd, { class: "capture_methodName", text: `${method}` });
@@ -724,15 +724,15 @@ export class CapturePanel {
     } else if (method === "unmap") {
       new Span(cmd, { class: "capture_method_args", text: getName(command.object) });
     } else if (method === "copyBufferToBuffer") {
-      new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.__id)} srcOffset:${args[1]} dest:${getName(args[2]?.__id)} destOffset:${args[3]} size:${args[4]}` });
+      new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.__id, "GPUBuffer")} srcOffset:${args[1]} dest:${getName(args[2]?.__id, "GPUBuffer")} destOffset:${args[3]} size:${args[4]}` });
     } else if (method === "clearBuffer") {
-      new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.__id)} offset:${args[1]} size:${args[4]}` });
+      new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.__id, "GPUBuffer")} offset:${args[1]} size:${args[4]}` });
     } else if (method === "copyBufferToTexture") {
-      new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.buffer?.__id)} texture:${getName(args[1]?.texture?.__id)}` });
+      new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.buffer?.__id, "GPUBuffer")} texture:${getName(args[1]?.texture?.__id, "GPUTexture")}` });
     } else if (method === "copyTextureToBuffer") {
-      new Span(cmd, { class: "capture_method_args", text: `texture:${getName(args[0]?.texture?.__id)} buffer:${getName(args[1]?.buffer?.__id)}` });
+      new Span(cmd, { class: "capture_method_args", text: `texture:${getName(args[0]?.texture?.__id, "GPUBuffer")} buffer:${getName(args[1]?.buffer?.__id, "GPUTexture")}` });
     } else if (method === "copyTextureToTexture") {
-      new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.texture.__id)} dest:${getName(args[1]?.texture.__id)}` });
+      new Span(cmd, { class: "capture_method_args", text: `src:${getName(args[0]?.texture.__id, "GPUTexture")} dest:${getName(args[1]?.texture.__id, "GPUTexture")}` });
     } else if (method === "setViewport") {
       new Span(cmd, { class: "capture_method_args", text: `x:${args[0]} y:${args[1]} w:${args[2]} h:${args[3]} minZ:${args[4]} maxZ:${args[5]}` });
     } else if (method === "setScissorRect") {
@@ -740,7 +740,7 @@ export class CapturePanel {
     } else if (method === "setStencilReference") {
       new Span(cmd, { class: "capture_method_args", text: `reference:${args[0]}` });
     } else if (method === "setBindGroup") {
-      new Span(cmd, { class: "capture_method_args", text: `index:${args[0]} bindGroup:${getName(args[1]?.__id)}` });
+      new Span(cmd, { class: "capture_method_args", text: `index:${args[0]} bindGroup:${getName(args[1]?.__id, "GPUBindGroup")}` });
       const bg = this._getObject(args[1]?.__id);
       if (bg) {
         for (const entry of bg.descriptor.entries) {
@@ -758,28 +758,28 @@ export class CapturePanel {
       const data = args[2];
       if (data.constructor === String) {
         const s = data.split(" ")[2];
-        new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id)} offset:${args[1]} data:${s} Bytes` });
+        new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id, "GPUBuffer")} offset:${args[1]} data:${s} Bytes` });
       } else {
-        new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id)} offset:${args[1]} data:${args[2]?.length} Bytes` });
+        new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id, "GPUBuffer")} offset:${args[1]} data:${args[2]?.length} Bytes` });
       }
     } else if (method === "setPipeline") {
-      new Span(cmd, { class: "capture_method_args", text: `renderPipeline:${getName(args[0]?.__id)}` });
+      new Span(cmd, { class: "capture_method_args", text: `renderPipeline:${getName(args[0]?.__id, "GPURenderPipeline")}` });
     } else if (method === "setVertexBuffer") {
-      new Span(cmd, { class: "capture_method_args", text: `slot:${args[0]} buffer:${getName(args[1]?.__id)} offset:${args[2] ?? 0}` });
+      new Span(cmd, { class: "capture_method_args", text: `slot:${args[0]} buffer:${getName(args[1]?.__id, "GPUBuffer")} offset:${args[2] ?? 0}` });
     } else if (method === "setIndexBuffer") {
-      new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id)} indexFormat:${args[1]} offset:${args[2] ?? 0}` });
+      new Span(cmd, { class: "capture_method_args", text: `buffer:${getName(args[0]?.__id, "GPUBuffer")} indexFormat:${args[1]} offset:${args[2] ?? 0}` });
     } else if (method === "drawIndexed") {
       new Span(cmd, { class: "capture_method_args", text: `indexCount:${args[0]} instanceCount:${args[1] ?? 1} firstIndex:${args[2] ?? 0} baseVertex:${args[3] ?? 0} firstInstance:${args[4] ?? 0}` });
     } else if (method === "draw") {
       new Span(cmd, { class: "capture_method_args", text: `vertexCount:${args[0]} instanceCount:${args[1] ?? 1} firstVertex:${args[2] ?? 0} firstInstance:${args[3] ?? 0}` });
     } else if (method === "drawIndirect") {
-      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id)} offset:${args[1]}` });
+      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id, "GPUBuffer")} offset:${args[1]}` });
     } else if (method === "drawIndexedIndirect") {
-      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id)} offset:${args[1]}` });
+      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id, "GPUBuffer")} offset:${args[1]}` });
     } else if (method === "dispatchWorkgroups") {
       new Span(cmd, { class: "capture_method_args", text: `countX:${args[0]} countY:${args[1] ?? 1} countZ:${args[2] ?? 1}` });
     } else if (method === "dispatchWorkgroupsIndirect") {
-      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id)} offset:${args[1]}` });
+      new Span(cmd, { class: "capture_method_args", text: `indirectBuffer:${getName(args[0]?.__id, "GPUBuffer")} offset:${args[1]}` });
     } else if (method === "pushDebugGroup") {
       debugGroupLabelStack.push(args[0]);
       new Span(cmd, { class: "capture_method_args", text: args[0] });
@@ -797,9 +797,11 @@ export class CapturePanel {
     } else if (method === "createBuffer") {
       new Span(cmd, { class: "capture_method_args", text: `size:${args[0]?.size} usage:${args[0]?.usage} mappedAtCreation:${args[0]?.mappedAtCreation ?? false} => ${getName(command.result, "GPUBuffer")}` });
     } else if (method === "writeTexture") {
-      new Span(cmd, { class: "capture_method_args", text: `dest:${getName(args[0]?.texture.__id)}` });
+      new Span(cmd, { class: "capture_method_args", text: `dest:${getName(args[0]?.texture.__id, "GPUTexture")}` });
     } else if (method === "destroy") {
       new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)}` });
+    } else if (method === "mapAsync") {
+      new Span(cmd, { class: "capture_method_args", text: `${getName(command.object, command.class)} mode:${args[0]}` });
     } else if (method === "getCurrentTexture") {
       new Span(cmd, { class: "capture_method_args", text: `=> ${getName(command.result, "GPUTexture")}` });
     } else if (method === "submit") {
@@ -812,6 +814,8 @@ export class CapturePanel {
       }
       buffers += "]";
       new Span(cmd, { class: "capture_method_args", text: `=> ${buffers}` });
+    } else if (method === "configure") {
+      new Span(cmd, { class: "capture_method_args", text: `device:${getName(args[0]?.device?.__id, "GPUDevice")} format:${args[0]?.format} usage:${args[0]?.usage}` });
     }
 
     cmd.element.onclick = () => {
@@ -2014,7 +2018,7 @@ export class CapturePanel {
         if (bufferData) {
           const indexArray = args[1] === "uint32" ? new Uint32Array(bufferData.buffer, bufferData.byteOffset, bufferData.byteLength / 4)
               : new Uint16Array(bufferData.buffer, bufferData.byteOffset, bufferData.byteLength / 2);
-          new Div(bufferGrp.body, { text: `Index Buffer: ${buffer.name}(${buffer.id}) Format:${indexArray instanceof Uint32Array ? "uint32" : "uint16"} Count:${indexArray.length}` });
+          new Div(bufferGrp.body, { text: `Index Buffer: ${buffer.name}[id:${buffer.id}] Format:${indexArray instanceof Uint32Array ? "uint32" : "uint16"} Count:${indexArray.length}` });
           const button = new Button(bufferGrp.body, { label: "Show Data", callback: () => {
             if (button.element.innerText === "Hide Data") {
               button.element.innerText = "Show Data";
