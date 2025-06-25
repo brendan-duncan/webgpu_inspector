@@ -348,15 +348,15 @@ export let webgpuInspector = null;
 
         context.__captureTexture = captureTexture;
         if (captureTexture) {
-          captureTexture.__id = texture.__id;
-          captureTexture.__canvasTexture = texture;
-          captureTexture.__context = context;
+          Object.defineProperty(captureTexture, "__id", { value: texture.__id, enumerable: false, writable: true });
+          Object.defineProperty(captureTexture, "__canvasTexture", { value: texture, enumerable: false, writable: true });
+          Object.defineProperty(captureTexture, "__context", { value: context, enumerable: false, writable: true });
 
           const captureView = captureTexture.createView();
-          captureView.__texture = captureTexture;
-          captureView.__canvasView = textureView;
-          captureTexture.__view = captureView;
-          captureView.__context = context;
+          Object.defineProperty(captureView, "__texture", { value: captureTexture, enumerable: false, writable: true });
+          Object.defineProperty(captureView, "__canvasView", { value: textureView, enumerable: false, writable: true });
+          Object.defineProperty(captureView, "__view", { value: captureView, enumerable: false, writable: true });
+          Object.defineProperty(captureView, "__context", { value: context, enumerable: false, writable: true });
 
           if (attachment.resolveTarget) {
             attachment.resolveTarget = captureView;
@@ -463,7 +463,7 @@ export let webgpuInspector = null;
           descriptor.usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC;
         }
         // Keep tabs on the device that the context was initialized with.
-        object.__device = descriptor.device;
+        Object.defineProperty(object, "__device", { value: descriptor.device, enumerable: false, writable: true });
       }
     }
 
@@ -482,7 +482,7 @@ export let webgpuInspector = null;
       if (method === "beginRenderPass") {
         // object is a GPUCommandEncoder
         // result is a GPURenderPassEncoder
-        result.__commandEncoder = object;
+        Object.defineProperty(result, "__commandEncoder", { value: object, enumerable: false, writable: true });
 
         // Check to see if any of the color attachments are canvas textures.
         // We need to know this so we can capture the canvas texture after the
@@ -494,7 +494,7 @@ export let webgpuInspector = null;
           const view = colorAttachment.resolveTarget ?? colorAttachment.view;
           if (view) {
             if (view.__id < 0) {
-              object.__rendersToCanvas = true;
+              Object.defineProperty(object, "__rendersToCanvas", { value: true, enumerable: false, writable: true });
               const texture = view.__texture;
               if (texture.__frameIndex < this._frameIndex) {
                 const message = "An expired canvas texture is being used as an attachment for a RenderPass.";
@@ -515,7 +515,7 @@ export let webgpuInspector = null;
         // We only want to capture canvas textures if it's been immediatley rendered to,
         // otherwise it will be black. Store the value in the command buffer so we can
         // see it from the submit function.
-        result.__rendersToCanvas = object.__rendersToCanvas;
+        Object.defineProperty(result, "__rendersToCanvas", { value: object.__rendersToCanvas, enumerable: false, writable: true });
       }
 
       if (method === "submit") {
@@ -531,7 +531,7 @@ export let webgpuInspector = null;
             size: this._timestampIndex * 8,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
           });
-          timestampDstBuffer.__count = this._timestampIndex;
+          Object.defineProperty(timestampDstBuffer, "__count", { value: this._timestampIndex, enumerable: false, writable: true });
           commandEncoder.copyBufferToBuffer(this._timestampBuffer, 0, timestampDstBuffer, 0, this._timestampIndex * 8);
           object.__device.queue.submit([commandEncoder.finish()]);
           this._timestampIndex = 0;
@@ -643,8 +643,13 @@ export let webgpuInspector = null;
         }
 
         id = -object.__id;
-        object.__canvasTexture = new WeakRef(result);
-        result.__frameIndex = this._frameIndex;
+        if (object.__canvasTexture) {
+          object.__canvasTexture = new WeakRef(result);
+          result.__frameIndex = this._frameIndex;
+        } else {
+          Object.defineProperty(object, "__canvasTexture", { value: new WeakRef(result), enumerable: false, writable: true });
+          Object.defineProperty(result, "__frameIndex", { value: this._frameIndex, enumerable: false, writable: true });
+        }
       } else if (method === "createView") {
         if (object.__id < 0) {
           id = object.__id - 0.5;
@@ -663,7 +668,7 @@ export let webgpuInspector = null;
           // We don't need the adapter to be a true owner of the device,
           // we're just using it for inspection purposes.
           navigator.gpu.requestAdapter().then((adapter) => {
-            object.__adapter = adapter;
+            Object.defineProperty(object, "__adapter", { value: adapter, enumerable: false, writable: true });
           });
         }
       }
@@ -676,12 +681,12 @@ export let webgpuInspector = null;
 
         if (method === "createShaderModule" ||
             method === "createRenderPipeline") {
-          result.__descriptor = args[0];
-          result.__device = object;
+          Object.defineProperty(result, "__descriptor", { value: args[0], enumerable: false, writable: true });
+          Object.defineProperty(result, "__device", { value: object, enumerable: false, writable: true });
           this._objectReplacementMap.set(result.__id, { id: result.__id, object: new WeakRef(result), replacement: null });
         } else if (method === "createRenderBundleEncoder") {
-          result.__descriptor = args[0];
-          result.__device = object;
+          Object.defineProperty(result, "__descriptor", { value: args[0], enumerable: false, writable: true });
+          Object.defineProperty(result, "__device", { value: object, enumerable: false, writable: true });
         } else if (method === "getCurrentTexture") {
           result.__context = object;
           this._trackObject(result.__id, result);
@@ -690,7 +695,7 @@ export let webgpuInspector = null;
           this._trackObject(result.__id, result);
         } else if (method === "createView" && !id) {
           this._trackObject(result.__id, result);
-          result.__texture = object;
+          Object.defineProperty(result, "__texture", { value: object, enumerable: false, writable: true });
           if (result.__id < 0) {
             result.label = "CanvasTextureView";
           }
@@ -698,7 +703,7 @@ export let webgpuInspector = null;
           this._trackObject(result.__id, result);
         } else if (method === "createBindGroup") {
           this._trackObject(result.__id, result);
-          result.__descriptor = args[0];
+          Object.defineProperty(result, "__descriptor", { value: args[0], enumerable: false, writable: true });
         } else if (method === "setBindGroup") {
           const descriptor = args[1].__descriptor;
           if (descriptor) {
@@ -811,7 +816,7 @@ export let webgpuInspector = null;
         descriptor["limits"] = this._gpuToObject(device.limits);
         this._trackObject(deviceId, device);
         this._sendAddObjectMessage(id, adapterId, "Device", JSON.stringify(descriptor), stacktrace);
-        device.__adapter = adapter; // prevent adapter from being garbage collected
+        Object.defineProperty(device, "__adapter", { value: adapter, enumerable: false, writable: true });
 
         //this._device = device;
         this._device = new WeakRef(device);
@@ -975,7 +980,7 @@ export let webgpuInspector = null;
       this.disableRecording();
       this._errorChecking--;
       device.pushErrorScope("validation");
-      descriptor.__replacement = shaderId;
+      Object.defineProperty(descriptor, "__replacement", { value: shaderId, enumerable: false, writable: true });
       const newShaderModule = device.createShaderModule(descriptor);
       const self = this;
       device.popErrorScope().then((error) => {
@@ -1031,7 +1036,7 @@ export let webgpuInspector = null;
           if (found) {
             this.disableRecording();
             this._errorChecking--;
-            newDescriptor.__replacement = objectRef.id;
+            Object.defineProperty(newDescriptor, "__replacement", { value: objectRef.id, enumerable: false, writable: true });
             device.pushErrorScope("validation");
             const newPipeline = isRenderPipeline ?
                 device.createRenderPipeline(newDescriptor) :
@@ -1256,7 +1261,7 @@ export let webgpuInspector = null;
         return;
       }
 
-      canvas.__id = this.getNextId(canvas);
+      Object.defineProperty(canvas, "__id", { value: this.getNextId(canvas), enumerable: false, writable: true });
       this._trackObject(canvas.__id, canvas);
 
       const self = this;
@@ -1278,7 +1283,7 @@ export let webgpuInspector = null;
         return;
       }
 
-      object.__id = id ?? this.getNextId(object);
+      Object.defineProperty(object, "__id", { value: id ?? this.getNextId(object), enumerable: false, writable: true });
 
       // Track garbage collected objects
       this._garbageCollectionRegistry.register(object, object.__id);
@@ -1489,7 +1494,7 @@ export let webgpuInspector = null;
       if (method === "beginRenderPass" || method === "beginComputePass" ||
           method === "createCommandEncoder" || method === "createRenderPassEncoder" ||
           (method === "finish" && object instanceof GPUCommandEncoder)) {
-        result.__id = `_${commandId}`;
+        Object.defineProperty(result, "__id", { value: `_${commandId}`, enumerable: false, writable: true });
       }
 
       let newArgs = null;
