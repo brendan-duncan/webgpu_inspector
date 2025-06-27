@@ -1,3 +1,12 @@
+## v0.14.0
+
+* Fix shader debugger for shaders that have multiple entry points with differing sets of bindings. [33](https://github.com/brendan-duncan/webgpu_inspector/issues/33)
+* UI improvements for frame captures:
+  [29](https://github.com/brendan-duncan/webgpu_inspector/issues/29)
+  [31](https://github.com/brendan-duncan/webgpu_inspector/issues/31)
+* Fix setBindGroup being displayed multiple times in capture. [30](https://github.com/brendan-duncan/webgpu_inspector/issues/30)    
+* Inspector shows all info from Adapter.
+
 ## v0.13.0
 
 * Fix frame capture for content running in a worker thread.
