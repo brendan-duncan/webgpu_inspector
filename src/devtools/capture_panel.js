@@ -1,7 +1,15 @@
 import { CaptureStatistics } from "./capture_statistics.js";
 import {
   Sampler,
-  TextureView
+  TextureView,
+  BindGroup,
+  BindGroupLayout,
+  Buffer,
+  ComputePipeline,
+  PipelineLayout,
+  RenderPipeline,
+  ShaderModule,
+  Texture
 } from "./gpu_objects/index.js";
 import { Button } from "./widget/button.js";
 import { Checkbox } from "./widget/checkbox.js";
@@ -256,6 +264,504 @@ export class CapturePanel {
     }
   }
 
+  _exportGetDescriptorArray(array, objectCache, output) {
+    const outArray = [];
+    for (const item of array) {
+      if (item instanceof Array) {
+        outArray.push(this._exportGetDescriptorArray(item, objectCache, output));
+      } else if (item instanceof Object) {
+        if (item.__id !== undefined) {
+          const obj = this._getObject(item.__id);
+          this._exportCreateObject(obj, objectCache, output);
+          outArray.push(`@_${item.__id}`);
+        } else {
+          outArray.push(this._exportGetObjectDescriptor(item, objectCache, output));
+        }
+      } else {
+        outArray.push(item);
+      }
+    }
+    return outArray;
+  }
+
+
+  _exportGetObjectDescriptor(descriptor, objectCache, output) {
+    const outDescriptor = {};
+
+    for (const key in descriptor) {
+      const value = descriptor[key];
+      if (value instanceof Array) {
+        outDescriptor[key] = this._exportGetDescriptorArray(value, objectCache, output);
+      } else if (value instanceof Object) {
+        if (value.__id !== undefined) {
+          const obj = this._getObject(value.__id);
+          if (obj) {
+            this._exportCreateObject(obj, objectCache, output);
+          }
+          outDescriptor[key] = `@_${value.__id}`;
+        } else {
+          outDescriptor[key] = this._exportGetObjectDescriptor(value, objectCache, output);
+        }
+      } else {
+        // Skip mappedAtCreation as it's not needed for export.
+        // Skip hasDynamicOffset since we are recording individual buffers instead of large scratch buffers.
+        if (key !== "mappedAtCreation" && key !== "hasDynamicOffset") {
+          outDescriptor[key] = value;
+        }
+      }
+    }
+    return outDescriptor;
+  }
+
+  _exportGetDescriptorArrayString(array) {
+    let out = "[";
+    for (const item of array) {
+      if (item instanceof Array) {
+        out += this._exportGetDescriptorArrayString(item);
+      } else if (item.constructor === String) {
+        if (item.startsWith("@_-")) {
+          if (item.indexOf(".") != -1) {
+            out += `_CANVASVIEW`;
+          } else {
+            out += `_CANVAS`;
+          }
+        } else if (item.startsWith("@_")) {
+          out += item.slice(1);
+        } else {
+          out += `\`${item}\``;
+        }
+      } else if (item instanceof Object) {
+        out += this._exportGetDescriptorString(item);
+      } else {
+        out += item;
+      }
+      out += ", ";
+    }
+    out += "]";
+    return out;
+  }
+
+  _exportGetDescriptorString(descriptor) {
+    let out = "{";
+    for (const key in descriptor) {
+      const value = descriptor[key];
+      if (value === undefined) {
+        continue;
+      }
+      if (value instanceof Array) {
+        out += `${key}: ${this._exportGetDescriptorArrayString(value)}, `;
+      } else if (value.constructor === String) {
+        if (value.startsWith("@_-")) {
+          if (value.indexOf(".") != -1) {
+            out += `${key}: _CANVASVIEW, `;
+          } else {
+            out += `${key}: _CANVAS, `;
+          }
+        } else if (value.startsWith("@_")) {
+          out += `${key}: ${value.slice(1)}, `;
+        } else {
+          out += `${key}: \`${value}\`, `;
+        }
+      } else if (value instanceof Object) {
+        out += `${key}: ${this._exportGetDescriptorString(value)}, `;
+      } else {
+        out += `${key}: ${value}, `;
+      }
+    }
+    out += "}";
+    return out;
+  }
+
+  _getExportDataId(data) {
+    for (let i = 0, l = this._exportDataMap.length; i < l; ++i) {
+      const d = this._exportDataMap[i];
+      if (d.length === data.length) {
+        let differs = false;
+        for (let j = 0; j < d.length; ++j) {
+          if (d[j] !== data[j]) {
+            differs = true;
+            break;
+          }
+        }
+        if (!differs) {
+          return i;
+        }
+      }
+    }
+    let id = this._exportDataMap.length;
+    this._exportDataMap.push(data);
+    return id;
+  }
+
+  _exportCreateObject(obj, objectCache, output) {
+    if (objectCache.has(obj.id)) {
+      return;
+    }
+    objectCache.add(obj.id);
+
+    const desc = this._exportGetObjectDescriptor(obj.descriptor, objectCache, output);
+    if (obj instanceof Texture && obj.id > 0) {
+      if (desc.usage !== undefined) {
+        desc.usage |= GPUTextureUsage.COPY_DST;
+      }
+    }
+    if (obj instanceof Buffer) {
+      if (desc.usage !== undefined) {
+        desc.usage |= GPUBufferUsage.COPY_DST;
+      }
+    }
+    const descStr = this._exportGetDescriptorString(desc);
+
+    if (obj instanceof Sampler) {
+      output.push(`const _${obj.id} = device.createSampler(${descStr});`);
+    } else if (obj instanceof TextureView) {
+      const texture = obj.__texture;
+      this._exportCreateObject(texture, objectCache, output);
+      output.push(`const _${obj.id < 0 ? "CANVASVIEW" : obj.id} = _${texture.id < 0 ? "CANVAS" : texture.id}.createView(${descStr});`);
+    } else if (obj instanceof Texture) {
+      if (obj.id < 0) {
+        // Canvas texture
+        output.push(`const _CANVAS = context.getCurrentTexture();`);
+        const width = obj.descriptor?.size?.width ?? obj.descriptor?.size[0] ?? 960;
+        const height = obj.descriptor?.size?.height ?? obj.descriptor?.size[1] ?? 600;
+        this._exportCanvasWidth = width;
+        this._exportCanvasHeight = height;
+      } else {
+        output.push(`const _${obj.id} = device.createTexture(${descStr});`);
+        if (!obj.isDepthStencil) {
+          for (let mip = 0; mip < obj.imageData.length; ++mip) {
+            //if (obj.imageData[mip].length > 1024*1024*4)
+              //continue;
+            const mipSize = obj.getMipSize(mip);
+            const bytesPerRow = obj.bytesPerRow >> mip;
+            const dataId = this._getExportDataId(obj.imageData[mip]);
+            output.push(`device.queue.writeTexture({texture: _${obj.id}, mipLevel: ${mip}}, D(${dataId}), {bytesPerRow:${bytesPerRow}}, [${mipSize[0]}, ${mipSize[1]}, 1]);`);
+          }
+        }
+      }
+    } else if (obj instanceof Buffer) {
+      output.push(`const _${obj.id} = device.createBuffer(${descStr});`);
+      if (obj._exportDataId !== undefined) {
+        output.push(`device.queue.writeBuffer(_${obj.id}, 0, D(${obj._exportDataId}));`);
+      }
+    } else if (obj instanceof ShaderModule) {
+      output.push(`const _${obj.id} = device.createShaderModule(${descStr});`);
+    } else if (obj instanceof BindGroup) {
+      output.push(`const _${obj.id} = device.createBindGroup(${descStr});`);
+    } else if (obj instanceof BindGroupLayout) {
+      output.push(`const _${obj.id} = device.createBindGroupLayout(${descStr});`);
+    } else if (obj instanceof PipelineLayout) {
+      output.push(`const _${obj.id} = device.createPipelineLayout(${descStr});`);
+    } else if (obj instanceof RenderPipeline) {
+      output.push(`const _${obj.id} = device.createRenderPipeline(${descStr});`);
+    } else if (obj instanceof ComputePipeline) {
+      output.push(`const _${obj.id} = device.createComputePipeline(${descStr});`);
+    }
+  }
+
+  _downloadData(data, filename) {
+    try {
+      const link = document.createElement("a");
+      //link.href = URL.createObjectURL(new Blob([data], { type: "text/html" }));
+      link.href = URL.createObjectURL(new Blob(data, { type: "text/html" }));
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+    }
+  }
+
+  async _encodeDataUrl(a, type = "application/octet-stream") {
+    const bytes = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+    return await new Promise((resolve, reject) => {
+      const reader = Object.assign(new FileReader(), {
+        onload: () => resolve(reader.result),
+        onerror: () => reject(reader.error),
+      });
+      reader.readAsDataURL(new File([bytes], "", { type }));
+    });
+  }
+
+  _export() {
+    const outCommand = [];
+    const outObjects = [];
+    const objectCache = new Set();
+
+    this._exportDataMap = [];
+    const _writtenData = new Set();
+
+    let currentPipeline = null;
+    const commands = this._captureCommands;
+    for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
+      const command = commands[commandIndex];
+      if (!command) {
+        break;
+      }
+
+      const method = command.method;
+      const args = command.args;
+
+      if (method === "createCommandEncoder") {
+        outCommand.push(`const ${command.result} = device.createCommandEncoder();`);
+      } else if (method === "beginRenderPass") {
+        const desc = this._exportGetObjectDescriptor(args[0], objectCache, outObjects);
+        const descStr = this._exportGetDescriptorString(desc);
+        outCommand.push(`{\nconst _${command.result} = ${command.object}.beginRenderPass(${descStr});`);
+      } else if (method === "end") {
+        outCommand.push(`_${command.object}.end();\n}`);
+      } else if (method === "finish") {
+        outCommand.push(`const _${command.result} = ${command.object}.finish();`);
+      } else if (method === "submit") {
+        if (args[0].length > 0) {
+          outCommand.push(`device.queue.submit([_${args[0][0].__id}]);`);
+        } else {
+          outCommand.push(`device.queue.submit([]);`);
+        }
+      } else if (method === "setViewport") {
+        outCommand.push(`_${command.object}.setViewport(${args[0]}, ${args[1]}, ${args[2]}, ${args[3]}, ${args[4]}, ${args[5]});`);
+      } else if (method === "setScissorRect") {
+        outCommand.push(`_${command.object}.setScissorRect(${args[0]}, ${args[1]}, ${args[2]}, ${args[3]});`);
+      } else if (method === "setPipeline") {
+        currentPipeline = this._getObject(args[0].__id);
+        outObjects.push(currentPipeline);
+        outCommand.push(`_${command.object}.setPipeline(_${args[0].__id});`);
+      } else if (method === "setBindGroup") {
+        //outObjects.push(this._getObject(args[1].__id));
+        //outCommand.push(`_${command.object}.setBindGroup(${args[0]}, _${args[1].__id});`);
+      } else if (method === "setVertexBuffer") {
+        const index = args[0];
+        const bufferObj = this._getObject(args[1].__id);
+        outObjects.push(bufferObj);
+        outCommand.push(`_${command.object}.setVertexBuffer(${index}, _${args[1].__id});`);
+
+        if (command.isBufferDataLoaded[index] && command.bufferData[index]) {
+          const bufferData = command.bufferData[index];
+          if (bufferData) {
+            const vertexArray = new Uint8Array(bufferData.buffer, bufferData.byteOffset, bufferData.byteLength);
+            const dataId = this._getExportDataId(vertexArray);
+            bufferObj._exportDataId = dataId;
+          }
+        }
+      } else if (method === "setIndexBuffer") {
+        const bufferObj = this._getObject(args[0].__id);
+        outObjects.push(bufferObj);
+        outCommand.push(`_${command.object}.setIndexBuffer(_${args[0].__id}, "${args[1]}");`);
+
+        if (command.isBufferDataLoaded && command.bufferData) {
+          const bufferData = command.bufferData[0];
+          if (bufferData) {
+            const indexArray = args[1] === "uint32" ? new Uint32Array(bufferData.buffer, bufferData.byteOffset, bufferData.byteLength / 4)
+                : new Uint16Array(bufferData.buffer, bufferData.byteOffset, bufferData.byteLength / 2);
+            const dataId = this._getExportDataId(indexArray);
+            bufferObj._exportDataId = dataId;
+          }
+        }
+      } else if (method === "drawIndexed") {
+        const state = this._getPipelineState(command);
+        if (state) {
+          for (const bindGroupCmd of state.bindGroups) {
+            const bindGroup = this._getObject(bindGroupCmd.args[1].__id);
+            outObjects.push(bindGroup);
+            const bindGroupDesc = bindGroup?.descriptor;
+
+            for (const entryIndex in bindGroupDesc.entries) {
+              const entry = bindGroupDesc.entries[entryIndex];
+
+              const binding = entry.binding;
+              const resource = entry.resource;
+
+              let size = null;
+              if (resource.buffer) {
+                if (bindGroupCmd?.isBufferDataLoaded) {
+                  if (bindGroupCmd.isBufferDataLoaded[entryIndex]) {
+                    const bufferData = bindGroupCmd.bufferData[entryIndex];
+                    if (bufferData) {
+                      size = bufferData.length;
+                    }
+                  }
+                }
+              }
+
+              if (resource.__id !== undefined) {
+                const obj = this._getObject(resource.__id);
+                if (obj) {
+                  if (obj instanceof Sampler) {
+                  } else if (obj instanceof TextureView) {
+                  } else if (obj instanceof Buffer) {
+                    // Buffer
+                    //console.log("Buffer", binding, resource.__id, size, obj);
+                  }
+                } else {
+                  // Object not found
+                  //console.log("!!!! NOT FOUND", binding, resource.__id, size);
+                }
+              } else {
+                if (resource.buffer) {
+                  const bufferId = resource.buffer.__id;
+                  const buffer = this._getObject(bufferId);
+                  
+                  if (bindGroupCmd?.isBufferDataLoaded) {
+                    if (bindGroupCmd.isBufferDataLoaded[entryIndex]) {
+                      const bufferData = bindGroupCmd.bufferData[entryIndex];
+                      if (bufferData) {
+
+                        outObjects.push(buffer);
+
+                        const dataId = this._getExportDataId(bufferData);
+                        const writtenKey = `${bufferId}_${dataId}`;
+                        if (!_writtenData.has(writtenKey)) {
+                          buffer._exportDataId = dataId;
+                          _writtenData.add(writtenKey);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            outCommand.push(`_${bindGroupCmd.object}.setBindGroup(${bindGroupCmd.args[0]}, _${bindGroupCmd.args[1].__id});`);
+          }
+        }
+        outCommand.push(`_${command.object}.drawIndexed(${args[0]});\n`);
+      } else if (method === "draw") {
+        const state = this._getPipelineState(command);
+        if (state) {
+          for (const bindGroupCmd of state.bindGroups) {
+            const bindGroup = this._getObject(bindGroupCmd.args[1].__id);
+            outObjects.push(bindGroup);
+            const bindGroupDesc = bindGroup?.descriptor;
+
+            for (const entryIndex in bindGroupDesc.entries) {
+              const entry = bindGroupDesc.entries[entryIndex];
+
+              const binding = entry.binding;
+              const resource = entry.resource;
+
+              let size = null;
+              if (resource.buffer) {
+                if (bindGroupCmd?.isBufferDataLoaded) {
+                  if (bindGroupCmd.isBufferDataLoaded[entryIndex]) {
+                    const bufferData = bindGroupCmd.bufferData[entryIndex];
+                    if (bufferData) {
+                      size = bufferData.length;
+                    }
+                  }
+                }
+              }
+
+              if (resource.__id !== undefined) {
+                const obj = this._getObject(resource.__id);
+                if (obj) {
+                  if (obj instanceof Sampler) {
+                  } else if (obj instanceof TextureView) {
+                  } else if (obj instanceof Buffer) {
+                    // Buffer
+                    //console.log("Buffer", binding, resource.__id, size, obj);
+                  }
+                } else {
+                  // Object not found
+                  //console.log("!!!! NOT FOUND", binding, resource.__id, size);
+                }
+              } else {
+                if (resource.buffer) {
+                  const bufferId = resource.buffer.__id;
+                  const buffer = this._getObject(bufferId);
+                  
+                  if (bindGroupCmd?.isBufferDataLoaded) {
+                    if (bindGroupCmd.isBufferDataLoaded[entryIndex]) {
+                      const bufferData = bindGroupCmd.bufferData[entryIndex];
+                      if (bufferData) {
+
+                        outObjects.push(buffer);
+
+                        const dataId = this._getExportDataId(bufferData);
+                        const writtenKey = `${bufferId}_${dataId}`;
+                        if (!_writtenData.has(writtenKey)) {
+                          buffer._exportDataId = dataId;
+                          _writtenData.add(writtenKey);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            outCommand.push(`_${bindGroupCmd.object}.setBindGroup(${bindGroupCmd.args[0]}, _${bindGroupCmd.args[1].__id});`);
+          }
+        }
+        outCommand.push(`_${command.object}.draw(${args[0]}, ${args[1]}, ${args[2]}, ${args[2]});`);
+      }
+    }
+
+    const createOutput = [];
+    for (const obj of outObjects) {
+      if (obj.constructor === String) {
+        createOutput.push(obj);
+      } else {
+        this._exportCreateObject(obj, objectCache, createOutput);
+      }
+    }
+
+    let exportString = `<html><body style="margin:0px; padding:0px;"><script type="module">\n// WebGPU Capture Export\n`;
+
+    exportString += "const adapter = await navigator.gpu.requestAdapter();\n";
+    exportString += `const device = await adapter.requestDevice({requiredFeatures: adapter.features, requiredLimits: adapter.limits});\n`;
+    exportString += `const canvas = document.getElementById("captureCanvas");\n`;
+    exportString += `const preferredFormat = navigator.gpu.getPreferredCanvasFormat();\n`;
+    exportString += `const context = canvas.getContext("webgpu");\n`;
+    exportString += `context.configure({device, format: preferredFormat, alphaMode: "opaque"});\n`;
+    exportString += `const _D = [];\n`;
+    exportString += `await _initializeData();\n`;
+    exportString += `function D(id) { return _D[id] ?? []; }\n`;
+    exportString += "\n\n";
+    exportString += createOutput.join("\n");
+    exportString += "\n\nrequestAnimationFrame(() => {\n";
+    exportString += outCommand.join("\n");
+    exportString += "\n});\n";
+    exportString += "\n\n";
+    exportString += `async function B64ToA(s, type, length) {
+    const res = await fetch(s);
+    const x = new Uint8Array(await res.arrayBuffer());
+    if (type == "Uint32Array") {
+        return new Uint32Array(x.buffer, 0, x.length/4);
+    } else if (type == "Uint16Array") {
+        return new Uint16Array(x.buffer, 0, x.length/2);
+    } else if (type == "Float32Array") {
+        return new Float32Array(x.buffer, 0, x.length/4);
+    }
+    return new Uint8Array(x.buffer, 0, x.length);
+}\n`;
+    exportString += `async function _initializeData() {\n`;
+
+    const promises = [];
+    const self = this;
+
+    const outputData = [exportString];
+
+    for (let ai = 0; ai < self._exportDataMap.length; ++ai) {
+      const a = self._exportDataMap[ai];
+      promises.push(new Promise((resolve) => {
+        self._encodeDataUrl(a).then((b64) => {
+          outputData.push(`  _D[${ai}] = await B64ToA("${b64}", "${a.type}", ${a.length});\n`);
+          //exportString += `  _D[${ai}] = await B64ToA("${b64}", "${a.type}", ${a.length});\n`;
+          resolve();
+        });
+      }));
+    }
+
+    Promise.all(promises).then(() => {
+      let footer = `}\n\n</script><canvas id="captureCanvas" width="${this._exportCanvasWidth}" height="${this._exportCanvasHeight}"></canvas></body></html>\n`;
+      outputData.push(footer);
+
+      this._downloadData(outputData, "webgpu_capture_export.html");
+
+      this._exportDataMap = [];
+    });
+  }
+
   _captureFrameResults(frame, commands) {
     const contents = this._capturePanel;
 
@@ -293,6 +799,10 @@ export class CapturePanel {
     new Span(filterArea, { text: "Filter: ", style: "margin-right: 5px;" });
     this.filterEdit = new TextInput(filterArea, { style: "width: 200px;", placeholder: "Filter", onEdit: (value) => {
       self._filterCommands(value, commands);
+    } });
+
+    new Button(filterArea, { text: "Export", onClick: () => {
+      self._export();
     } });
 
     const frameContents = new Div(_frameContents, { class: "capture_frame" });

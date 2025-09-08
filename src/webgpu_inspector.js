@@ -2197,8 +2197,9 @@ export let webgpuInspector = null;
   });
 
   // Intercept Worker creation to inject inspector
-  Worker = new Proxy(Worker, {
+  /*Worker = new Proxy(Worker, {
     construct(target, args, newTarget) {
+      console.log(`!!!!!!!!! Worker created ${args[0]}`);
       // Inject inspector before the worker loads
       let src = `self.__webgpu_src = ${self.__webgpu_src.toString()};self.__webgpu_src();`;
 
@@ -2294,5 +2295,5 @@ export let webgpuInspector = null;
         }
       })
     },
-  });
+  });*/
 })();
