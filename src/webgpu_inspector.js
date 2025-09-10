@@ -2200,7 +2200,7 @@ export let webgpuInspector = null;
   Worker = new Proxy(Worker, {
     construct(target, args, newTarget) {
       // Inject inspector before the worker loads
-      let src = `self.__webgpu_src = ${self.__webgpu_src.toString()};self.__webgpu_src();`;
+      let src = self.__webgpu_src ? `self.__webgpu_src = ${self.__webgpu_src.toString()};self.__webgpu_src();` : "";
 
       let url = args[0];
 
@@ -2209,8 +2209,9 @@ export let webgpuInspector = null;
         _url = new _URL(url);
       } catch {
         const baseUrl = new _URL(import.meta.url);
+        const baseDir = baseUrl.pathname.substring(0, baseUrl.pathname.lastIndexOf("/"));
         const sep = url.startsWith("/") ? "" : "/";
-        _url = new URL(`${baseUrl.protocol}//${baseUrl.host}${sep}${url}`);
+        _url = new URL(`${baseUrl.protocol}//${baseUrl.host}${baseDir}${sep}${url}`);
       }
 
       const _webgpuHostAddress = `${_url.protocol}//${_url.host}`;
