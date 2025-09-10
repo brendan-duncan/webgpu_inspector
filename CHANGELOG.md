@@ -1,3 +1,8 @@
+## v0.15.0
+
+* Various fixes from wgsl_reflect for shader reflection and debugging.
+* Fix issues with sites that have Workers.
+
 ## v0.14.0
 
 * Fix shader debugger for shaders that have multiple entry points with differing sets of bindings. [33](https://github.com/brendan-duncan/webgpu_inspector/issues/33)
