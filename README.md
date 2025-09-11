@@ -71,6 +71,10 @@ Some pages will not update if they do not have focus. If Capture is not recordin
 
 Install WebGPU Inspector from the [Chrome Web Store](https://chromewebstore.google.com/detail/webgpu-inspector/holcbbnljhkpkjkhgkagjkhhpeochfal).
 
+### Mozilla Add-Ons Store
+
+Install WebGPU Inspector from the [Firefox Add-Ons Store](https://addons.mozilla.org/en-US/firefox/addon/webgpu-inspector).
+
 ### From Source
 
 ##### [Back to top](#webgpu-inspector)
@@ -145,4 +149,5 @@ After the project is built:
   * Used for parsing and getting reflection information from WGSL shaders.
 * [WebGPU Recorder](https://github.com/brendan-duncan/webgpu_recorder)
   * Used for generating recordings of WebGPU content.
+
 
