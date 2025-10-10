@@ -2389,6 +2389,9 @@ export class CapturePanel {
   _showTextureInputs(state, parent) {
     const inputs = [];
     for (const bindGroupCmd of state.bindGroups) {
+      if (!bindGroupCmd?.args) {
+        continue;
+      }
       const group = bindGroupCmd.args[0];
       const bindGroup = this._getObject(bindGroupCmd.args[1]?.__id);
       if (bindGroup?.entries) {
