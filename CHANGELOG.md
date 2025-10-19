@@ -1,3 +1,7 @@
+## v0.16.0
+
+* Fix shader recompile on Firefox
+
 ## v0.15.0
 
 * Various fixes from wgsl_reflect for shader reflection and debugging.

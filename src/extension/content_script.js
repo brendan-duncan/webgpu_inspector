@@ -4,6 +4,7 @@ import { Actions, PanelActions } from "../utils/actions.js";
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
 const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
+const isRunningInFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
 
 const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
   let action = message.action;
@@ -12,7 +13,8 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
   }
 
   if (action === PanelActions.RequestTexture || action === PanelActions.CompileShader || action === PanelActions.RevertShader) {
-    window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: message }))
+    const msg = isRunningInFirefox ? cloneInto(message, document.defaultView) : message;
+    window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: msg }));
     return;
   }
 
@@ -38,7 +40,8 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
       sessionStorage.setItem(webgpuInspectorCaptureFrameKey, messageString);
       const message = { __webgpuInspector: true, __webgpuInspectorPanel: true, action: PanelActions.Capture,
         data: messageString };
-      window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: message }))
+      const msg = isRunningInFirefox ? cloneInto(message, document.defaultView) : message;
+      window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: msg }))
     }
   }
   
