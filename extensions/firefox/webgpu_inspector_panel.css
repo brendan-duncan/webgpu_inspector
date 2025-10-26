@@ -455,6 +455,10 @@ span {
   filter: brightness(150%);
 }
 
+.button:disabled {
+  color: #888;
+}
+
 /* checkbox */
 .styled-checkbox-container {
   display: inline-block;

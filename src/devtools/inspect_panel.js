@@ -123,6 +123,11 @@ export class InspectPanel {
     this.database.onValidationError.addListener(this._validationError, this);
     this.database.onResolvePendingObject.addListener(this._resolvePendingObject, this);
 
+    // Keep track of previously inspected objects for history navigation.
+    this._inspectedObjectBack = [];
+    this._inspectedObjectForward = [];
+    this._maxInspectedObjectHistory = 20;
+
     this.window.onTextureLoaded.addListener(this._textureLoaded, this);
 
     // Periodically clean up old recycled widgets.
@@ -161,12 +166,13 @@ export class InspectPanel {
     return this.database.inspectedObject;
   }
 
-  inspectObject(object) {
-    if (!object) {
-      return;
-    }
-    if (object.widget) {
+  inspectObject(object, skipHistory) {
+    // Procedurally inspect an object an object by simulating a click
+    // on its Objects list widget. This will ensure the Objects list item
+    // is expanded and selected.
+    if (object?.widget) {
       object.widget.group.expand();
+      object.skipHistory = skipHistory;
       object.widget.element.click();
     }
   }
@@ -228,6 +234,10 @@ export class InspectPanel {
     this._recycledWidgets = {};
     this._inspectedInfoBox = null;
 
+    this._inspectedObjectBack = [];
+    this._inspectedObjectForward = [];
+    this._updateHistoryButtons();
+
     this._selectedObject = null;
     this._selectedGroup = null;
     this.inspectorGUI.html = "";
@@ -236,9 +246,28 @@ export class InspectPanel {
 
     const pane1 = new Span(split);
 
+    const self = this;
+
     const objectsTab = new TabWidget(pane1);
     const objectsPanel = new Div(null, { style: "font-size: 11pt; overflow: auto; height: calc(-115px + 100vh);" });
     objectsTab.addTab("Objects", objectsPanel);
+
+    this._backButton = new Button(objectsTab.headerElement, { label: "<", style: "font-weight: bold;", tooltip: "Back", disabled: true, callback: () => {
+      const previousObject = self._inspectedObjectBack.pop();
+      self._updateHistoryButtons();
+      if (previousObject) {
+        self._inspectedObjectForward.push(self.inspectedObject);
+        self.inspectObject(previousObject, true);
+      }
+    }});
+    this._forwardButton = new Button(objectsTab.headerElement, { label: ">", style: "font-weight: bold;", tooltip: "Forward", disabled: true, callback: () => {
+      const nextObject = self._inspectedObjectForward.pop();
+      self._updateHistoryButtons();
+      if (nextObject) {
+        self._inspectedObjectBack.push(self.inspectedObject);
+        self.inspectObject(nextObject, true);
+      }
+    }});
 
     const pane2 = new Span(split, { style: "flex-grow: 1; overflow: hidden;" });
 
@@ -354,6 +383,15 @@ export class InspectPanel {
         this._inspectedInfoBox.style.backgroundColor = "#533";
       }
     }
+
+    // Remove the deleted object from the inspection history.
+    if (this._inspectedObjectBack.indexOf(object) !== -1) {
+      this._inspectedObjectBack = this._inspectedObjectBack.filter((o) => o !== object);
+    }
+    if (this._inspectedObjectForward.indexOf(object) !== -1) {
+      this._inspectedObjectForward = this._inspectedObjectForward.filter((o) => o !== object);
+    }
+    this._updateHistoryButtons();
   }
 
   _updateObjectStat(object) {
@@ -442,6 +480,14 @@ export class InspectPanel {
     return panel;
   }
 
+  _updateHistoryButtons() {
+    if (!this._backButton)
+      return;
+    this._backButton.disabled = this._inspectedObjectBack.length === 0;
+    this._forwardButton.disabled = this._inspectedObjectForward.length === 0;
+  }
+
+  // Adds an object to the Objects list.
   _addObjectToUI(object, ui) {
     const name = `${object.name}`;
     let type = "";
@@ -463,8 +509,9 @@ export class InspectPanel {
         type += ` Texture:${texture.idName} ${texture.descriptor.format} ${texture.resolutionString}`;
       }
     } else if (object instanceof Buffer) {
-      const access = object.descriptor.usage;
+      type += ` size:${object.descriptor?.size ?? "?"}`;
 
+      const access = object.descriptor.usage;
       if (access & GPUBufferUsage.INDEX) {
         type += " INDEX";
       }
@@ -512,6 +559,18 @@ export class InspectPanel {
         self._selectedObject.widget.element.classList.remove("selected");
       }
       object.widget.element.classList.add("selected");
+      // Track the previously inspected object in the history stack.
+      if (!object.skipHistory) {
+        if (this.database.inspectedObject) {
+          this._inspectedObjectBack.push(this.database.inspectedObject);
+          if (this._inspectedObjectBack.length > this._maxInspectedObjectHistory) {
+            this._inspectedObjectBack.shift();
+          }
+        }
+      } else {
+        object.skipHistory = false;
+      }
+      self._updateHistoryButtons();
       self._selectedObject = object;
       self._inspectObject(object);
     };

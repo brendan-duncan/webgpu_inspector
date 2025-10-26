@@ -1,6 +1,7 @@
 ## v0.16.0
 
-* Fix shader recompile on Firefox
+* Fix shader recompile on Firefox.
+* Add back/forward inspection history navigation.
 
 ## v0.15.0
 
