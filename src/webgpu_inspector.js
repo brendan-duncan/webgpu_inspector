@@ -20,7 +20,7 @@ export let webgpuInspector = null;
 
   // How much data should we send to the panel via message as a chunk.
   // Messages can't send that much data.
-  const maxDataChunkSize = (1024 * 1024) / 4; // 256KB
+  const maxDataChunkSize = (1024 * 1024); // 1MB
   const maxBufferCaptureSize = (1024 * 1024) / 4; // 256KB
   const maxColorAttachments = 10;
   const captureFrameCount = 1;
