@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pointer Lock Example</title>
+    <style>
+        /* Simple styling for the element to lock the pointer onto */
+        #pointerLockTarget {
+            width: 100%;
+            height: 200px;
+            background-color: lightblue;
+            text-align: center;
+            line-height: 200px;
+            font-size: 24px;
+            margin-top: 20px;
+            cursor: pointer; /* Indicates it's clickable */
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Click to Get Pointer Lock</h1>
+
+    <div id="pointerLockTarget">
+        Click here to lock the pointer!
+    </div>
+
+    <p id="status">Status: Pointer is unlocked.</p>
+
+    <script>
+        // Get a reference to the element you want to lock the pointer onto
+        const lockTarget = document.getElementById('pointerLockTarget');
+        const statusElement = document.getElementById('status');
+
+        /**
+         * Event handler for when the pointer lock state changes.
+         */
+        function lockChangeAlert() {
+            if (document.pointerLockElement === lockTarget) {
+                // Pointer is locked
+                statusElement.textContent = "Status: Pointer is **LOCKED**! Press ESC to release.";
+                console.log("The pointer lock succeeded.");
+            } else {
+                // Pointer is unlocked
+                statusElement.textContent = "Status: Pointer is **unlocked**.";
+                console.log("The pointer lock released.");
+            }
+        }
+
+        /**
+         * Requests the pointer lock when the target element is clicked.
+         */
+        function requestPointerLock() {
+            // Request the browser to lock the pointer to the target element
+            lockTarget.requestPointerLock();
+        }
+
+        // 1. Listen for changes in the pointer lock state
+        document.addEventListener('pointerlockchange', lockChangeAlert, false);
+        document.addEventListener('mozpointerlockchange', lockChangeAlert, false); // For Firefox compatibility
+        document.addEventListener('webkitpointerlockchange', lockChangeAlert, false); // For older WebKit compatibility
+
+        // 2. Attach the click handler to initiate the lock
+        lockTarget.addEventListener('click', requestPointerLock, false);
+    </script> 
+</body>
+</html>
