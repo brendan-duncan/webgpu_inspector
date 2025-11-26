@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebGPU 3D Texture WriteTexture Test</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        pre { background-color: #eee; padding: 10px; border: 1px solid #ccc; }
+        .success { color: green; font-weight: bold; }
+        .failure { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>WebGPU 3D Texture `writeTexture` Slice Test</h1>
+    <p>This test initializes a 3D texture, writes data to the first depth slice (index 0) using <code>writeTexture</code>, and verifies the result.</p>
+    <pre id="output">Running WebGPU initialization...</pre>
+    
+    <script>
+        async function runWebGPUTest() {
+            const outputElement = document.getElementById('output');
+            outputElement.textContent = "Requesting adapter...";
+
+            if (!navigator.gpu) {
+                outputElement.textContent = "Error: WebGPU is not supported on this browser.";
+                return;
+            }
+
+            const adapter = await navigator.gpu.requestAdapter();
+            if (!adapter) {
+                outputElement.textContent = "Error: No WebGPU adapter found.";
+                return;
+            }
+
+            outputElement.textContent = "Requesting device...";
+            const device = await adapter.requestDevice();
+
+            device.onuncapturederror = (event) => {
+                console.error(`Uncaptured device error: ${event.error.message}`, event.error);
+                outputElement.textContent = `Device Error: ${event.error.message}`;
+            };
+
+            const TEXTURE_WIDTH = 4;
+            const TEXTURE_HEIGHT = 4;
+            const TEXTURE_DEPTH = 3;
+
+            const TARGET_SLICE = 0; 
+            
+            // The value we expect the written slice to have (RGBA)
+            const WRITE_VALUE = 0xFF00FF00; // Opaque Magenta
+
+            // --- 1. Create the 3D Texture ---
+            outputElement.textContent = `Creating a ${TEXTURE_WIDTH}x${TEXTURE_HEIGHT}x${TEXTURE_DEPTH} 3D texture...`;
+            const textureSize = {
+                width: TEXTURE_WIDTH,
+                height: TEXTURE_HEIGHT,
+                depthOrArrayLayers: TEXTURE_DEPTH,
+            };
+
+            const texture = device.createTexture({
+                size: textureSize,
+                format: 'rgba8unorm',
+                usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST,
+                dimension: '3d',
+            });
+            
+            // --- 2. Create the Data to Write (one slice only) ---
+            const bytesPerPixel = 4; // rgba8unorm
+            const dataLength = TEXTURE_WIDTH * TEXTURE_HEIGHT * bytesPerPixel;
+            const writeData = new Uint8Array(dataLength);
+
+            // Fill the write data with the target color (Magenta)
+            for (let i = 0; i < writeData.length; i += bytesPerPixel) {
+                writeData[i + 0] = 0xFF; // R
+                writeData[i + 1] = 0x00; // G
+                writeData[i + 2] = 0xFF; // B
+                writeData[i + 3] = 0xFF; // A
+            }
+
+            // --- 3. Use writeTexture to upload the single slice ---
+            outputElement.textContent += `\nWriting ${writeData.byteLength} bytes to slice ${TARGET_SLICE} of the 3D texture...`;
+            
+            device.queue.writeTexture(
+                // destination
+                {
+                    texture: texture,
+                    origin: { x: 0, y: 0, z: TARGET_SLICE }, // Specify the slice index here (z coordinate for 3D textures)
+                },
+                // data
+                writeData,
+                // dataLayout
+                {
+                    bytesPerRow: TEXTURE_WIDTH * bytesPerPixel,
+                    rowsPerImage: TEXTURE_HEIGHT,
+                },
+                // size
+                {
+                    width: TEXTURE_WIDTH,
+                    height: TEXTURE_HEIGHT,
+                    depthOrArrayLayers: 1, // Only uploading 1 depth slice
+                }
+            );
+
+            // --- 4. Read the data back to verify (copy the written slice) ---
+            
+            // Create a buffer to receive the texture data (only for the single slice)
+            const bufferSize = 256 * TEXTURE_HEIGHT;//TEXTURE_WIDTH * TEXTURE_HEIGHT * bytesPerPixel;
+            const readbackBuffer = device.createBuffer({
+                size: bufferSize,
+                usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+            });
+
+            // Encode the copy command
+            const commandEncoder = device.createCommandEncoder();
+            commandEncoder.copyTextureToBuffer(
+                // source
+                {
+                    texture: texture,
+                    origin: { x: 0, y: 0, z: TARGET_SLICE }, // Copying from the slice we just wrote to
+                    aspect: 'all',
+                },
+                // destination
+                {
+                    buffer: readbackBuffer,
+                    bytesPerRow: 256,//EXTURE_WIDTH * bytesPerPixel,
+                    rowsPerImage: TEXTURE_HEIGHT,
+                },
+                // copySize
+                {
+                    width: TEXTURE_WIDTH,
+                    height: TEXTURE_HEIGHT,
+                    depthOrArrayLayers: 1,
+                }
+            );
+            
+            // Submit the copy command and wait for it to complete
+            device.queue.submit([commandEncoder.finish()]);
+
+            // --- 5. Verify the data ---
+            outputElement.textContent += "\nReading data back from the texture for verification...";
+            
+            // Map the buffer for reading
+            await readbackBuffer.mapAsync(GPUMapMode.READ);
+            const readData = new Uint8Array(readbackBuffer.getMappedRange());
+            
+            let verificationPassed = true;
+            let firstFailureIndex = -1;
+
+            // Check if every pixel in the readback data matches the written magenta data
+            for (let h = 0, wi = 0; h < TEXTURE_HEIGHT; h++) {
+                for (let w = 0; w < TEXTURE_WIDTH; w++, wi += bytesPerPixel) {
+                    const ri = h * 256 + w * bytesPerPixel;
+                    const r = readData[ri + 0];
+                    const g = readData[ri + 1];
+                    const b = readData[ri + 2];
+                    const a = readData[ri + 3];
+
+                    const expectedR = writeData[wi + 0];
+                    const expectedG = writeData[wi + 1];
+                    const expectedB = writeData[wi + 2];
+                    const expectedA = writeData[wi + 3];
+
+                    if (r !== expectedR || g !== expectedG || b !== expectedB || a !== expectedA) {
+                        verificationPassed = false;
+                        firstFailureIndex = ri;
+                        break;
+                    }
+                }
+                if (!verificationPassed) {
+                    break;
+                }
+            }
+
+            readbackBuffer.unmap();
+
+            if (verificationPassed) {
+                outputElement.innerHTML += `<div class="success">\nVerification successful! Data read back from slice ${TARGET_SLICE} matches the uploaded data.</div>`;
+            } else {
+                outputElement.innerHTML += `<div class="failure">\nVerification failed! Mismatch at byte index ${firstFailureIndex}.</div>`;
+            }
+        }
+
+        runWebGPUTest().catch(console.error);
+
+    </script>
+</body>
+</html>
