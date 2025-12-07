@@ -1739,14 +1739,15 @@ export class CapturePanel {
 
       let size = null;
       if (resource.buffer) {
-        if (bindGroupCmd?.isBufferDataLoaded) {
+        size = resource.size;
+        /*if (bindGroupCmd?.isBufferDataLoaded) {
           if (bindGroupCmd.isBufferDataLoaded[entryIndex]) {
             const bufferData = bindGroupCmd.bufferData[entryIndex];
             if (bufferData) {
               size = bufferData.length;
             }
           }
-        }
+        }*/
       }
 
       let label = `${groupLabel}Binding ${binding}: ${getResourceType(resource)} ID:${getResourceId(resource)} ${getResourceUsage(resource)}`;

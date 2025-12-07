@@ -2105,7 +2105,7 @@ export let webgpuInspector = null;
         this._isHTMLImageElement(object)) {
         return `@-1 ${object.constructor.name} ${object.width} ${object.height}`;
       }
-      if (object instanceof Array || object.buffer !== undefined) {
+      if (this._isArray(object) || this._isTypedArray(object)) {
         const maxMessageArrayLength = 100;
         if (object.length > maxMessageArrayLength) {
           const id = this._addCommandData(object);
