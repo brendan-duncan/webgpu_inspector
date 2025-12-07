@@ -27,7 +27,8 @@ export let webgpuInspector = null;
 
   class WebGPUInspector {
     constructor() {
-      this._captureFrameCommands = [];
+      this._captureFrameCommands = []; // Commands for the current frame that have been captured
+      this._frameCaptureCommands = []; // Commands for all captured frames.
       this._frameData = [];
       this._frameRenderPassCount = 0;
       this._captureTexturedBuffers = [];
@@ -63,15 +64,18 @@ export let webgpuInspector = null;
       this._hasPendingDeviceDestroy = false;
 
       if (!navigator.gpu) {
-        // No WebGPU support
+        // No WebGPU support, nothing to inspect.
         return;
       }
 
       const self = this;
 
       if (_document?.body) {
+        // If the document body is available, create the status elements now,
+        // which overlays information about the inspector.
         this.createStatusElements();
       } else if (_document) {
+        // If there is a document but no body yet, wait for the DOMContentLoaded event.
         _document.addEventListener("DOMContentLoaded", () => {
           self.createStatusElements();
 
@@ -142,7 +146,9 @@ export let webgpuInspector = null;
         }
       });
 
-      // Clean out the garbage collected objects every so often.
+      // Clean out the garbage collected objects periodically.
+      // We want to reduce the number of messages sent to the devtools panel, so we gather
+      //  garbage collected objects and send them in a batch.
       const garbageCollectionInterval = 200;
       setInterval(() => {
         if (self._garbageCollectectedObjects.length > 0) {
@@ -201,32 +207,39 @@ export let webgpuInspector = null;
       };
 
       // Listen for messages from the content-script.
-
       function eventCallback(event) {
         let message = event.detail || event.data;
         if (message?.__WebGPUInspector) {
           message = message.__WebGPUInspector;
         }
+
+        // Ignore messages that aren't for us.
         if (typeof message !== "object" || !message.__webgpuInspector) {
           return;
         }
 
         if (message.action === Actions.DeltaTime) {
+          // Update framerate display. This message comes from worker threads.
           if (message.__webgpuInspectorWorker) {
             self._updateFrameRate(message.deltaTime);
           }
         } else if (message.action === PanelActions.RequestTexture) {
+          // The devtools panel is requesting the data for a texture.
           const textureId = message.id;
           const mipLevel = message.mipLevel ?? 0;
           self._requestTexture(textureId, mipLevel);
         } else if (message.action === PanelActions.CompileShader) {
+          // The devtools panel is requesting to replace the code of a shader
+          // with new code. This is used for live shader editing.
           const shaderId = message.id;
           const code = message.code;
           self._compileShader(shaderId, code);
         } else if (message.action === PanelActions.RevertShader) {
+          // The devtools panel is requesting to revert a shader back to its original code.
           const shaderId = message.id;
           self._revertShader(shaderId);
         } else if (message.action === PanelActions.Capture) {
+          // The devtools panel is requesting to capture a frame.
           if (_window == null) {
             if (message.data.constructor.name === "String") {
               message.data = JSON.parse(message.data);
@@ -237,12 +250,16 @@ export let webgpuInspector = null;
       }
 
       if (!_window) {
+        // If _window is null, we're in a worker context. Listen for messages from the main thread.
         _self.addEventListener("message", eventCallback);
       } else {
+        // Listen for messages from the devtools panel.
         _self.addEventListener("__WebGPUInspector", eventCallback);
       }
 
       if (_sessionStorage) {
+        // Check if there is any capture data stored in sessionStorage, used for re-loading a page
+        // for recording or capturing from the first frame.
         const captureData = _sessionStorage.getItem(webgpuInspectorCaptureFrameKey);
         if (captureData) {
           try {
@@ -259,6 +276,7 @@ export let webgpuInspector = null;
       }
     }
 
+    // Create an on-screen status display on the page being inspected.
     createStatusElements() {
       const statusContainer = _document.createElement("div");
       statusContainer.style = "position: absolute; top: 0px; left: 0px; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt;";
@@ -279,6 +297,9 @@ export let webgpuInspector = null;
       statusContainer.appendChild(this._inspectingStatusText);
 
       const self = this;
+      // Clicking the status display will force capture a frame, for cases when
+      // the automatic capture might not trigger, such as when the page does not use
+      // requestAnimationFrame for its rendering loop.
       statusContainer.addEventListener("click", () => {
         if (self._captureFrameRequest) {
           self._sendCapturedCommands();
@@ -286,86 +307,29 @@ export let webgpuInspector = null;
       });
     }
 
-    captureWorker(canvas) {
-      this._wrapCanvas(canvas);
-    }
-
+    ///  Disable recording of WebGPU calls.
+    /// This can be called multiple times, with a matching enableRecording used to re-enable recording.
     disableRecording() {
       this._gpuWrapper.disableRecording();
     }
 
+    ///  Enable recording of WebGPU calls.
+    /// This can be called multiple times, with a matching disableRecording used to stop recording.
     enableRecording() {
       this._gpuWrapper.enableRecording();
     }
 
+    // Send a message to the devtools panel.
     _postMessage(message) {
       message.__webgpuInspector = true;
       message.__webgpuInspectorPage = true;
       message.__webgpuInspectorWorker = !_window;
+      // If _window is null, we're in a worker context. Send the message to the main thread,
+      // which will then send it to the devtools panel.
       if (!_window) {
         _postMessage({ __WebGPUInspector: message });
       } else {
         _dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: message }));
-      }
-    }
-
-    _updateCanvasAttachment(attachment) {
-      let textureView = null;
-      if (attachment.resolveTarget) {
-        textureView = attachment.resolveTarget;
-      } else if (attachment.view) {
-        textureView = attachment.view;
-      }
-
-      const texture = textureView?.__texture;
-      const context = texture?.__context;
-
-      // If the texture has a context, it's a canvas texture.
-      if (!context) {
-        return;
-      }
-
-      if (context.__captureTexture) {
-        if (context.__captureTexture.width != texture.width ||
-            context.__captureTexture.height != texture.height ||
-            context.__captureTexture.format != texture.format) {
-          this.disableRecording();
-          context.__captureTexture.destroy();
-          context.__captureTexture = null;
-          this.enableRecording();
-        }
-      }
-
-      const device = context.__device;
-      if (device) {
-        this.disableRecording();
-
-        const captureTexture = device.createTexture({
-          size: [texture.width, texture.height, 1],
-          format: texture.format,
-          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
-        });
-
-        context.__captureTexture = captureTexture;
-        if (captureTexture) {
-          Object.defineProperty(captureTexture, "__id", { value: texture.__id, enumerable: false, writable: true });
-          Object.defineProperty(captureTexture, "__canvasTexture", { value: texture, enumerable: false, writable: true });
-          Object.defineProperty(captureTexture, "__context", { value: context, enumerable: false, writable: true });
-
-          const captureView = captureTexture.createView();
-          Object.defineProperty(captureView, "__texture", { value: captureTexture, enumerable: false, writable: true });
-          Object.defineProperty(captureView, "__canvasView", { value: textureView, enumerable: false, writable: true });
-          Object.defineProperty(captureView, "__view", { value: captureView, enumerable: false, writable: true });
-          Object.defineProperty(captureView, "__context", { value: context, enumerable: false, writable: true });
-
-          if (attachment.resolveTarget) {
-            attachment.resolveTarget = captureView;
-          } else {
-            attachment.view = captureView;
-          }
-        }
-
-        this.enableRecording();
       }
     }
 
@@ -758,6 +722,7 @@ export let webgpuInspector = null;
       }
     }
 
+    // Wrap a GPUAdapter object for inspection.
     _wrapAdapter(adapter, id, stacktrace) {
       this._wrapObject(adapter, id);
       id ??= adapter.__id;
@@ -794,6 +759,7 @@ export let webgpuInspector = null;
       }
     }
 
+    // Wrap a GPUDevice object for inspection.
     _wrapDevice(adapter, device, id, args, stacktrace) {
       if (adapter && adapter.__id === undefined) {
         this._wrapAdapter(adapter, undefined, stacktrace);
@@ -823,11 +789,13 @@ export let webgpuInspector = null;
       }
     }
 
+    // Clear the captured frame commands.
     clear() {
       this._captureFrameCommands.length = 0;
       this._currentFrame = null;
     }
 
+    // Get the next unique object ID.
     getNextId(object) {
       // We don't need unique id's for some types of objects
       // and they get created so frequently they make the ID's
@@ -841,6 +809,8 @@ export let webgpuInspector = null;
       return this._objectID++;
     }
 
+    // Warn about potential GPU memory leaks.
+    // This is called for buffers that are garbage collected without being explicitly destroyed.
     _memoryLeakWarning(id, object) {
       if (object) {
         const type = object.name;
@@ -849,18 +819,23 @@ export let webgpuInspector = null;
       }
     }
 
+    // Is the object a number, string, boolean, null, or undefined?
     _isPrimitiveType(obj) {
       return !obj || obj.constructor === String || obj.constructor === Number || obj.constructor === Boolean;
     }
 
+    // Is the object a typed array?
     _isTypedArray(obj) {
       return obj && (obj instanceof ArrayBuffer || obj.buffer instanceof ArrayBuffer);
     }
 
+    // Is the object a regular array?
     _isArray(obj) {
       return obj && obj.constructor === Array;
     }
 
+    // Duplicate an array, optionally replacing GPU objects with their IDs so it can be serialized
+    // for sending to the devtools panel.
     _duplicateArray(array, replaceGpuObjects) {
       const newArray = new Array(array.length);
       for (let i = 0, l = array.length; i < l; ++i) {
@@ -869,15 +844,19 @@ export let webgpuInspector = null;
           newArray[i] = x;
         } else if (x.__id !== undefined) {
           if (replaceGpuObjects) {
-            newArray[i] = { __id: x.__id, __class: x.constructor.name }
+            // Replace GPU objects with an object containing just the id and class name.
+            // This allows the devtools panel to reference its version of the object.
+            newArray[i] = { __id: x.__id, __class: x.constructor.name };
           } else {
             newArray[i] = x;
           }
         } else if (this._isTypedArray(x)) {
           newArray[i] = x;
         } else if (this._isArray(x)) {
+          // Arrays and objects can be nested, so duplicate them recursively.
           newArray[i] = this._duplicateArray(x, replaceGpuObjects);
         } else if (x instanceof Object) {
+          // Arrays and objects can be nested, so duplicate them recursively.
           newArray[i] = this._duplicateObject(x, replaceGpuObjects);
         } else {
           newArray[i] = x;
@@ -886,6 +865,8 @@ export let webgpuInspector = null;
       return newArray;
     }
 
+    // Duplicate an object, optionally replacing GPU objects with their IDs so it can be serialized
+    // for sending to the devtools panel.
     _duplicateObject(object, replaceGpuObjects) {
       const obj = {};
       for (const key in object) {
@@ -900,7 +881,9 @@ export let webgpuInspector = null;
           obj[key] = x;
         } else if (x.__id !== undefined) {
           if (replaceGpuObjects) {
-            obj[key] = { __id: x.__id, __class: x.constructor.name }
+            // Replace GPU objects with an object containing just the id and class name.
+            // This allows the devtools panel to reference its version of the object.
+            obj[key] = { __id: x.__id, __class: x.constructor.name };
           } else {
             obj[key] = x;
           }
@@ -909,8 +892,10 @@ export let webgpuInspector = null;
         } else if (this._isTypedArray(x)) {
           obj[key] = x;
         } else if (this._isArray(x)) {
+          // Arrays and objects can be nested, so duplicate them recursively.
           obj[key] = this._duplicateArray(x, replaceGpuObjects);
         } else if (x instanceof Object) {
+          // Arrays and objects can be nested, so duplicate them recursively.
           obj[key] = this._duplicateObject(x, replaceGpuObjects);
         } else {
           obj[key] = x;
@@ -919,6 +904,7 @@ export let webgpuInspector = null;
       return obj;
     }
 
+    // If a shader was overridden with edited code, revert it to the original shader.
     _revertShader(shaderId) {
       const objectMap = this._objectReplacementMap.get(shaderId);
       if (!objectMap) {
@@ -963,6 +949,8 @@ export let webgpuInspector = null;
       }
     }
 
+    // Replace a shader with a new shader with the given code.
+    // This is used for editing shaders live.
     _compileShader(shaderId, code) {
       const objectMap = this._objectReplacementMap.get(shaderId);
       if (!objectMap) {
@@ -1058,6 +1046,7 @@ export let webgpuInspector = null;
       }
     }
 
+    // The devtools panel has requested a texture to be captured.
     _requestTexture(textureId, mipLevel) {
       mipLevel = parseInt(mipLevel || 0) || 0;
       if (textureId < 0) {
@@ -1071,6 +1060,7 @@ export let webgpuInspector = null;
       }
     }
 
+    // Update the status overlay message.
     _updateStatusMessage() {
       if (!this._inspectingStatusFrame) {
         return;
@@ -1115,6 +1105,7 @@ export let webgpuInspector = null;
       this._inspectingStatusText.textContent = status;
     }
 
+    // Update the frame rate overlay.
     _updateFrameRate(deltaTime) {
       this._frameRate.add(deltaTime);
       this._frameIndex++;
@@ -1123,6 +1114,7 @@ export let webgpuInspector = null;
       }
     }
 
+    // Update the frame status overlay.
     _updateFrameStatus() {
       if (this._inspectingStatusFrame) {
         let statusMessage = `Frame: ${this._frameIndex}`;
@@ -1134,6 +1126,7 @@ export let webgpuInspector = null;
       }
     }
 
+    // Initialize capture data for a new frame.
     _initCaptureData() {
       if (this._captureData.frame < 0 || this._frameIndex >= this._captureData.frame) {
         this._captureMaxBufferSize = this._captureData.maxBufferSize || maxBufferCaptureSize;
@@ -1175,6 +1168,7 @@ export let webgpuInspector = null;
       }
     }
 
+    // Called at the start of each frame, before the requestAnimationFrame callback is invoked.
     _frameStart(time) {
       let deltaTime = 0;
       if (this._lastFrameTime == 0) {
@@ -1218,31 +1212,55 @@ export let webgpuInspector = null;
       }
     }
 
+    // Send all captured frame commands to the devtools panel.
     _sendCapturedCommands() {
       const maxFrameCount = 2000;
-      const batches = Math.ceil(this._captureFrameCommands.length / maxFrameCount);
-      this._postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": this._captureFrameCommands.length, "batches": batches });
 
-      for (let i = 0; i < this._captureFrameCommands.length; i += maxFrameCount) {
-        const length = Math.min(maxFrameCount, this._captureFrameCommands.length - i);
-        const commands = this._captureFrameCommands.slice(i, i + length);
+      let commands = null;
+      if (this._frameCaptureCommands.length === 1) {
+        commands = this._frameCaptureCommands[0];
+      } else {
+        commands = [];
+        for (const frameCommands of this._frameCaptureCommands) {
+          commands.push(...frameCommands);
+        }
+      }
+      this._frameCaptureCommands = [];
+
+      const batches = Math.ceil(commands.length / maxFrameCount);
+      this._postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": commands.length, "batches": batches });
+
+      for (let i = 0; i < commands.length; i += maxFrameCount) {
+        const length = Math.min(maxFrameCount, commands.length - i);
+        const commandsSlice = commands.slice(i, i + length);
         this._postMessage({
             "action": Actions.CaptureFrameCommands,
             "frame": this._frameIndex - 1,
-            "commands": commands,
+            "commands": commandsSlice,
             "index": i,
             "count": length
           });
       }
-      this._captureFrameCommands.length = 0;
       this._captureFrameRequest = false;
       this._gpuWrapper.recordStacktraces = false;
       this._updateStatusMessage();
     }
 
+    // Called at the end of each frame, after the requestAnimationFrame callback have been invoked.
     _frameEnd(time) {
+      // If we're captureing frames, and some commands have been recorded, send them to the devtools panel.
       if (this._captureFrameCommands.length) {
+        this._frameCaptureCommands.push(this._captureFrameCommands);
+        if (this._captureFrameCommands.length === 1) {
+          if (this._captureFrameCommands[0].method === "requestAdapter" ||
+              this._captureFrameCommands[0].method === "requestDevice") {
+            // Don't count requestAdapter and requestDevice as frames.
+            this._captureFrameCount++;
+          }
+        }
+        this._captureFrameCommands = [];
         this._captureFrameCount--;
+        // If we're capturing multiple frames, wait until all frames have been captured.
         if (this._captureFrameCount <= 0) {
           this._sendCapturedCommands();
         }
