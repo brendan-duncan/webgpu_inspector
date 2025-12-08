@@ -29,6 +29,7 @@ export let webgpuInspector = null;
     constructor() {
       this._captureFrameCommands = []; // Commands for the current frame that have been captured
       this._frameCaptureCommands = []; // Commands for all captured frames.
+      this._commandId = 0;
       this._frameData = [];
       this._frameRenderPassCount = 0;
       this._captureTexturedBuffers = [];
@@ -791,8 +792,10 @@ export let webgpuInspector = null;
 
     // Clear the captured frame commands.
     clear() {
+      this._frameCaptureCommands.length = 0;
       this._captureFrameCommands.length = 0;
       this._currentFrame = null;
+      this._commandId = 0;
     }
 
     // Get the next unique object ID.
@@ -1134,10 +1137,13 @@ export let webgpuInspector = null;
         this._captureFrameRequest = true;
         this._gpuWrapper.recordStacktraces = true;
         this._captureData = null;
+        this._commandId = 0;
         this._updateStatusMessage();
 
-        if (this._captureTimestamps) {
+        // TODO: timestamp capture
+        /*if (this._captureTimestamps) {
           this.disableRecording();
+
           const device = this._device?.deref();
           if (device) {
             if (!this._timestampQuerySet) {
@@ -1164,7 +1170,7 @@ export let webgpuInspector = null;
             this._timestampIndex = 2;
           }
           this.enableRecording();
-        }
+        }*/
       }
     }
 
@@ -1241,6 +1247,8 @@ export let webgpuInspector = null;
             "count": length
           });
       }
+
+      this._commandId = 0;
       this._captureFrameRequest = false;
       this._gpuWrapper.recordStacktraces = false;
       this._updateStatusMessage();
@@ -1502,7 +1510,7 @@ export let webgpuInspector = null;
     }
 
     _captureCommand(object, method, args, stacktrace, result) {
-      const commandId = this._captureFrameCommands.length;
+      const commandId = this._commandId++;
 
       const a = args;
       if (a.length === 1 && a[0] === undefined) {
@@ -1522,25 +1530,31 @@ export let webgpuInspector = null;
         const bindGroup = a[1];
         newArgs.push(binding);
         newArgs.push(bindGroup);
-        // handle dynamic offsets data, converting buffer views to Uint32Array
+
         if (a.length > 2 && a[2]?.length) {
-          const array = a[2];
-          if (array.length > 0) {
-            if (array instanceof Uint32Array) {
-              const offset = a[3];
-              const size = a[4];
-              if (size > 0) {
-                const subArray = new Uint32Array(array.buffer, offset * 4, size);
-                newArgs.push(subArray);
+          const dynamicOffsetsData = a[2];
+          if (dynamicOffsetsData.length > 0) {
+            // Wasm can pass dynamic offsets as a buffer view with offset and size.
+            // Convert that to a Uint32Array for easier passing to devtools.
+            if (dynamicOffsetsData instanceof Uint32Array && a.length === 5) {
+              const dynamicOffsetsDataStart = a[3];
+              const dynamicOffsetsDataLength = a[4];
+              // If dynamicOffsetsDataLength is 0, then there are no dynamic offsets.
+              if (dynamicOffsetsDataLength > 0) {
+                const dynamicOffsetsSubData = new Uint32Array(dynamicOffsetsData.buffer, dynamicOffsetsDataStart * 4, dynamicOffsetsDataLength);
+                newArgs.push(dynamicOffsetsSubData);
               }
             } else {
-              newArgs.push(array);
+              // Normal JS array of dynamic offsets.
+              newArgs.push(dynamicOffsetsData);
             }
           }
         }
 
         const dynamicOffsets = (newArgs.length > 2) ? newArgs[2] : null;
-        let dynamicOffsetIndex = 0;
+
+        // Sort out which dynamic offsets correspond to which bindings by looking at the bind group layout entries
+        // for buffer resources that have hasDynamicOffset set to true.
         const bindGroupDesc = bindGroup?.__descriptor;
         const bindGroupLayoutDesc = bindGroupDesc?.layout?.__descriptor;
         const bglEntries = bindGroupLayoutDesc?.entries;
@@ -1561,19 +1575,22 @@ export let webgpuInspector = null;
           mappedDynamicOffsets[i] = sortedEntries[i][1];
         }
 
-        dynamicOffsetIndex = 0;
+        let dynamicOffsetIndex = 0;
         if (bindGroupDesc) {
+          // For each resource in the bind group, if it's a buffer, capture its contents.
           for (const entryIndex in bindGroupDesc.entries) {
             const entry = bindGroupDesc.entries[entryIndex];
             const layoutEntry = bglEntries ? bglEntries[entryIndex] : undefined;
             const buffer = entry?.resource?.buffer;
-            const usesDynamicOffset = layoutEntry?.buffer?.hasDynamicOffset ?? false;
+
             if (buffer) {
               let offset = entry.resource.offset ?? 0;
               const origSize = entry.resource.size ?? (buffer.size - offset);
               const size = alignTo(origSize, 4);
 
               if (this._captureMaxBufferSize < 0 || size <= this._captureMaxBufferSize) {
+                // If the buffer uses a dynamic offset, get the correct offset from the dynamic offsets array.
+                const usesDynamicOffset = layoutEntry?.buffer?.hasDynamicOffset ?? false;
                 if (usesDynamicOffset && dynamicOffsets !== null) {
                   offset = mappedDynamicOffsets[dynamicOffsetIndex++];
                 }
@@ -1581,9 +1598,10 @@ export let webgpuInspector = null;
                 if (!object.__captureBuffers) {
                   object.__captureBuffers = [];
                 }
-
+                // Record the buffer to be captured when the command encoder is finished.
                 object.__captureBuffers.push({ commandId, entryIndex, buffer, offset, size });
                 this._captureBuffersCount++;
+
                 this._updateStatusMessage();
               }
             } else if (entry?.resource instanceof GPUTextureView) {
@@ -1704,6 +1722,7 @@ export let webgpuInspector = null;
         const commandEncoder = object.__commandEncoder;
         if (object.__captureBuffers?.length > 0) {
           this._recordCaptureBuffers(commandEncoder, object.__captureBuffers);
+          object.__captureBuffers = [];
           this._updateStatusMessage();
         }
 
@@ -1930,7 +1949,6 @@ export let webgpuInspector = null;
       const device = commandEncoder?.__device;
       if (!device) {
         this._captureBuffersCount -= buffers.length;
-        buffers.length = 0;
         return;
       }
 
@@ -1961,7 +1979,6 @@ export let webgpuInspector = null;
       }
 
       this._captureBuffersCount -= buffers.length;
-      buffers.length = 0;
     }
 
     // Copy the texture to a buffer so we can send it to the inspector server.
