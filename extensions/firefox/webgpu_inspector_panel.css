@@ -13,8 +13,9 @@
 }
   
 body {
-    background-color: var(--bg-color);
-    color: var(--fg-color);
+    /*background-color: var(--bg-color);
+    color: var(--fg-color);*/
+    color: #fff;
 }
 
 #head {
