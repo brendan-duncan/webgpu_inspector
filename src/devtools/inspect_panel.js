@@ -489,7 +489,7 @@ export class InspectPanel {
 
   // Adds an object to the Objects list.
   _addObjectToUI(object, ui) {
-    const name = `${object.name}`;
+    let name = `${object.name}`;
     let type = "";
     if (object instanceof ShaderModule) {
       if (object.hasVertexEntries) {
@@ -506,6 +506,9 @@ export class InspectPanel {
     } else if (object instanceof TextureView) {
       const texture = this.database.getTextureFromView(object);
       if (texture) {
+        if (!object.label) {
+          name = texture.name;
+        }
         type += ` Texture:${texture.idName} ${texture.descriptor.format} ${texture.resolutionString}`;
       }
     } else if (object instanceof Buffer) {
@@ -644,9 +647,17 @@ export class InspectPanel {
 
     const infoStyle = object.isDeleted ? "background-color: #533;" : "background-color: #353;";
 
+    let name = object.name;
+    if (object instanceof TextureView) {
+      const texture = this.database.getTextureFromView(object);
+      if (texture) {
+        name = texture.name;
+      }
+    }
+
     const infoBox = new Div(this.inspectPanel, { style: `${infoStyle} padding: 10px;` });
     const idName = object.idName;
-    new Div(infoBox, { text: `${object.name} ID: ${idName} ${object.isDeleted ? "<deleted>" : ""}` });
+    new Div(infoBox, { text: `${name} ID: ${idName} ${object.isDeleted ? "<deleted>" : ""}` });
     this._inspectedInfoBox = infoBox;
 
     if (object instanceof Texture) {
@@ -928,7 +939,7 @@ export class InspectPanel {
     } else if (object instanceof TextureView) {
       const texture = this.database.getTextureFromView(object);
       if (texture) {
-        const textureGrp = this._getCollapsableWithState(descriptionBox, object, "textureCollapsed", `Texture ${texture.idName} ${texture.dimension} ${texture.format} ${texture.resolutionString}`, false);
+        const textureGrp = this._getCollapsableWithState(descriptionBox, object, "textureCollapsed", `Texture ID: ${texture.idName} ${texture.dimension} ${texture.format} ${texture.resolutionString}`, false);
         textureGrp.body.style.maxHeight = "unset";
 
         const desc = this._getDescriptorInfo(texture, texture.descriptor);
