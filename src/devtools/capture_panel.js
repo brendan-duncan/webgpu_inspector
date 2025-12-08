@@ -1545,12 +1545,20 @@ export class CapturePanel {
 
     function getResourceId(resource) {
       if (resource.__id !== undefined) {
-        return resource.__id;
+        const object = self._getObject(resource.__id);
+        if (object instanceof TextureView) {
+          const texture = self.database.getTextureFromView(object);
+          if (texture) {
+            return `${texture.label} (ID: ${resource.__id})`;
+          }
+        }
+        return `${object.name} (ID: ${resource.__id})`;
       }
       if (resource.buffer?.__id !== undefined) {
-        return resource.buffer.__id;
+        const buffer = self._getObject(resource.buffer.__id);
+        return `${buffer?.name} (ID: ${resource.buffer.__id})`;
       }
-      return 0;
+      return `<unknown>`;
     }
 
     function getResourceUsage(resource) {
@@ -1582,7 +1590,7 @@ export class CapturePanel {
               if (reflection) {
                 for (const storage of reflection.storage) {
                   if (storage.group == group && storage.binding == binding) {
-                    return storage.access;
+                    return `Access: ${storage.access}`;
                   }
                 }
               }
@@ -1594,7 +1602,7 @@ export class CapturePanel {
               if (reflection) {
                 for (const storage of reflection.storage) {
                   if (storage.group == group && storage.binding == binding) {
-                    return storage.access;
+                    return `Access: ${storage.access}`;
                   }
                 }
               }
@@ -1606,7 +1614,7 @@ export class CapturePanel {
               if (reflection) {
                 for (const storage of reflection.storage) {
                   if (storage.group == group && storage.binding == binding) {
-                    return storage.access;
+                    return `Access: ${storage.access}`;
                   }
                 }
               }
@@ -1618,7 +1626,7 @@ export class CapturePanel {
               if (reflection) {
                 for (const storage of reflection.storage) {
                   if (storage.group == group && storage.binding == binding) {
-                    return storage.access;
+                    return `Access: ${storage.access}`;
                   }
                 }
               }
@@ -1750,7 +1758,7 @@ export class CapturePanel {
         }*/
       }
 
-      let label = `${groupLabel}Binding ${binding}: ${getResourceType(resource)} ID:${getResourceId(resource)} ${getResourceUsage(resource)}`;
+      let label = `${groupLabel}Binding ${binding}: ${getResourceType(resource)} ${getResourceId(resource)} ${getResourceUsage(resource)}`;
 
       if (access) {
         label += ` ${access}`;
