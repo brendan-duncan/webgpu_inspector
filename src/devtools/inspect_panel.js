@@ -73,6 +73,19 @@ export class InspectPanel {
   constructor(win, parent) {
     this.window = win;
 
+    // Prevent the DevTools panel from zooming when CTRL + mouse-wheel is used.
+    // It interferes with zooming the texture views.
+		this.window.addEventListener("mousewheel", (evt) => {
+      if (evt.ctrlKey) {
+          evt.preventDefault();
+      }
+    }, { passive: false });
+		this.window.addEventListener("DOMMouseScroll", (evt) => {
+      if (evt.ctrlKey) {
+          evt.preventDefault();
+      }
+    }, { passive: false });
+
     const self = this;
     const _controlBar = new Div(parent, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px; font-size: 10pt; display: flex;" });
     const controlBar = new Div(_controlBar);
@@ -1020,7 +1033,7 @@ export class InspectPanel {
         }
       } });
 
-    new Span(controls, { text:  "Exposure", style: "margin-right: 3px; font-size: 9pt; color: #bbb;" });
+    new Span(controls, { text:  "Exposure", style: "margin-left: 10px; margin-right: 3px; font-size: 9pt; color: #bbb;" });
     new NumberInput(controls, { value: texture.display.exposure, step: 0.01, onChange: (value) => {
       texture.display.exposure = value;
       displayChanged.emit();
@@ -1036,6 +1049,12 @@ export class InspectPanel {
         texture.display.channels = index;
         displayChanged.emit();
       } });
+
+    new Span(controls, { text: "Zoom", tooltip: "Zoom level of the texture, CTRL + mouse-wheel", style: "margin-left: 10px; margin-right: 3px; font-size: 9pt; color: #bbb;" });
+    const zoomControl = new NumberInput(controls, { tooltip: "Zoom level of the texture, CTRL + mouse-wheel", value: texture.display.zoom, step: 1, min: 1, onChange: (value) => {
+      texture.display.zoom = value;
+      displayChanged.emit();
+    }, style: "width: 100px; display: inline-block;" });
 
     if (!this._tooltip) {
       this._tooltip = document.createElement('pre');
@@ -1067,13 +1086,16 @@ export class InspectPanel {
     const hl = 0.5 / numLayers;
 
     for (let layer = 0; layer < numLayers; ++layer) {
-      const layerInfo = new Div(container);
+      const layerInfo = new Div(container, { class: 'inspect_texture_layer_info' });
       if (layerRanges) {
-        new Span(layerInfo, { text: `Layer ${layer} Min Value: ${layerRanges[layer].min} Max Value: ${layerRanges[layer].max}`, class: 'inspect_texture_layer_info' });
+        new Span(layerInfo, { text: `Layer ${layer} Min Value: ${layerRanges[layer].min} Max Value: ${layerRanges[layer].max}` });
       } else {
-        new Span(layerInfo, { text: `Layer ${layer}`, class: 'inspect_texture_layer_info' });
+        new Span(layerInfo, { text: `Layer ${layer}` });
       }
-      const canvas = new Widget("canvas", new Div(container), { style: "box-shadow: 5px 5px 5px rgba(0,0,0,0.5);" });
+
+      const canvas = new Widget("canvas", new Div(container), { style: "box-shadow: 5px 5px 5px rgba(0,0,0,0.5); image-rendering: -moz-crisp-edges; image-rendering: -webkit-crisp-edges; image-rendering: pixelated;" });
+      canvas.style.width = `${width * texture.display.zoom / 100}px`;
+      canvas.style.height = `${height * texture.display.zoom / 100}px`;
       canvas.element.addEventListener("mouseenter", (event) => {
         if (this._tooltip) {
           this._tooltip.style.display = 'block';
@@ -1086,13 +1108,28 @@ export class InspectPanel {
       });
       canvas.element.addEventListener("mousemove", (event) => {
         if (this._tooltip) {
-          const x = event.offsetX;
-          const y = event.offsetY;
+          const x = Math.floor(event.offsetX / (texture.display.zoom / 100));
+          const y = Math.floor(event.offsetY / (texture.display.zoom / 100));
           const pixel = texture.getPixel(x, y, layer, texture.display?.mipLevel ?? 0);
           this._tooltip.style.left = `${event.pageX + 10}px`;
           this._tooltip.style.top = `${event.pageY + 10}px`;
           const pixelStr = getPixelString(pixel);
           this._tooltip.innerHTML = `X:${x} Y:${y}\n${pixelStr}`;
+        }
+      });
+      canvas.element.addEventListener('wheel', (event) => {
+        if (event.ctrlKey) {
+          event.preventDefault();
+          let zoom = texture.display.zoom;
+          if (event.deltaY < 0) {
+            zoom += 10;
+          } else {
+            zoom -= 10;
+          }
+          zoom = Math.max(1, zoom);
+          zoomControl.setValue(zoom);
+          texture.display.zoom = zoom;
+          displayChanged.emit();
         }
       });
 
@@ -1142,6 +1179,9 @@ export class InspectPanel {
         const srcView = texture.gpuTexture.object.createView(viewDesc);
 
         self.textureUtils.blitTexture(srcView, texture.format, 1, canvasTexture.createView(), format, texture.display);
+
+        canvas.style.width = `${width * texture.display.zoom / 100}px`;
+        canvas.style.height = `${height * texture.display.zoom / 100}px`;
       });
     }
   }

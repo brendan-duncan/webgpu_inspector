@@ -18,7 +18,8 @@ export class Texture extends GPUObject {
       channels: 0,
       minRnage: 0,
       maxRange: 1,
-      mipLevel: 0
+      mipLevel: 0,
+      zoom: 100
     };
   }
 
