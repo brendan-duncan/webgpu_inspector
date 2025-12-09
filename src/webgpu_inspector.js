@@ -31,14 +31,15 @@ export let webgpuInspector = null;
       this._frameCaptureCommands = []; // Commands for all captured frames.
       this._commandId = 0;
       this._frameData = [];
-      this._frameRenderPassCount = 0;
+      this._frameRenderPassCount = 0; // Count of render passes in the current frame
       this._captureTexturedBuffers = [];
       this._currentFrame = null;
-      this._frameIndex = 0;
+      this._frameIndex = 0; // The current frame index based on requestAnimationFrame
+      this._gpuFrameIndex = 0; // The frame index based on frames that have GPU work submitted
+      this._frameGpuComamndCount = 0; // The number of GPU commands in the current frame
       this._initalized = true;
       this._objectID = 1;
       this._lastFrameTime = 0;
-      this._frameCommandCount = 0;
       this._captureFrameRequest = false;
       this._errorChecking = 1;
       this._trackedObjects = new Map();
@@ -337,6 +338,11 @@ export let webgpuInspector = null;
     // Called before a GPU method is called, allowing the inspector to modify
     // the arguments or the object before the method is called.
     _preMethodCall(object, method, args) {
+      // Don't include requestAdapter and requestDevice in the command count.
+      if (method !== "requestAdapter" && method !== "requestDevice") {
+        this._frameGpuComamndCount++;
+      }
+
       if (method === "destroy") {
         if (object === this._device?.deref()) {
           if (this._pendingMapCount) {
@@ -434,8 +440,6 @@ export let webgpuInspector = null;
 
     // Called after a GPU method is called, allowing the inspector to wrap the result.
     _postMethodCall(object, method, args, result, stacktrace) {
-      this._frameCommandCount++;
-
       if (object instanceof GPURenderBundleEncoder && method !== "finish") {
         if (object._commands === undefined) {
           object._commands = [];
@@ -1129,9 +1133,9 @@ export let webgpuInspector = null;
       }
     }
 
-    // Initialize capture data for a new frame.
+    // Begin capturing frame data based on the settings passed in _captureData from the devtools panel.
     _initCaptureData() {
-      if (this._captureData.frame < 0 || this._frameIndex >= this._captureData.frame) {
+      if (this._captureData.frame < 0 || this._gpuFrameIndex >= this._captureData.frame) {
         this._captureMaxBufferSize = this._captureData.maxBufferSize || maxBufferCaptureSize;
         this._captureFrameCount = this._captureData.captureFrameCount || captureFrameCount;
         this._captureFrameRequest = true;
@@ -1176,6 +1180,8 @@ export let webgpuInspector = null;
 
     // Called at the start of each frame, before the requestAnimationFrame callback is invoked.
     _frameStart(time) {
+      this._frameGpuComamndCount = 0;
+
       let deltaTime = 0;
       if (this._lastFrameTime == 0) {
         this._lastFrameTime = time;
@@ -1209,7 +1215,6 @@ export let webgpuInspector = null;
         this._captureFrameCommands.length = 0;
         this._frameRenderPassCount = 0;
         this._frameIndex++;
-        this._frameCommandCount = 0;
       }
 
       if (this._inspectingStatusFrame) {
@@ -1256,6 +1261,11 @@ export let webgpuInspector = null;
 
     // Called at the end of each frame, after the requestAnimationFrame callback have been invoked.
     _frameEnd(time) {
+      if (this._frameGpuComamndCount > 0) {
+        this._gpuFrameIndex++;
+        this._frameGpuComamndCount = 0;
+      }
+
       // If we're captureing frames, and some commands have been recorded, send them to the devtools panel.
       if (this._captureFrameCommands.length) {
         this._frameCaptureCommands.push(this._captureFrameCommands);

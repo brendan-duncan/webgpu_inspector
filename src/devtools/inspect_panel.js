@@ -745,6 +745,12 @@ export class InspectPanel {
           createDependencyLink(obj, `Fragment Module: ${obj.name}(${obj.idName})`, ul);
         }
       }
+      if (descriptor.compute) {
+        const obj = this.database.getObject(descriptor.compute.module.__id);
+        if (obj) {
+          createDependencyLink(obj, `Compute Module: ${obj.name}(${obj.idName})`, ul);
+        }
+      }
     }
 
     if (object instanceof PipelineLayout) {
