@@ -146,6 +146,14 @@ export class Widget {
     if (options.tooltip !== undefined) {
       this.tooltip = options.tooltip;
     }
+
+    if (options.href !== undefined) {
+      this._element.href = options.href;
+    }
+
+    if (options.target !== undefined) {
+      this._element.target = options.target;
+    }
   }
 
   /**

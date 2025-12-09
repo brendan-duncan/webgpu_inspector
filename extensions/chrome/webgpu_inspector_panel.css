@@ -1807,6 +1807,22 @@ li.tree-item .expandbutton
   font-size: 12pt;
 }
 
+.inspector-stacktrace {
+ font-size: 10pt;
+ color: #ddd;
+ overflow: auto;
+ background-color: rgb(51, 51, 85);
+ box-shadow: #000 0 3px 5px;
+ padding: 5px;
+ padding-left: 30px;
+ padding-right: 10px;
+ max-height: 200px;
+}
+
+.inspector-stacktrace li a {
+ color: rgb(220, 238, 255);
+}
+
 .cm-tooltip {
   background-color: rgba(220, 220, 160, 0.95);
   color: #000;

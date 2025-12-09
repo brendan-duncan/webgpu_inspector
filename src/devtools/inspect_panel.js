@@ -653,6 +653,96 @@ export class InspectPanel {
     return collabsable;
   }
 
+  _generateInteractiveStacktraceHTML(parent, stackLine) {
+    const trimmed = stackLine.trim();
+
+    const patterns = {
+      // JavaScript: functionName (http://url:line:column)
+      jsWithParens: /^(.+?)\s+\((https?:\/\/.+?):(\d+):(\d+)\)$/,
+      
+      // JavaScript without function name: http://url:line:column
+      jsNoFunction: /^(https?:\/\/.+?):(\d+):(\d+)$/,
+      
+      // WASM: functionName (http://url:wasm-function[index]:offset)
+      wasmWithOffset: /^(.+?)\s+\((https?:\/\/.+?):wasm-function\[(\d+)\]:(0x[0-9a-f]+)\)$/,
+      
+      // WASM alternative: functionName (http://url:line:column)
+      wasmWithLine: /^(.+?)\s+\((https?:\/\/.+?\.wasm):(\d+):(\d+)\)$/
+    };
+
+    let filePath = null;
+    let line = null;
+    let column = null;
+    let type = null;
+    let match = null;
+
+    // Try JavaScript with function name and parentheses
+    if ((match = trimmed.match(patterns.jsWithParens))) {
+      filePath = match[2];
+      line = parseInt(match[3], 10);
+      type = match[2].endsWith('.wasm') ? 'wasm' : 'javascript';
+      column = match[4];
+      //functionName: match[1],
+    }
+    // Try WASM with offset
+    else if ((match = trimmed.match(patterns.wasmWithOffset))) {
+      filePath = match[2];
+      type = 'wasm';
+      //functionName = match[1];
+      //wasmFunctionIndex = match[3];
+      //wasmOffset = match[4];
+    }
+    // Try WASM with line number
+    else if ((match = trimmed.match(patterns.wasmWithLine))) {
+      filePath = match[2];
+      line = parseInt(match[3], 10);
+      column = match[4];
+      type = 'wasm';
+      //functionName: match[1],
+    }
+    // Try JavaScript without function name
+    else if ((match = trimmed.match(patterns.jsNoFunction))) {
+      filePath = match[1];
+      line = parseInt(match[2], 10);
+      column = match[3];
+      type = 'javascript';
+      //functionName = null;
+    }
+
+    // Don't create a link for wasm, chrome will cause it to download instead of opening.
+    if (filePath === null || line === null) {
+      new Widget("li", parent, { text: stackLine });
+      return;
+    }
+
+    const lineDiv = new Widget("li", parent);
+
+    let href = `${filePath}`;
+    if (line !== null) {
+      href += `#${line}`;
+      if (column !== null) {
+        href += `:${column}`;
+      }
+    }
+
+    const title = line !== null ? `${filePath} Line ${line}` : `${filePath}`;
+    
+    const link = new Widget("a", lineDiv, { text: stackLine, title: title });
+    link.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      if (chrome?.devtools?.panels) {
+        const zeroBasedLine = Math.max(line !== null ? line - 1 : 0, 0);
+        chrome.devtools.panels.openResource(filePath, zeroBasedLine, () => {
+          if (chrome.runtime.lastError) {
+            console.error('Error opening resource:', chrome.runtime.lastError);
+          }
+        });
+      } else {
+        window.open(href, "_blank");
+      }
+    });
+  }
+
   _inspectObject(object) {
     this.inspectPanel.html = "";
 
@@ -693,7 +783,11 @@ export class InspectPanel {
 
     if (object.stacktrace) {
       const stacktraceGrp = this._getCollapsableWithState(infoBox, object, "stacktraceCollapsed", "Stacktrace", true);
-      new Div(stacktraceGrp.body, { text: object.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" })
+      const stacktraceBody = new Widget("ol", stacktraceGrp.body, { class: "inspector-stacktrace" });
+      const stacktraceLines = object.stacktrace.split("\n");
+      for (const line of stacktraceLines) {
+        this._generateInteractiveStacktraceHTML(stacktraceBody, line);
+      }
     }
 
     const errorLines = [];
