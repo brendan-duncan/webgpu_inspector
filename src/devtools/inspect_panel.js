@@ -1028,7 +1028,7 @@ export class InspectPanel {
         }
       }
       const text = object.message;
-      new Widget("pre", descriptionBox, { text });
+      new Widget("pre", descriptionBox, { text, class: "validation-error" });
     } else {
       const grp = this._getCollapsableWithState(descriptionBox, object, "descriptorCollapsed", "Descriptor", false);
       const desc = this._getDescriptorInfo(object, object.descriptor);

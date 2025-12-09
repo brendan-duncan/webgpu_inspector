@@ -1790,6 +1790,12 @@ li.tree-item .expandbutton
 .functionArgName, .hex { font-size: x-small; color: #d0d0d0; }
 .functionArgs { color: #a9a9a9; }
 
+.validation-error {
+  user-select: text;
+  -moz-user-select: text;
+  -webkit-user-select: text;
+  -ms-user-select: text;
+}
 
 .inspector-tooltip {
   width: 150px;
