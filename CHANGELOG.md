@@ -1,3 +1,11 @@
+## v0.17.0 - December 17, 2025
+
+* Zoomable texture views.
+* Stacktrace lines link to source files.
+* Fix text color for light color mode.
+* Validation error text is now selectable.
+* Improvements to capturing specific frames.
+
 ## v0.16.0
 
 * Fix shader recompile on Firefox.
