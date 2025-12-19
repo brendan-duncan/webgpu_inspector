@@ -48,6 +48,11 @@ export class InspectorWindow extends Window {
     const self = this;
     this.port.addListener((message) => {
       switch (message.action) {
+        case Actions.PageReady: {
+          console.log("[WebGPU Inspector] Received PageReady from content script, sending PanelReady");
+          self.port.postMessage({ action: Actions.PanelReady });
+          break;
+        }
         case Actions.CaptureTextureData: {
           const id = message.id;
           const passId = message.passId;
@@ -67,16 +72,20 @@ export class InspectorWindow extends Window {
   }
 
   async initialize() {
-    this.port.postMessage({action: "PanelLoaded"});
+    console.log("[WebGPU Inspector] Panel initializing");
 
     if (!navigator.gpu) {
+      console.warn("[WebGPU Inspector] WebGPU not available in this browser");
       return;
     }
 
     this.adapter = await navigator.gpu.requestAdapter();
     if (!this.adapter) {
+      console.error("[WebGPU Inspector] Failed to get GPU adapter");
       return;
     }
+
+    console.log("[WebGPU Inspector] GPU adapter obtained");
 
     const features = [];
     const limits = {};
@@ -90,7 +99,13 @@ export class InspectorWindow extends Window {
       }
     }
 
-    this.device = await this.adapter.requestDevice({requiredFeatures: features, requiredLimits: limits});
+    try {
+      this.device = await this.adapter.requestDevice({requiredFeatures: features, requiredLimits: limits});
+      console.log("[WebGPU Inspector] GPU device created");
+    } catch (e) {
+      console.error("[WebGPU Inspector] Failed to create GPU device:", e);
+      return;
+    }
 
     this.textureUtils = new TextureUtils(this.device);   
   }
