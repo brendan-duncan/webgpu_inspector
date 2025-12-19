@@ -19,7 +19,12 @@ export const Actions = {
   Recording: "webgpu_record_recording",
   RecordingCommand: "webgpu_record_command",
   RecordingDataCount: "webgpu_record_data_count",
-  RecordingData: "webgpu_record_data"
+  RecordingData: "webgpu_record_data",
+
+  // Connection handshake actions
+  PageReady: "webgpu_inspect_page_ready",
+  PanelReady: "webgpu_inspect_panel_ready",
+  ConnectionAck: "webgpu_inspect_connection_ack"
 };
 
 Actions.values = new Set(Object.values(Actions));

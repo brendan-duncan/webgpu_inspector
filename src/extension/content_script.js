@@ -12,6 +12,13 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
     return;
   }
 
+  // Handle connection handshake from panel
+  if (action === Actions.PanelReady) {
+    //console.log("[WebGPU Inspector] Received PanelReady, sending ConnectionAck");
+    port.postMessage({ action: Actions.ConnectionAck });
+    return;
+  }
+
   if (action === PanelActions.RequestTexture || action === PanelActions.CompileShader || action === PanelActions.RevertShader) {
     const msg = isRunningInFirefox ? cloneInto(message, document.defaultView) : message;
     window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: msg }));
@@ -76,7 +83,7 @@ window.addEventListener("__WebGPUInspector", (event) => {
   try {
     port.postMessage(message);
   } catch (e) {
-    //console.log("#### error:", e);
+    console.error("[WebGPU Inspector] Error sending message from page:", e);
   }
 });
 
@@ -95,7 +102,7 @@ window.addEventListener("__WebGPURecorder", (event) => {
   try {
     port.postMessage(message);
   } catch (e) {
-    //console.log("#### error:", e);
+    console.error("[WebGPU Inspector] Error sending message from page:", e);
   }
 });
 
@@ -133,4 +140,6 @@ if (navigator.userAgent.indexOf("Chrom") === -1 &&
   }
 }
 
-port.postMessage({action: "PageLoaded"});
+// Send PageReady to signal content script is ready
+//console.log("[WebGPU Inspector] Content script ready, sending PageReady");
+port.postMessage({ action: Actions.PageReady });
