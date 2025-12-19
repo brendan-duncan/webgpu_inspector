@@ -16,7 +16,7 @@
 
 ## Introduction
 
-**Version: 0.17.0**
+**Version: 0.18.0**
 
 Inspection, profiling, and graphics debugging browser extension for WebGPU.
 
