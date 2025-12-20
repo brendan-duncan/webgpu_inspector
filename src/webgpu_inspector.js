@@ -831,9 +831,16 @@ export let webgpuInspector = null;
       return !obj || obj.constructor === String || obj.constructor === Number || obj.constructor === Boolean;
     }
 
+    _isArrayBuffer(obj) {
+      if (typeof SharedArrayBuffer === 'function') {
+        return obj && (obj instanceof ArrayBuffer || obj instanceof SharedArrayBuffer);
+      }
+      return obj && obj instanceof ArrayBuffer;
+    }
+
     // Is the object a typed array?
     _isTypedArray(obj) {
-      return obj && (obj instanceof ArrayBuffer || obj.buffer instanceof ArrayBuffer || obj.buffer instanceof SharedArrayBuffer);
+      return obj && (obj instanceof ArrayBuffer || this._isArrayBuffer(obj.buffer));
     }
 
     // Is the object a regular array?
@@ -1633,7 +1640,7 @@ export let webgpuInspector = null;
         if (a.length > 3) {
           const offset = a[3] ?? 0;
          const size = a[4];
-          const buffer = (data instanceof ArrayBuffer || data instanceof SharedArrayBuffer) ? data : data.buffer;
+          const buffer = this._isArrayBuffer(data) ? data : data.buffer;
           if (!buffer) {
             // It's a []<number>
           } else if (size > 0) {
@@ -2144,7 +2151,7 @@ export let webgpuInspector = null;
         }
         return newArray;
       }
-      if (object instanceof ArrayBuffer || object instanceof SharedArrayBuffer) {
+      if (this._isArrayBuffer(object)) {
         const id = this._addCommandData(object);
         return `@${id} ${object.constructor.name} ${object.byteLength}`;
       }
