@@ -1,6 +1,7 @@
 ## v0.18.0 -
 
 * Improve connection from page to devtools panel.
+* Fix capturing frames from multithreaded Wasm.
 
 ## v0.17.0 - December 17, 2025
 
