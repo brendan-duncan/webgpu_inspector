@@ -24,7 +24,7 @@ export class MessagePort {
       this._port = chrome.runtime.connect({ name: this.name });
 
       this._port.onDisconnect.addListener(() => {
-        console.warn(`[WebGPU Inspector] MessagePort ${self.name} disconnected`);
+        //console.warn(`[WebGPU Inspector] MessagePort ${self.name} disconnected`);
         self._isConnected = false;
         self._isConnecting = false;
 
