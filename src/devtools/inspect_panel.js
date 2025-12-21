@@ -4,9 +4,7 @@ import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
 import { TabWidget } from "./widget/tab_widget.js";
 import { Widget } from "./widget/widget.js";
-import { NumberInput } from "./widget/number_input.js";
 import { Select } from "./widget/select.js";
-import { Signal } from "../utils/signal.js";
 import {
   Adapter,
   Device,
@@ -26,6 +24,8 @@ import { getFlagString } from "../utils/flags.js";
 import { PanelActions } from "../utils/actions.js";
 import { Plot } from "./widget/plot.js";
 import { Split } from "./widget/split.js";
+import { StacktraceViewer } from './stacktrace_viewer.js';
+import { TextureViewer } from "./texture_viewer.js";
 
 import { EditorView } from "codemirror";
 import { keymap, highlightSpecialChars, drawSelection, dropCursor,
@@ -653,82 +653,6 @@ export class InspectPanel {
     return collabsable;
   }
 
-  _generateInteractiveStacktraceHTML(parent, stackLine) {
-    const trimmed = stackLine.trim();
-
-    const patterns = {
-      // JavaScript: functionName (http://url:line:column)
-      jsWithParens: /^(.+?)\s+\((https?:\/\/.+?):(\d+):(\d+)\)$/,
-      
-      // JavaScript without function name: http://url:line:column
-      jsNoFunction: /^(https?:\/\/.+?):(\d+):(\d+)$/,
-      
-      // WASM: functionName (http://url:wasm-function[index]:offset)
-      wasmWithOffset: /^(.+?)\s+\((https?:\/\/.+?):wasm-function\[(\d+)\]:(0x[0-9a-f]+)\)$/,
-      
-      // WASM alternative: functionName (http://url:line:column)
-      wasmWithLine: /^(.+?)\s+\((https?:\/\/.+?\.wasm):(\d+):(\d+)\)$/
-    };
-
-    let filePath = null;
-    let functionName = null;
-    let line = null;
-    let column = null;
-    let columnStr = null;
-    let match = null;
-
-    // Try JavaScript with function name and parentheses
-    if ((match = trimmed.match(patterns.jsWithParens))) {
-      filePath = match[2];
-      functionName = match[1];
-      line = Math.max(parseInt(match[3], 10) - 1, 0);
-      columnStr = match[4];
-      column = parseInt(columnStr, 10) - 1;
-    }
-    // Try WASM with offset
-    else if ((match = trimmed.match(patterns.wasmWithOffset))) {
-      filePath = match[2];
-      functionName = match[1];
-      columnStr = match[4];
-      column = parseInt(columnStr, 16); // wasm offset
-      //wasmFunctionIndex = match[3];
-    }
-    // Try WASM with line number
-    else if ((match = trimmed.match(patterns.wasmWithLine))) {
-      filePath = match[2];
-      functionName = match[1];
-      line = Math.max(parseInt(match[3], 10) - 1, 0);
-      columnStr = match[4];
-      column = parseInt(columnStr, 10) - 1;
-    }
-    // Try JavaScript without function name
-    else if ((match = trimmed.match(patterns.jsNoFunction))) {
-      filePath = match[1];
-      line = Math.max(parseInt(match[2], 10) - 1, 0);
-      columnStr = match[3];
-      column = parseInt(columnStr, 10) - 1;
-    }
-
-    if (filePath === null) {
-      new Widget("li", parent, { text: stackLine });
-      return;
-    }
-
-    const lineDiv = new Widget("li", parent);
-
-    const title = `${functionName || "<anonymous>"} (${filePath}${line !== null ? `:${line}` : ""}${columnStr !== null ? `:${columnStr}` : ""})`;
-
-    const link = new Widget("a", lineDiv, { text: stackLine, title: title });
-    link.addEventListener("click", (evt) => {
-      evt.preventDefault();
-      if (chrome?.devtools?.panels) {
-        chrome.devtools.panels.openResource(filePath, line || 0, column);
-      } else {
-        window.open(filePath, "_blank");
-      }
-    });
-  }
-
   _inspectObject(object) {
     this.inspectPanel.html = "";
 
@@ -768,12 +692,7 @@ export class InspectPanel {
     }
 
     if (object.stacktrace) {
-      const stacktraceGrp = this._getCollapsableWithState(infoBox, object, "stacktraceCollapsed", "Stacktrace", true);
-      const stacktraceBody = new Widget("ol", stacktraceGrp.body, { class: "inspector-stacktrace" });
-      const stacktraceLines = object.stacktrace.split("\n");
-      for (const line of stacktraceLines) {
-        this._generateInteractiveStacktraceHTML(stacktraceBody, line);
-      }
+      new StacktraceViewer(this, infoBox, object, object.stacktrace);
     }
 
     const errorLines = [];
@@ -1030,7 +949,7 @@ export class InspectPanel {
         self.database.requestTextureData(object, object.display?.mipLevel ?? 0);
       }});
       if (object.gpuTexture) {
-        this._createTexturePreview(object, descriptionBox);
+        new TextureViewer(this, descriptionBox, object);
       } else if (!loadButton.disabled) {
         // Auto-load the texture if it's not a depth-stencil texture
         this.database.requestTextureData(object, object.display?.mipLevel ?? 0);
@@ -1052,7 +971,7 @@ export class InspectPanel {
         }});
 
         if (texture.gpuTexture) {
-          this._createTexturePreview(texture, textureGrp.body);
+          new TextureViewer(this, textureGrp.body, texture);
         } else if (!loadButton.disabled) {
           // Auto-load the texture if it's not a depth-stencil texture
           this.database.requestTextureData(texture);
@@ -1078,198 +997,6 @@ export class InspectPanel {
     }
     this.database.removeErrorsForObject(object.id);
     this.port.postMessage({ action: PanelActions.CompileShader, id: object.id, code });
-  }
-
-  _createTexturePreview(texture, parent, width, height) {
-    const mipLevel = Math.max(Math.min(texture.display.mipLevel || 0, texture.mipLevelCount), 0);
-
-    width ??= (texture.width >> mipLevel) || texture.width;
-    height ??= (texture.height >> mipLevel) || texture.height;
-
-    const numLayers = texture.depthOrArrayLayers;
-    const layerRanges = texture.layerRanges;
-
-    const container = new Div(parent, { style: "margin-bottom: 5px; margin-top: 10px;" });
-
-    const displayChanged = new Signal();
-
-    const controls = new Div(container);
-
-    const mipLevels = Array.from({length: texture.mipLevelCount}, (_,i)=>i.toString());
-
-    const self = this;
-
-    new Span(controls, { text:  "Mip Level", style: "margin-right: 3px; font-size: 9pt; color: #bbb;" });
-    new Select(controls, {
-      options: mipLevels,
-      index: texture.display.mipLevel,
-      style: "color: #fff; margin-left: 10px; font-size: 10pt; width: 100px;",
-      onChange: (value) => {
-        const index = mipLevels.indexOf(value);
-        texture.display.mipLevel = index || 0;
-        if (self._tooltip) {
-          self._tooltip.style.display = 'none';
-          document.body.removeChild(self._tooltip);
-          self._tooltip = null;
-        }
-        if (texture.isMipLevelLoaded(texture.display.mipLevel)) {
-          displayChanged.emit();
-        } else {
-          self.database.requestTextureData(texture, texture.display.mipLevel || 0);
-        }
-      } });
-
-    new Span(controls, { text:  "Exposure", style: "margin-left: 10px; margin-right: 3px; font-size: 9pt; color: #bbb;" });
-    new NumberInput(controls, { value: texture.display.exposure, step: 0.01, onChange: (value) => {
-      texture.display.exposure = value;
-      displayChanged.emit();
-    }, style: "width: 100px; display: inline-block;" });
-
-    const channels = ["RGB", "Red", "Green", "Blue", "Alpha", "Luminance"];
-    new Select(controls, {
-      options: channels,
-      index: 0,
-      style: "color: #fff; margin-left: 10px; font-size: 10pt; width: 100px;",
-      onChange: (value) => {
-        const index = channels.indexOf(value);
-        texture.display.channels = index;
-        displayChanged.emit();
-      } });
-
-    new Span(controls, { text: "Zoom", tooltip: "Zoom level of the texture, CTRL + mouse-wheel", style: "margin-left: 10px; margin-right: 3px; font-size: 9pt; color: #bbb;" });
-    const zoomControl = new NumberInput(controls, { tooltip: "Zoom level of the texture, CTRL + mouse-wheel", value: texture.display.zoom, step: 1, min: 1, onChange: (value) => {
-      texture.display.zoom = value;
-      displayChanged.emit();
-    }, style: "width: 100px; display: inline-block;" });
-
-    if (!this._tooltip) {
-      this._tooltip = document.createElement('pre');
-      document.body.appendChild(this._tooltip);
-      this._tooltip.classList.add('inspector-tooltip');
-      this._tooltip.style.display = 'none';
-    }
-
-    function getPixelString(pixel) {
-      if (!pixel) {
-        return "<unknown pixel value>";
-      }
-      let str = "";
-      if (pixel.r !== undefined) {
-        str += `R: ${pixel.r}\n`;
-      }
-      if (pixel.g !== undefined) {
-        str += `G: ${pixel.g}\n`;
-      }
-      if (pixel.b !== undefined) {
-        str += `B: ${pixel.b}\n`;
-      }
-      if (pixel.a !== undefined) {
-        str += `A: ${pixel.a}\n`;
-      }
-      return str;
-    }
-
-    const hl = 0.5 / numLayers;
-
-    for (let layer = 0; layer < numLayers; ++layer) {
-      const layerInfo = new Div(container, { class: 'inspect_texture_layer_info' });
-      if (layerRanges) {
-        new Span(layerInfo, { text: `Layer ${layer} Min Value: ${layerRanges[layer].min} Max Value: ${layerRanges[layer].max}` });
-      } else {
-        new Span(layerInfo, { text: `Layer ${layer}` });
-      }
-
-      const canvas = new Widget("canvas", new Div(container), { style: "box-shadow: 5px 5px 5px rgba(0,0,0,0.5); image-rendering: -moz-crisp-edges; image-rendering: -webkit-crisp-edges; image-rendering: pixelated;" });
-      canvas.style.width = `${width * texture.display.zoom / 100}px`;
-      canvas.style.height = `${height * texture.display.zoom / 100}px`;
-      canvas.element.addEventListener("mouseenter", (event) => {
-        if (this._tooltip) {
-          this._tooltip.style.display = 'block';
-        }
-      });
-      canvas.element.addEventListener("mouseleave", (event) => {
-        if (this._tooltip) {
-          this._tooltip.style.display = 'none';
-        }
-      });
-      canvas.element.addEventListener("mousemove", (event) => {
-        if (this._tooltip) {
-          const x = Math.floor(event.offsetX / (texture.display.zoom / 100));
-          const y = Math.floor(event.offsetY / (texture.display.zoom / 100));
-          const pixel = texture.getPixel(x, y, layer, texture.display?.mipLevel ?? 0);
-          this._tooltip.style.left = `${event.pageX + 10}px`;
-          this._tooltip.style.top = `${event.pageY + 10}px`;
-          const pixelStr = getPixelString(pixel);
-          this._tooltip.innerHTML = `X:${x} Y:${y}\n${pixelStr}`;
-        }
-      });
-      canvas.element.addEventListener('wheel', (event) => {
-        if (event.ctrlKey) {
-          event.preventDefault();
-          let zoom = texture.display.zoom;
-          if (event.deltaY < 0) {
-            zoom += 10;
-          } else {
-            zoom -= 10;
-          }
-          zoom = Math.max(1, zoom);
-          zoomControl.setValue(zoom);
-          texture.display.zoom = zoom;
-          displayChanged.emit();
-        }
-      });
-
-      canvas.element.width = width;
-      canvas.element.height = height;
-      const context = canvas.element.getContext("webgpu");
-      const format = navigator.gpu.getPreferredCanvasFormat();
-      const device = this.window.device;
-      context.configure({ device, format });
-      const canvasTexture = context.getCurrentTexture();
-
-      const viewDesc = {
-        aspect: "all",
-        dimension: texture.descriptor.dimension ?? "2d",
-        baseArrayLayer: texture.descriptor.dimension == "3d" ? 0 : layer,
-        layerArrayCount: 1,
-        baseMipLevel: mipLevel,
-        mipLevelCount: 1 };
-
-      const srcView = texture.gpuTexture.object.createView(viewDesc);
-
-      if (layerRanges) {
-        texture.display.minRange = layerRanges[layer].min;
-        texture.display.maxRange = layerRanges[layer].max;
-      }
-
-      this.textureUtils.blitTexture(srcView, texture.format, 1, canvasTexture.createView(), format, texture.display, texture.descriptor.dimension, (layer / numLayers) + hl);
-
-      const self = this;
-      displayChanged.addListener(() => {
-        const mipLevel = texture.display.mipLevel;
-        const width = (texture.width >> mipLevel) || texture.width;
-        const height = (texture.height >> mipLevel) || texture.height;
-
-        canvas.element.width = width;
-        canvas.element.height = height;
-
-        const canvasTexture = context.getCurrentTexture();
-        const viewDesc = {
-          aspect: "all",
-          dimension: texture.descriptor.dimension,
-          baseArrayLayer: texture.descriptor.dimension == "3d" ? 0 : layer,
-          layerArrayCount: 1,
-          baseMipLevel: mipLevel,
-          mipLevelCount: 1 };
-  
-        const srcView = texture.gpuTexture.object.createView(viewDesc);
-
-        self.textureUtils.blitTexture(srcView, texture.format, 1, canvasTexture.createView(), format, texture.display);
-
-        canvas.style.width = `${width * texture.display.zoom / 100}px`;
-        canvas.style.height = `${height * texture.display.zoom / 100}px`;
-      });
-    }
   }
 
   _getDescriptorArray(object, array) {
