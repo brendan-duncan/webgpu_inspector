@@ -58,7 +58,7 @@ export class MessagePort {
 
       //console.log(`[WebGPU Inspector] MessagePort ${this.name} connected`);
     } catch (e) {
-      console.error(`[WebGPU Inspector] Failed to connect MessagePort ${this.name}:`, e);
+      //console.error(`[WebGPU Inspector] Failed to connect MessagePort ${this.name}:`, e);
       this._isConnecting = false;
       this._isConnected = false;
 

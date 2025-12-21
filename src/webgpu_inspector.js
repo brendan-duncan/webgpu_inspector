@@ -1998,6 +1998,16 @@ export let webgpuInspector = null;
       this._captureBuffersCount -= buffers.length;
     }
 
+    _isCompatibilityMode(device) {
+      const adapter = device?.__adapter;
+      if (adapter?.features.has("core-features-and-limits")) {
+        if (!device?.features.has("core-features-and-limits")) {
+          return true;
+        }
+      }
+      return false;
+    }
+
     // Copy the texture to a buffer so we can send it to the inspector server.
     // The texture data is copied to a buffer now, then after the frame has finished
     // the buffer data is sent to the inspector server.
@@ -2029,6 +2039,11 @@ export let webgpuInspector = null;
       }
 
       if (formatInfo.isDepthStencil) {
+        if (this._isCompatibilityMode(device)) {
+          // Can't capture depth textures in compatibility mode
+          // because textureLoad can't read from depth textures.
+          return;
+        }
         this.disableRecording();
         try {
           const textureUtils = this._getTextureUtils(device);
