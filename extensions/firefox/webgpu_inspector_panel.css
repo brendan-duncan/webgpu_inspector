@@ -203,8 +203,8 @@ li:hover {
 }
 
 .inspector_panel_content {
-  overflow: hidden;
-  height: calc(-120px + 100vh);
+  overflow: auto;
+  height: calc(-152px + 100vh);
   font-size: 14pt;
 }
 

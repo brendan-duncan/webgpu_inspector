@@ -1,8 +1,9 @@
+import { Div } from "./widget/div.js";
 import { Widget } from "./widget/widget.js";
 
-export class StacktraceViewer extends Widget {
+export class StacktraceViewer extends Div {
   constructor(panel, parent, object, stacktrace) {
-    super("div", parent);
+    super(parent);
 
     const patterns = {
       // JavaScript: functionName (http://url:line:column)

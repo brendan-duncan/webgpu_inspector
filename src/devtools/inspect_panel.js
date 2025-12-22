@@ -24,50 +24,9 @@ import { getFlagString } from "../utils/flags.js";
 import { PanelActions } from "../utils/actions.js";
 import { Plot } from "./widget/plot.js";
 import { Split } from "./widget/split.js";
+import { ShaderEditor } from "./shader_editor.js";
 import { StacktraceViewer } from './stacktrace_viewer.js';
 import { TextureViewer } from "./texture_viewer.js";
-
-import { EditorView } from "codemirror";
-import { keymap, highlightSpecialChars, drawSelection, dropCursor,
-  crosshairCursor, lineNumbers, highlightActiveLineGutter } from "@codemirror/view";
-import { EditorState } from "@codemirror/state";
-import { defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
-  foldGutter, foldKeymap } from "@codemirror/language";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { searchKeymap } from "@codemirror/search";
-import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { lintKeymap } from "@codemirror/lint";
-import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
-import { cobalt } from 'thememirror';
-
-const shaderEditorSetup = (() => [
-  lineNumbers(),
-  highlightActiveLineGutter(),
-  highlightSpecialChars(),
-  history(),
-  foldGutter(),
-  drawSelection(),
-  dropCursor(),
-  EditorState.allowMultipleSelections.of(true),
-  indentOnInput(),
-  syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
-  bracketMatching(),
-  closeBrackets(),
-  autocompletion(),
-  crosshairCursor(),
-  cobalt,
-  wgsl(),
-  keymap.of([
-    indentWithTab,
-    ...closeBracketsKeymap,
-    ...defaultKeymap,
-    ...searchKeymap,
-    ...historyKeymap,
-    ...foldKeymap,
-    ...completionKeymap,
-    ...lintKeymap
-  ])
-])();
 
 export class InspectPanel {
   constructor(win, parent) {
@@ -720,8 +679,6 @@ export class InspectPanel {
       };
     }
 
-    let compileButton = null;
-    let revertButton = null;
     if (object instanceof RenderPipeline || object instanceof ComputePipeline) {
       const grp = this._getCollapsableWithState(infoBox, object, "dependenciesCollapsed", "Dependencies", true);
       const ul = new Widget("ul", grp.body);
@@ -872,48 +829,15 @@ export class InspectPanel {
           }
         }
       }
-
-      const isModified = object.replacementCode && object.replacementCode !== object.descriptor.code;
-      const compileRow = new Div(this.inspectPanel);
-      compileButton = new Button(compileRow, { label: "Compile", style: "background-color: rgb(200, 150, 51);" });
-      revertButton = isModified ? new Button(compileRow, { label: "Revert", style: "background-color: rgb(200, 150, 51);" }) : null;
     }
 
-    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-320px + 100vh); overflow: auto;" });
+    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-320px + 100vh);" });
 
     if (object instanceof ShaderModule) {
       const self = this;
-
-      const text = object.replacementCode || object.descriptor.code;
-
-      const editor = new EditorView({
-        doc: text,
-        extensions: [
-          shaderEditorSetup
-        ],
-        parent: descriptionBox.element,
+      new ShaderEditor(this, descriptionBox, object, () => {
+        self._inspectObject(object);
       });
-
-      compileButton.callback = () => {
-        const code = editor.state.doc.toString();
-        if (code === object.descriptor.code) {
-          self._revertShader(object);
-          object.replacementCode = null;
-          self._inspectObject(object); // refresh the inspection info panel
-        } else {
-          self._compileShader(object, code);
-          object.replacementCode = code;
-          self._inspectObject(object); // refresh the inspection info panel
-        }
-      };
-
-      if (revertButton) {
-        revertButton.callback = () => {
-          self._revertShader(object);
-          object.replacementCode = null;
-          self._inspectObject(object); // refresh the inspection info panel
-        };
-      }
     } else if (object instanceof ValidationError) {
       const objectId = object.object;
       if (objectId) {
@@ -978,25 +902,6 @@ export class InspectPanel {
         }
       }
     }
-  }
-
-  _revertShader(object) {
-    this.port.postMessage({ action: PanelActions.RevertShader, id: object.id });
-  }
-
-  _compileShader(object, code) {
-    if (code === object.code) {
-      return;
-    }
-    if (object.widget) {
-      object.widget.element.classList.remove("error");
-      object.widget.tooltip = "";
-      for (const child of object.widget.children) {
-        child.tooltip = "";
-      }
-    }
-    this.database.removeErrorsForObject(object.id);
-    this.port.postMessage({ action: PanelActions.CompileShader, id: object.id, code });
   }
 
   _getDescriptorArray(object, array) {

@@ -5,10 +5,10 @@ import { Select } from "./widget/select.js";
 import { NumberInput } from "./widget/number_input.js";
 import { Signal } from "../utils/signal.js";
 
-export class TextureViewer extends Widget {
+export class TextureViewer extends Div {
   constructor(panel, parent, texture) {
-    super("div", parent);
-    
+    super(parent);
+
     this.panel = panel;
 
     const mipLevel = Math.max(Math.min(texture.display.mipLevel || 0, texture.mipLevelCount), 0);

@@ -47,7 +47,7 @@ export let webgpuInspector = null;
       this._bindGroupCount = 0;
       this._captureTextureRequest = new Map();
       this._toDestroy = []; // Defer deleting temp objects until after finish
-      this._objectReplacementMap = new Map(); // Map objects to their replacements
+      this._objectReplacementMap = new Map(); // Map objects to their replacements <id:string, {id:string, object:WeakRef, replacement:Object}>
       this._captureBuffersCount = 0;
       this._captureTempBuffers = [];
       this._mappedTextureBufferCount = 0;
@@ -377,6 +377,20 @@ export let webgpuInspector = null;
         }
       }
 
+      if (method === "setBindGroup") {
+        // If a shader has been recompiled, that means the pipelines that
+        // used that shader were also re-created. Any BindGroups created
+        // with a layout from pipeline.getBindGroupLayout(#) also need
+        // to be re-created. Patch in the replacement BindGroup if there is one.
+        let bindGroup = args[1];
+        const objectRef = this._objectReplacementMap.get(bindGroup.__id);
+        if (objectRef) {
+          if (objectRef.replacement) {
+            args[1] = objectRef.replacement;
+          }
+        }
+      }
+
       if (method === "createTexture") {
         // Add COPY_SRC usage to all textures so we can capture them
         args[0].usage |= GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING;
@@ -648,6 +662,11 @@ export let webgpuInspector = null;
           this._wrapObject(result, id);
         }
 
+        if (method === "getBindGroupLayout") {
+          Object.defineProperty(result, "__pipeline", { value: object, enumerable: false, writable: true });
+          Object.defineProperty(result, "__bindGroupIndex", { value: args[0], enumerable: false, writable: true });
+        }
+
         if (method === "createShaderModule" ||
             method === "createRenderPipeline") {
           Object.defineProperty(result, "__descriptor", { value: args[0], enumerable: false, writable: true });
@@ -673,6 +692,7 @@ export let webgpuInspector = null;
         } else if (method === "createBindGroup") {
           this._trackObject(result.__id, result);
           Object.defineProperty(result, "__descriptor", { value: args[0], enumerable: false, writable: true });
+          this._objectReplacementMap.set(result.__id, { id: result.__id, object: new WeakRef(result), replacement: null });
         } else if (method === "setBindGroup") {
           const descriptor = args[1].__descriptor;
           if (descriptor) {
@@ -931,33 +951,44 @@ export let webgpuInspector = null;
 
       objectMap.replacement = null;
 
+      // Any pipelines that used this shader need to be reverted as well.
       for (const objectRef of this._objectReplacementMap.values()) {
-        const object = objectRef.object.deref();
-        const isRenderPipeline = object instanceof GPURenderPipeline;
-        const isComputePipeline = object instanceof GPUComputePipeline;
+        const pipelineObject = objectRef.object.deref();
+        const isRenderPipeline = pipelineObject instanceof GPURenderPipeline;
+        const isComputePipeline = pipelineObject instanceof GPUComputePipeline;
         if (isRenderPipeline || isComputePipeline) {
-          const descriptor = object.__descriptor;
+          const descriptor = pipelineObject.__descriptor;
 
           let found = false;
-          let vertexModule = null;
-          let fragmentModule = null;
-          let computeModule = 0;
 
           if (descriptor.vertex?.module === shader) {
-            vertexModule = shader;
             found = true;
           }
           if (descriptor.fragment?.module === shader) {
-            fragmentModule = shader;
             found = true;
           }
           if (descriptor.compute?.module === shader) {
-            computeModule = shader;
             found = true;
           }
 
           if (found) {
             objectRef.replacement = null;
+
+            // Any BindGroup that was created with a BindGroupLayout from pipeline.getBindGroupLayout(#)
+            // need to be reverted as well.
+            for (const objectRef of this._objectReplacementMap.values()) {
+              const bindGroup = objectRef.object.deref();
+              if (bindGroup instanceof GPUBindGroup) {
+                const descriptor = bindGroup.__descriptor;
+                let layout = descriptor.layout;
+                if (layout instanceof GPUBindGroupLayout) {
+                  const parentPipeline = layout.__pipeline;
+                  if (parentPipeline === pipelineObject) {
+                    objectRef.replacement = null;
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1023,7 +1054,8 @@ export let webgpuInspector = null;
             fragmentModule = shader;
             if (!newDescriptor) {
               newDescriptor = this._duplicateObject(descriptor);
-            }            found = true;
+            }
+            found = true;
             newDescriptor.fragment.module = newShaderModule;
           }
           if (descriptor.compute?.module === shader) {
@@ -1055,6 +1087,30 @@ export let webgpuInspector = null;
             this.enableRecording();
 
             objectRef.replacement = newPipeline;
+
+            // If any BindGroup was created with a BindGroupLayout from pipeline.getBindGroupLayout(#),
+            // We need to recreate those as well.
+            for (const bindGroupRef of this._objectReplacementMap.values()) {
+              const bindGroup = bindGroupRef.object.deref();
+              if (bindGroup instanceof GPUBindGroup) {
+                const descriptor = bindGroup.__descriptor;
+                let layout = descriptor.layout;
+                if (layout instanceof GPUBindGroupLayout) {
+                  const parentPipeline = layout.__pipeline;
+                  const bindGroupIndex = layout.__bindGroupIndex;
+                  if (parentPipeline === object) {
+                    layout = objectRef.replacement.getBindGroupLayout(bindGroupIndex);
+                    const newBindGroupDescriptor = this._duplicateObject(descriptor);
+                    newBindGroupDescriptor.layout = layout;
+                    this.disableRecording();
+                    Object.defineProperty(newBindGroupDescriptor, "__replacement", { value: bindGroupRef.id, enumerable: false, writable: true });
+                    const newBindGroup = device.createBindGroup(newBindGroupDescriptor);
+                    this.enableRecording();
+                    bindGroupRef.replacement = newBindGroup;
+                  }
+                }
+              }
+            }
           }
         }
       }
