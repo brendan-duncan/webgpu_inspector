@@ -323,7 +323,6 @@ export class RecorderData {
     }
 
     if (!object) {
-      //console.log("!!!!!!!!!!!!!!!!", command.object, command.method);
       return;
     }
 

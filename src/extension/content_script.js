@@ -1,6 +1,9 @@
 import { MessagePort } from "../utils/message_port.js";
 import { Actions, PanelActions } from "../utils/actions.js";
 
+// The content script runs in the context of the web page, can send and receive messages
+// to/from the extension background script, and can inject scripts into the web page.
+
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
 const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";

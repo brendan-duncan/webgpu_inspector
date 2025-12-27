@@ -24,7 +24,7 @@ function registerPort(port, tabId) {
     ports.push(port);
 
     port.onDisconnect.addListener(() => {
-      console.log(`[WebGPU Inspector] Port disconnected: ${port.name} (tab ${tabId})`);
+      //console.log(`[WebGPU Inspector] Port disconnected: ${port.name} (tab ${tabId})`);
       if (ports.includes(port)) {
         ports.splice(ports.indexOf(port), 1);
       }
@@ -35,13 +35,13 @@ function registerPort(port, tabId) {
         connections.delete(tabId);
       }
     });
-
-    console.log(`[WebGPU Inspector] Port registered: ${port.name} (tab ${tabId})`);
+    
+    //console.log(`[WebGPU Inspector] Port registered: ${port.name} (tab ${tabId})`);
   }
 }
 
 chrome.runtime.onConnect.addListener((port) => {
-  console.log(`[WebGPU Inspector] Port connecting: ${port.name}`);
+  //console.log(`[WebGPU Inspector] Port connecting: ${port.name}`);
 
   // Register the port immediately on connect, before any messages
   // This is done in the first onMessage handler because we need the tabId

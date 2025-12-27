@@ -253,12 +253,6 @@ export class CaptureData {
       command.dataPending[entryIndex] = true;
     }
 
-    /*const bufferData = command.bufferData[entryIndex];
-    if (bufferData.length != size) {
-      console.log("!!!!!!!!!!!!!!! INVALID BUFFER SIZE", bufferData.length, size);
-      return;
-    }*/
-
     if (!command.loadedDataChunks) {
       command.loadedDataChunks = [];
     }

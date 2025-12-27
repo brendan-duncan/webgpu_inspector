@@ -85,9 +85,16 @@ export let webgpuInspector = null;
           if (iframes.length > 0) {
             for (const iframe of iframes) {
               iframe.addEventListener("load", () => {
-                iframe.contentWindow.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: {
-                  __webgpuInspector: true,
-                  action: "webgpu_inspector_start_inspection" } }));
+                try {
+                  if (iframe.contentWindow) {
+                    iframe.contentWindow.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: {
+                      __webgpuInspector: true,
+                      action: "webgpu_inspector_start_inspection" } }));
+                  }
+                } catch (e) {
+                  // Cross-origin iframe access denied - this is expected
+                  console.log("[WebGPU Inspector] Cannot access cross-origin iframe:", e.message);
+                }
               });
             }
           }
@@ -97,6 +104,51 @@ export let webgpuInspector = null;
             self._wrapCanvas(canvas);
           }
         });
+
+        // Set up MutationObserver to catch dynamically added iframes that might be missed
+        if (_document && typeof MutationObserver !== 'undefined') {
+          const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+              for (const node of mutation.addedNodes) {
+                if (node.nodeName === 'IFRAME') {
+                  node.addEventListener("load", () => {
+                    try {
+                      if (node.contentWindow) {
+                        node.contentWindow.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: {
+                          __webgpuInspector: true,
+                          action: "webgpu_inspector_start_inspection" } }));
+                      }
+                    } catch (e) {
+                      // Cross-origin iframe access denied - this is expected
+                      console.log("[WebGPU Inspector] Cannot access cross-origin iframe:", e.message);
+                    }
+                  });
+                } else if (node.getElementsByTagName) {
+                  const nestedIframes = node.getElementsByTagName('iframe');
+                  for (const iframe of nestedIframes) {
+                    iframe.addEventListener("load", () => {
+                      try {
+                        if (iframe.contentWindow) {
+                          iframe.contentWindow.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: {
+                            __webgpuInspector: true,
+                            action: "webgpu_inspector_start_inspection" } }));
+                        }
+                      } catch (e) {
+                        // Cross-origin iframe access denied - this is expected
+                        console.log("[WebGPU Inspector] Cannot access cross-origin iframe:", e.message);
+                      }
+                    });
+                  }
+                }
+              }
+            }
+          });
+
+          observer.observe(_document.body || _document.documentElement, {
+            childList: true,
+            subtree: true
+          });
+        }
       }
 
       this._gpuWrapper = new GPUObjectWrapper(this);
@@ -174,9 +226,16 @@ export let webgpuInspector = null;
             self._wrapCanvas(element);
           } else if (type === "iframe") {
             element.addEventListener("load", () => {
-              element.contentWindow.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: {
-                __webgpuInspector: true,
-                action: "webgpu_inspector_start_inspection" } }));
+              try {
+                if (element.contentWindow) {
+                  element.contentWindow.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: {
+                    __webgpuInspector: true,
+                    action: "webgpu_inspector_start_inspection" } }));
+                }
+              } catch (e) {
+                // Cross-origin iframe access denied - this is expected
+                console.log("[WebGPU Inspector] Cannot access cross-origin iframe:", e.message);
+              }
             });
           }
           return element;

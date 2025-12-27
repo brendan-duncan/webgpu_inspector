@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebGPU Inspector Iframe Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 2px solid #ccc; }
+        iframe { width: 400px; height: 300px; border: 1px solid #000; margin: 10px; }
+        button { padding: 10px; margin: 5px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <h1>WebGPU Inspector Iframe Injection Test</h1>
+    
+    <div class="test-section">
+        <h2>Same-Origin Iframe</h2>
+        <p>This iframe loads from the same origin and should allow inspector injection:</p>
+        <iframe id="same-origin" src="triangle.html"></iframe>
+    </div>
+    
+    <div class="test-section">
+        <h2>Cross-Origin Iframe</h2>
+        <p>This iframe loads from a different origin and should be handled gracefully:</p>
+        <iframe id="cross-origin" src="https://example.com"></iframe>
+    </div>
+    
+    <div class="test-section">
+        <h2>Dynamic Iframe Creation</h2>
+        <p>Click the button to dynamically create iframes:</p>
+        <button onclick="createSameOriginIframe()">Create Same-Origin Iframe</button>
+        <button onclick="createCrossOriginIframe()">Create Cross-Origin Iframe</button>
+        <div id="dynamic-container"></div>
+    </div>
+    
+    <script>
+        function createSameOriginIframe() {
+            const iframe = document.createElement('iframe');
+            iframe.src = 'triangle.html';
+            iframe.style.width = '400px';
+            iframe.style.height = '300px';
+            iframe.style.border = '1px solid #000';
+            iframe.style.margin = '10px';
+            document.getElementById('dynamic-container').appendChild(iframe);
+            console.log('Created same-origin iframe:', iframe);
+        }
+        
+        function createCrossOriginIframe() {
+            const iframe = document.createElement('iframe');
+            iframe.src = 'https://example.com';
+            iframe.style.width = '400px';
+            iframe.style.height = '300px';
+            iframe.style.border = '1px solid #000';
+            iframe.style.margin = '10px';
+            document.getElementById('dynamic-container').appendChild(iframe);
+            console.log('Created cross-origin iframe:', iframe);
+        }
+        
+        // Log when page loads
+        window.addEventListener('load', () => {
+            console.log('Page loaded. Testing iframe injection...');
+            
+            // Test direct iframe access
+            const iframes = document.getElementsByTagName('iframe');
+            console.log(`Found ${iframes.length} iframes on page load`);
+            
+            for (let i = 0; i < iframes.length; i++) {
+                const iframe = iframes[i];
+                try {
+                    console.log(`Iframe ${i} (${iframe.id}):`, iframe.src);
+                    if (iframe.contentWindow) {
+                        console.log(`  - contentWindow accessible:`, !!iframe.contentWindow);
+                    }
+                } catch (e) {
+                    console.log(`Iframe ${i} (${iframe.id}): Cross-origin access blocked`);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

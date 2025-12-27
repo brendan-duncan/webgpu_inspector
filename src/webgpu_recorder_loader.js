@@ -18,7 +18,7 @@ if (recorderMessage) {
   const download = dl === null ? true : dl === "false" ? false : dl === "true" ? true : dl;
 
   self._webgpu_recorder_init = {
-    filename,
+    export: filename,
     frames,
     download,
     removeUnusedResources,
@@ -27,4 +27,37 @@ if (recorderMessage) {
  
   self.__webgpu_src = coreLoader;
   self.__webgpu_src();
+}
+
+if (window) {
+  window.addEventListener("__WebGPURecorder", (event) => {
+    const message = event.detail || event.data;
+    if (typeof message !== "object" || !message.__webgpuRecorder) {
+      return;
+    }
+    if (message.action === "webgpu_recorder_start_recording") {
+      if (!self.__webgpu_src) {
+
+        //const data = recorderMessage.split("%");
+        const frames = message.frames;
+        const filename = message.export;
+        const dl = message.download;
+        const removeUnusedResources = true;
+        const messageRecording = true;
+
+        const download = dl === null ? true : dl === "false" ? false : dl === "true" ? true : dl;
+
+        self._webgpu_recorder_init = {
+          export: filename,
+          frames,
+          download,
+          removeUnusedResources,
+          messageRecording
+        };
+
+        self.__webgpu_src = coreLoader;
+        self.__webgpu_src();
+      }
+    }
+  });
 }
