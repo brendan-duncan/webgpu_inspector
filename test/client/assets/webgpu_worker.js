@@ -78,6 +78,8 @@ async function init(canvas) {
         format: 'depth24plus',
       },
     });
+
+    let c = 0.0;
   
     function frame() {
       const commandEncoder = device.createCommandEncoder();
@@ -88,7 +90,7 @@ async function init(canvas) {
         colorAttachments: [
           {
             view: canvasTextureView,
-            clearValue: { r: 0.5, g: 0.5, b: 0.5, a: 1.0 },
+            clearValue: { r: c, g: c, b: c, a: 1.0 },
             loadOp: "clear",
             storeOp: "store",
           },
@@ -105,6 +107,11 @@ async function init(canvas) {
       passEncoder.end();
   
       device.queue.submit([commandEncoder.finish()]);
+
+      c += 0.01;
+      if (c > 1.0) {
+        c = 0.0;
+      }
   
       requestAnimationFrame(frame);
     }

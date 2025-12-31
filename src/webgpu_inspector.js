@@ -316,6 +316,55 @@ export let webgpuInspector = null;
       } else {
         // Listen for messages from the devtools panel.
         _self.addEventListener("__WebGPUInspector", eventCallback);
+
+        // If we're in an iframe context, set up message forwarding to parent page
+        // This is critical for workers inside iframes to communicate with the inspector
+        if (_window && _window.parent && _window.parent !== _window) {
+          try {
+            // Check if we can access the parent (same-origin iframe)
+            const parentAccessible = _window.parent.location !== null;
+
+            if (parentAccessible) {
+              //console.log("[WebGPU Inspector] Setting up iframe message forwarding to parent page");
+
+              // Listen for messages from workers in this iframe and forward them to parent
+              _window.addEventListener("__WebGPUInspector", (event) => {
+                const detail = event.detail || event.data;
+
+                if (detail && detail.__webgpuInspector && !detail.__webgpuInspectorPage) {
+                  // Only forward messages that originate from workers, not from parent page
+                  // This prevents infinite forwarding loops
+                  if (detail.__webgpuInspectorWorker || detail.__webgpuInspectorFrame) {
+                    try {
+                      // Tag the message as coming from an iframe to track its origin
+                      const forwardedMessage = {
+                        ...detail,
+                        __webgpuInspectorIframe: true,
+                        __webgpuInspectorIframeOrigin: _window.location.origin
+                      };
+
+                      // Forward to parent page using the same event system
+                      _window.parent.dispatchEvent(new CustomEvent("__WebGPUInspector", {
+                        detail: forwardedMessage
+                      }));
+
+                      //console.log("[WebGPU Inspector] Forwarded worker message from iframe to parent");
+                    } catch (e) {
+                      console.warn("[WebGPU Inspector] Failed to forward message to parent:", e);
+                    }
+                  }
+                }
+              });
+
+              //console.log("[WebGPU Inspector] Iframe message forwarding enabled successfully");
+            } else {
+              console.log("[WebGPU Inspector] Cross-origin iframe detected - message forwarding not available");
+            }
+          } catch (e) {
+            // Cross-origin iframe - gracefully disable forwarding
+            console.log("[WebGPU Inspector] Cannot access parent (cross-origin iframe):", e.message);
+          }
+        }
       }
 
       if (_sessionStorage) {
@@ -385,6 +434,22 @@ export let webgpuInspector = null;
       message.__webgpuInspector = true;
       message.__webgpuInspectorPage = true;
       message.__webgpuInspectorWorker = !_window;
+
+      // Check if we're in an iframe context and tag the message accordingly
+      if (_window && _window.parent && _window.parent !== _window) {
+        try {
+          // Try to access parent to see if it's same-origin
+          if (_window.parent.location) {
+            message.__webgpuInspectorFrame = true;
+            message.__webgpuInspectorFrameOrigin = _window.location.origin;
+          }
+        } catch (e) {
+          // Cross-origin iframe - cannot access parent
+          message.__webgpuInspectorFrame = true;
+          message.__webgpuInspectorFrameOrigin = 'cross-origin';
+        }
+      }
+
       // If _window is null, we're in a worker context. Send the message to the main thread,
       // which will then send it to the devtools panel.
       if (!_window) {
@@ -2347,7 +2412,7 @@ export let webgpuInspector = null;
       for (let i = 0; i < args.length; ++i) {
         args[i] = _getFixedUrl(args[i]);
       }
-      return _origImportScripts(...args); 
+      return _origImportScripts(...args);
     };
   }
 
@@ -2431,6 +2496,8 @@ export let webgpuInspector = null;
           message = message.__WebGPUInspector;
         }
         if (message.__webgpuInspector) {
+          // Tag this message as coming from a worker to enable proper forwarding in iframe contexts
+          message.__webgpuInspectorWorker = true;
           window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: message }));
         }
       });

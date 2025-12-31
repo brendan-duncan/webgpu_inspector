@@ -1,7 +1,79 @@
+<!DOCTYPE html>
 <html>
-    <body>
+<head>
+    <title>WebGPU Worker Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 1000px;
+        }
+        canvas { 
+            width: 960px; 
+            height: 600px; 
+            border: 2px solid #333; 
+            margin: 10px 0; 
+            background: white;
+            display: block;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.info { background: #e3f2fd; border-left: 4px solid #2196f3; color: #1976d2; }
+        .status.success { background: #e8f5e8; border-left: 4px solid #4caf50; color: #2e7d32; }
+        .status.error { background: #ffebee; border-left: 4px solid #f44336; color: #c62828; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>WebGPU Worker Test</h2>
+        <p>This test creates a WebGPU worker that renders a triangle using OffscreenCanvas.</p>
+        
+        <div id="status" class="status info">
+            Initializing WebGPU worker...
+        </div>
+        
         <canvas id="webgpu_canvas" width="960" height="600"></canvas>
-        <script src="client/worker_loader.js" type="module">
-        </script>
-    </body>
+        
+        <div id="inspector-status" class="status info">
+            Inspector status: Unknown
+        </div>
+    </div>
+    
+    <script src="client/worker_loader.js" type="module"></script>
+    <script>
+        // Monitor for inspector messages
+        window.addEventListener('__WebGPUInspector', (event) => {
+            const detail = event.detail;
+            if (detail && detail.__webgpuInspector) {
+                const statusDiv = document.getElementById('inspector-status');
+                statusDiv.className = 'status success';
+                statusDiv.textContent = 'Inspector: Worker messages detected ✅';
+                console.log('[Worker Test] Inspector message detected:', detail);
+            }
+        });
+
+        // Check if inspector is loaded
+        setTimeout(() => {
+            const statusDiv = document.getElementById('status');
+            if (window.__webgpu_src || self.__webgpu_src) {
+                statusDiv.className = 'status success';
+                statusDiv.textContent = 'WebGPU Inspector is loaded and active ✅';
+            } else {
+                statusDiv.className = 'status info';
+                statusDiv.textContent = 'WebGPU Inspector not detected (normal if extension not loaded)';
+            }
+        }, 1000);
+    </script>
+</body>
 </html>

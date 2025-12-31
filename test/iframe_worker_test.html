@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebGPU Inspector Iframe Worker Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 2px solid #ccc; }
+        .test-section h3 { margin-top: 0; color: #333; }
+        iframe { width: 500px; height: 400px; border: 2px solid #000; margin: 10px; }
+        canvas { width: 400px; height: 300px; border: 1px solid #ccc; margin: 10px; }
+        button { padding: 10px; margin: 5px; font-size: 14px; background: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #005a9e; }
+        .status { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .status.info { background: #e3f2fd; border-left: 4px solid #2196f3; }
+        .status.warning { background: #fff3e0; border-left: 4px solid #ff9800; }
+        .status.success { background: #e8f5e8; border-left: 4px solid #4caf50; }
+        .console-output { background: #f5f5f5; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>WebGPU Inspector: Iframe Worker Communication Test</h1>
+
+    <div class="test-section">
+        <iframe id="same-origin-iframe" src="iframe_worker_content.html"></iframe>
+    </div>
+</body>
+</html>
