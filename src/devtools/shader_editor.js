@@ -55,13 +55,28 @@ export class ShaderEditor extends Div {
     const compileButton = new Button(compileRow, { label: "Compile", style: "background-color: rgb(200, 150, 51);" });
     const revertButton = isModified ? new Button(compileRow, { label: "Revert", style: "background-color: rgb(200, 150, 51);" }) : null;
     
+    const editorDiv = new Div(parent, { style: "height: calc(-315px + 100vh); overflow: auto;" });
+
     const editor = new EditorView({
       doc: text,
       extensions: [ shaderEditorSetup ],
-      parent: parent.element,
+      parent: editorDiv.element,
     });
 
+    if (object.__line) {
+      const line = editor.state.doc.line(object.__line);
+      editor.dispatch({
+        selection: { anchor: line.from, head: line.from },
+        scrollIntoView: true,
+      });
+    }
+
     compileButton.callback = () => {
+      const { head } = editor.state.selection.main;
+      const line = editor.state.doc.lineAt(head);
+
+      object.__line = line.number;
+
       const code = editor.state.doc.toString();
       if (code === object.descriptor.code) {
         this._revertShader(object);
@@ -80,6 +95,10 @@ export class ShaderEditor extends Div {
 
     if (revertButton) {
       revertButton.callback = () => {
+        const { head } = editor.state.selection.main;
+        const line = editor.state.doc.lineAt(head);
+        object.__line = line.number;
+
         this._revertShader(object);
         object.replacementCode = null;
         if (onRefresh) {

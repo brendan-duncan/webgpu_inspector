@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const offscreenCanvas = canvas.transferControlToOffscreen();
-    
+
     // Try different approaches to create the worker URL
     let workerUrl;
     try {
@@ -26,14 +26,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     console.log('[Worker Loader] Creating worker with URL:', workerUrl);
-    
+
     try {
         const worker = new Worker(workerUrl, { type: 'module' });
-        
+
         worker.addEventListener('error', (error) => {
             console.error('[Worker Loader] Worker error:', error);
         });
-        
+
         worker.addEventListener('message', (event) => {
             console.log('[Worker Loader] Worker message:', event.data);
         });
@@ -41,15 +41,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const devicePixelRatio = window.devicePixelRatio;
         offscreenCanvas.width = canvas.clientWidth * devicePixelRatio;
         offscreenCanvas.height = canvas.clientHeight * devicePixelRatio;
-        
+
         console.log('[Worker Loader] Initializing worker with canvas:', {
             width: offscreenCanvas.width,
             height: offscreenCanvas.height,
             devicePixelRatio
         });
-        
+
         worker.postMessage({ type: 'init', offscreenCanvas }, [offscreenCanvas]);
-        
+
     } catch (error) {
         console.error('[Worker Loader] Failed to create worker:', error);
         // Try alternative approach
