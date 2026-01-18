@@ -3,13 +3,19 @@ import { Actions, PanelActions } from "../utils/actions.js";
 
 // The content script runs in the context of the web page, can send and receive messages
 // to/from the extension background script, and can inject scripts into the web page.
+// We use this to inject the webgpu_inspector_loader.js script into the page context,
+// and register to listen to messages from the background script and forward them to the page,
+// as well as messages from the page to the background script.
 
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
 const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 const isRunningInFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
 
+// Create a message port to communicate with the background script.
 const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
+  // We store the message type in the action field, so if that's empty, it's
+  // not a valid message for the inspector.
   let action = message.action;
   if (!action) {
     return;
@@ -70,7 +76,8 @@ window.addEventListener('pageshow', (event) => {
   }
 });
 
-// Listen for messages from the page
+// Listen for messages from the page. If it's a valid
+// inspector message, forward it to the background script through the port.
 window.addEventListener("__WebGPUInspector", (event) => {
   const message = event.detail;
   if (typeof message !== 'object' || message === null) {
@@ -90,6 +97,8 @@ window.addEventListener("__WebGPUInspector", (event) => {
   }
 });
 
+// Listen for messages from the page. If it's a valid
+// recorder message, forward it to the background script through the port.
 window.addEventListener("__WebGPURecorder", (event) => {
   const message = event.detail;
   if (typeof message !== 'object' || message === null) {
@@ -143,6 +152,6 @@ if (navigator.userAgent.indexOf("Chrom") === -1 &&
   }
 }
 
-// Send PageReady to signal content script is ready
+// Send PageReady message to the background script to signal content script is ready.
 //console.log("[WebGPU Inspector] Content script ready, sending PageReady");
 port.postMessage({ action: Actions.PageReady });

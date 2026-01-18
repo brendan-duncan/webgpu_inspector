@@ -1,3 +1,9 @@
+// The background script manages connections between the devtools panel and
+// the content scripts injected into web pages. It forwards messages between
+// these two contexts. The background script is persistent and runs as long
+// as the extension is active. It keeps a record of active connections from
+// tabs to their associated ports.
+
 const connections = new Map();
 
 // Helper function to get or create tab connection map
@@ -8,7 +14,7 @@ function getOrCreateTabConnection(tabId) {
   return connections.get(tabId);
 }
 
-// Helper function to register a port
+// Helper function to register a port for a given tab.
 function registerPort(port, tabId) {
   const portMap = getOrCreateTabConnection(tabId);
 

@@ -8,7 +8,10 @@ import { alignTo } from "./utils/align.js";
 
 export let webgpuInspector = null;
 
+// This code will be executed to initialize the WebGPU Inspector from
+// webgpu_inspector_loader.js.
 (() => {
+  // Make a local copy of some global variables for simplified access.
   const _self = self;
   const _window = self.window;
   const _document = self.document;
@@ -36,8 +39,8 @@ export let webgpuInspector = null;
       this._currentFrame = null;
       this._frameIndex = 0; // The current frame index based on requestAnimationFrame
       this._gpuFrameIndex = 0; // The frame index based on frames that have GPU work submitted
-      this._frameGpuComamndCount = 0; // The number of GPU commands in the current frame
-      this._initalized = true;
+      this._frameGpuCommandCount = 0; // The number of GPU commands in the current frame
+      this._initialized = true;
       this._objectID = 1;
       this._lastFrameTime = 0;
       this._captureFrameRequest = false;
@@ -65,8 +68,8 @@ export let webgpuInspector = null;
       this._pendingMapCount = 0; // Number of pending async map requests
       this._hasPendingDeviceDestroy = false;
 
+      // If there is no WebGPU support, then there's nothing to inspect.
       if (!navigator.gpu) {
-        // No WebGPU support, nothing to inspect.
         return;
       }
 

@@ -17,6 +17,7 @@ export function webgpuInspectorWorker(worker) {
   }
 
   worker.addEventListener("message", (event) => {
+    // Forward messages from the worker to the page.
     if (event.data.__webgpuInspector) {
       window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: event.data }));
     }
