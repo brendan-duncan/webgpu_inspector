@@ -24,14 +24,16 @@ export class TextureViewer extends Div {
     const displayChanged = new Signal();
     const controls = new Div(container);
 
-    this._createTextureControls(controls, texture, displayChanged);
+    this.layerTitles = [];
+
+    const zoomControl = this._createTextureControls(controls, texture, displayChanged);
 
     if (!this.panel._tooltip) {
       this._createTooltip();
     }
 
     for (let layer = 0; layer < numLayers; ++layer) {
-      this._createTextureLayer(container, texture, layer, width, height, layerRanges, displayChanged);
+      this._createTextureLayer(container, texture, layer, width, height, layerRanges, displayChanged, zoomControl);
     }
   }
 
@@ -55,7 +57,7 @@ export class TextureViewer extends Div {
           this.panel._tooltip = null;
         }
         if (texture.isMipLevelLoaded(texture.display.mipLevel)) {
-          displayChanged.emit();
+          displayChanged.emit(1);
         } else {
           this.panel.database.requestTextureData(texture, texture.display.mipLevel || 0);
         }
@@ -64,13 +66,13 @@ export class TextureViewer extends Div {
 
     new Checkbox(controls, { text: "Auto Range", checked: texture.display.autoRange, style: "font-size: 9pt; color: #bbb;", onChange: (checked) => {
       texture.display.autoRange = checked;
-      displayChanged.emit();
+      displayChanged.emit(1);
     } });
 
     new Span(controls, { text: "Exposure", style: "margin-left: 10px; margin-right: 3px; font-size: 9pt; color: #bbb;" });
     new NumberInput(controls, { value: texture.display.exposure, step: 0.01, onChange: (value) => {
       texture.display.exposure = value;
-      displayChanged.emit();
+      displayChanged.emit(1);
     }, style: "width: 100px; display: inline-block;" });
 
     const channels = ["RGB", "Red", "Green", "Blue", "Alpha", "Luminance"];
@@ -81,14 +83,14 @@ export class TextureViewer extends Div {
       onChange: (value) => {
         const index = channels.indexOf(value);
         texture.display.channels = index;
-        displayChanged.emit();
+        displayChanged.emit(1);
       }
     });
 
     new Span(controls, { text: "Zoom", tooltip: "Zoom level of the texture, CTRL + mouse-wheel", style: "margin-left: 10px; margin-right: 3px; font-size: 9pt; color: #bbb;" });
-    zoomControl = new NumberInput(controls, { tooltip: "Zoom level of the texture, CTRL + mouse-wheel", value: texture.display.zoom, step: 1, min: 1, onChange: (value) => {
+    zoomControl = new NumberInput(controls, { tooltip: "Zoom level of the texture, CTRL + mouse-wheel", value: texture.display.zoom, step: 1, min: 0, onChange: (value) => {
       texture.display.zoom = value;
-      displayChanged.emit();
+      displayChanged.emit(1);
     }, style: "width: 100px; display: inline-block;" });
 
     return zoomControl;
@@ -121,30 +123,30 @@ export class TextureViewer extends Div {
     return str;
   }
 
-  _createTextureLayer(container, texture, layer, width, height, layerRanges, displayChanged) {
+  _createTextureLayer(container, texture, layer, width, height, layerRanges, displayChanged, zoomControl) {
     const layerInfo = new Div(container, { class: 'inspect_texture_layer_info' });
-    let layerTitle = null;
     if (layerRanges) {
-      layerTitle = new Span(layerInfo, { text: `Layer ${layer} Min Value: ${layerRanges[layer].min} Max Value: ${layerRanges[layer].max}` });
+      this.layerTitles[layer] = new Span(layerInfo, { text: `Layer ${layer} Min Value: ${layerRanges[layer].min} Max Value: ${layerRanges[layer].max}` });
     } else {
-      layerTitle = new Span(layerInfo, { text: `Layer ${layer}` });
+      this.layerTitles[layer] = new Span(layerInfo, { text: `Layer ${layer}` });
     }
 
     const canvas = new Widget("canvas", container, { style: "box-shadow: 5px 5px 5px rgba(0,0,0,0.5); image-rendering: -moz-crisp-edges; image-rendering: -webkit-crisp-edges; image-rendering: pixelated;" });
-    canvas.style.width = `${width * texture.display.zoom / 100}px`;
-    canvas.style.height = `${height * texture.display.zoom / 100}px`;
+    const zoom = Math.max(texture.display.zoom, 1) / 100;
+    canvas.style.width = `${width * zoom}px`;
+    canvas.style.height = `${height * zoom}px`;
 
-    this._setupCanvasEvents(canvas, texture, layer, displayChanged);
+    this._setupCanvasEvents(canvas, texture, layer, displayChanged, zoomControl);
 
     canvas.element.width = width;
     canvas.element.height = height;
 
-    this._renderTexture(canvas, texture, layer, layerTitle);
+    this._renderTexture(canvas, texture, layer, false);
 
     this._setupDisplayChangeListener(displayChanged, canvas, texture, layer);
   }
 
-  _setupCanvasEvents(canvas, texture, layer, displayChanged) {
+  _setupCanvasEvents(canvas, texture, layer, displayChanged, zoomControl) {
     canvas.element.addEventListener("mouseenter", (event) => {
       if (this.panel._tooltip) {
         this.panel._tooltip.style.display = 'block';
@@ -159,8 +161,9 @@ export class TextureViewer extends Div {
 
     canvas.element.addEventListener("mousemove", (event) => {
       if (this.panel._tooltip) {
-        const x = Math.max(Math.floor(event.offsetX / (texture.display.zoom / 100)), 0);
-        const y = Math.max(Math.floor(event.offsetY / (texture.display.zoom / 100)), 0);
+        const zoom = Math.max(texture.display.zoom, 1) / 100;
+        const x = Math.max(Math.floor(event.offsetX / zoom), 0);
+        const y = Math.max(Math.floor(event.offsetY / zoom), 0);
         const pixel = texture.getPixel(x, y, layer, texture.display?.mipLevel ?? 0);
         this.panel._tooltip.style.left = `${event.pageX + 10}px`;
         this.panel._tooltip.style.top = `${event.pageY + 10}px`;
@@ -178,19 +181,18 @@ export class TextureViewer extends Div {
         } else {
           zoom -= 10;
         }
-        zoom = Math.max(1, zoom);
-        // Update zoom control if available
-        const zoomControl = event.target.closest('.controls')?.querySelector('input[type="number"]');
+        zoom = Math.max(0, zoom);
         if (zoomControl) {
-          zoomControl.value = zoom;
+          zoomControl.setValue(zoom);
         }
         texture.display.zoom = zoom;
-        displayChanged.emit();
+        displayChanged.emit(1);
       }
     });
   }
 
-  _renderTexture(canvas, texture, layer, layerTitle) {
+  _renderTexture(canvas, texture, layer, skipMinMax) {
+    const layerTitle = this.layerTitles[layer];
     const mipLevel = Math.max(Math.min(texture.display.mipLevel || 0, texture.mipLevelCount), 0);
     const width = (texture.width >> mipLevel) || texture.width;
     const height = (texture.height >> mipLevel) || texture.height;
@@ -225,7 +227,7 @@ export class TextureViewer extends Div {
 
     this.panel.textureUtils.blitTexture(srcView, texture.format, 1, canvasTexture.createView(), format,
         texture.display, texture.descriptor.dimension, (layer / texture.depthOrArrayLayers) + hl,
-        (minRange, maxRange) => {
+        skipMinMax ? null : (minRange, maxRange) => {
           texture._layerRanges = texture._layerRanges || [];
           texture._layerRanges[layer] = { min: minRange, max: maxRange };
           if (layerTitle) {
@@ -234,14 +236,15 @@ export class TextureViewer extends Div {
         }
     );
 
-    canvas.style.width = `${width * texture.display.zoom / 100}px`;
-    canvas.style.height = `${height * texture.display.zoom / 100}px`;
+    const zoom = Math.max(texture.display.zoom, 1) / 100;
+    canvas.style.width = `${width * zoom}px`;
+    canvas.style.height = `${height * zoom}px`;
   }
 
   _setupDisplayChangeListener(displayChanged, canvas, texture, layer) {
     const self = this;
-    displayChanged.addListener(() => {
-      self._renderTexture(canvas, texture, layer);
+    displayChanged.addListener((skipMinMax) => {
+      self._renderTexture(canvas, texture, layer, !!skipMinMax);
     });
   }
 }

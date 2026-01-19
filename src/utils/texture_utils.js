@@ -233,16 +233,18 @@ export class TextureUtils {
     commandEncoder.copyBufferToBuffer(this.minMaxStorageBuffer, 0, this.minMaxReadbackBuffer, 0, 32);
     this.device.queue.submit([commandEncoder.finish()]);
 
-    this.minMaxReadbackBuffer.mapAsync(GPUMapMode.READ).then(() => {
-        const arrayBuffer = this.minMaxReadbackBuffer.getMappedRange();
-        const data = new Float32Array(arrayBuffer.slice(0));
-        this.minMaxReadbackBuffer.unmap();
-        display.minRange = data[0];
-        display.maxRange = data[4];
-        if (minMaxUpdateCallback) {
+    if (minMaxUpdateCallback && !this.minMaxReadbackBuffer._mapRequested) {
+      this.minMaxReadbackBuffer._mapRequested = true;
+      this.minMaxReadbackBuffer.mapAsync(GPUMapMode.READ).then(() => {
+          const arrayBuffer = this.minMaxReadbackBuffer.getMappedRange();
+          const data = new Float32Array(arrayBuffer.slice(0));
+          this.minMaxReadbackBuffer.unmap();
+          this.minMaxReadbackBuffer._mapRequested = false;
+          display.minRange = data[0];
+          display.maxRange = data[4];
           minMaxUpdateCallback(display.minRange, display.maxRange);
-        }
-    });
+      });
+    }
   }
 
   convertDepthToFloat(fromTextureView, sampleCount, toTextureView, dstFormat, commandEncoder) {

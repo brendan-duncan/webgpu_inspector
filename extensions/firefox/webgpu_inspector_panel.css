@@ -204,7 +204,7 @@ li:hover {
 
 .inspector_panel_content {
   overflow: auto;
-  height: calc(-152px + 100vh);
+  height: calc(-150px + 100vh);
   font-size: 14pt;
 }
 
@@ -219,7 +219,6 @@ li:hover {
 
 .inspect_texture_layer_info {
   background-color: #444;
-  width: 100%;
   font-size: 11pt;
   color: #ddd;
   padding-top: 5px;
