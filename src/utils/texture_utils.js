@@ -196,14 +196,6 @@ export class TextureUtils {
         ]
     });
 
-    // Setting the min value to 0 will keep most images ranges to [0, max],
-    // unless any texture values are less than 0. This seems more reasonable
-    // for most textures than normalizing to the range [min, max].
-    // If we do want to normalize to [min, max], the min values here should be
-    // changed to maxfloat.
-    this.device.queue.writeBuffer(this.minMaxStorageBuffer, 0,
-      new Float32Array([0, 0, 0, 0, 0, 0, 0, 0]));
-
     const computePass = commandEncoder.beginComputePass();
     computePass.setPipeline(minMaxPipeline);
     computePass.setBindGroup(0, minMaxBindGroup);
@@ -356,25 +348,29 @@ export class TextureUtils {
 function _getComputeTextureMinMax(fmt) {
   return `
   struct Result {
-      min_val: vec4<f32>,
-      max_val: vec4<f32>,
+      minValue: vec4f,
+      maxValue: vec4f,
   };
   @group(0) @binding(0) var inputTexture: texture_2d<${fmt}>;
   @group(0) @binding(1) var<storage, read_write> output: Result;
   @compute @workgroup_size(1)
   fn main() {
       let dims = textureDimensions(inputTexture);
-      var min_v = vec4<f32>(1.0);
-      var max_v = vec4<f32>(0.0);
+      // Another option is the set minValue to 0, which would manke the
+      // range [0, maxValue] unless there are negative values in the texture.
+      // Not sure which is better for general use.
+      //var minValue = vec4f(0.0);
+      var minValue = vec4f(3.402823466e+38); // max float
+      var maxValue = vec4f(0.0);
       for (var x = 0u; x < dims.x; x++) {
           for (var y = 0u; y < dims.y; y++) {
               let color = vec4f(textureLoad(inputTexture, vec2<u32>(x, y), 0));
-              min_v = min(min_v, color);
-              max_v = max(max_v, color);
+              minValue = min(minValue, color);
+              maxValue = max(maxValue, color);
           }
       }
-      output.min_val = min_v;
-      output.max_val = max_v;
+      output.minValue = minValue;
+      output.maxValue = maxValue;
   }`;
 }
 
@@ -407,8 +403,8 @@ function _getBlitShader(fmt) {
     _pad3: f32
   };
   struct MinMax {
-      min_val: vec4<f32>,
-      max_val: vec4<f32>,
+      min_val: vec4f,
+      max_val: vec4f,
   };
   @group(1) @binding(0) var<uniform> display: Display;
   @group(1) @binding(1) var<storage> minMax: MinMax;
@@ -493,8 +489,8 @@ TextureUtils.blit3dShader = `
     _pad3: f32
   };
   struct MinMax {
-      min_val: vec4<f32>,
-      max_val: vec4<f32>,
+      min_val: vec4f,
+      max_val: vec4f,
   };
   @group(1) @binding(0) var<uniform> display: Display;
   @group(1) @binding(1) var<storage> minMax: MinMax;
@@ -578,8 +574,8 @@ TextureUtils.multisampleBlitShader = `
     _pad3: f32
   };
   struct MinMax {
-      min_val: vec4<f32>,
-      max_val: vec4<f32>,
+      min_val: vec4f,
+      max_val: vec4f,
   };
   @group(1) @binding(0) var<uniform> display: Display;
   @group(1) @binding(1) var<storage> minMax: MinMax;
@@ -639,8 +635,8 @@ TextureUtils.depthToFloatShader = `
     vec4f(3.0, 1.0, 2.0, 0.0),
     vec4f(-1.0, -3.0, 0.0, 2.0));
   struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) uv : vec2<f32>
+    @builtin(position) position: vec4f,
+    @location(0) uv : vec2f
   };
   @vertex
   fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
@@ -652,12 +648,12 @@ TextureUtils.depthToFloatShader = `
 
   @binding(0) @group(0) var depth: texture_depth_2d;
   @fragment
-  fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     var depthSize = textureDimensions(depth);
     var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),
                            i32(f32(depthSize.y) * input.uv.y));
     var d = textureLoad(depth, coords, 0);
-    return vec4<f32>(d, 0.0, 0.0, 1.0);
+    return vec4f(d, 0.0, 0.0, 1.0);
   }`;
 
 TextureUtils.depthToFloatMultisampleShader = `
@@ -666,8 +662,8 @@ TextureUtils.depthToFloatMultisampleShader = `
     vec4f(3.0, 1.0, 2.0, 0.0),
     vec4f(-1.0, -3.0, 0.0, 2.0));
   struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) uv : vec2<f32>
+    @builtin(position) position: vec4f,
+    @location(0) uv : vec2f
   };
   @vertex
   fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
@@ -679,10 +675,10 @@ TextureUtils.depthToFloatMultisampleShader = `
 
   @binding(0) @group(0) var depth: texture_depth_multisampled_2d;
   @fragment
-  fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
+  fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     var depthSize = textureDimensions(depth);
     var coords = vec2<i32>(i32(f32(depthSize.x) * input.uv.x),
                            i32(f32(depthSize.y) * input.uv.y));
     var d = textureLoad(depth, coords, 0);
-    return vec4<f32>(d, 0.0, 0.0, 1.0);
+    return vec4f(d, 0.0, 0.0, 1.0);
   }`;
