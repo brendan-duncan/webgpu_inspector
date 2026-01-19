@@ -164,7 +164,7 @@ export class TextureUtils {
 
     if (display) {
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
-        new Float32Array([display.exposure, display.channels, numChannels, display.minRange, display.maxRange, layer, 0, 0]));
+        new Float32Array([display.exposure, display.channels, numChannels, display.minRange ?? 0, display.maxRange ?? 1, layer, 0, 0]));
     } else {
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
         new Float32Array([1, 0, numChannels, 0, 1, layer, 0, 0]));

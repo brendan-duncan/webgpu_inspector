@@ -16,7 +16,7 @@ export class Texture extends GPUObject {
     this.display = {
       exposure: 1,
       channels: 0,
-      minRnage: 0,
+      minRange: 0,
       maxRange: 1,
       mipLevel: 0,
       zoom: 100

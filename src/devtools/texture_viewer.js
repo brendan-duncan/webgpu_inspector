@@ -126,14 +126,14 @@ export class TextureViewer extends Div {
     const canvas = new Widget("canvas", container, { style: "box-shadow: 5px 5px 5px rgba(0,0,0,0.5); image-rendering: -moz-crisp-edges; image-rendering: -webkit-crisp-edges; image-rendering: pixelated;" });
     canvas.style.width = `${width * texture.display.zoom / 100}px`;
     canvas.style.height = `${height * texture.display.zoom / 100}px`;
-    
+
     this._setupCanvasEvents(canvas, texture, layer, displayChanged);
-    
+
     canvas.element.width = width;
     canvas.element.height = height;
-    
+
     this._renderTexture(canvas, texture, layer);
-    
+
     this._setupDisplayChangeListener(displayChanged, canvas, texture, layer);
   }
 
@@ -143,7 +143,7 @@ export class TextureViewer extends Div {
         this.panel._tooltip.style.display = 'block';
       }
     });
-    
+
     canvas.element.addEventListener("mouseleave", (event) => {
       if (this.panel._tooltip) {
         this.panel._tooltip.style.display = 'none';
