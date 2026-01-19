@@ -852,7 +852,7 @@ export class Widget {
   }
 
   /**
-   * Event called when the widget recieves a ContextMenu event, usually from
+   * Event called when the widget receives a ContextMenu event, usually from
    * the right mouse button.
    */
   contextMenuEvent() {

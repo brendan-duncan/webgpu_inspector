@@ -178,7 +178,7 @@ export class TreeWidget extends Div {
       this._updateCollapseButton(this._findElement(parentId));
     }
 
-    if (data?.collapsable) {
+    if (data?.collapsible) {
         this._updateCollapseButton(element);
     }
 

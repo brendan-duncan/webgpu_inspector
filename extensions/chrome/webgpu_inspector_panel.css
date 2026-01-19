@@ -132,7 +132,7 @@ body {
   color: #000;
 }
 
-.collapsable_body {
+.collapsible_body {
   background-color: #555;
   text-align: left;
   overflow: auto;
@@ -141,14 +141,14 @@ body {
   padding-left: 10px;
 }
 
-.collapsable_body * {
+.collapsible_body * {
   user-select: text;
   -moz-user-select: text;
   -webkit-user-select: text;
   -ms-user-select: text;
 }
 
-.collapsable_button {
+.collapsible_button {
   font-family: monospace;
   font-size: 14pt;
   color: #ddd;

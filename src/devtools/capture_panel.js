@@ -5,7 +5,7 @@ import {
 } from "./gpu_objects/index.js";
 import { Button } from "./widget/button.js";
 import { Checkbox } from "./widget/checkbox.js";
-import { Collapsable } from "./widget/collapsable.js";
+import { collapsible } from "./widget/collapsible.js";
 import { Dialog } from "./widget/dialog.js";
 import { Div } from "./widget/div.js";
 import { NumberInput } from "./widget/number_input.js";
@@ -945,14 +945,14 @@ export class CapturePanel {
       if (texture) {
         const format = texture.descriptor.format;
         if (texture.gpuTexture) {
-          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: Texture:${texture.idName} ${format} ${texture.resolutionString}` });
+          const colorAttachmentGrp = new collapsible(commandInfo, { label: `Color Attachment ${i}: Texture:${texture.idName} ${format} ${texture.resolutionString}` });
           new Button(colorAttachmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           const passId = this._getPassId(renderPassIndex, i);
           this._createTextureWidget(colorAttachmentGrp.body, texture, passId, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
         } else {
-          const colorAttachmentGrp = new Collapsable(commandInfo, { label: `Color Attachment ${i}: ${format} ${texture.resolutionString}` });
+          const colorAttachmentGrp = new collapsible(commandInfo, { label: `Color Attachment ${i}: ${format} ${texture.resolutionString}` });
           new Button(colorAttachmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
@@ -972,13 +972,13 @@ export class CapturePanel {
       if (texture) {
         if (texture.gpuTexture) {
           const format = texture.descriptor.format;
-          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment ${format} ${texture.resolutionString}` });
+          const depthStencilAttachmentGrp = new collapsible(commandInfo, { label: `Depth-Stencil Attachment ${format} ${texture.resolutionString}` });
           new Button(depthStencilAttachmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           this._createTextureWidget(depthStencilAttachmentGrp.body, texture, -1, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
         } else {
-          const depthStencilAttachmentGrp = new Collapsable(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.format ?? "<unknown format>"} ${texture.resolutionString}` });
+          const depthStencilAttachmentGrp = new collapsible(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.format ?? "<unknown format>"} ${texture.resolutionString}` });
           new Button(depthStencilAttachmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
@@ -1517,7 +1517,7 @@ export class CapturePanel {
     const self = this;
 
     const group = args[0];
-    const bindGroupGrp = new Collapsable(commandInfo, { collapsed: true, label: `BindGroup ${groupIndex ?? ""} ID:${id}` });
+    const bindGroupGrp = new collapsible(commandInfo, { collapsed: true, label: `BindGroup ${groupIndex ?? ""} ID:${id}` });
     new Button(bindGroupGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
       self.window.inspectObject(bindGroup);
     } });
@@ -1652,7 +1652,7 @@ export class CapturePanel {
       }
 
       if (inputs.length) {
-        const inputGrp = new Collapsable(commandInfo, { collapsed: true, label: "Input Textures" });
+        const inputGrp = new collapsible(commandInfo, { collapsed: true, label: "Input Textures" });
         for (const resource of inputs) {
           const texture = this.database.getTextureFromView(resource.textureView);
           if (texture) {
@@ -1778,7 +1778,7 @@ export class CapturePanel {
         }
       }
 
-      const resourceGrp = new Collapsable(commandInfo, { collapsed: true, label });
+      const resourceGrp = new collapsible(commandInfo, { collapsed: true, label });
       if (resource.__id !== undefined) {
         const obj = this._getObject(resource.__id);
         if (obj) {
@@ -1903,7 +1903,7 @@ export class CapturePanel {
     const pipeline = this._getObject(id);
 
     if (pipeline) {
-      const pipelineGrp = new Collapsable(commandInfo, { collapsed: true, label: `Pipeline ID:${id}` });
+      const pipelineGrp = new collapsible(commandInfo, { collapsed: true, label: `Pipeline ID:${id}` });
       new Button(pipelineGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(pipeline);
       } });
@@ -1920,7 +1920,7 @@ export class CapturePanel {
         if (module) {
           const vertexEntry = desc.vertex?.entryPoint ?? "@vertex";
           const fragmentEntry = desc.fragment?.entryPoint ?? "@fragment";
-          const grp = new Collapsable(commandInfo, { collapsed: true, label: `Module ID:${vertexId} Vertex: ${vertexEntry} Fragment: ${fragmentEntry}` });
+          const grp = new collapsible(commandInfo, { collapsed: true, label: `Module ID:${vertexId} Vertex: ${vertexEntry} Fragment: ${fragmentEntry}` });
           new Button(grp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(module);
           } });
@@ -1934,7 +1934,7 @@ export class CapturePanel {
           const vertexModule = this._getObject(vertexId);
           if (vertexModule) {
             const vertexEntry = desc.vertex?.entryPoint ?? "@vertex";
-            const vertexGrp = new Collapsable(commandInfo, { collapsed: true, label: `Vertex Module ID:${vertexId} Entry: ${vertexEntry}` });
+            const vertexGrp = new collapsible(commandInfo, { collapsed: true, label: `Vertex Module ID:${vertexId} Entry: ${vertexEntry}` });
             new Button(vertexGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
               self.window.inspectObject(vertexModule);
             } });
@@ -1949,7 +1949,7 @@ export class CapturePanel {
           const fragmentModule = this._getObject(fragmentId);
           if (fragmentModule) {
             const fragmentEntry = desc.fragment?.entryPoint ?? "@fragment";
-            const fragmentGrp = new Collapsable(commandInfo, { collapsed: true, label: `Fragment Module ID:${fragmentId} Entry: ${fragmentEntry}` });
+            const fragmentGrp = new collapsible(commandInfo, { collapsed: true, label: `Fragment Module ID:${fragmentId} Entry: ${fragmentEntry}` });
             new Button(fragmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
               self.window.inspectObject(fragmentModule);
             } });
@@ -1966,7 +1966,7 @@ export class CapturePanel {
         const computeModule = this._getObject(computeId);
         if (computeModule) {
           const computeEntry = desc.compute?.entryPoint ?? "@compute";
-          const computeGrp = new Collapsable(commandInfo, { collapsed: true, label: `Compute Module ID:${computeId} Entry: ${computeEntry}` });
+          const computeGrp = new collapsible(commandInfo, { collapsed: true, label: `Compute Module ID:${computeId} Entry: ${computeEntry}` });
           new Button(computeGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(computeModule);
           } });
@@ -2004,7 +2004,7 @@ export class CapturePanel {
     const buffer = this._getObject(id);
 
     if (buffer) {
-      const bufferGrp = new Collapsable(commandInfo, { label: `Buffer ID:${id}` });
+      const bufferGrp = new collapsible(commandInfo, { label: `Buffer ID:${id}` });
       const desc = buffer.descriptor;
       const newDesc = this._processCommandArgs(desc);
       if (newDesc.usage) {
@@ -2020,7 +2020,7 @@ export class CapturePanel {
     const id = args[0]?.__id;
     const buffer = this._getObject(id);
     if (buffer) {
-      const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Index Buffer ID:${id}` });
+      const bufferGrp = new collapsible(commandInfo, { collapsed, label: `Index Buffer ID:${id}` });
       new Button(bufferGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(buffer);
       } });
@@ -2072,7 +2072,7 @@ export class CapturePanel {
     }
 
     if (buffer) {
-      const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Vertex Buffer ${index} ID:${id}` });
+      const bufferGrp = new collapsible(commandInfo, { collapsed, label: `Vertex Buffer ${index} ID:${id}` });
       new Button(bufferGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(buffer);
       } });
@@ -2258,7 +2258,7 @@ export class CapturePanel {
   _shaderInfo(type, shader, commandInfo) {
     const reflect = shader.reflection;
     if (reflect) {
-      const grp = new Collapsable(commandInfo, { collapsed: true, label: `${type} Shader Info` });
+      const grp = new collapsible(commandInfo, { collapsed: true, label: `${type} Shader Info` });
 
       if (reflect.entry.vertex.length) {
         new Div(grp.body, { text: `Vertex Entry Functions: ${reflect.entry.vertex.length}` });
@@ -2357,7 +2357,7 @@ export class CapturePanel {
 
     if (outputs.color.length || outputs.depthStencil) {
       const self = this;
-      const outputGrp = new Collapsable(parent, { collapsed, label: "Output Textures" });
+      const outputGrp = new collapsible(parent, { collapsed, label: "Output Textures" });
       for (let index = 0, l = outputs.color.length; index < l; ++index) {
         const texture = outputs.color[index];
         const passId = this._getPassId(renderPassIndex, index);
@@ -2418,7 +2418,7 @@ export class CapturePanel {
 
     if (inputs.length) {
       const self = this;
-      const inputGrp = new Collapsable(parent, { collapsed: true, label: "Input Textures" });
+      const inputGrp = new collapsible(parent, { collapsed: true, label: "Input Textures" });
       for (const resource of inputs) {
         const texture = this.database.getTextureFromView(resource.textureView);
         if (texture) {
@@ -2491,7 +2491,7 @@ export class CapturePanel {
     const buffer = this._getObject(id);
     if (buffer) {
       const self = this;
-      const bufferGrp = new Collapsable(commandInfo, { collapsed, label: `Indirect Buffer ID:${id} ${buffer.label}` });
+      const bufferGrp = new collapsible(commandInfo, { collapsed, label: `Indirect Buffer ID:${id} ${buffer.label}` });
       new Button(bufferGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(buffer);
       } });
@@ -2597,7 +2597,7 @@ export class CapturePanel {
     }
 
     const self = this;
-    const inputGrp = new Collapsable(commandInfo, { collapsed: false, label: `Texture ${texture.idName} ${texture.format} ${texture.resolutionString}` });
+    const inputGrp = new collapsible(commandInfo, { collapsed: false, label: `Texture ${texture.idName} ${texture.format} ${texture.resolutionString}` });
     new Button(inputGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
       self.window.inspectObject(texture);
     } });
@@ -2622,7 +2622,7 @@ export class CapturePanel {
   _inspectStats(commandInfo) {
     commandInfo.html = "";
 
-    const group = new Collapsable(commandInfo, { label: "Frame Statistics" });
+    const group = new collapsible(commandInfo, { label: "Frame Statistics" });
 
     const ol = new Widget("ul", group.body);
     const stats = this.statistics;
@@ -2698,11 +2698,11 @@ export class CapturePanel {
     }
 
     if (command.stacktrace) {
-      const stacktrace = new Collapsable(commandInfo, { collapsed: true, label: "Stacktrace" });
+      const stacktrace = new collapsible(commandInfo, { collapsed: true, label: "Stacktrace" });
       new Div(stacktrace.body, { text: command.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" })
     }
 
-    const argsGroup = new Collapsable(commandInfo, { label: "Arguments" });
+    const argsGroup = new collapsible(commandInfo, { label: "Arguments" });
     const newArgs = this._processCommandArgs(args);
     if (CapturePanel._commandArgs[method]) {
       const args = CapturePanel._commandArgs[method];

@@ -174,7 +174,7 @@ export class ShaderWatchView extends Div {
                     index: j,
                     count: itemCount,
                     children: [],
-                    collapsable: true,
+                    collapsible: true,
                     collapsed: true,
                     onCollapseChange: (n, d, s) => {
                         const parent = d;

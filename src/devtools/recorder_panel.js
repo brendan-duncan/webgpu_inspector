@@ -1,6 +1,6 @@
 import { Button } from "./widget/button.js";
 import { Checkbox } from "./widget/checkbox.js";
-import { Collapsable } from "./widget/collapsable.js";
+import { collapsible } from "./widget/collapsible.js";
 import { Div } from "./widget/div.js";
 import { Input } from "./widget/input.js";
 import { Span } from "./widget/span.js";
@@ -99,12 +99,12 @@ export class RecorderPanel {
       self._filterCommands(value);
     } });
 
-    let grp = new Collapsable(commands, { label: "Initialize Commands", collapsed: true });
+    let grp = new collapsible(commands, { label: "Initialize Commands", collapsed: true });
     this._captureFrameResults(grp.body, this._recorderData.initiazeCommands, canvas, -1);
 
     for (let i = 0; i < this._recorderData.frames.length; ++i) {
       if (this._recorderData.frames[i]) {
-        grp = new Collapsable(commands, { label: `Frame ${i}`, collapsed: true });
+        grp = new collapsible(commands, { label: `Frame ${i}`, collapsed: true });
         this._captureFrameResults(grp.body, this._recorderData.frames[i], canvas, i);
       }
     }

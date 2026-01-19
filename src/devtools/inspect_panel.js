@@ -1,5 +1,5 @@
 import { Button } from "./widget/button.js";
-import { Collapsable } from "./widget/collapsable.js";
+import { collapsible } from "./widget/collapsible.js";
 import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
 import { TabWidget } from "./widget/tab_widget.js";
@@ -434,7 +434,7 @@ export class InspectPanel {
   }
 
   _createObjectListUI(parent, name) {
-    const panel = new Collapsable(parent, { collapsed: true, label: `${name} 0` });
+    const panel = new collapsible(parent, { collapsed: true, label: `${name} 0` });
     panel.body.style.maxHeight = "300px";
     panel.body.style.overflow = "auto";
 
@@ -599,15 +599,15 @@ export class InspectPanel {
     }
   }
 
-  _getCollapsableWithState(parent, object, peropety, label, collapsed) {
+  _getcollapsibleWithState(parent, object, property, label, collapsed) {
     object.__guistate = object.__guistate || {};
-    object.__guistate[peropety] = object.__guistate[peropety] ?? collapsed;
-    const collabsable = new Collapsable(parent, { collapsed: true, label: label, collapsed: object.__guistate[peropety] });
+    object.__guistate[property] = object.__guistate[property] ?? collapsed;
+    const collabsable = new collapsible(parent, { collapsed: true, label: label, collapsed: object.__guistate[property] });
     collabsable.onExpanded.addListener(() => {
-      object.__guistate[peropety] = false;
+      object.__guistate[property] = false;
     });
     collabsable.onCollapsed.addListener(() => {
-      object.__guistate[peropety] = true;
+      object.__guistate[property] = true;
     });
     return collabsable;
   }
@@ -658,7 +658,7 @@ export class InspectPanel {
 
     const errors = this.database.findObjectErrors(object.id);
     if (errors.length > 0) {
-      const errorsGrp = this._getCollapsableWithState(infoBox, object, "errorsCollapsed", "Errors", true);
+      const errorsGrp = this._getcollapsibleWithState(infoBox, object, "errorsCollapsed", "Errors", true);
       for (const error of errors) {
         new Div(errorsGrp.body, { text: error.message, class: "inspect_info_error" });
 
@@ -680,7 +680,7 @@ export class InspectPanel {
     }
 
     if (object instanceof RenderPipeline || object instanceof ComputePipeline) {
-      const grp = this._getCollapsableWithState(infoBox, object, "dependenciesCollapsed", "Dependencies", true);
+      const grp = this._getcollapsibleWithState(infoBox, object, "dependenciesCollapsed", "Dependencies", true);
       const ul = new Widget("ul", grp.body);
       const descriptor = object.descriptor;
       if (descriptor.layout) {
@@ -710,7 +710,7 @@ export class InspectPanel {
     }
 
     if (object instanceof PipelineLayout) {
-      const grp = this._getCollapsableWithState(infoBox, object, "dependenciesCollapsed", "Dependencies", true);
+      const grp = this._getcollapsibleWithState(infoBox, object, "dependenciesCollapsed", "Dependencies", true);
       const ul = new Widget("ul", grp.body);
       const descriptor = object.descriptor;
       const bindGroupLayouts = descriptor.bindGroupLayouts;
@@ -723,7 +723,7 @@ export class InspectPanel {
     }
 
     if (object instanceof BindGroup) {
-      const grp = this._getCollapsableWithState(infoBox, object, "dependenciesCollapsed", "Dependencies", true);
+      const grp = this._getcollapsibleWithState(infoBox, object, "dependenciesCollapsed", "Dependencies", true);
       const ul = new Widget("ul", grp.body);
       const descriptor = object.descriptor;
       const layout = this.database.getObject(descriptor.layout?.__id);
@@ -752,7 +752,7 @@ export class InspectPanel {
     if (object instanceof ShaderModule) {
       const reflect = object.reflection;
       if (reflect) {
-        const grp = this._getCollapsableWithState(infoBox, object, "reflectionInfoCollapsed", "Reflection Info", true);
+        const grp = this._getcollapsibleWithState(infoBox, object, "reflectionInfoCollapsed", "Reflection Info", true);
         grp.body.style.maxHeight = "600px";
 
         if (reflect.entry.vertex.length) {
@@ -859,7 +859,7 @@ export class InspectPanel {
       const text = object.message;
       new Widget("pre", descriptionBox, { text, class: "validation-error" });
     } else {
-      const grp = this._getCollapsableWithState(descriptionBox, object, "descriptorCollapsed", "Descriptor", false);
+      const grp = this._getcollapsibleWithState(descriptionBox, object, "descriptorCollapsed", "Descriptor", false);
       const desc = this._getDescriptorInfo(object, object.descriptor);
       const text = JSON.stringify(desc, undefined, 4);
       new Widget("pre", grp.body, { text });
@@ -881,7 +881,7 @@ export class InspectPanel {
     } else if (object instanceof TextureView) {
       const texture = this.database.getTextureFromView(object);
       if (texture) {
-        const textureGrp = this._getCollapsableWithState(descriptionBox, object, "textureCollapsed", `Texture ID: ${texture.idName} ${texture.dimension} ${texture.format} ${texture.resolutionString}`, false);
+        const textureGrp = this._getcollapsibleWithState(descriptionBox, object, "textureCollapsed", `Texture ID: ${texture.idName} ${texture.dimension} ${texture.format} ${texture.resolutionString}`, false);
         textureGrp.body.style.maxHeight = "unset";
 
         const desc = this._getDescriptorInfo(texture, texture.descriptor);

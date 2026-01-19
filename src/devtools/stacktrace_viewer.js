@@ -19,7 +19,7 @@ export class StacktraceViewer extends Div {
       wasmWithLine: /^(.+?)\s+\((https?:\/\/.+?\.wasm):(\d+):(\d+)\)$/
     };
 
-    const stacktraceGrp = panel._getCollapsableWithState(this, object, "stacktraceCollapsed", "Stacktrace", true);
+    const stacktraceGrp = panel._getcollapsibleWithState(this, object, "stacktraceCollapsed", "Stacktrace", true);
     const stacktraceBody = new Widget("ol", stacktraceGrp.body, { class: "inspector-stacktrace" });
     const stacktraceLines = stacktrace.split("\n");
     for (const stackLine of stacktraceLines) {

@@ -1834,7 +1834,7 @@ export let webgpuInspector = null;
         }
         // We can't push the actual data to the inspector server, it would be too much data.
         // Instead, we push a description of the data. If we actually want the data, we should
-        // push it seperately in chunks as an ID'd data block, and then reference that ID here.
+        // push it separately in chunks as an ID'd data block, and then reference that ID here.
         newArgs.push(data);
       } else {
         newArgs = a;

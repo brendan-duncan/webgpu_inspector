@@ -2,7 +2,7 @@ import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
 import { Split } from "./widget/split.js";
 import { Img } from "./widget/img.js";
-import { Collapsable } from "./widget/collapsable.js";
+import { collapsible } from "./widget/collapsible.js";
 import { WgslDebug } from "wgsl_reflect/wgsl_reflect.module.js";
 import { TextureView } from "./gpu_objects/index.js";
 import { ShaderWatchView } from "./shader_watch_view.js";
@@ -362,10 +362,10 @@ export class ShaderDebugger extends Div {
 
         this.watch = new Div(pane2, { style: "overflow: auto; background-color: #333; color: #bbb; width: 100%; height: 100%;" });
 
-        this.variables = new Collapsable(this.watch, { collapsed: false, label: `Variables` });;
+        this.variables = new collapsible(this.watch, { collapsed: false, label: `Variables` });;
         this.watchVariables = new ShaderWatchView(this.variables.body);
-        //this.globals = new Collapsable(this.watch, { collapsed: false, label: `Globals` });;
-        this.callstack = new Collapsable(this.watch, { collapsed: false, label: `Callstack` });;
+        //this.globals = new collapsible(this.watch, { collapsed: false, label: `Globals` });;
+        this.callstack = new collapsible(this.watch, { collapsed: false, label: `Callstack` });;
 
         this.debug();
     }
