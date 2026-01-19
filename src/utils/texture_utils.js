@@ -196,6 +196,14 @@ export class TextureUtils {
         ]
     });
 
+    // Setting the min value to 0 will keep most images ranges to [0, max],
+    // unless any texture values are less than 0. This seems more reasonable
+    // for most textures than normalizing to the range [min, max].
+    // If we do want to normalize to [min, max], the min values here should be
+    // changed to maxfloat.
+    this.device.queue.writeBuffer(this.minMaxStorageBuffer, 0,
+      new Float32Array([0, 0, 0, 0, 0, 0, 0, 0]));
+
     const computePass = commandEncoder.beginComputePass();
     computePass.setPipeline(minMaxPipeline);
     computePass.setBindGroup(0, minMaxBindGroup);
