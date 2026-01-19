@@ -62,7 +62,7 @@ export class TextureViewer extends Div {
       }
     });
 
-    new Checkbox(controls, { text: "Auto Range", checked: texture.display.autoRange, style: "margin-left: 10px; font-size: 9pt; color: #bbb;", onChange: (checked) => {
+    new Checkbox(controls, { text: "Auto Range", checked: texture.display.autoRange, style: "font-size: 9pt; color: #bbb;", onChange: (checked) => {
       texture.display.autoRange = checked;
       displayChanged.emit();
     } });
