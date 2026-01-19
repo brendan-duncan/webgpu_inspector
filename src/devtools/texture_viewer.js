@@ -1,4 +1,5 @@
 import { Widget } from "./widget/widget.js";
+import { Checkbox } from "./widget/checkbox.js";
 import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
 import { Select } from "./widget/select.js";
@@ -60,6 +61,11 @@ export class TextureViewer extends Div {
         }
       }
     });
+
+    new Checkbox(controls, { text: "Auto Range", checked: texture.display.autoRange, style: "margin-left: 10px; font-size: 9pt; color: #bbb;", onChange: (checked) => {
+      texture.display.autoRange = checked;
+      displayChanged.emit();
+    } });
 
     new Span(controls, { text: "Exposure", style: "margin-left: 10px; margin-right: 3px; font-size: 9pt; color: #bbb;" });
     new NumberInput(controls, { value: texture.display.exposure, step: 0.01, onChange: (value) => {

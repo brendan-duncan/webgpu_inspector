@@ -204,10 +204,11 @@ export class TextureUtils {
 
     if (display) {
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
-        new Float32Array([display.exposure, display.channels, numChannels, display.minRange ?? 0, display.maxRange ?? 1, layer, 0, 0]));
+        new Float32Array([display.exposure, display.channels, numChannels, display.autoRange ?? 0 ? 1 : 0,
+          display.minRange ?? 0, display.maxRange ?? 1, layer, 0]));
     } else {
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
-        new Float32Array([1, 0, numChannels, 0, 1, layer, 0, 0]));
+        new Float32Array([1, 0, numChannels, 0, 0, 1, layer, 0]));
     }
 
     const passEncoder = commandEncoder.beginRenderPass({
@@ -391,9 +392,9 @@ function _getBlitShader(fmt) {
     exposure: f32,
     channels: f32,
     numChannels: f32,
+    autoRange: f32,
     minRange: f32,
     maxRange: f32,
-    _pad1: f32,
     _pad2: f32,
     _pad3: f32
   };
@@ -409,11 +410,11 @@ function _getBlitShader(fmt) {
     var color = vec4f(textureLoad(texture, vec2i(input.uv * vec2f(dim)), 0));
     var minVal = minMax.min_val;
     var maxVal = minMax.max_val;
+
     var minCh = min(minVal.r, min(minVal.g, minVal.b));
     var maxCh = max(maxVal.r, max(maxVal.g, maxVal.b));
-
-    if (abs(maxCh - minCh) > 0.00001) {
-      color = (color - vec4f(minCh)) / vec4f(maxCh - minCh);
+    if (display.autoRange > 0.0 && abs(maxCh - minCh) > 0.00001) {
+      color = vec4f((color.rgb - vec3f(minCh)) / vec3f(maxCh - minCh), color.a);
     }
 
     if (display.numChannels == 1.0) {
@@ -477,10 +478,10 @@ TextureUtils.blit3dShader = `
     exposure: f32,
     channels: f32,
     numChannels: f32,
+    autoRange: f32,
     minRange: f32,
     maxRange: f32,
     layer: f32,
-    _pad2: f32,
     _pad3: f32
   };
   struct MinMax {
@@ -494,6 +495,12 @@ TextureUtils.blit3dShader = `
     var color = textureSampleLevel(texture, texSampler, vec3f(input.uv, display.layer), 0.0);
     var minVal = minMax.min_val;
     var maxVal = minMax.max_val;
+
+    var minCh = min(minVal.r, min(minVal.g, minVal.b));
+    var maxCh = max(maxVal.r, max(maxVal.g, maxVal.b));
+    if (display.autoRange > 0.0 && abs(maxCh - minCh) > 0.00001) {
+      color = vec4f((color.rgb - vec3f(minCh)) / vec3f(maxCh - minCh), color.a);
+    }
 
     if (display.numChannels == 1.0) {
       if (display.minRange != display.maxRange) {
@@ -556,9 +563,9 @@ TextureUtils.multisampleBlitShader = `
     exposure: f32,
     channels: f32,
     numChannels: f32,
+    autoRange: f32,
     minRange: f32,
     maxRange: f32,
-    _pad1: f32,
     _pad2: f32,
     _pad3: f32
   };
@@ -574,6 +581,12 @@ TextureUtils.multisampleBlitShader = `
     var color = textureLoad(texture, coords, 0);
     var minVal = minMax.min_val;
     var maxVal = minMax.max_val;
+
+    var minCh = min(minVal.r, min(minVal.g, minVal.b));
+    var maxCh = max(maxVal.r, max(maxVal.g, maxVal.b));
+    if (display.autoRange > 0.0 && abs(maxCh - minCh) > 0.00001) {
+      color = vec4f((color.rgb - vec3f(minCh)) / vec3f(maxCh - minCh), color.a);
+    }
 
     if (display.numChannels == 1.0) {
       if (display.minRange != display.maxRange) {
