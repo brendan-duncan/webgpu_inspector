@@ -38,6 +38,11 @@ export class TextureUtils {
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
     });
 
+    this.minMaxReadbackBuffer = device.createBuffer({
+        size: 32,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+
     this.displayBindGroupLayout = device.createBindGroupLayout({
       entries: [
         {
@@ -115,7 +120,8 @@ export class TextureUtils {
     return dst;
   }
 
-  blitTexture(srcView, srcFormat, sampleCount, dstView, dstFormat, display, dimension, layer) {
+  blitTexture(srcView, srcFormat, sampleCount, dstView, dstFormat, display, dimension, layer,
+      minMaxUpdateCallback) {
     layer ??= 0;
     dimension ??= "2d";
     const sampleType = TextureFormatInfo[srcFormat]?.sampleType || "unfilterable-float";
@@ -223,7 +229,20 @@ export class TextureUtils {
     passEncoder.setBindGroup(1, this.displayBindGroup);
     passEncoder.draw(3);
     passEncoder.end();
+
+    commandEncoder.copyBufferToBuffer(this.minMaxStorageBuffer, 0, this.minMaxReadbackBuffer, 0, 32);
     this.device.queue.submit([commandEncoder.finish()]);
+
+    this.minMaxReadbackBuffer.mapAsync(GPUMapMode.READ).then(() => {
+        const arrayBuffer = this.minMaxReadbackBuffer.getMappedRange();
+        const data = new Float32Array(arrayBuffer.slice(0));
+        this.minMaxReadbackBuffer.unmap();
+        display.minRange = data[0];
+        display.maxRange = data[4];
+        if (minMaxUpdateCallback) {
+          minMaxUpdateCallback(display.minRange, display.maxRange);
+        }
+    });
   }
 
   convertDepthToFloat(fromTextureView, sampleCount, toTextureView, dstFormat, commandEncoder) {

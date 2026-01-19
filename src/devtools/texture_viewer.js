@@ -123,10 +123,11 @@ export class TextureViewer extends Div {
 
   _createTextureLayer(container, texture, layer, width, height, layerRanges, displayChanged) {
     const layerInfo = new Div(container, { class: 'inspect_texture_layer_info' });
+    let layerTitle = null;
     if (layerRanges) {
-      new Span(layerInfo, { text: `Layer ${layer} Min Value: ${layerRanges[layer].min} Max Value: ${layerRanges[layer].max}` });
+      layerTitle = new Span(layerInfo, { text: `Layer ${layer} Min Value: ${layerRanges[layer].min} Max Value: ${layerRanges[layer].max}` });
     } else {
-      new Span(layerInfo, { text: `Layer ${layer}` });
+      layerTitle = new Span(layerInfo, { text: `Layer ${layer}` });
     }
 
     const canvas = new Widget("canvas", container, { style: "box-shadow: 5px 5px 5px rgba(0,0,0,0.5); image-rendering: -moz-crisp-edges; image-rendering: -webkit-crisp-edges; image-rendering: pixelated;" });
@@ -138,7 +139,7 @@ export class TextureViewer extends Div {
     canvas.element.width = width;
     canvas.element.height = height;
 
-    this._renderTexture(canvas, texture, layer);
+    this._renderTexture(canvas, texture, layer, layerTitle);
 
     this._setupDisplayChangeListener(displayChanged, canvas, texture, layer);
   }
@@ -189,7 +190,7 @@ export class TextureViewer extends Div {
     });
   }
 
-  _renderTexture(canvas, texture, layer) {
+  _renderTexture(canvas, texture, layer, layerTitle) {
     const mipLevel = Math.max(Math.min(texture.display.mipLevel || 0, texture.mipLevelCount), 0);
     const width = (texture.width >> mipLevel) || texture.width;
     const height = (texture.height >> mipLevel) || texture.height;
@@ -223,7 +224,15 @@ export class TextureViewer extends Div {
     const hl = 0.5 / (numLayers || 1);
 
     this.panel.textureUtils.blitTexture(srcView, texture.format, 1, canvasTexture.createView(), format,
-        texture.display, texture.descriptor.dimension, (layer / texture.depthOrArrayLayers) + hl);
+        texture.display, texture.descriptor.dimension, (layer / texture.depthOrArrayLayers) + hl,
+        (minRange, maxRange) => {
+          texture._layerRanges = texture._layerRanges || [];
+          texture._layerRanges[layer] = { min: minRange, max: maxRange };
+          if (layerTitle) {
+            layerTitle.text = `Layer ${layer} Min Value: ${minRange} Max Value: ${maxRange}`;
+          }
+        }
+    );
 
     canvas.style.width = `${width * texture.display.zoom / 100}px`;
     canvas.style.height = `${height * texture.display.zoom / 100}px`;
