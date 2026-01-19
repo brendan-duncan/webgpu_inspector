@@ -152,8 +152,8 @@ export class TextureViewer extends Div {
 
     canvas.element.addEventListener("mousemove", (event) => {
       if (this.panel._tooltip) {
-        const x = Math.floor(event.offsetX / (texture.display.zoom / 100));
-        const y = Math.floor(event.offsetY / (texture.display.zoom / 100));
+        const x = Math.max(Math.floor(event.offsetX / (texture.display.zoom / 100)), 0);
+        const y = Math.max(Math.floor(event.offsetY / (texture.display.zoom / 100)), 0);
         const pixel = texture.getPixel(x, y, layer, texture.display?.mipLevel ?? 0);
         this.panel._tooltip.style.left = `${event.pageX + 10}px`;
         this.panel._tooltip.style.top = `${event.pageY + 10}px`;
