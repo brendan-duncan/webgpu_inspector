@@ -18,13 +18,13 @@ export class TextureViewer extends Div {
     const height = (texture.height >> mipLevel) || texture.height;
 
     const numLayers = texture.depthOrArrayLayers;
-    const layerRanges = texture.layerRanges;
 
     const container = new Div(this, { style: "margin-bottom: 5px; margin-top: 10px;" });
     const displayChanged = new Signal();
     const controls = new Div(container);
 
     this.layerTitles = [];
+    this.layerPixelInfo = [];
 
     const zoomControl = this._createTextureControls(controls, texture, displayChanged);
 
@@ -33,7 +33,7 @@ export class TextureViewer extends Div {
     }
 
     for (let layer = 0; layer < numLayers; ++layer) {
-      this._createTextureLayer(container, texture, layer, width, height, layerRanges, displayChanged, zoomControl);
+      this._createTextureLayer(container, texture, layer, width, height, displayChanged, zoomControl);
     }
   }
 
@@ -123,13 +123,25 @@ export class TextureViewer extends Div {
     return str;
   }
 
-  _createTextureLayer(container, texture, layer, width, height, layerRanges, displayChanged, zoomControl) {
-    const layerInfo = new Div(container, { class: 'inspect_texture_layer_info' });
-    if (layerRanges) {
-      this.layerTitles[layer] = new Span(layerInfo, { text: `Layer ${layer} Min Value: ${layerRanges[layer].min} Max Value: ${layerRanges[layer].max}` });
-    } else {
-      this.layerTitles[layer] = new Span(layerInfo, { text: `Layer ${layer}` });
+  _updateLayerTitle(texture, layer) {
+    const layerTitle = this.layerTitles[layer];
+    if (layerTitle) {
+      let text = `Layer ${layer}`;
+      if (texture.layerRanges && texture.layerRanges[layer]) {
+        const ranges = texture.layerRanges[layer];
+        text += ` Min Value: ${ranges.min} Max Value: ${ranges.max}`;
+      }
+      if (this.layerPixelInfo[layer]) {
+        text += ` Pixel: ${this.layerPixelInfo[layer]}`;
+      }
+      layerTitle.text = text;
     }
+  }
+
+  _createTextureLayer(container, texture, layer, width, height, displayChanged, zoomControl) {
+    const layerInfo = new Div(container, { class: 'inspect_texture_layer_info' });
+    this.layerTitles[layer] = new Span(layerInfo);
+    this._updateLayerTitle(texture, layer);
 
     const canvas = new Widget("canvas", container, { style: "box-shadow: 5px 5px 5px rgba(0,0,0,0.5); image-rendering: -moz-crisp-edges; image-rendering: -webkit-crisp-edges; image-rendering: pixelated;" });
     const zoom = Math.max(texture.display.zoom, 1) / 100;
@@ -159,6 +171,16 @@ export class TextureViewer extends Div {
       }
     });
 
+    canvas.element.addEventListener("mousedown", (event) => {
+      const zoom = Math.max(texture.display.zoom, 1) / 100;
+      const x = Math.max(Math.floor(event.offsetX / zoom), 0);
+      const y = Math.max(Math.floor(event.offsetY / zoom), 0);
+      const pixel = texture.getPixel(x, y, layer, texture.display?.mipLevel ?? 0);
+      const pixelStr = this._getPixelString(pixel).replaceAll("\n", ", ");
+      this.layerPixelInfo[layer] = `X:${x} Y:${y}, ${pixelStr}`;
+      this._updateLayerTitle(texture, layer);
+    });
+
     canvas.element.addEventListener("mousemove", (event) => {
       if (this.panel._tooltip) {
         const zoom = Math.max(texture.display.zoom, 1) / 100;
@@ -169,6 +191,11 @@ export class TextureViewer extends Div {
         this.panel._tooltip.style.top = `${event.pageY + 10}px`;
         const pixelStr = this._getPixelString(pixel);
         this.panel._tooltip.innerHTML = `X:${x} Y:${y}\n${pixelStr}`;
+
+        if (event.buttons === 1) {
+          this.layerPixelInfo[layer] = `X:${x} Y:${y}, ${pixelStr.replaceAll("\n", ", ")}`;
+          this._updateLayerTitle(texture, layer);
+        }
       }
     });
 
@@ -231,7 +258,7 @@ export class TextureViewer extends Div {
           texture._layerRanges = texture._layerRanges || [];
           texture._layerRanges[layer] = { min: minRange, max: maxRange };
           if (layerTitle) {
-            layerTitle.text = `Layer ${layer} Min Value: ${minRange} Max Value: ${maxRange}`;
+            this._updateLayerTitle(texture, layer);
           }
         }
     );
