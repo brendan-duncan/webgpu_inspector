@@ -252,20 +252,16 @@ export let webgpuInspector = null;
 
       requestAnimationFrame = function (cb) {
         function callback(timestamp) {
-          if (!self._currentFrameTime) {
-            self._currentFrameTime = timestamp;
-            self._frameStart(timestamp);
-            const result = cb(timestamp);
-            if (result instanceof Promise) {
-              Promise.all([result]).then(() => {
-                self._frameEnd(timestamp);
-                self._currentFrameTime = 0.0;
-              });
-            } else {
+          self._frameStart(timestamp);
+          const result = cb(timestamp);
+          if (result instanceof Promise) {
+            Promise.all([result]).then(() => {
               self._frameEnd(timestamp);
-              self._currentFrameTime = 0.0;
-            }
+            });
+          } else {
+            self._frameEnd(timestamp);
           }
+          return result;
         }
         return __requestAnimationFrame(callback);
       };
