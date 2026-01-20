@@ -55,7 +55,7 @@ export class ShaderEditor extends Div {
     const compileButton = new Button(compileRow, { label: "Compile", style: "background-color: rgb(200, 150, 51);" });
     const revertButton = isModified ? new Button(compileRow, { label: "Revert", style: "background-color: rgb(200, 150, 51);" }) : null;
     
-    const editorDiv = new Div(parent, { style: "height: calc(-315px + 100vh); overflow: auto;" });
+    const editorDiv = new Div(parent, { style: "height: calc(-345px + 100vh); overflow: auto;" });
 
     const editor = new EditorView({
       doc: text,

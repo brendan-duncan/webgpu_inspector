@@ -1,4 +1,14 @@
-## v0.18.0 -
+## v0.19.0 - January 19, 2026
+
+* Fix requestAnimationFrame inspection breaking threejs pages.
+* Shader Edtior: Compile button will stay visible when scrolling large shaders.
+* Texture Viewer: Fix display of 1 channel textures.
+* Texture Viewer: Fix display of u32 and i32 textures.
+* Texture Viewer: Add Auto Range option, to normalize auto texture values for display.
+* Texture Viewer: Display texture min and max values
+* Texture Viewer: Left-click on texture will display pixel value on the texture info bar.
+
+## v0.18.0 - December 28, 2025
 
 * Improve connection from page to devtools panel.
 * Fix capturing frames from multithreaded Wasm and iframes.
