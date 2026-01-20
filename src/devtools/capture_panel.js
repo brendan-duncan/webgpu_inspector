@@ -915,12 +915,12 @@ export class CapturePanel {
       });
 
       let display = null;
-      if (layerRanges) {
+      if (layerRanges && layer in layerRanges) {
         display = {
           exposure: 1.0,
           channels: 0,
-          minRange: layerRanges[layer].min,
-          maxRange: layerRanges[layer].max
+          minRange: layerRanges[layer]?.min ?? 0,
+          maxRange: layerRanges[layer]?.max ?? 1
         };
       }
 
