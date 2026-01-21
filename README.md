@@ -16,8 +16,6 @@
 
 ## Introduction
 
-**Version: 0.19.2**
-
 Inspection, profiling, and graphics debugging browser extension for WebGPU.
 
 WebGPU Inspector is designed to inspect what's happening with WebGPU on the page, independent of the engine.

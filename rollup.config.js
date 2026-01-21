@@ -7,7 +7,7 @@ import copy from "rollup-plugin-copy";
 import fg from 'fast-glob';
 import { SourceMapConsumer, SourceNode } from 'source-map'
 
-const version = "0.19.2";
+const version = readFileSync('VERSION', 'utf-8').trim();
 
 function build(name, input, dst, file, copyFiles, watchInclude) {
   const format = "iife";
