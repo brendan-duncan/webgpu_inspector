@@ -94,14 +94,27 @@ When you inspect a texture, a Load button pulls the texture image from the page 
 
 Mousing over the texture image will show the pixel color vlaues, if the Inspector can decode the texture format.
 
-An Exposure control lets you adjust the brightness of the texture's display.
+The layer title bar will include the min and max pixel color values from the texture.
 
-A Channel control lets you inspect specific color channels of the image.
+Left-click on the texture will show the pixel value on the texture layer title bar.
 
-Depth textures are normalized for displayed. This means the min and max
+Mip Level: select the mip level to inspect.
+
+Auto Range: when enabled, the min and max pixel values from the texture are used to normalize the texture display.
+
+Exposure: adjusts the brightness of the texture's display.
+
+Channel: lets you inspect specific color channels of the image.
+
+Zoom: scale the display of the texture. You can also control the texture display zoom using **control+mouse-wheel**.
+
+Depth textures are always normalized for displayed. This means the min and max
 values of the texture are found, then all values in the depth texture
 are normalized to that range. This makes it easier to visualize depth
-tetures, even if their values are in a compressed range.
+tetures, even if their values are in a compressed range. Other texture types can
+be displayed normalized using the Auto Range setting.
+
+**Note:** if the page is using WebGPU compatibility mode, depth textures can't be viewed as compatibility mode lacks the feature needed to read depth textures.
 
 <a href="images/inspect_texture.png">
 <img src="images/inspect_texture.png" style="width: 750px;">
