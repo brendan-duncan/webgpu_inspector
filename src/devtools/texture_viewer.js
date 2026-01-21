@@ -127,7 +127,7 @@ export class TextureViewer extends Div {
     const layerTitle = this.layerTitles[layer];
     if (layerTitle) {
       let text = `Layer ${layer}`;
-      if (texture.layerRanges && texture.layerRanges[layer]) {
+      if (texture.layerRanges && texture.layerRanges[layer] && texture.layerRanges[layer].min !== undefined && texture.layerRanges[layer].max !== undefined) {
         const ranges = texture.layerRanges[layer];
         text += ` Min Value: ${ranges.min} Max Value: ${ranges.max}`;
       }
@@ -246,8 +246,8 @@ export class TextureViewer extends Div {
     const srcView = texture.gpuTexture.object.createView(viewDesc);
 
     if (texture.layerRanges) {
-      texture.display.minRange = texture.layerRanges[layer].min;
-      texture.display.maxRange = texture.layerRanges[layer].max;
+      texture.display.minRange = texture.layerRanges[layer]?.min ?? 0;
+      texture.display.maxRange = texture.layerRanges[layer]?.max ?? 1;
     }
 
     const numLayers = texture.depthOrArrayLayers;

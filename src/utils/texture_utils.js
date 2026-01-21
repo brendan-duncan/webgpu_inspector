@@ -230,7 +230,9 @@ export class TextureUtils {
     passEncoder.draw(3);
     passEncoder.end();
 
-    commandEncoder.copyBufferToBuffer(this.minMaxStorageBuffer, 0, this.minMaxReadbackBuffer, 0, 32);
+    if (!this.minMaxReadbackBuffer._mapRequested) {
+      commandEncoder.copyBufferToBuffer(this.minMaxStorageBuffer, 0, this.minMaxReadbackBuffer, 0, 32);
+    }
     this.device.queue.submit([commandEncoder.finish()]);
 
     if (minMaxUpdateCallback && !this.minMaxReadbackBuffer._mapRequested) {
