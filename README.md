@@ -16,7 +16,7 @@
 
 ## Introduction
 
-**Version: 0.19.0**
+**Version: 0.19.2**
 
 Inspection, profiling, and graphics debugging browser extension for WebGPU.
 
@@ -133,6 +133,8 @@ Building the project requires an installation of [Node.js](https://nodejs.org/en
 - Make sure the dependencies are installed: `npm install`
 - Compile the project: `npm run build`.
 - Compile on file changes: `npm run watch`.
+
+Update the plugin version from rollup.config.js.
 
 After the project is built:
 

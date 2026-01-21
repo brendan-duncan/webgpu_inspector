@@ -2,6 +2,7 @@ import { Actions } from "../utils/actions.js";
 import { ObjectDatabase } from "./object_database.js";
 import { MessagePort } from "../utils/message_port.js";
 import { Div } from "./widget/div.js";
+import { Span } from "./widget/span.js";
 import { TabWidget } from "./widget/tab_widget.js";
 import { TextureUtils } from "../utils/texture_utils.js";
 import { Window } from "./widget/window.js";
@@ -44,6 +45,9 @@ export class InspectorWindow extends Window {
     const recorderPanel = new Div(null, { class: "recorder_panel" });
     this._tabs.addTab("Record", recorderPanel);
     this._recorderPanel = new RecorderPanel(this, recorderPanel);
+
+    const version = "__buildVersion";
+    new Span(this._tabs.headerElement, { text: `WebGPU Inspector v${version}`, style: "color: #aaa; padding-top: 5px; font-size: 10pt; font-weight: bold; float: right; margin-right: 10px;" });
 
     const self = this;
     this.port.addListener((message) => {

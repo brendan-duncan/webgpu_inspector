@@ -2,9 +2,12 @@ import { readFileSync } from 'node:fs';
 import * as path from "node:path";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import terser from "@rollup/plugin-terser";
+import replace from '@rollup/plugin-replace';
 import copy from "rollup-plugin-copy";
 import fg from 'fast-glob';
 import { SourceMapConsumer, SourceNode } from 'source-map'
+
+const version = "0.19.2";
 
 function build(name, input, dst, file, copyFiles, watchInclude) {
   const format = "iife";
@@ -17,6 +20,10 @@ function build(name, input, dst, file, copyFiles, watchInclude) {
       name
     },
     plugins: [
+      replace({
+        __buildVersion: version,
+        preventAssignment: true
+      }),
       {
         name: "stringer",
         resolveId(id, importer) {
@@ -121,29 +128,29 @@ function build(name, input, dst, file, copyFiles, watchInclude) {
 }
 
 const builds = [];
-const versions = ["chrome", "firefox"];
-for (const version of versions) {
+const variants = ["chrome", "firefox"];
+for (const variant of variants) {
   const copyFiles = {
     targets: [
-      { src: `src/extension/${version}/manifest.json`, dest: `extensions/${version}` },
-      { src: `src/extension/webgpu_inspector_devtools.html`, dest: `extensions/${version}` },
-      { src: `src/extension/webgpu_inspector_devtools.js`, dest: `extensions/${version}` },
-      { src: `src/extension/webgpu_inspector_panel.css`, dest: `extensions/${version}` },
-      { src: `src/extension/webgpu_inspector_panel.html`, dest: `extensions/${version}` },
-      { src: `src/extension/res`, dest: `extensions/${version}` },
-      { src: `src/extension/img`, dest: `extensions/${version}` },
+      { src: `src/extension/${variant}/manifest.json`, dest: `extensions/${variant}`, transform: (contents) => contents.toString().replace(/__buildVersion/g, version) },
+      { src: `src/extension/webgpu_inspector_devtools.html`, dest: `extensions/${variant}` },
+      { src: `src/extension/webgpu_inspector_devtools.js`, dest: `extensions/${variant}` },
+      { src: `src/extension/webgpu_inspector_panel.css`, dest: `extensions/${variant}` },
+      { src: `src/extension/webgpu_inspector_panel.html`, dest: `extensions/${variant}` },
+      { src: `src/extension/res`, dest: `extensions/${variant}` },
+      { src: `src/extension/img`, dest: `extensions/${variant}` },
     ]
   };
 
   builds.push(
-    build("__webgpu_recorder", 'webgpu_recorder/webgpu_recorder.js', `extensions/${version}`, '/webgpu_recorder.js'),
-    build("__webgpu_inspector", 'src/webgpu_inspector.js', `extensions/${version}`, '/webgpu_inspector.js'),
-    build("__webgpu_inspector_loader", 'src/webgpu_inspector_loader.js', `extensions/${version}`, '/webgpu_inspector_loader.js'),   
-    build("__webgpu_recorder_loader", 'src/webgpu_recorder_loader.js', `extensions/${version}`, '/webgpu_recorder_loader.js'),
-    build("__webgpu_inspector_worker", 'src/webgpu_inspector_worker.js', `extensions/${version}`, '/webgpu_inspector_worker.js'),   
-    build("__webgpu_inspector_window", 'src/devtools/inspector_window.js', `extensions/${version}`, '/webgpu_inspector_window.js'),
-    build("__background", 'src/extension/background.js', `extensions/${version}`, '/background.js'),
-    build("__content_script", 'src/extension/content_script.js', `extensions/${version}`, 'content_script.js', copyFiles, "src/extension/**/*"),
+    build("__webgpu_recorder", 'webgpu_recorder/webgpu_recorder.js', `extensions/${variant}`, '/webgpu_recorder.js'),
+    build("__webgpu_inspector", 'src/webgpu_inspector.js', `extensions/${variant}`, '/webgpu_inspector.js'),
+    build("__webgpu_inspector_loader", 'src/webgpu_inspector_loader.js', `extensions/${variant}`, '/webgpu_inspector_loader.js'),   
+    build("__webgpu_recorder_loader", 'src/webgpu_recorder_loader.js', `extensions/${variant}`, '/webgpu_recorder_loader.js'),
+    build("__webgpu_inspector_worker", 'src/webgpu_inspector_worker.js', `extensions/${variant}`, '/webgpu_inspector_worker.js'),   
+    build("__webgpu_inspector_window", 'src/devtools/inspector_window.js', `extensions/${variant}`, '/webgpu_inspector_window.js'),
+    build("__background", 'src/extension/background.js', `extensions/${variant}`, '/background.js'),
+    build("__content_script", 'src/extension/content_script.js', `extensions/${variant}`, 'content_script.js', copyFiles, "src/extension/**/*"),
   );
 }
 
