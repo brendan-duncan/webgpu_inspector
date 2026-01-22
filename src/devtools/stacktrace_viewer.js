@@ -34,38 +34,38 @@ export class StacktraceViewer extends Div {
 
         // Try JavaScript with function name and parentheses
         if ((match = trimmed.match(patterns.jsWithParens))) {
-        filePath = match[2];
-        functionName = match[1];
-        line = Math.max(parseInt(match[3], 10) - 1, 0);
-        columnStr = match[4];
-        column = parseInt(columnStr, 10) - 1;
+          filePath = match[2];
+          functionName = match[1];
+          line = Math.max(parseInt(match[3], 10) - 1, 0);
+          columnStr = match[4];
+          column = parseInt(columnStr, 10) - 1;
         }
         // Try WASM with offset
         else if ((match = trimmed.match(patterns.wasmWithOffset))) {
-        filePath = match[2];
-        functionName = match[1];
-        columnStr = match[4];
-        column = parseInt(columnStr, 16); // wasm offset
+          filePath = match[2];
+          functionName = match[1];
+          columnStr = match[4];
+          column = parseInt(columnStr, 16); // wasm offset
         }
         // Try WASM with line number
         else if ((match = trimmed.match(patterns.wasmWithLine))) {
-        filePath = match[2];
-        functionName = match[1];
-        line = Math.max(parseInt(match[3], 10) - 1, 0);
-        columnStr = match[4];
-        column = parseInt(columnStr, 10) - 1;
+          filePath = match[2];
+          functionName = match[1];
+          line = Math.max(parseInt(match[3], 10) - 1, 0);
+          columnStr = match[4];
+          column = parseInt(columnStr, 10) - 1;
         }
         // Try JavaScript without function name
         else if ((match = trimmed.match(patterns.jsNoFunction))) {
-        filePath = match[1];
-        line = Math.max(parseInt(match[2], 10) - 1, 0);
-        columnStr = match[3];
-        column = parseInt(columnStr, 10) - 1;
+          filePath = match[1];
+          line = Math.max(parseInt(match[2], 10) - 1, 0);
+          columnStr = match[3];
+          column = parseInt(columnStr, 10) - 1;
         }
 
         if (filePath === null) {
-        new Widget("li", stacktraceBody, { text: stackLine });
-        return;
+          new Widget("li", stacktraceBody, { text: stackLine });
+          return;
         }
 
         const lineDiv = new Widget("li", stacktraceBody);
@@ -74,12 +74,12 @@ export class StacktraceViewer extends Div {
 
         const link = new Widget("a", lineDiv, { text: stackLine, title: title });
         link.addEventListener("click", (evt) => {
-        evt.preventDefault();
-        if (chrome?.devtools?.panels) {
-            chrome.devtools.panels.openResource(filePath, line || 0, column);
-        } else {
-            window.open(filePath, "_blank");
-        }
+          evt.preventDefault();
+          if (chrome?.devtools?.panels) {
+              chrome.devtools.panels.openResource(filePath, line || 0, column);
+          } else {
+              window.open(filePath, "_blank");
+          }
         });
     }
   }
