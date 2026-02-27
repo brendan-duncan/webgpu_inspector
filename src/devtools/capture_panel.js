@@ -2014,7 +2014,7 @@ export class CapturePanel {
     }
   }
 
-  _showCaptureCommandInfo_setIndexBuffer(command, commandInfo, collapsed) {
+  _showCaptureCommandInfo_setIndexBuffer(command, commandInfo, collapsed, firstIndex, indexCount) {
     const args = command.args;
     const self = this;
     const id = args[0]?.__id;
@@ -2036,6 +2036,8 @@ export class CapturePanel {
         if (bufferData) {
           const indexArray = args[1] === "uint32" ? new Uint32Array(bufferData.buffer, bufferData.byteOffset, bufferData.byteLength / 4)
               : new Uint16Array(bufferData.buffer, bufferData.byteOffset, bufferData.byteLength / 2);
+          const effectiveFirstIndex = firstIndex ?? 0;
+          const effectiveIndexCount = indexCount ?? indexArray.length;
           new Div(bufferGrp.body, { text: `Index Buffer: ${buffer.name}[id:${buffer.id}] Format:${indexArray instanceof Uint32Array ? "uint32" : "uint16"} Count:${indexArray.length}` });
           const button = new Button(bufferGrp.body, { label: "Show Data", callback: () => {
             if (button.element.innerText === "Hide Data") {
@@ -2045,8 +2047,9 @@ export class CapturePanel {
             }
             button.element.innerText = "Hide Data";
             const ol = new Widget("ol", bufferGrp.body);
-            for (const index of indexArray) {
-              new Widget("li", ol, { text: `${index}` });
+            const displayCount = Math.min(effectiveIndexCount, indexArray.length - effectiveFirstIndex);
+            for (let i = 0; i < displayCount; ++i) {
+              new Widget("li", ol, { text: `${indexArray[effectiveFirstIndex + i]}` });
             }
           } });
         }
@@ -2476,7 +2479,7 @@ export class CapturePanel {
       this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo);
     }
     if (state.indexBuffer) {
-      this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer, commandInfo, true);
+      this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer, commandInfo, true, command.args[2] ?? 0, command.args[0]);
     }
     for (const vertexBuffer of state.vertexBuffers) {
       this._showCaptureCommandInfo_setVertexBuffer(vertexBuffer, commandInfo, true, state);
