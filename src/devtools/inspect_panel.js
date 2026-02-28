@@ -67,8 +67,8 @@ export class InspectPanel {
       window.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/inspect.md", "_blank");
     }});
 
-    this.plots = new Div(parent, { style: "display: flex; flex-direction: row; margin-bottom: 10px; height: 30px;" });
-    new Span(this.plots, { text: "Frame Time", class: "text-secondary mt-sm mr-sm" });
+    this.plots = new Div(parent, { style: "display: flex; flex-direction: row; margin-bottom: 10px; margin-top: 0px; padding-top: 0px; height: 30px;" });
+    new Span(this.plots, { text: "Frame Time", class: "text-secondary mt-sm mr-sm", style: "font-size: 11pt; color: #ccc;"  });
     this.frameRatePlot = new Plot(this.plots, { precision: 2, suffix: "ms", class: "plot-container", style: "flex-grow: 1; margin-right: 10px; max-width: 500px;" });
     this.frameRateData = this.frameRatePlot.addData("Frame Time");
 
@@ -79,6 +79,7 @@ export class InspectPanel {
       options: ["GPU Objects", "Buffer", "BindGroup", "TextureView", "Texture", "Sampler", "PipelineLayout", "BindGroupLayout", "ShaderModule", "ComputePipeline", "RenderPipeline", "RenderBundle"],
       index: 0,
       class: "text-secondary mt-sm mr-sm",
+      style: "padding: 0px; margin: 0px;",
       onChange: (value) => {
         self._changeObjectCountPlot(value);
       } });

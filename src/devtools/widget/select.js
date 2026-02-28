@@ -46,7 +46,7 @@ export class Select extends Widget {
       this.configure(options);
     }
 
-    this.style.height = '20px';
+    //this.style.height = '20px';
     this.style.position = 'relative';
     this.style.minWidth = '50px';
   }
