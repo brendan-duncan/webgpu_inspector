@@ -24,36 +24,6 @@ export class Widget {
     this._parent = null;
     this.children = [];
 
-    /*this.hasFocus = false;
-    this.mouseX = 0;
-    this.mouseY = 0;
-    this.mousePageX = 0;
-    this.mousePageY = 0;
-
-    this._mouseDownEnabled = false;
-    this._mouseMoveEnabled = false;
-    this._mouseUpEnabled = false;
-    this._clickEnabled = false;
-    this._contextMenuEnabled = false;
-    this._doubleClickEnabled = false;
-    this._mouseWheelEnabled = false;
-    this._mouseOverEnabled = false;
-    this._mouseOutEnabled = false;
-    this._keyPressEnabled = false;
-    this._keyReleaseEnabled = false;
-    this._touchEventsEnabled = false;
-    this._pointerEventsEnabled = false;
-    this._isMouseDown = false;
-    // The button that is down during the onMouseDown event.
-    // This should be used during mouseMoveEvent, as MouseEvent.button isn't
-    // going to work on anything but Chrome.
-    this.mouseButton = -1;*/
-
-    // Latest state of the tracked pointers.
-    //this.currentPointers = [];
-
-    //this.enableContextMenuEvent();
-
     if (parent) {
       if (parent.constructor.isLayout) {
         const stretch = options && options.stretch ? options.stretch : 0;
@@ -493,7 +463,7 @@ export class Widget {
   }
 
   get tabIndex() {
-    return this._element.tabindex;
+    return this._element.tabIndex;
   }
 
   set tabIndex(v) {
@@ -501,11 +471,11 @@ export class Widget {
   }
 
   get zIndex() {
-    return parseInt(this._element.style.zorder);
+    return parseInt(this._element.style.zIndex) || 0;
   }
 
   set zIndex(v) {
-    this._element.style.zorder = String(v);
+    this._element.style.zIndex = String(v);
   }
 
   get draggable() {
@@ -559,19 +529,19 @@ export class Widget {
     }
   }
 
+  startResize() { }
+
   _startResize() {
-    if (this.startResize) {
-      this.startResize();
-    }
+    this.startResize();
     for (const c of this.children) {
       c._startResize();
     }
   }
 
+  onAddedToWindow(w) {}
+
   _addedToWindow(w) {
-    if (this.onAddedToWindow) {
-      this.onAddedToWindow(w);
-    }
+    this.onAddedToWindow(w);
     for (const c of this.children) {
       c._addedToWindow(w);
     }
