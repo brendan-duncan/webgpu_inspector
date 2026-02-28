@@ -21,9 +21,9 @@ export class RecorderPanel {
     const self = this;
     const port = window.port;
 
-    const recorderBar = new Div(parent, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 5px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
+    const recorderBar = new Div(parent, { class: "control-bar" });
 
-    this.recordButton = new Button(recorderBar, { label: "Record", style: "background-color: #755;", callback: () => {
+    this.recordButton = new Button(recorderBar, { label: "Record", class: "btn btn-success", callback: () => {
       const frames = self.recordFramesInput.value || 1;
       const filename = self.recordNameInput.value;
       const download = self._downloadCheckbox.checked;
@@ -31,12 +31,12 @@ export class RecorderPanel {
       port.postMessage({ action: PanelActions.InitializeRecorder, frames, filename, download });
     }});
 
-    new Span(recorderBar, { text: "Frames:", style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
-    this.recordFramesInput = new Input(recorderBar, { id: "record_frames", type: "number", value: 1, style: "width: 60px; display: inline-block;"});
+    new Span(recorderBar, { text: "Frames:", class: "text-secondary ml-sm mr-sm" });
+    this.recordFramesInput = new Input(recorderBar, { id: "record_frames", type: "number", value: 1, style: "width: 60px;"});
 
-    this._downloadCheckbox = new Checkbox(recorderBar, { label: "Download", tooltip: "Automatically Download Recording", checked: true, style: "margin-left: 20px; color: #fff;" });
+    this._downloadCheckbox = new Checkbox(recorderBar, { label: "Download", tooltip: "Automatically Download Recording", checked: true, class: "ml-sm" });
 
-    new Span(recorderBar, { text: "Name:", style: "margin-left: 20px; margin-right: 10px;  vertical-align: middle;" });
+    new Span(recorderBar, { text: "Name:", class: "text-secondary ml-sm mr-sm" });
     this.recordNameInput = new Input(recorderBar, { id: "record_frames", type: "text", value: "webgpu_record" });
 
     this.recorderDataPanel = new Div(parent, { style: "width: 100%; height: calc(-80px + 100vh); position: relative;" });
@@ -75,11 +75,11 @@ export class RecorderPanel {
 
     const self = this;
 
-    const controls = new Div(this.recorderDataPanel, { style: "background-color: #333; padding: 10px; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000;" });
+    const controls = new Div(this.recorderDataPanel, { class: "control-bar" });
 
     const lastFrame = this._recorderData.frames.length - 1;
-    new Span(controls, { text: "Frame:", style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
-    new NumberInput(controls, { precision: 0, value: lastFrame, min: 0, max: lastFrame, style: "width: 60px; display: inline-block;", onChange: (value) => {
+    new Span(controls, { text: "Frame:", class: "text-secondary ml-sm mr-sm" });
+    new NumberInput(controls, { precision: 0, value: lastFrame, min: 0, max: lastFrame, style: "width: 60px;", onChange: (value) => {
       self._recorderData.executeCommands(canvas, value);
     } });
 
@@ -94,7 +94,7 @@ export class RecorderPanel {
     split.position = 800;
 
     const filterArea = new Div(commands, { class: "capture_filterArea" });
-    new Span(filterArea, { text: "Filter: ", style: "margin-right: 5px;" });
+    new Span(filterArea, { text: "Filter: ", class: "mr-sm" });
     this.filterEdit = new TextInput(filterArea, { style: "width: 200px;", placeholder: "Filter", onEdit: (value) => {
       self._filterCommands(value);
     } });

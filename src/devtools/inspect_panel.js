@@ -46,30 +46,30 @@ export class InspectPanel {
     }, { passive: false });
 
     const self = this;
-    const _controlBar = new Div(parent, { style: "background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px; font-size: 10pt; display: flex;" });
+    const _controlBar = new Div(parent, { class: "control-bar" });
     const controlBar = new Div(_controlBar);
 
-    this.inspectButton = new Button(controlBar, { label: "Start", style: "background-color: #575;", callback: () => {
+    this.inspectButton = new Button(controlBar, { label: "Start", class: "btn btn-success", callback: () => {
       try {
         self._reset();
         self.port.postMessage({ action: PanelActions.InitializeInspector });
       } catch (e) {}
     } });
 
-    const stats = new Span(controlBar, { style: "border-left: 1px solid #aaa; padding-left: 10px; margin-left: 20px; height: 20px; padding-top: 5px; color: #ddd;" });
+    const stats = new Span(controlBar, { class: "control-bar-stats" });
     this.uiFrameTime = new Span(stats, { style: "width: 140px; overflow: hidden;" });
-    this.uiTotalTextureMemory = new Span(stats, { style: "margin-left: 20px;" });
-    this.uiTotalBufferMemory = new Span(stats, { style: "margin-left: 20px;" });
+    this.uiTotalTextureMemory = new Span(stats, { class: "control-bar-stat" });
+    this.uiTotalBufferMemory = new Span(stats, { class: "control-bar-stat" });
 
-    new Span(_controlBar, { style: "flex-grow: 2;" });
+    new Span(_controlBar, { class: "control-bar-spacer" });
 
-    new Button(_controlBar, { label: "Help", style: "margin-left: 20px; background-color: #557;", callback: () => {
+    new Button(_controlBar, { label: "Help", class: "btn btn-secondary", callback: () => {
       window.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/inspect.md", "_blank");
     }});
 
     this.plots = new Div(parent, { style: "display: flex; flex-direction: row; margin-bottom: 10px; height: 30px;" });
-    new Span(this.plots, { text: "Frame Time", style: "color: #ccc; padding-top: 5px; margin-right: 10px; font-size: 10pt;"});
-    this.frameRatePlot = new Plot(this.plots, { precision: 2, suffix: "ms", style: "flex-grow: 1; margin-right: 10px; max-width: 500px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);" });
+    new Span(this.plots, { text: "Frame Time", class: "text-secondary mt-sm mr-sm" });
+    this.frameRatePlot = new Plot(this.plots, { precision: 2, suffix: "ms", class: "plot-container", style: "flex-grow: 1; margin-right: 10px; max-width: 500px;" });
     this.frameRateData = this.frameRatePlot.addData("Frame Time");
 
     this._objectCountType = null;
@@ -78,11 +78,11 @@ export class InspectPanel {
     new Select(this.plots, {
       options: ["GPU Objects", "Buffer", "BindGroup", "TextureView", "Texture", "Sampler", "PipelineLayout", "BindGroupLayout", "ShaderModule", "ComputePipeline", "RenderPipeline", "RenderBundle"],
       index: 0,
-      style: "color: #ccc; padding-top: 5px; margin-right: 10px; font-size: 10pt;",
+      class: "text-secondary mt-sm mr-sm",
       onChange: (value) => {
         self._changeObjectCountPlot(value);
       } });
-    this.objectCountPlot = new Plot(this.plots, { style: "flex-grow: 1; max-width: 500px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);" });
+    this.objectCountPlot = new Plot(this.plots, { class: "plot-container", style: "flex-grow: 1; max-width: 500px;" });
     this.objectCountData = this.objectCountPlot.addData("Object Count");
     this._changeObjectCountPlot(0);
 
@@ -232,7 +232,7 @@ export class InspectPanel {
         self.inspectObject(previousObject, true);
       }
     }});
-    this._forwardButton = new Button(objectsTab.headerElement, { label: ">", style: "font-weight: bold;", tooltip: "Forward", disabled: true, callback: () => {
+    this._forwardButton = new Button(objectsTab.headerElement, { label: ">", class: "font-bold", tooltip: "Forward", disabled: true, callback: () => {
       const nextObject = self._inspectedObjectForward.pop();
       self._updateHistoryButtons();
       if (nextObject) {
@@ -352,7 +352,7 @@ export class InspectPanel {
 
     if (object === this.inspectedObject) {
       if (this._inspectedInfoBox) {
-        this._inspectedInfoBox.style.backgroundColor = "#533";
+        this._inspectedInfoBox.classList.add("info-box-error");
       }
     }
 
@@ -521,8 +521,8 @@ export class InspectPanel {
     } else {
       widget = new Widget("li", ui.objectList);
       widget.nameWidget = new Span(widget, { text: name });
-      widget.idWidget = new Span(widget, { text: `ID:${idName}`, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
-      widget.typeWidget = new Span(widget, { text: type, style: "margin-left: 10px; vertical-align: baseline; font-size: 10pt; color: #ddd; font-style: italic;" });
+      widget.idWidget = new Span(widget, { text: `ID:${idName}`, class: "object-item-id" });
+      widget.typeWidget = new Span(widget, { text: type, class: "object-item-type" });
     }
 
     object.widget = widget;
@@ -617,8 +617,6 @@ export class InspectPanel {
 
     this.database.inspectedObject = object;
 
-    const infoStyle = object.isDeleted ? "background-color: #533;" : "background-color: #353;";
-
     let name = object.name;
     if (object instanceof TextureView) {
       const texture = this.database.getTextureFromView(object);
@@ -627,7 +625,7 @@ export class InspectPanel {
       }
     }
 
-    const infoBox = new Div(this.inspectPanel, { style: `${infoStyle} padding: 10px;` });
+    const infoBox = new Div(this.inspectPanel, { class: object.isDeleted ? "info-box info-box-error" : "info-box info-box-success" });
     const idName = object.idName;
     new Div(infoBox, { text: `${name} ID: ${idName} ${object.isDeleted ? "<deleted>" : ""}` });
     this._inspectedInfoBox = infoBox;
@@ -639,13 +637,13 @@ export class InspectPanel {
     }
 
     const dependencies = this.database.getObjectDependencies(object);
-    new Div(infoBox, { text: `Reference Count: ${object.referenceCount}`, style: "font-size: 10pt; color: #aaa;"});
+    new Div(infoBox, { text: `Reference Count: ${object.referenceCount}`, class: "font-md text-muted" });
 
     if (object instanceof RenderBundle) {
-      new Div(infoBox, { text: `Bundle Commands: ${object.commands.length}`, style: "font-size: 10pt; color: #aaa;"});
+      new Div(infoBox, { text: `Bundle Commands: ${object.commands.length}`, class: "font-md text-muted" });
     }
 
-    const depGrp = new Div(infoBox, { style: "font-size: 10pt; color: #aaa; padding-left: 20px; max-height: 50px; overflow: auto;" })
+    const depGrp = new Div(infoBox, { class: "font-md text-muted pl-md", style: "max-height: 50px; overflow: auto;" })
     for (const dep of dependencies) {
       new Div(depGrp, { text: `${dep.name} ${dep.idName}` });
     }
@@ -754,6 +752,7 @@ export class InspectPanel {
       if (reflect) {
         const grp = this._getcollapsibleWithState(infoBox, object, "reflectionInfoCollapsed", "Reflection Info", true);
         grp.body.style.maxHeight = "600px";
+        grp.body.style.fontSize = "10pt";
 
         if (reflect.entry.vertex.length) {
           new Div(grp.body, { text: `Vertex Entry Functions: ${reflect.entry.vertex.length}` });
@@ -844,7 +843,7 @@ export class InspectPanel {
         const obj = this.database.getObject(objectId);
         if (obj) {
           const self = this;
-          new Button(infoBox, { label: `${obj.name}.${obj.idName}`, style: "background-color: #733; color: #fff;" , callback: () => {
+          new Button(infoBox, { label: `${obj.name}.${obj.idName}`, class: "btn btn-danger" , callback: () => {
             if (obj.widget) {
               if (obj.widget.group) {
                 obj.widget.group.collapsed = false;
@@ -862,14 +861,14 @@ export class InspectPanel {
       const grp = this._getcollapsibleWithState(descriptionBox, object, "descriptorCollapsed", "Descriptor", false);
       const desc = this._getDescriptorInfo(object, object.descriptor);
       const text = JSON.stringify(desc, undefined, 4);
-      new Widget("pre", grp.body, { text });
+      new Widget("pre", grp.body, { class: "descriptor-info", text });
     }
 
     if (object instanceof RenderBundle) {
 
     } else if (object instanceof Texture) {
       const self = this;
-      const loadButton = new Button(descriptionBox, { label: "Load", callback: () => {
+      const loadButton = new Button(descriptionBox, { label: "Load", class: "btn", callback: () => {
         self.database.requestTextureData(object, object.display?.mipLevel ?? 0);
       }});
       if (object.gpuTexture) {
@@ -886,11 +885,11 @@ export class InspectPanel {
 
         const desc = this._getDescriptorInfo(texture, texture.descriptor);
         const text = JSON.stringify(desc, undefined, 4);
-        new Widget("pre", textureGrp.body, { text });
+        new Widget("pre", textureGrp.body, { text, style: "font-size: 10pt;" });
 
         const self = this;
 
-        const loadButton = new Button(textureGrp.body, { label: "Load", callback: () => {
+        const loadButton = new Button(textureGrp.body, { label: "Load", class: "btn", callback: () => {
           self.database.requestTextureData(texture);
         }});
 

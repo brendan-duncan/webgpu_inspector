@@ -22,7 +22,7 @@ import { ResourceType, WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
 import { CaptureData } from "./capture_data.js";
 import { ShaderDebugger } from "./shader_debugger.js";
 
-const _inspectButtonStyle = "background-color: rgb(40, 40, 40);";
+const _inspectButtonStyle = "btn btn-info";
 
 export class CapturePanel {
   constructor(win, parent) {
@@ -35,11 +35,9 @@ export class CapturePanel {
 
     this._captureData = null;
 
-    const _controlBar = new Div(parent, { style: "display: flex; background-color: #333; box-shadow: #000 0px 3px 3px; border-bottom: 1px solid #000; margin-bottom: 10px; padding-left: 20px; padding-top: 10px; padding-bottom: 10px;" });
+    const _controlBar = new Div(parent, { class: "control-bar" });
 
-    const controlBar = new Div(_controlBar, { style: "" });
-
-    new Button(controlBar, { label: "Capture", style: "background-color: #557;", callback: () => {
+    new Button(_controlBar, { label: "Capture", class: "btn", callback: () => {
       try {
         this._captureData = new CaptureData(this.database);
         this._captureData.onCaptureFrameResults.addListener(self._captureFrameResults, self);
@@ -55,9 +53,9 @@ export class CapturePanel {
 
     this.captureMode = 0;
 
-    new Select(controlBar, {
+    new Select(_controlBar, {
       options: ["Immediate", "Specific Frame"],
-      style: "margin-right: 10px; vertical-align: middle;",
+      class: "mr-sm",
       onChange: (_, index) => {
         self.captureMode = index;
         if (self.captureMode === 0) {
@@ -69,12 +67,12 @@ export class CapturePanel {
     });
 
     this.captureSpecificFrame = 0;
-    this.captureFrameEdit = new NumberInput(controlBar, {
+    this.captureFrameEdit = new NumberInput(_controlBar, {
       value: this.captureSpecificFrame,
       min: -1,
       step: 1,
       precision: 0,
-      style: "display: inline-block; width: 75px; margin-right: 10px; vertical-align: middle;",
+      class: "mr-sm",
       onChange: (value) => {
         self.captureSpecificFrame = Math.max(value, -1);
       }
@@ -84,17 +82,17 @@ export class CapturePanel {
     }
 
     this.captureFrameCount = 1;
-    new Span(controlBar, { text: "Frames:", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });
-    new NumberInput(controlBar, { value: this.captureFrameCount, min: 1, step: 1, precision: 0, style: "display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;", onChange: (value) => {
+    new Span(_controlBar, { text: "Frames:", class: "text-secondary ml-sm mr-sm" });
+    new NumberInput(_controlBar, { value: this.captureFrameCount, min: 1, step: 1, precision: 0, class: "mr-sm", onChange: (value) => {
       self.captureFrameCount = Math.max(value, 1);
     } });
 
     this.maxBufferSize = 1 * (1024 * 1024);
     this.useMaxBufferSize = false;
-    const useMaxBufferSizeBtn = new Checkbox(controlBar, { value: this.useMaxBufferSize, title: "Use Max Buffer Size", 
-      label: "Max Buffer Size (Bytes):", style: "margin-left: 10px; vertical-align: middle; margin-right: 5px;"});
-    const maxBufferSizeInput = new NumberInput(controlBar, { value: this.maxBufferSize, min: 1, step: 1, precision: 0,
-        style: "display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;", onChange: (value) => {
+    const useMaxBufferSizeBtn = new Checkbox(_controlBar, { value: this.useMaxBufferSize, title: "Use Max Buffer Size", 
+      label: "Max Buffer Size (Bytes):", class: "ml-sm" });
+    const maxBufferSizeInput = new NumberInput(_controlBar, { value: this.maxBufferSize, min: 1, step: 1, precision: 0,
+        class: "mr-sm", onChange: (value) => {
       self.maxBufferSize = Math.max(value, 1);
     } });
 
@@ -105,15 +103,13 @@ export class CapturePanel {
       maxBufferSizeInput.disabled = !value;
     });
 
-    new Span(controlBar, {  style: "" });
+    this._captureFrame = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });
+    this._captureStats = new Button(_controlBar, { label: "Frame Stats", style: "display: none;" });
+    this._captureStatus = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });
 
-    this._captureFrame = new Span(controlBar, { style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
-    this._captureStats = new Button(controlBar, { label: "Frame Stats", style: "display: none;" });
-    this._captureStatus = new Span(controlBar, { style: "margin-left: 20px; margin-right: 10px; vertical-align: middle;" });
+    new Div(_controlBar, { class: "control-bar-spacer" });
 
-    new Div(_controlBar, { style: "flex-grow: 2;" });
-
-    new Button(_controlBar, { label: "Help", style: "margin-left: 20px; background-color: #557;", callback: () => {
+    new Button(_controlBar, { label: "Help", class: "btn", callback: () => {
       window.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/capture.md", "_blank");
     }});
 
@@ -938,6 +934,7 @@ export class CapturePanel {
     const renderPassIndex = command._passIndex;
     const args = command.args;
     const self = this;
+
     const colorAttachments = args[0]?.colorAttachments;
     for (let i = 0, l = colorAttachments.length; i < l; ++i) {
       const attachment = colorAttachments[i];
@@ -946,14 +943,14 @@ export class CapturePanel {
         const format = texture.descriptor.format;
         if (texture.gpuTexture) {
           const colorAttachmentGrp = new collapsible(commandInfo, { label: `Color Attachment ${i}: Texture:${texture.idName} ${format} ${texture.resolutionString}` });
-          new Button(colorAttachmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+          new Button(colorAttachmentGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           const passId = this._getPassId(renderPassIndex, i);
           this._createTextureWidget(colorAttachmentGrp.body, texture, passId, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
         } else {
           const colorAttachmentGrp = new collapsible(commandInfo, { label: `Color Attachment ${i}: ${format} ${texture.resolutionString}` });
-          new Button(colorAttachmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+          new Button(colorAttachmentGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           new Widget("pre", colorAttachmentGrp.body, { text: JSON.stringify(attachment.view.descriptor, undefined, 4) });
@@ -973,13 +970,13 @@ export class CapturePanel {
         if (texture.gpuTexture) {
           const format = texture.descriptor.format;
           const depthStencilAttachmentGrp = new collapsible(commandInfo, { label: `Depth-Stencil Attachment ${format} ${texture.resolutionString}` });
-          new Button(depthStencilAttachmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+          new Button(depthStencilAttachmentGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           this._createTextureWidget(depthStencilAttachmentGrp.body, texture, -1, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
         } else {
           const depthStencilAttachmentGrp = new collapsible(commandInfo, { label: `Depth-Stencil Attachment: ${texture?.format ?? "<unknown format>"} ${texture.resolutionString}` });
-          new Button(depthStencilAttachmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+          new Button(depthStencilAttachmentGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           new Widget("pre", depthStencilAttachmentGrp.body, { text: JSON.stringify(depthStencilAttachment.view.descriptor, undefined, 4) });
@@ -1518,7 +1515,7 @@ export class CapturePanel {
 
     const group = args[0];
     const bindGroupGrp = new collapsible(commandInfo, { collapsed: true, label: `BindGroup ${groupIndex ?? ""} ID:${id}` });
-    new Button(bindGroupGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+    new Button(bindGroupGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
       self.window.inspectObject(bindGroup);
     } });
 
@@ -1656,7 +1653,7 @@ export class CapturePanel {
         for (const resource of inputs) {
           const texture = this.database.getTextureFromView(resource.textureView);
           if (texture) {
-            new Button(inputGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+            new Button(inputGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
               self.window.inspectObject(texture);
             } });
             if (texture.gpuTexture) {
@@ -1782,7 +1779,7 @@ export class CapturePanel {
       if (resource.__id !== undefined) {
         const obj = this._getObject(resource.__id);
         if (obj) {
-          new Button(resourceGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+          new Button(resourceGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(obj);
           } });
 
@@ -1819,7 +1816,7 @@ export class CapturePanel {
           const bufferId = resource.buffer.__id;
           const buffer = this._getObject(bufferId);
           if (buffer) {
-            new Button(resourceGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+            new Button(resourceGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
               self.window.inspectObject(buffer);
             } });
             const bufferDesc = buffer.descriptor;
@@ -1904,7 +1901,7 @@ export class CapturePanel {
 
     if (pipeline) {
       const pipelineGrp = new collapsible(commandInfo, { collapsed: true, label: `Pipeline ID:${id}` });
-      new Button(pipelineGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+      new Button(pipelineGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(pipeline);
       } });
       const desc = pipeline.descriptor;
@@ -1921,7 +1918,7 @@ export class CapturePanel {
           const vertexEntry = desc.vertex?.entryPoint ?? "@vertex";
           const fragmentEntry = desc.fragment?.entryPoint ?? "@fragment";
           const grp = new collapsible(commandInfo, { collapsed: true, label: `Module ID:${vertexId} Vertex: ${vertexEntry} Fragment: ${fragmentEntry}` });
-          new Button(grp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+          new Button(grp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(module);
           } });
           const code = module.descriptor.code;
@@ -1935,7 +1932,7 @@ export class CapturePanel {
           if (vertexModule) {
             const vertexEntry = desc.vertex?.entryPoint ?? "@vertex";
             const vertexGrp = new collapsible(commandInfo, { collapsed: true, label: `Vertex Module ID:${vertexId} Entry: ${vertexEntry}` });
-            new Button(vertexGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+            new Button(vertexGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
               self.window.inspectObject(vertexModule);
             } });
             const code = vertexModule.descriptor.code;
@@ -1950,7 +1947,7 @@ export class CapturePanel {
           if (fragmentModule) {
             const fragmentEntry = desc.fragment?.entryPoint ?? "@fragment";
             const fragmentGrp = new collapsible(commandInfo, { collapsed: true, label: `Fragment Module ID:${fragmentId} Entry: ${fragmentEntry}` });
-            new Button(fragmentGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+            new Button(fragmentGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
               self.window.inspectObject(fragmentModule);
             } });
             const code = fragmentModule.descriptor.code;
@@ -1967,7 +1964,7 @@ export class CapturePanel {
         if (computeModule) {
           const computeEntry = desc.compute?.entryPoint ?? "@compute";
           const computeGrp = new collapsible(commandInfo, { collapsed: true, label: `Compute Module ID:${computeId} Entry: ${computeEntry}` });
-          new Button(computeGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+          new Button(computeGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(computeModule);
           } });
           if (parentCommand) {
@@ -2021,7 +2018,7 @@ export class CapturePanel {
     const buffer = this._getObject(id);
     if (buffer) {
       const bufferGrp = new collapsible(commandInfo, { collapsed, label: `Index Buffer ID:${id}` });
-      new Button(bufferGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+      new Button(bufferGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(buffer);
       } });
       const desc = buffer.descriptor;
@@ -2076,7 +2073,7 @@ export class CapturePanel {
 
     if (buffer) {
       const bufferGrp = new collapsible(commandInfo, { collapsed, label: `Vertex Buffer ${index} ID:${id}` });
-      new Button(bufferGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+      new Button(bufferGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(buffer);
       } });
       const desc = buffer.descriptor;
@@ -2263,33 +2260,35 @@ export class CapturePanel {
     if (reflect) {
       const grp = new collapsible(commandInfo, { collapsed: true, label: `${type} Shader Info` });
 
+      const grpDiv = new Div(grp.body, { style: "font-size: 10pt;"});
+
       if (reflect.entry.vertex.length) {
-        new Div(grp.body, { text: `Vertex Entry Functions: ${reflect.entry.vertex.length}` });
-        const list = new Widget("ul", grp.body);
+        new Div(grpDiv, { text: `Vertex Entry Functions: ${reflect.entry.vertex.length}` });
+        const list = new Widget("ul", grpDiv);
         for (const s of reflect.entry.vertex) {
           this._shaderInfoEntryFunction(list, s);
         }
       }
 
       if (reflect.entry.fragment.length) {
-        new Div(grp.body, { text: `Fragment Entry Functions: ${reflect.entry.fragment.length}` });
-        const list = new Widget("ul", grp.body);
+        new Div(grpDiv, { text: `Fragment Entry Functions: ${reflect.entry.fragment.length}` });
+        const list = new Widget("ul", grpDiv);
         for (const s of reflect.entry.fragment) {
           this._shaderInfoEntryFunction(list, s);
         }
       }
 
       if (reflect.entry.compute.length) {
-        new Div(grp.body, { text: `Compute Entry Functions: ${reflect.entry.compute.length}` });
-        const list = new Widget("ul", grp.body);
+        new Div(grpDiv, { text: `Compute Entry Functions: ${reflect.entry.compute.length}` });
+        const list = new Widget("ul", grpDiv);
         for (const s of reflect.entry.compute) {
           this._shaderInfoEntryFunction(list, s);
         }
       }
 
       if (reflect.uniforms.length) {
-        new Div(grp.body, { text: `Uniform Buffers: ${reflect.uniforms.length}` });
-        const list = new Widget("ul", grp.body);
+        new Div(grpDiv, { text: `Uniform Buffers: ${reflect.uniforms.length}` });
+        const list = new Widget("ul", grpDiv);
         for (const s of reflect.uniforms) {
           new Widget("li", list, { text: `${s.name}: ${this._getTypeName(s.type)}` });
           const l2 = new Widget("ul", list);
@@ -2302,8 +2301,8 @@ export class CapturePanel {
       }
 
       if (reflect.storage.length) {
-        new Div(grp.body, { text: `Storage Buffers: ${reflect.storage.length}` });
-        const list = new Widget("ul", grp.body);
+        new Div(grpDiv, { text: `Storage Buffers: ${reflect.storage.length}` });
+        const list = new Widget("ul", grpDiv);
         for (const s of reflect.storage) {
           new Widget("li", list, { text: `${s.name}: ${this._getTypeName(s.type)}` });
           const l2 = new Widget("ul", list);
@@ -2317,8 +2316,8 @@ export class CapturePanel {
       }
 
       if (reflect.textures.length) {
-        new Div(grp.body, { text: `Textures: ${reflect.textures.length}` });
-        const list = new Widget("ul", grp.body);
+        new Div(grpDiv, { text: `Textures: ${reflect.textures.length}` });
+        const list = new Widget("ul", grpDiv);
         for (const s of reflect.textures) {
           new Widget("li", list, { text: `${s.name}: ${this._getTypeName(s.type)}` });
           const l2 = new Widget("ul", list);
@@ -2328,8 +2327,8 @@ export class CapturePanel {
       }
 
       if (reflect.samplers.length) {
-        new Div(grp.body, { text: `Samplers: ${reflect.samplers.length}` });
-        const list = new Widget("ul", grp.body);
+        new Div(grpDiv, { text: `Samplers: ${reflect.samplers.length}` });
+        const list = new Widget("ul", grpDiv);
         for (const s of reflect.samplers) {
           new Widget("li", list, { text: `${s.name}: ${this._getTypeName(s.type)}` });
           const l2 = new Widget("ul", list);
@@ -2365,7 +2364,7 @@ export class CapturePanel {
         const texture = outputs.color[index];
         const passId = this._getPassId(renderPassIndex, index);
         if (texture) {
-          new Button(outputGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+          new Button(outputGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           if (texture.gpuTexture) {
@@ -2382,7 +2381,7 @@ export class CapturePanel {
       if (outputs.depthStencil) {
         const texture = outputs.depthStencil;
         if (texture) {
-          new Button(outputGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+          new Button(outputGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           if (texture.gpuTexture) {
@@ -2425,7 +2424,7 @@ export class CapturePanel {
       for (const resource of inputs) {
         const texture = this.database.getTextureFromView(resource.textureView);
         if (texture) {
-          new Button(inputGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+          new Button(inputGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
           if (texture.gpuTexture) {
@@ -2495,7 +2494,7 @@ export class CapturePanel {
     if (buffer) {
       const self = this;
       const bufferGrp = new collapsible(commandInfo, { collapsed, label: `Indirect Buffer ID:${id} ${buffer.label}` });
-      new Button(bufferGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+      new Button(bufferGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(buffer);
       } });
       const desc = buffer.descriptor;
@@ -2601,7 +2600,7 @@ export class CapturePanel {
 
     const self = this;
     const inputGrp = new collapsible(commandInfo, { collapsed: false, label: `Texture ${texture.idName} ${texture.format} ${texture.resolutionString}` });
-    new Button(inputGrp.body, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+    new Button(inputGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
       self.window.inspectObject(texture);
     } });
     if (texture.gpuTexture) {
@@ -2641,18 +2640,19 @@ export class CapturePanel {
     const args = command.args;
 
     if (showHeader) {
-      new Div(commandInfo, { text: `${name} ${method}`, style: "background-color: #575; padding-left: 20px; line-height: 40px;" });
+      new Div(commandInfo, { text: `${name} ${method}`, class: "info-box-success pl-xl", style: "line-height: 40px;" });
     }
 
     if (method === "beginRenderPass") {
       const desc = args[0];
+      const attachments = new Div(commandInfo, { style: "margin-top: 10px; margin-bottom: 10px; font-size: 10pt;" });
       const colorAttachments = desc.colorAttachments;
       for (const i in colorAttachments) {
         const attachment = colorAttachments[i];
         const texture = this._getTextureFromAttachment(attachment);
         if (texture) {
           const format = texture.descriptor.format;
-          new Div(commandInfo, { text: `Color ${i}: ${format} ${texture.resolutionString}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          new Div(attachments, { text: `Color ${i}: ${format} ${texture.resolutionString}`, class: "bg-info pl-xl lh-md" });
         }
       }
       const depthStencilAttachment = desc.depthStencilAttachment;
@@ -2660,7 +2660,7 @@ export class CapturePanel {
         const texture = this._getTextureFromAttachment(depthStencilAttachment);
         if (texture) {
           const format = texture.descriptor.format;
-          new Div(commandInfo, { text: `Depth-Stencil: ${format} ${texture.resolutionString}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          new Div(attachments, { text: `Depth-Stencil: ${format} ${texture.resolutionString}`, class: "bg-info pl-xl lh-md" });
         }
       }
     } else if (method === "draw" || method === "drawIndexed" || method === "drawIndirect" || method === "drawIndexedIndirect") {
@@ -2683,26 +2683,26 @@ export class CapturePanel {
 
         if (topology === "triangle-list") {
           const count = (vertexCount / 3).toLocaleString("en-US");
-          new Div(commandInfo, { text: `Triangles: ${count}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          new Div(commandInfo, { text: `Triangles: ${count}`, class: "bg-info pl-xl lh-md" });
         } else if (topology === "triangle-strip") {
           const count = (vertexCount - 2).toLocaleString("en-US");
-          new Div(commandInfo, { text: `Triangles: ${count}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          new Div(commandInfo, { text: `Triangles: ${count}`, class: "bg-info pl-xl lh-md" });
         } else if (topology === "point-list") {
           const count = (vertexCount).toLocaleString("en-US");
-          new Div(commandInfo, { text: `Points: ${count}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          new Div(commandInfo, { text: `Points: ${count}`, class: "bg-info pl-xl lh-md" });
         } else if (topology === "line-list") {
           const count = (vertexCount / 2).toLocaleString("en-US");
-          new Div(commandInfo, { text: `Lines: ${count}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          new Div(commandInfo, { text: `Lines: ${count}`, class: "bg-info pl-xl lh-md" });
         } else if (topology === "line-strip") {
           const count = (vertexCount - 1).toLocaleString("en-US");
-          new Div(commandInfo, { text: `Lines: ${count}`, style: "background-color: #353; padding-left: 40px; line-height: 20px;" });
+          new Div(commandInfo, { text: `Lines: ${count}`, class: "bg-info pl-xl lh-md" });
         }
       }
     }
 
     if (command.stacktrace) {
       const stacktrace = new collapsible(commandInfo, { collapsed: true, label: "Stacktrace" });
-      new Div(stacktrace.body, { text: command.stacktrace, style: "font-size: 10pt;color: #ddd;overflow: auto;background-color: rgb(51, 51, 85);box-shadow: #000 0 3px 5px;padding: 5px;padding-left: 10px;" })
+      new Div(stacktrace.body, { text: command.stacktrace, class: "font-md text-secondary inspect-stacktrace" })
     }
 
     const argsGroup = new collapsible(commandInfo, { label: "Arguments" });
@@ -2714,13 +2714,13 @@ export class CapturePanel {
         const value = newArgs[i];
         const valueStr = value instanceof Array ? `[${value.length}]: ${value}` : JSON.stringify(value, undefined, 4);
         if (arg !== undefined) {
-          new Widget("pre", argsGroup.body, { text: `${arg}: ${valueStr}`, style: "margin-left: 10px;" });
+          new Widget("pre", argsGroup.body, { text: `${arg}: ${valueStr}`, style: "margin-left: 10px; font-size: 10pt;" });
         } else {
-          new Widget("pre", argsGroup.body, { text: `[${i}]: ${valueStr}`, style: "margin-left: 10px;" });
+          new Widget("pre", argsGroup.body, { text: `[${i}]: ${valueStr}`, style: "margin-left: 10px; font-size: 10pt;" });
         }
       }
     } else {
-      new Widget("pre", argsGroup.body, { text: JSON.stringify(newArgs, undefined, 4) });
+      new Widget("pre", argsGroup.body, { text: JSON.stringify(newArgs, undefined, 4), style: "font-size: 10pt;" });
     }
 
     if (method === "createRenderPipeline" || method === "createBindGroup" ||
@@ -2728,7 +2728,7 @@ export class CapturePanel {
         method === "createPipelineLayout") {
       const obj = this._getObject(command.result);
       const self = this;
-      new Button(commandInfo, { label: "Inspect", style: _inspectButtonStyle, callback: () => {
+      new Button(commandInfo, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
         self.window.inspectObject(obj);
       } });
     } else if (method == "beginRenderPass") {
@@ -2838,10 +2838,10 @@ export class CapturePanel {
         this._frameImageList[passId] = passFrame;
       }
 
-      new Div(passFrame, { text: `Render Pass ${passIndex} ${`Attachment ${attachment}`}`, style: "color: #ddd; margin-bottom: 5px;" });
+      new Div(passFrame, { text: `Render Pass ${passIndex} ${`Attachment ${attachment}`}`, class: "text-secondary mb-sm" });
       const textureId = texture.id < 0 ? "CANVAS" : texture.id;
-      new Div(passFrame, { text: `${texture.name} ID:${textureId}`, style: "color: #ddd; margin-bottom: 10px;" });
-      new Div(passFrame, { text: `${texture.format} ${texture.resolutionString}`, style: "color: #ddd; margin-bottom: 10px; font-size: 9pt;" });
+      new Div(passFrame, { text: `${texture.name} ID:${textureId}`, class: "text-secondary mb-md" });
+      new Div(passFrame, { text: `${texture.format} ${texture.resolutionString}`, class: "text-secondary mb-md font-sm" });
 
       this._createTextureWidget(passFrame, texture, passId, 256);
 

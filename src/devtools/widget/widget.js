@@ -79,7 +79,8 @@ export class Widget {
 
     if (options.class) {
       if (options.class.constructor === String) {
-        this.classList.add(options.class);
+        const classes = options.class.split(' ').filter(c => c.trim());
+        this.classList.add(...classes);
       } else {
         this.classList.add(...options.class);
       }
