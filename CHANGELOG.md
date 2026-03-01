@@ -1,3 +1,11 @@
+## v1.0.1 - March 01, 2026
+
+* Version updated to 1.0 to improve the version naming scheme.
+* Refreshed styling for a cleaner look.
+* Index Buffers view is now paginated to improve performance of viewing them.
+* Fix null errors with texture views
+* Version label is clickable and takes you to the github.
+
 ## v0.19.0 - January 19, 2026
 
 * Fix requestAnimationFrame inspection breaking threejs pages.

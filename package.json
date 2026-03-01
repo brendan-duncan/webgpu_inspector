@@ -1,6 +1,6 @@
 {
   "name": "webgpu_inspector",
-  "version": "0.19.0",
+  "version": "1.0.1",
   "description": "WebGPU Inspection Debugger",
   "author": "Brendan Duncan",
   "license": "MIT",
@@ -10,7 +10,7 @@
     "url": "https://github.com/brendan-duncan/webgpu_inspector"
   },
   "bugs": {
-    "url": "https://github.com/brendan-duncan/wgsl_reflect/issues"
+    "url": "https://github.com/brendan-duncan/webgpu_inspector/issues"
   },
   "sideEffects": false,
   "scripts": {
