@@ -2043,11 +2043,54 @@ export class CapturePanel {
               return;
             }
             button.element.innerText = "Hide Data";
-            const ol = new Widget("ol", bufferGrp.body);
             const displayCount = Math.min(effectiveIndexCount, indexArray.length - effectiveFirstIndex);
-            for (let i = 0; i < displayCount; ++i) {
-              new Widget("li", ol, { text: `${indexArray[effectiveFirstIndex + i]}` });
+
+            let subOffset = 0;
+            let maxCount = 100;
+
+            let ol = null;
+
+            function showIndexData(ol, subOffset, maxCount) {
+              const startIndex = effectiveFirstIndex + subOffset;
+              const count = Math.min(maxCount, displayCount - subOffset);
+              for (let i = 0; i < count; ++i) {
+                new Widget("div", ol, { text: `[${startIndex + i}]: ${indexArray[startIndex + i]}` });
+              }
             }
+
+            if (displayCount > 100) {
+              const filter = new Div(bufferGrp.body);
+              new Span(filter, { text: "Offset:" });
+              new NumberInput(filter, { value: 0, min: 0, max: displayCount, precision: 0, step: 1, tooltip: "Starting element of the array to display",
+                onChange: (value) => {
+                  try {
+                    subOffset = Math.max(parseInt(value), 0);
+                  } catch (e) {
+                    console.log(e.message);
+                    subOffset = 0;
+                  }
+                  ol.removeAllChildren();
+                  showIndexData(ol, subOffset, maxCount);
+                }, style: "display: inline-block; width: 75px; margin-right: 10px; vertical-align: middle;" });
+
+              new Span(filter, { text: "Count:" });
+              new NumberInput(filter, { value: 100, min: 1, max: 1000, precision: 0, step: 1, tooltip: "Number of elements to display",
+                onChange: (value) => {
+                  try {
+                    maxCount = Math.max(parseInt(value), 1);
+                  } catch (e) {
+                    console.log(e.message);
+                    maxCount = 100;
+                  }
+                  ol.removeAllChildren();
+                  showIndexData(ol, subOffset, maxCount);
+                }, style: "display: inline-block; width: 75px; margin-right: 10px; vertical-align: middle;" });
+              new Span(filter, { text: `/ ${displayCount}` });
+            }
+
+            ol = new Widget("div", bufferGrp.body, { style: "font-size: 10pt; background-color: #112;"});
+
+            showIndexData(ol, subOffset, maxCount);
           } });
         }
       }
