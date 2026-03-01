@@ -49,6 +49,7 @@ export class InspectorWindow extends Window {
     const version = "__buildVersion";
     new Widget("a", this._tabs.headerElement, { text: `WebGPU Inspector v${version}`,
       href: "https://github.com/brendan-duncan/webgpu_inspector/blob/main/README.md",
+      target: "_blank",
       style: "color: rgb(127 181 205); text-decoration: none; padding-top: 5px; font-size: 10pt; float: right; margin-right: 10px;" 
     });
 

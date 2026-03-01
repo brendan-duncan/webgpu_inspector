@@ -39,7 +39,7 @@ export class RecorderPanel {
     new Span(recorderBar, { text: "Name:", class: "text-secondary ml-sm mr-sm" });
     this.recordNameInput = new Input(recorderBar, { id: "record_frames", type: "text", value: "webgpu_record" });
 
-    this.recorderDataPanel = new Div(parent, { style: "width: 100%; height: calc(-80px + 100vh); position: relative;" });
+    this.recorderDataPanel = new Div(parent, { style: "width: 100%; min-height: calc(-85px + 100vh); position: relative;" });
 
     port.addListener((message) => {
       switch (message.action) {

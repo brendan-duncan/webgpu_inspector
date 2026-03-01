@@ -463,7 +463,7 @@ export let webgpuInspector = null;
     _preMethodCall(object, method, args) {
       // Don't include requestAdapter and requestDevice in the command count.
       if (method !== "requestAdapter" && method !== "requestDevice") {
-        this._frameGpuComamndCount++;
+        this._frameGpuCommandCount++;
       }
 
       if (method === "destroy") {
@@ -1366,7 +1366,7 @@ export let webgpuInspector = null;
 
     // Called at the start of each frame, before the requestAnimationFrame callback is invoked.
     _frameStart(time) {
-      this._frameGpuComamndCount = 0;
+      this._frameGpuCommandCount = 0;
 
       let deltaTime = 0;
       if (this._lastFrameTime == 0) {
@@ -1447,9 +1447,9 @@ export let webgpuInspector = null;
 
     // Called at the end of each frame, after the requestAnimationFrame callback have been invoked.
     _frameEnd(time) {
-      if (this._frameGpuComamndCount > 0) {
+      if (this._frameGpuCommandCount > 0) {
         this._gpuFrameIndex++;
-        this._frameGpuComamndCount = 0;
+        this._frameGpuCommandCount = 0;
       }
 
       // If we're captureing frames, and some commands have been recorded, send them to the devtools panel.
@@ -1574,7 +1574,7 @@ export let webgpuInspector = null;
       this._postMessage({ "action": Actions.AddObject, id, parent, type, descriptor, stacktrace, pending });
     }
 
-    _detroyDevice() {
+    _destroyDevice() {
       this._device.deref()?.destroy();
       /*if (this._captureFrameCommands.length) {
         this._sendCapturedCommands();
@@ -1848,10 +1848,6 @@ export let webgpuInspector = null;
         stacktrace
       });
 
-      if (method === "setIndexBuffer") {
-        object.__indexBuffer = args;
-      }
-
       if (method === "setVertexBuffer") {
         const slot = args[0];
         const buffer = args[1];
@@ -1866,6 +1862,7 @@ export let webgpuInspector = null;
       }
 
       if (method === "setIndexBuffer") {
+        object.__indexBuffer = args;
         const buffer = args[0];
         const size = buffer.size;
         if (!object.__captureBuffers) {
@@ -1959,7 +1956,7 @@ export let webgpuInspector = null;
       if (this._pendingMapCount === 0) {
         if (this._hasPendingDeviceDestroy) {
           this._hasPendingDeviceDestroy = false;
-          this._detroyDevice();
+          this._destroyDevice();
         }
       }
     }
@@ -2406,8 +2403,7 @@ export let webgpuInspector = null;
 
   if (self.importScripts) {
     const _origImportScripts = self.importScripts;
-    self.importScripts = function () {
-      const args = [...arguments];
+    self.importScripts = function (...args) {
       for (let i = 0; i < args.length; ++i) {
         args[i] = _getFixedUrl(args[i]);
       }
@@ -2505,25 +2501,25 @@ export let webgpuInspector = null;
         get(target, prop, receiver) {
           // Intercept event handlers to hide the inspectors messages
           if (prop === "addEventListener") {
-            return function () {
-              if (arguments[0] === "message") {
-                const origHandler = arguments[1];
-                arguments[1] = function () {
-                  if (!arguments[0].data.__webgpuInspector && !arguments[0].data.__WebGPUInspector) {
-                    origHandler(...arguments);
+            return function (...args) {
+              if (args[0] === "message") {
+                const origHandler = args[1];
+                args[1] = function (...args) {
+                  if (!args[0].data.__webgpuInspector && !args[0].data.__WebGPUInspector) {
+                    origHandler(...args);
                   }
                 };
               }
 
-              return target.addEventListener(...arguments);
+              return target.addEventListener(...args);
             };
           }
 
           // Intercept worker termination and remove it from list so we don't send
           // messages to a terminated worker.
           if (prop === "terminate") {
-            return function () {
-              const result = target.terminate(...arguments);
+            return function (...args) {
+              const result = target.terminate(...args);
               target.__webgpuInspector = false;
               return result;
             };

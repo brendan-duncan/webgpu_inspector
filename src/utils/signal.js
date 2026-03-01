@@ -97,9 +97,9 @@ export class Signal {
    * Emit a signal, calling all listeners.
    * @param {...*} arguments Optional arguments to call the listeners with.
    */
-  emit() {
+  emit(...args) {
     if (Signal.disabled) {
-      return;
+      return null;
     }
 
     for (const k of this.slots) {
@@ -110,25 +110,27 @@ export class Signal {
       }
 
       if (s.constructor === Signal) {
-        s.emit.apply(o, arguments);
+        s.emit.apply(o, args);
       } else {
-        let res = s.apply(o, arguments);
+        let res = s.apply(o, args);
         if (res) {
           return res;
         }
       }
     }
+    return null;
   }
 
   /**
    * Connect a listener to the signal. This can be a function, object method,
    * class static method, or another signal. There is no type-checking to
    * ensure the listener function can successfully receive the arguments that
-   * will be emitted by the signal, which will result in an exception of you
+   * will be emitted by the signal, which will result in an exception if you
    * connect an incompatible listener and emit the signal.
    * To have an object method listen to a signal, pass in the object, too.
    * @param {Function|Signal} callback
    * @param {Object?} [object=null]
+   * @returns {number} A handle that can be used to disconnect the listener. Returns -1 if the listener was already connected.
    * @example
    * listen(Function)
    * listen(Signal)
@@ -137,7 +139,7 @@ export class Signal {
   addListener(callback, object) {
     // Don't add the same listener multiple times.
     if (this.isListening(callback, object)) {
-      return null;
+      return -1;
     }
 
     this.slots.set(this._lastSlotId++, [callback, object]);
@@ -188,15 +190,13 @@ export class Signal {
    * disconnect() -- Disconnect all listeners from the signal.
    */
   disconnect(callback, object) {
-    if (
-      (callback === null || callback === undefined) &&
-      (object === null || object === undefined)
-    ) {
+    if ((callback === null || callback === undefined) &&
+      (object === null || object === undefined)) {
       this.slots.clear();
       return true;
     }
 
-    if (callback.constructor === Number) {
+    if (typeof callback === 'number') {
       const handle = callback;
       if (!this.slots.has(handle)) {
         return false;
