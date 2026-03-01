@@ -1,4 +1,5 @@
 import { CaptureStatistics } from "./capture_statistics.js";
+import { StacktraceViewer } from "./stacktrace_viewer.js";
 import {
   Sampler,
   TextureView
@@ -160,6 +161,19 @@ export class CapturePanel {
 
   _getObject(id) {
     return this.database.getObject(id);
+  }
+
+  _getcollapsibleWithState(parent, object, property, label, collapsed) {
+    object.__guistate = object.__guistate || {};
+    object.__guistate[property] = object.__guistate[property] ?? collapsed;
+    const collabsable = new collapsible(parent, { collapsed: true, label: label, collapsed: object.__guistate[property] });
+    collabsable.onExpanded.addListener(() => {
+      object.__guistate[property] = false;
+    });
+    collabsable.onCollapsed.addListener(() => {
+      object.__guistate[property] = true;
+    });
+    return collabsable;
   }
 
   _updateCaptureStatus() {
@@ -2744,8 +2758,7 @@ export class CapturePanel {
     }
 
     if (command.stacktrace) {
-      const stacktrace = new collapsible(commandInfo, { collapsed: true, label: "Stacktrace" });
-      new Div(stacktrace.body, { text: command.stacktrace, class: "font-md text-secondary inspect-stacktrace" })
+      new StacktraceViewer(this, commandInfo, command, command.stacktrace);
     }
 
     const argsGroup = new collapsible(commandInfo, { label: "Arguments" });

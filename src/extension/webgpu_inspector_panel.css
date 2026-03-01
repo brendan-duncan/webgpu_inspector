@@ -199,7 +199,7 @@
 .font-lg { font-size: 12pt; }
 
 .bg-success { background-color: rgba(78, 201, 176, 0.15); }
-.bg-info { background-color: rgba(86, 156, 214, 0.15); }
+.bg-info { background-color: rgba(86, 156, 214, 0.15); padding: 10px; }
 .bg-warning { background-color: rgba(220, 220, 170, 0.15); }
 
 .font-bold { font-weight: bold; }
@@ -1829,7 +1829,7 @@ li.tree-item .expandbutton
   width: calc(50% - 10px);
   height: calc(100% - 10px);
   padding-left: 5px;
-  font-size: 12pt;
+  font-size: 11pt;
 }
 
 .capture_frame_title {
