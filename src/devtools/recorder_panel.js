@@ -17,7 +17,7 @@ export class RecorderPanel {
 
     this._recorderData = new RecorderData(window);
     this._recorderData.onReady.addListener(this._recordingReady, this);
-    
+
     const self = this;
     const port = window.port;
 
@@ -100,7 +100,7 @@ export class RecorderPanel {
     } });
 
     let grp = new collapsible(commands, { label: "Initialize Commands", collapsed: true });
-    this._captureFrameResults(grp.body, this._recorderData.initiazeCommands, canvas, -1);
+    this._captureFrameResults(grp.body, this._recorderData.initializeCommands, canvas, -1);
 
     for (let i = 0; i < this._recorderData.frames.length; ++i) {
       if (this._recorderData.frames[i]) {
@@ -131,7 +131,7 @@ export class RecorderPanel {
       }
     }
 
-    filterCommands(this._recorderData.initiazeCommands);
+    filterCommands(this._recorderData.initializeCommands);
     for (let i = 0; i < this._recorderData.frames.length; ++i) {
       filterCommands(this._recorderData.frames[i]);
     }

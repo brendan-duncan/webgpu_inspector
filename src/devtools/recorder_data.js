@@ -1,11 +1,25 @@
 import { Signal } from "../utils/signal.js";
 import { TextureUtils } from "../utils/texture_utils.js";
 
+async function fetchArrayBuffer(url, type, length) {
+  try {
+    const res = await fetch(url);
+    const buffer = await res.arrayBuffer();
+    if (type === "Uint32Array") {
+      return new Uint32Array(buffer, 0, buffer.byteLength / 4);
+    }
+    return new Uint8Array(buffer, 0, buffer.byteLength);
+  } catch (e) {
+    console.error(`Failed to fetch data: ${e.message}`);
+  }
+  return new Uint8Array(length);
+}
+
 export class RecorderData {
   constructor(window) {
     this.window = window;
     this.data = [];
-    this.initiazeCommands = [];
+    this.initializeCommands = [];
     this.frames = [];
     this._dataCount = 0;
     this._commandCount = 0;
@@ -25,8 +39,14 @@ export class RecorderData {
   }
 
   clear() {
+    for (const value of this._objectMap.values()) {
+      if (value instanceof GPUDevice) {
+        value.destroy();
+      }
+    }
+    this._objectMap.clear();
     this.data = [];
-    this.initiazeCommands = [];
+    this.initializeCommands = [];
     this.frames = [];
     this._dataCount = 0;
     this._commandCount = 0;
@@ -34,46 +54,26 @@ export class RecorderData {
     this._commandsReady = false;
   }
 
+  _checkReady() {
+    if (this.ready) {
+      this.onReady.emit();
+    }
+  }
+
   addData(data, type, index, count) {
     if (data === undefined) {
       this.data[index] = new Uint8Array(count);
       this._dataCount++;
-      if (this._dataCount >= count) {
-        this.dataReady = true;
-        if (this.ready) {
-          this.onReady.emit();
-        }
-      } else {
-        this.dataReady = false;
-      }
+      this.dataReady = this._dataCount >= count;
+      this._checkReady();
       return;
     }
-    async function B64ToA(s, type, length) {
-      try {
-        const res = await fetch(s);
-        const x = new Uint8Array(await res.arrayBuffer());
-        if (type == "Uint32Array") {
-          return new Uint32Array(x.buffer, 0, x.length/4);
-        }
-        return new Uint8Array(x.buffer, 0, x.length);
-      } catch (e) {
-        console.log(e.message);
-      }
-      return new Uint8Array(length);
-    }
 
-    const self = this;
-    B64ToA(data, type, 0).then((x) => {
-      self.data[index] = x;
-      self._dataCount++;
-      if (self._dataCount >= count) {
-        self.dataReady = true;
-        if (self.ready) {
-          self.onReady.emit();
-        }
-      } else {
-        self.dataReady = false;
-      }
+    fetchArrayBuffer(data, type, 0).then((x) => {
+      this.data[index] = x;
+      this._dataCount++;
+      this.dataReady = this._dataCount >= count;
+      this._checkReady();
     });
   }
 
@@ -81,43 +81,33 @@ export class RecorderData {
     try {
       if (command.method === "requestDevice") {
         const adapter = this.window.adapter;
-        const requiredFeatures = [];
-        for (const x of adapter.features) {
-          requiredFeatures.push(x);
-        }
+        const requiredFeatures = [...adapter.features];
         const requiredLimits = {};
         const exclude = new Set(["minSubgroupSize", "maxSubgroupSize"]);
-        for (const x in adapter.limits) {
-          if (!exclude.has(x)) {
-            requiredLimits[x] = adapter.limits[x];
+        for (const key in adapter.limits) {
+          if (!exclude.has(key)) {
+            requiredLimits[key] = adapter.limits[key];
           }
         }
-        command.args = [{
-          requiredFeatures,
-          requiredLimits
-        }];
+        command.args = [{ requiredFeatures, requiredLimits }];
       } else {
         command.args = JSON.parse(command.args);
       }
+
       if (frame < 0) {
-        this.initiazeCommands[commandIndex] = command;
+        this.initializeCommands[commandIndex] = command;
       } else {
         if (this.frames[frame] === undefined) {
           this.frames[frame] = [];
         }
         this.frames[frame][commandIndex] = command;
       }
+
       this._commandCount++;
-      if (this._commandCount >= count) {
-        this._commandsReady = true;
-        if (this.ready) {
-          this.onReady.emit();
-        }
-      } else {
-        this._commandsReady = false;
-      }
+      this._commandsReady = this._commandCount >= count;
+      this._checkReady();
     } catch (e) {
-      console.log(e.message, command.method, command.args);
+      console.error(`Error adding command: ${command.method}`, e.message);
     }
   }
 
@@ -126,34 +116,23 @@ export class RecorderData {
       return navigator.gpu;
     }
     if (id === "context") {
-      if (this._context) {
-        return this._context;
+      if (!this._context && this._canvas) {
+        this._context = this._canvas.element.getContext("webgpu");
       }
-      this._context = this._canvas.element.getContext("webgpu");
       return this._context;
     }
     return this._objectMap.get(id);
   }
 
-  // if commandIndex is provided, it is the last command to be executed
-  // on the given frameIndex.
-  async executeCommands(canvas, frameIndex, commandIndex) {
-    commandIndex ??= -1;
+  async executeCommands(canvas, frameIndex, commandIndex = -1) {
+    this.clear();
 
-    this._objectMap.forEach((value) => {
-      if (value instanceof GPUDevice) {
-        value.destroy();
-      }
-    });
-
-    this._objectMap.clear();
     this._canvas = canvas;
-    this._context = null;
     this._device = null;
     this._textureUtils = null;
 
     let ci = 0;
-    for (const command of this.initiazeCommands) {
+    for (const command of this.initializeCommands) {
       await this._executeCommand(command, -1, ci);
       ci++;
     }
@@ -175,13 +154,9 @@ export class RecorderData {
       ci = 0;
       const hasFrameCommandIndex = hasCommandIndex && fi === frameIndex;
       for (const command of frame) {
-        // If the current command is after the requested last command to be executed,
-        // then skip the command. We do want to close the current render or compute pass,
-        // debug group, and commandEncoder, so we do want to execute those commands.
         if (hasFrameCommandIndex && ci > commandIndex) {
           if (passes.size > 0 && command.method === "end") {
-            await this._executeCommand(command, fi, ci);
-            const object = this._getObject(command.object);
+            const object = await this._executeCommand(command, fi, ci);
             if (object) {
               passes.delete(object);
             }
@@ -189,8 +164,7 @@ export class RecorderData {
           }
 
           if (commandEncoders.size > 0 && command.method === "finish") {
-            await this._executeCommand(command, fi, ci);
-            const object = this._getObject(command.object);
+            const object = await this._executeCommand(command, fi, ci);
             if (object) {
               commandEncoders.delete(object);
             }
@@ -198,7 +172,7 @@ export class RecorderData {
           }
 
           if (command.method === "popDebugGroup" && debugGroups > 0) {
-            this._executeCommand(command, fi, ci);
+            await this._executeCommand(command, fi, ci);
             debugGroups--;
           }
 
@@ -262,12 +236,10 @@ export class RecorderData {
           const canvasTexture = this._context.getCurrentTexture();
           const canvasView = canvasTexture.createView();
 
-          if (!this._textureUtils) {
-            if (this._device) {
-              this._textureUtils = new TextureUtils(this._device);
-            }
+          if (!this._textureUtils && this._device) {
+            this._textureUtils = new TextureUtils(this._device);
           }
-          
+
           if (this._textureUtils) {
             this._textureUtils.blitTexture(colorOutput0, colorOutput0.texture.format, 1, canvasView, canvasTexture.format, null);
           }
@@ -276,54 +248,43 @@ export class RecorderData {
     }
   }
 
+  _prepareValue(value) {
+    if (value && typeof value !== 'string' && value.length !== undefined) {
+      return this._prepareArgs(value);
+    }
+    if (value instanceof Object) {
+      if (value.__id !== undefined) {
+        return this._getObject(value.__id);
+      }
+      if (value.__data !== undefined) {
+        return this.data[value.__data];
+      }
+      return this._prepareObject(value);
+    }
+    return value;
+  }
+
   _prepareObject(obj) {
     const newObj = {};
     for (const key in obj) {
-      if (typeof(obj[key]) !== "string" && obj[key].length !== undefined) {
-        newObj[key] = this._prepareArgs(obj[key]);
-      } else if (obj[key] instanceof Object) {
-        if (obj[key].__id !== undefined) {
-          newObj[key] = this._getObject(obj[key].__id);
-        } else if (obj[key].__data !== undefined) {
-          newObj[key] = this.data[obj[key].__data];
-        } else {
-          newObj[key] = this._prepareObject(obj[key]);
-        }
-      } else {
-        newObj[key] = obj[key];
-      }
+      newObj[key] = this._prepareValue(obj[key]);
     }
     return newObj;
   }
 
   _prepareArgs(args) {
-    const newArgs = [...args];
-    for (let i = 0; i < newArgs.length; ++i) {
-      if (typeof(newArgs[i]) !== "string" && newArgs[i].length !== undefined) {
-        newArgs[i] = this._prepareArgs(newArgs[i]);
-      } else if (newArgs[i] instanceof Object) {
-        if (newArgs[i].__id !== undefined) {
-          newArgs[i] = this._getObject(newArgs[i].__id);
-        } else if (newArgs[i].__data !== undefined) {
-          newArgs[i] = this.data[newArgs[i].__data];
-        } else {
-          newArgs[i] = this._prepareObject(newArgs[i]);
-        }
-      }
-    }
-    return newArgs;
+    return [...args].map(arg => this._prepareValue(arg));
   }
 
   async _executeCommand(command, frameIndex, commandIndex) {
     const object = this._getObject(command.object);
-    let method = command.method;
-
-    if (method === "pushDebugGroup" || method === "popDebugGroup") {
-      return;
+    if (!object) {
+      return null;
     }
 
-    if (!object) {
-      return;
+    const method = command.method;
+    if (method === "pushDebugGroup" || method === "popDebugGroup") {
+      return null;
     }
 
     if (object instanceof GPUDevice) {
@@ -335,85 +296,65 @@ export class RecorderData {
     }
 
     const args = this._prepareArgs(command.args);
+    let result = null;
 
     if (method === "__setCanvasSize") {
       this._canvas.element.width = args[0];
       this._canvas.element.height = args[1];
-      return;
-    } else if (method === "__writeData") {
+      return null;
+    }
+
+    if (method === "__writeData") {
       const dataIndex = args[0];
       const data = this.data[dataIndex];
       new Uint8Array(object).set(data);
-      return;
-    } else if (method === "__getQueue") {
+      return null;
+    }
+
+    if (method === "__getQueue") {
       this._objectMap.set(command.result, object.queue);
-      return;
-    } else if (method === "createTexture") {
+      return null;
+    }
+
+    if (method === "createTexture") {
       args[0].usage |= GPUTextureUsage.TEXTURE_BINDING;
     }
-    
-    if (command.async) {
-      if (this._device) {
-        this._device.pushErrorScope("validation");
-      }
 
-      let result = undefined;
-      try {
-        result = await object[method](...args);
-      } catch (e) {
-        console.log(`EXCEPTION frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${e.message}`);
-      }
-
-      if (this._device) {
-        this._device.popErrorScope().then((error) => {
-          if (error) {
-            console.log(`ERROR frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${error.message}`);
-          }
-        }).catch((e) => {
-          console.log(`ERROR frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${e.message}`)
-        });;
-      }
-
-      if (command.result) {
-        this._objectMap.set(command.result, result);
-      }
-
-      if (result instanceof GPUDevice) {
-        this._device = result;
-      }
-      return result;  
-    } else {
-      if (this._device) {
-        this._device.pushErrorScope("validation");
-      }
-
-      let result = undefined;
-
-      try {
-        result = object[method](...args);
-      } catch (e) {
-        console.log(`EXCEPTION frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${e.message}`);
-      }
-
-      if (method === "createView") {
-        result.texture = object;
-      } else if (method === "getCurrentTexture") {
-        result.isCanvasTexture = true;
-      }
-
-      if (this._device) {
-        this._device.popErrorScope().then((error) => {
-          if (error) {
-            console.log(`ERROR frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${error.message}`);
-          }
-        });
-      }
-
-      if (command.result) {
-        this._objectMap.set(command.result, result);
-      }
-
-      return result;
+    const isAsync = command.async;
+    if (this._device) {
+      this._device.pushErrorScope("validation");
     }
+
+    try {
+      result = isAsync ? await object[method](...args) : object[method](...args);
+    } catch (e) {
+      console.error(`EXCEPTION frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${e.message}`);
+    }
+
+    if (this._device) {
+      this._device.popErrorScope().then((error) => {
+        if (error) {
+          console.error(`ERROR frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${error.message}`);
+        }
+      }).catch((e) => {
+        console.error(`ERROR frame:${frameIndex} command:${commandIndex} ${object?.constructor.name} ${method}: ${e.message}`);
+      });
+    }
+
+    if (method === "createView") {
+      result.texture = object;
+    } else if (method === "getCurrentTexture") {
+      result.isCanvasTexture = true;
+    }
+
+    if (command.result) {
+      this._objectMap.set(command.result, result);
+    }
+
+    if (result instanceof GPUDevice) {
+      this._device = result;
+    }
+
+    return result;
   }
 }

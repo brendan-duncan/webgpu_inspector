@@ -118,7 +118,7 @@ export class CaptureData {
   _captureBufferData(id, entryIndex, offset, size, index, count, chunk) {
     if (id === -1000) {
       // Timestamp buffer
-      if (this._timestampBuffer == null) {
+      if (this._timestampBuffer === null) {
         this._timestampBuffer = new Uint8Array(size);
         this._timestampChunkCount = count;
       }
