@@ -4,9 +4,14 @@ import { Pointer } from './pointer.js';
  * A Widget is a wrapper for a DOM element.
  */
 export class Widget {
+  /**
+   * @param {HTMLElement | string} element 
+   * @param {Widget? | Object?} parent 
+   * @param {Object?} options 
+   */
   constructor(element, parent, options) {
     this.id = `${this.constructor.name}${Widget.id++}`;
-    if (element && element.constructor === String) {
+    if (element && typeof element === 'string') {
       element = document.createElement(element);
     }
 
@@ -42,6 +47,9 @@ export class Widget {
     }
   }
 
+  /**
+   * @param {Object} options 
+   */
   configure(options) {
     if (options.id) {
       this._element.id = options.id;
@@ -95,7 +103,7 @@ export class Widget {
     }
 
     if (options.tabIndex !== undefined) {
-      this._element.tabindex = options.tabindex;
+      this._element.tabIndex = options.tabIndex;
     }
 
     if (options.zIndex !== undefined) {
@@ -141,6 +149,10 @@ export class Widget {
     return this._parent;
   }
 
+  /**
+   * Set the parent widget of this widget. If the widget already has a parent, it will be removed from the current parent before being added to the new parent.
+   * @param {Widget?} p The new parent widget. If null, the widget will be removed from its current parent.
+   */
   set parent(p) {
     if (!p) {
       if (this._parent) {
@@ -154,14 +166,17 @@ export class Widget {
     this.onResize();
   }
 
+  /**
+   * @property {Widget?} lastChild The last child widget of this widget, or null if there are no children.
+   */
   get lastChild() {
     return this.children[this.children.length - 1];
   }
 
   /**
    * Insert a child widget before the given child widget.
-   * @param {*} newChild
-   * @param {*} refChild
+   * @param {Widget} newChild The new child widget to insert.
+   * @param {Widget} refChild The reference child widget before which the new child will be inserted. If refChild is not a child of this widget, newChild will be appended to the end of the children list.
    */
   insertBefore(newChild, refChild) {
     const index = this.children.indexOf(refChild);
@@ -176,8 +191,8 @@ export class Widget {
 
   /**
    * Insert a child widget after the given child widget.
-   * @param {Widget} newChild 
-   * @param {Widget} refChild 
+   * @param {Widget} newChild The new child widget to insert.
+   * @param {Widget} refChild The reference child widget after which the new child will be inserted. If refChild is not a child of this widget, newChild will be appended to the end of the children list.
    */
   insertAfter(newChild, refChild) {
     let index = this.children.indexOf(refChild);
@@ -193,11 +208,12 @@ export class Widget {
     const refWidget = this.children[index];
     this.children.splice(index, 0, newChild);
     this._element.insertBefore(newChild._element, refWidget._element);
+    newChild._parent = this;
   }
 
   /**
    * Add a child widget to this widget.
-   * @param {Widget} child
+   * @param {Widget} child The child widget to add.
    */
   appendChild(child) {
     if (child.parent === this) {
@@ -228,7 +244,7 @@ export class Widget {
 
   /**
    * Remove a child widget.
-   * @param {Widget} child
+   * @param {Widget} child The child widget to remove.
    */
   removeChild(child) {
     const index = this.children.indexOf(child);
@@ -321,7 +337,7 @@ export class Widget {
   }
 
   /**
-   * @property {bool} visible Is the element visible?
+   * @property {boolean} visible Is the element visible?
    */
   get visible() {
     let e = this;
@@ -334,8 +350,19 @@ export class Widget {
     return true;
   }
 
+  /**
+   * Called when the DOM of the widget has changed.
+   * This can be used to trigger any updates that need to happen when the DOM changes,
+   * like updating the size of the widget.
+   * This method can be overridden by subclasses to implement custom behavior when the DOM changes.
+   */
   onDomChanged() {}
 
+  /**
+   * Called when the DOM of the widget or any of its children has changed. 
+   * This can be used to trigger any updates that need to happen when the DOM changes,
+   * like updating the size of the widget.
+   */
   domChanged() {
     this.onDomChanged();
     for (const c of this.children) {
@@ -359,6 +386,9 @@ export class Widget {
 
   /**
    * Set the position of the element.
+   * @param {number} x The x position of the element.
+   * @param {number} y The y position of the element.
+   * @param {string} type The CSS position type of the element. Defaults to "absolute".
    */
   setPosition(x, y, type) {
     type = type || 'absolute';
@@ -369,6 +399,8 @@ export class Widget {
 
   /**
    * Resize the element.
+   * @param {number} w The new width of the element.
+   * @param {number} h The new height of the element.
    */
   resize(w, h) {
     // style.width/height is only for the inner contents of the widget,
@@ -548,7 +580,18 @@ export class Widget {
   }
 
   get window() {
-    return Widget.window;
+    let w = Widget.window;
+    if (!w) {
+      let p = this._parent;
+      while (p) {
+        if (p._window) {
+          w = p._window;
+          break;
+        }
+        p = p._parent;
+      }
+    }
+    return w;
   }
 
   /**
@@ -586,10 +629,7 @@ export class Widget {
     this.enableMouseMoveEvent();
     if (!this._contextMenuEnabled && this._element) {
       this._contextMenuEnabled = true;
-      this._element.addEventListener(
-        'contextmenu',
-        this._onContextMenu.bind(this)
-      );
+      this._element.addEventListener('contextmenu', this._onContextMenu.bind(this));
     }
   }
 
@@ -610,10 +650,7 @@ export class Widget {
     //this.enableMouseMoveEvent();
     if (!this._doubleClickEnabled && this._element) {
       this._doubleClickEnabled = true;
-      this._element.addEventListener(
-        'dblclick',
-        this._onDoubleClick.bind(this)
-      );
+      this._element.addEventListener('dblclick', this._onDoubleClick.bind(this));
     }
   }
 
@@ -623,10 +660,7 @@ export class Widget {
   enableMouseWheelEvent() {
     if (!this._mouseWheelEnabled && this._element) {
       this._mouseWheelEnabled = true;
-      this._element.addEventListener(
-        'mousewheel',
-        this._onMouseWheel.bind(this)
-      );
+      this._element.addEventListener('mousewheel', this._onMouseWheel.bind(this));
     }
   }
 
@@ -658,15 +692,9 @@ export class Widget {
   enableTouchEvents() {
     if (!this._touchEventsEnabled) {
       this._touchEventsEnabled = true;
-      this._element.addEventListener(
-        'touchstart',
-        this._onTouchStart.bind(this)
-      );
+      this._element.addEventListener('touchstart', this._onTouchStart.bind(this));
       this._element.addEventListener('touchend', this._onTouchEnd.bind(this));
-      this._element.addEventListener(
-        'touchcancel',
-        this._onTouchCancel.bind(this)
-      );
+      this._element.addEventListener('touchcancel', this._onTouchCancel.bind(this));
       this._element.addEventListener('touchmove', this._onTouchMove.bind(this));
       // Without this, Android Chrome will hijack touch events.
       this.style.touchAction = 'none';
@@ -676,22 +704,13 @@ export class Widget {
   enablePointerEvents(bindToWindow) {
     if (!this._pointerEventsEnabled) {
       this._pointerEventsEnabled = true;
-      this._element.addEventListener(
-        'pointerdown',
-        this._onPointerDown.bind(this)
-      );
+      this._element.addEventListener('pointerdown', this._onPointerDown.bind(this));
       if (bindToWindow) {
         window.addEventListener('pointermove', this._onPointerMove.bind(this));
         window.addEventListener('pointerup', this._onPointerUp.bind(this));
       } else {
-        this._element.addEventListener(
-          'pointermove',
-          this._onPointerMove.bind(this)
-        );
-        this._element.addEventListener(
-          'pointerup',
-          this._onPointerUp.bind(this)
-        );
+        this._element.addEventListener('pointermove', this._onPointerMove.bind(this));
+        this._element.addEventListener('pointerup', this._onPointerUp.bind(this));
       }
       // Without this, Android Chrome will hijack touch events.
       this.style.touchAction = 'none';
@@ -701,7 +720,9 @@ export class Widget {
   _onPointerDown(e) {
     this.hasFocus = true;
     const pointer = new Pointer(e);
-    if (Widget.currentPointers.some((p) => p.id === pointer.id)) return;
+    if (Widget.currentPointers.some((p) => p.id === pointer.id)) {
+      return;
+    }
     Widget.currentPointers.push(pointer);
     //this.element.setPointerCapture(e.pointerId);
     const res = this.pointerDownEvent(e, Widget.currentPointers, pointer);
@@ -721,7 +742,9 @@ export class Widget {
     const pointer = new Pointer(e);
 
     const index = Widget.currentPointers.findIndex((p) => p.id === pointer.id);
-    if (index !== -1) Widget.currentPointers[index] = pointer;
+    if (index !== -1) {
+      Widget.currentPointers[index] = pointer;
+    }
 
     this.hasFocus = true;
     const res = this.pointerMoveEvent(e, Widget.currentPointers, pointer);
@@ -1196,6 +1219,12 @@ export class Widget {
     }
   }
 
+  /**
+   * 
+   * @param {string} eventName 
+   * @param {*} params 
+   * @returns {CustomEvent}
+   */
   trigger(eventName, params) {
     const event = new CustomEvent(eventName, {
       bubbles: true,
@@ -1236,6 +1265,15 @@ export class Widget {
     this.addEventListener('dragenter', this._onDragEvent);
   }
 
+  dragEnterEvent(event) { }
+
+  dragLeaveEvent(event) { }
+
+  dragOverEvent(event) { }
+
+  /**
+   * @param {Event} event 
+   */
   onDragEvent(event) {
     const element = this.element;
 
@@ -1244,25 +1282,25 @@ export class Widget {
       element.addEventListener('dragover', this._onDragEvent);
       element.addEventListener('drop', this._onDropEvent);
     }
-    if (event.type == 'dragenter' && this.dragEnterEvent) {
+    if (event.type == 'dragenter') {
       this.dragEnterEvent(event);
     }
-    if (event.type == 'dragleave' && this.dragLeaveEvent) {
+    if (event.type == 'dragleave') {
       this.dragLeaveEvent(event);
     }
-    if (event.type == 'dragover' && this.dragOverEvent) {
+    if (event.type == 'dragover') {
       this.dragOverEvent(event);
     }
   }
+
+  dropEvent() { }
 
   onDropEvent(event) {
     this.removeEventListener('dragleave', this._onDragEvent);
     this.removeEventListener('dragover', this._onDragEvent);
     this.removeEventListener('drop', this._onDropEvent);
 
-    if (this.dropEvent) {
-      this.dropEvent(event);
-    }
+    this.dropEvent(event);
   }
 }
 

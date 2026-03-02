@@ -2,13 +2,49 @@
 import { decodeDataUrl } from "../utils/base64.js";
 import { Signal } from "../utils/signal.js";
 
+/*interface CaptureTextureFramesMessage {
+    chunkCount: number;
+    count: number;
+    textures: number[];
+}*/
+
+/*interface CaptureFrameResultsMessage {
+    frame: number;
+    count: number;
+    batches: number;
+}*/
+
+/*interface CaptureFrameCommandsMessage {
+    frame: number;
+    index: number;
+    count: number;
+    commands: Object[];
+}*/
+
+/*interface CaptureBuffersMessage {
+    chunkCount: number;
+    count: number;
+}*/
+
+/*interface CaptureBufferDataMessage {
+    commandId: number;
+    entryIndex: number;
+    offset: number;
+    size: number;
+    index: number;
+    count: number;
+    chunk: string;
+}*/
+
 export class CaptureData {
+  /**
+   * @param {ObjectDatabase} objectDatabase 
+   */
   constructor(objectDatabase) {
     this.database = objectDatabase;
 
     this.frameIndex = 0;
     this.commands = [];
-    this.frameImageList = [];
 
     this.onCaptureFrameResults = new Signal();
     this.onUpdateCaptureStatus = new Signal();
@@ -22,6 +58,11 @@ export class CaptureData {
     this._timestampChunkCount = 0;
   }
 
+  /**
+   * Called from the frontend with information about captured texture frames, 
+   * updating the internal state to track loading progress.
+   * @param {CaptureTextureFramesMessage} message 
+   */
   captureTextureFrames(message) {
     this._loadedDataChunks += message.chunkCount;
     this._loadingImages += message.count ?? 0;
@@ -36,14 +77,24 @@ export class CaptureData {
     }
   }
 
+  /**
+   * Called when a chunk of texture data is loaded, updating the loading state and emitting status updates.
+   */
   captureTextureDataChunk() {
     this._loadedDataChunks--;
   }
 
+  /**
+   * Called when a captured texture is fully loaded, decrementing the loading image count and emitting status updates.
+   */
   captureTextureLoaded() {
     this._loadingImages--;
   }
 
+  /**
+   * Called when frame results are captured, updating the internal state with the new frame data.
+   * @param {CaptureFrameResultsMessage} message 
+   */
   captureFrameResults(message) {
     const frame = message.frame;
     const count = message.count;
@@ -53,6 +104,10 @@ export class CaptureData {
     this._captureCount = batches;
   }
 
+  /**
+   * Called when frame commands are captured, updating the internal state with the new command data.
+   * @param {CaptureFrameCommandsMessage} message 
+   */
   captureFrameCommands(message) {
     const commands = message.commands;
     const index = message.index;
@@ -76,11 +131,19 @@ export class CaptureData {
     }
   }
 
+  /**
+   * Called when buffer data is captured, updating the internal state with the new buffer data.
+   * @param {CaptureBuffersMessage} message 
+   */
   captureBuffers(message) {
     this._loadingBuffers += message.count ?? 0;
     this._loadedDataChunks += message.chunkCount;
   }
 
+  /**
+   * Called when buffer data is captured, updating the internal state with the new buffer data.
+   * @param {CaptureBufferDataMessage} message 
+   */
   captureBufferData(message) {
     const id = message.commandId;
     const entryIndex = message.entryIndex;
@@ -92,6 +155,10 @@ export class CaptureData {
     this._captureBufferData(id, entryIndex, offset, size, index, count, chunk);
   }
 
+  /**
+   * Returns the current capture status as a string.
+   * @returns {string}
+   */
   getCaptureStatus() {
     let text = "";
     if (this._loadingImages || this._loadingBuffers || this._loadedDataChunks) {
@@ -108,13 +175,27 @@ export class CaptureData {
       }
     }
     return text;
-    //this._captureStatus.text = text;
   }
 
+  /**
+   * Retrieves an object from the database by its ID.
+   * @param {number} id - The ID of the object to retrieve.
+   * @returns {Object} The object with the specified ID.
+   */
   _getObject(id) {
     return this.database.getObject(id);
   }
 
+  /**
+   * Handles the capture of buffer data, updating the internal state with the new buffer data and loading status.
+   * @param {number} id - The ID of the command associated with the buffer data.
+   * @param {number} entryIndex - The index of the buffer entry.
+   * @param {number} offset - The offset within the buffer data.
+   * @param {number} size - The size of the buffer data chunk.
+   * @param {number} index - The index of the chunk within the entry.
+   * @param {number} count - The total number of chunks for the entry.
+   * @param {string} chunk - The base64-encoded buffer data chunk.
+   */
   _captureBufferData(id, entryIndex, offset, size, index, count, chunk) {
     if (id === -1000) {
       // Timestamp buffer
@@ -239,6 +320,13 @@ export class CaptureData {
     });
   }
 
+  /**
+   * Adds data members to a command for buffer management.
+   * @param {Object} command - The command object to update.
+   * @param {number} entryIndex - The index of the buffer entry.
+   * @param {number} size - The size of the buffer data.
+   * @param {number} count - The number of chunks for the buffer entry.
+   */
   _addDataMembersToCommand(command, entryIndex, size, count) {
     if (!command.bufferData) {
       command.bufferData = [];

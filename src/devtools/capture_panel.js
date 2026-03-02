@@ -25,7 +25,16 @@ import { ShaderDebugger } from "./shader_debugger.js";
 
 const _inspectButtonStyle = "btn btn-info";
 
+/**
+ * Panel for displaying captured WebGPU frames and commands.
+ * Provides UI for capturing, viewing, and inspecting GPU operations.
+ */
 export class CapturePanel {
+  /**
+   * Creates a new CapturePanel.
+   * @param {Object} win - The window object containing port and database references.
+   * @param {Widget} parent - The parent DOM element to attach the panel to.
+   */
   constructor(win, parent) {
     this.window = win;
 
@@ -46,6 +55,8 @@ export class CapturePanel {
 
         const frame = self.captureMode === 0 ? -1 : self.captureSpecificFrame;
         const maxBufferSize = self.useMaxBufferSize ? self.maxBufferSize : -1;
+
+        // Send the capture request to the backend with the specified frame count and buffer size.
         self.port.postMessage({ action: PanelActions.Capture, captureFrameCount: this.captureFrameCount, maxBufferSize, frame });
       } catch (e) {
         console.error(e.message);
@@ -155,14 +166,33 @@ export class CapturePanel {
     });
   }
 
+  /**
+   * Calculates a clamped width for texture preview based on dimensions.
+   * @param {Object} texture - The texture object with width and height.
+   * @returns {number} The clamped texture width.
+   */
   _clampedTextureWidth(texture) {
     return Math.max(Math.min(Math.max(texture.width, texture.height), 256), 64);
   }
 
+  /**
+   * Retrieves an object from the database by ID.
+   * @param {number} id - The object ID.
+   * @returns {Object|null} The retrieved object or null.
+   */
   _getObject(id) {
     return this.database.getObject(id);
   }
 
+  /**
+   * Creates a collapsible section that persists its collapsed state.
+   * @param {HTMLElement} parent - Parent element.
+   * @param {Object} object - Object to store GUI state on.
+   * @param {string} property - Property name for storing state.
+   * @param {string} label - Label for the collapsible.
+   * @param {boolean} collapsed - Initial collapsed state.
+   * @returns {collapsible} The collapsible widget.
+   */
   _getcollapsibleWithState(parent, object, property, label, collapsed) {
     object.__guistate = object.__guistate || {};
     object.__guistate[property] = object.__guistate[property] ?? collapsed;
@@ -176,23 +206,43 @@ export class CapturePanel {
     return collabsable;
   }
 
+  /**
+   * Updates the capture status display.
+   */
   _updateCaptureStatus() {
     let text = this._captureData?.getCaptureStatus() ?? "";
     this._captureStatus.text = text;
   }
 
+  /**
+   * Gets the database from the window object.
+   * @returns {Object} The capture database.
+   */
   get database() {
     return this.window.database;
   }
 
+  /**
+   * Gets the communication port from the window object.
+   * @returns {Object} The message port.
+   */
   get port() {
     return this.window.port;
   }
 
+  /**
+   * Gets the texture utilities from the window object.
+   * @returns {Object} The texture utilities.
+   */
   get textureUtils() {
     return this.window.textureUtils;
   }
 
+  /**
+   * Processes command arguments, converting internal IDs to readable strings.
+   * @param {*} object - The object or arguments to process.
+   * @returns {*} The processed arguments.
+   */
   _processCommandArgs(object) {
     if (!object) {
       return object;
@@ -221,6 +271,11 @@ export class CapturePanel {
     return object;
   }
 
+  /**
+   * Filters visible commands based on a search filter.
+   * @param {string} filter - The filter string to search for.
+   * @param {Array} commands - Array of captured commands.
+   */
   _filterCommands(filter, commands) {
     for (let commandIndex = 0, numCommands = commands.length; commandIndex < numCommands; ++commandIndex) {
       const command = commands[commandIndex];
@@ -239,6 +294,10 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Captures objects from command arguments, tracking them in the database.
+   * @param {*} args - Command arguments to process.
+   */
   _captureObjectsFromArgs(args) {
     if (args instanceof Array || args instanceof Object) {
       for (const m in args) {
@@ -266,6 +325,11 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Handles capture frame results and builds the UI to display them.
+   * @param {number} frame - The frame number.
+   * @param {Array} commands - Array of commands for the frame.
+   */
   _captureFrameResults(frame, commands) {
     const contents = this._capturePanel;
 
@@ -632,6 +696,16 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Creates a widget for displaying a capture command in the UI.
+   * @param {HTMLElement} currentBlock - Current parent block element.
+   * @param {number} commandIndex - Index of the command.
+   * @param {Object} command - The command object.
+   * @param {Array} cmdType - CSS classes for the command.
+   * @param {HTMLElement} commandInfo - Element for command details.
+   * @param {Array} debugGroupLabelStack - Stack of debug group labels.
+   * @returns {Object} The created command widget.
+   */
   _createCommandWidget(currentBlock, commandIndex, command, cmdType, commandInfo, debugGroupLabelStack) {
     const method = command.method;
     const args = command.args;
@@ -852,6 +926,11 @@ export class CapturePanel {
     return cmd;
   }
 
+  /**
+   * Extracts the texture view from a render pass attachment.
+   * @param {Object} attachment - The attachment object.
+   * @returns {Object|null} The texture view or null.
+   */
   _getTextureViewFromAttachment(attachment) {
     if (!attachment) {
       return null;
@@ -862,6 +941,11 @@ export class CapturePanel {
     return this._getObject(attachment.view?.__id);
   }
 
+  /**
+   * Gets the texture from a render pass attachment.
+   * @param {Object} attachment - The attachment object.
+   * @returns {Object|null} The texture or null.
+   */
   _getTextureFromAttachment(attachment) {
     if (!attachment) {
       return null;
@@ -883,6 +967,15 @@ export class CapturePanel {
     return this.database.getTextureFromView(view);
   }
 
+  /**
+   * Creates a widget for displaying a texture preview.
+   * @param {HTMLElement} parent - Parent element.
+   * @param {Object} texture - The texture to display.
+   * @param {number} passId - Render pass identifier.
+   * @param {number} size - Display size for the preview.
+   * @param {string} style - CSS style string.
+   * @returns {HTMLElement} The created container element.
+   */
   _createTextureWidget(parent, texture, passId, size, style) {
     const gpuTexture = this._gpuTextureMap.get(passId) ?? texture.gpuTexture;
 
@@ -944,6 +1037,11 @@ export class CapturePanel {
     return container;
   }
 
+  /**
+   * Displays detailed info for beginRenderPass command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   */
   _showCaptureCommandInfo_beginRenderPass(command, commandInfo) {
     const renderPassIndex = command._passIndex;
     const args = command.args;
@@ -1004,6 +1102,14 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays buffer data with type information.
+   * @param {HTMLElement} ui - Parent UI element.
+   * @param {Object} type - The type information.
+   * @param {ArrayBuffer} bufferData - The buffer data.
+   * @param {number} offset - Offset into the buffer.
+   * @param {number} radix - Radix for number display (10, 16, 8, 2).
+   */
   _showBufferDataType(ui, type, bufferData, offset = 0, radix = 10) {
     if (!type) {
       return;
@@ -1305,6 +1411,14 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Sets the buffer format using WGSL reflection.
+   * @param {Object} type - Type object to set format on.
+   * @param {string} typeName - Name of the type.
+   * @param {string} format - WGSL format string.
+   * @param {boolean} skipStructEncapsulation - Whether to skip struct wrapping.
+   * @param {number} radix - Radix for number display.
+   */
   _setBufferFormat(type, typeName, format, skipStructEncapsulation = false, radix = 10) {
     try {
       let reflect = new WgslReflect(format);
@@ -1336,6 +1450,13 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Creates a button for editing buffer format.
+   * @param {HTMLElement} parentWidget - Parent element.
+   * @param {Object} resource - The resource with type information.
+   * @param {HTMLElement} bufferDataUI - Element for buffer data display.
+   * @param {ArrayBuffer} bufferData - The buffer data.
+   */
   _createFormatButton(parentWidget, resource, bufferDataUI, bufferData) {
     function resourceType(resource) {
       return resource.type.replacement || resource.type;
@@ -1409,6 +1530,12 @@ export class CapturePanel {
     } });
   }
 
+  /**
+   * Shows buffer data information for uniform or storage resources.
+   * @param {HTMLElement} parentWidget - Parent element.
+   * @param {Object} resource - The resource with type info.
+   * @param {ArrayBuffer} bufferData - The buffer data.
+   */
   _showBufferDataInfo(parentWidget, resource, bufferData) {
     function resourceType(resource) {
       return resource.type.replacement || resource.type;
@@ -1435,6 +1562,13 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Finds binding resource information from pipeline state.
+   * @param {Object} state - The pipeline state.
+   * @param {number} group - Bind group index.
+   * @param {number} binding - Binding index.
+   * @returns {Object|null} The resource information or null.
+   */
   _findBindingResourceFromState(state, group, binding) {
     if (!state) {
       return null;
@@ -1508,6 +1642,15 @@ export class CapturePanel {
     return null;
   }
 
+  /**
+   * Shows buffer data for a specific binding.
+   * @param {HTMLElement} parentWidget - Parent element.
+   * @param {number} groupIndex - Bind group index.
+   * @param {number} entryIndex - Binding entry index.
+   * @param {Object} bindGroup - The bind group.
+   * @param {Object} state - Pipeline state.
+   * @param {ArrayBuffer} bufferData - The buffer data.
+   */
   _showBufferData(parentWidget, groupIndex, entryIndex, bindGroup, state, bufferData) {
     new Div(parentWidget, { text: `Group ${groupIndex} Binding ${entryIndex} Size: ${bufferData.length}` });
 
@@ -1517,6 +1660,15 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays info for setBindGroup command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   * @param {number} groupIndex - Bind group index.
+   * @param {boolean} skipInputs - Whether to skip input textures.
+   * @param {Object} state - Pipeline state.
+   * @param {Array} commands - Array of commands.
+   */
   _showCaptureCommandInfo_setBindGroup(command, commandInfo, groupIndex, skipInputs, state, commands) {
     const args = command.args;
     const id = args[1]?.__id;
@@ -1907,6 +2059,12 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays info for setPipeline command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   * @param {Object} parentCommand - Parent command for debugging.
+   */
   _showCaptureCommandInfo_setPipeline(command, commandInfo, parentCommand) {
     const args = command.args;
     const self = this;
@@ -1998,6 +2156,12 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Opens shader debugger for a compute shader.
+   * @param {Object} command - The command object.
+   * @param {string} entry - Entry point name.
+   * @param {Object} parentCommand - Parent command.
+   */
   _debugShader(command, entry, parentCommand) {
     const args = command.args;
     const id = args[0]?.__id;
@@ -2009,6 +2173,11 @@ export class CapturePanel {
     this._captureTab.setActivePanel(editor);
   }
 
+  /**
+   * Displays info for writeBuffer command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   */
   _showCaptureCommandInfo_writeBuffer(command, commandInfo) {
     const args = command.args;
     const id = args[0]?.__id;
@@ -2025,6 +2194,14 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays info for setIndexBuffer command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   * @param {boolean} collapsed - Initial collapsed state.
+   * @param {number} firstIndex - First index value.
+   * @param {number} indexCount - Number of indices.
+   */
   _showCaptureCommandInfo_setIndexBuffer(command, commandInfo, collapsed, firstIndex, indexCount) {
     const args = command.args;
     const self = this;
@@ -2111,6 +2288,13 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays info for setVertexBuffer command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   * @param {boolean} collapsed - Initial collapsed state.
+   * @param {Object} state - Pipeline state.
+   */
   _showCaptureCommandInfo_setVertexBuffer(command, commandInfo, collapsed, state) {
     const args = command.args;
     const self = this;
@@ -2198,6 +2382,11 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Gets the pipeline state at a given command by looking backwards through the command list.
+   * @param {Object} command - The command to get state for.
+   * @returns {Object} Pipeline state including pipeline, buffers, bind groups, etc.
+   */
   _getPipelineState(command) {
     const commands = command.object?.commands || (this._passEncoderCommands.get(command.object) ?? null);
     if (commands === null) {
@@ -2261,6 +2450,11 @@ export class CapturePanel {
     return { renderPass, computePass, pipeline, vertexBuffers, indexBuffer, bindGroups };
   }
 
+  /**
+   * Gets the type name from a type object.
+   * @param {Object} t - Type object.
+   * @returns {string} The type name as a string.
+   */
   _getTypeName(t) {
     if (!t) {
       return "";
@@ -2274,6 +2468,11 @@ export class CapturePanel {
     return t.name;
   }
 
+  /**
+   * Adds shader type information to the UI.
+   * @param {HTMLElement} ui - Parent UI element.
+   * @param {Object} type - Type information.
+   */
   _addShaderTypeInfo(ui, type) {
     if (!type) {
       return;
@@ -2294,6 +2493,11 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays shader entry function information.
+   * @param {HTMLElement} ui - Parent UI element.
+   * @param {Object} entry - Entry function info.
+   */
   _shaderInfoEntryFunction(ui, entry) {
     new Widget("li", ui, { text: `Entry: ${entry.name}` });
     if (entry.inputs.length) {
@@ -2312,6 +2516,12 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays shader reflection information including uniforms, storage, textures, and samplers.
+   * @param {string} type - Shader type (Vertex, Fragment, Compute).
+   * @param {Object} shader - The shader module object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   */
   _shaderInfo(type, shader, commandInfo) {
     const reflect = shader.reflection;
     if (reflect) {
@@ -2396,6 +2606,12 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays texture outputs for a render pass.
+   * @param {Object} state - Pipeline state.
+   * @param {HTMLElement} parent - Parent element.
+   * @param {boolean} collapsed - Initial collapsed state.
+   */
   _showTextureOutputs(state, parent, collapsed) {
     let renderPassIndex = 0;
     const outputs = { color: [], depthStencil: null };
@@ -2454,6 +2670,11 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays texture inputs from bind groups.
+   * @param {Object} state - Pipeline state.
+   * @param {HTMLElement} parent - Parent element.
+   */
   _showTextureInputs(state, parent) {
     const inputs = [];
     for (const bindGroupCmd of state.bindGroups) {
@@ -2496,11 +2717,21 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays info for end command (end of render/compute pass).
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   */
   _showCaptureCommandInfo_end(command, commandInfo) {
     const state = this._getPipelineState(command);
     this._showTextureOutputs(state, commandInfo, false);
   }
 
+  /**
+   * Displays info for draw command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   */
   _showCaptureCommandInfo_draw(command, commandInfo) {
     const state = this._getPipelineState(command);
     if (!state) {
@@ -2522,6 +2753,11 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays info for drawIndexed command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   */
   _showCaptureCommandInfo_drawIndexed(command, commandInfo) {
     const state = this._getPipelineState(command);
     if (!state) {
@@ -2545,6 +2781,14 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays info for indirect buffer commands.
+   * @param {Object} command - The command object.
+   * @param {Object} indirectBuffer - The indirect buffer.
+   * @param {number} indirectOffset - Offset into the indirect buffer.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   * @param {boolean} collapsed - Initial collapsed state.
+   */
   _showCaptureCommandInfo_indirectBuffer(command, indirectBuffer, indirectOffset, commandInfo, collapsed) {
     const id = indirectBuffer.__id;
     const buffer = this._getObject(id);
@@ -2586,6 +2830,11 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays info for drawIndirect command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   */
   _showCaptureCommandInfo_drawIndirect(command, commandInfo) {
     const state = this._getPipelineState(command);
 
@@ -2605,6 +2854,11 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays info for drawIndexedIndirect command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   */
   _showCaptureCommandInfo_drawIndexedIndirect(command, commandInfo) {
     const state = this._getPipelineState(command);
 
@@ -2627,6 +2881,11 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays info for dispatchWorkgroups command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   */
   _showCaptureCommandInfo_dispatchWorkgroups(command, commandInfo) {
     const state = this._getPipelineState(command);
     if (state.pipeline) {
@@ -2637,6 +2896,11 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays info for dispatchWorkgroupsIndirect command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   */
   _showCaptureCommandInfo_dispatchWorkgroupsIndirect(command, commandInfo) {
     this._showCaptureCommandInfo_indirectBuffer(command, command.args[0], command.args[1], commandInfo, true, true);
 
@@ -2649,6 +2913,11 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays info for createView command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   */
   _showCaptureCommandInfo_createView(command, commandInfo) {
     const texture = this._getObject(command.object);
     if (!texture) {
@@ -2668,6 +2937,11 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays info for executeBundles command.
+   * @param {Object} command - The command object.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   */
   _showCaptureCommandInfo_executeBundles(command, commandInfo) {
     const bundles = command.args[0];
     for (const bundleId of bundles) {
@@ -2678,6 +2952,10 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays frame statistics in the panel.
+   * @param {HTMLElement} commandInfo - Element to display stats in.
+   */
   _inspectStats(commandInfo) {
     commandInfo.html = "";
 
@@ -2690,6 +2968,14 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Displays comprehensive information for a capture command.
+   * Routes to specific handlers based on command method.
+   * @param {Object} command - The command object.
+   * @param {string} name - Command name to display.
+   * @param {HTMLElement} commandInfo - Element to display info in.
+   * @param {boolean} showHeader - Whether to show the command header.
+   */
   _showCaptureCommandInfo(command, name, commandInfo, showHeader = true) {
     commandInfo.html = "";
 
@@ -2820,6 +3106,9 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Handles texture data chunk loaded event.
+   */
   _textureDataChunkLoaded() {
     if (this._captureData) {
       this._captureData.captureTextureDataChunk();
@@ -2827,6 +3116,11 @@ export class CapturePanel {
     }
   }
 
+  /**
+   * Recursively finds a canvas element within a widget tree.
+   * @param {Object} widget - The widget to search.
+   * @returns {Object|null} The canvas widget or null.
+   */
   _findCanvas(widget) {
     if (widget.element.tagName === "CANVAS") {
       return widget;
@@ -2840,10 +3134,21 @@ export class CapturePanel {
     return null;
   }
 
+  /**
+   * Generates a unique ID for a render pass and attachment combination.
+   * @param {number} renderPass - Render pass index.
+   * @param {number} attachment - Attachment index.
+   * @returns {number} Combined pass ID.
+   */
   _getPassId(renderPass, attachment) {
     return renderPass * 10 + attachment;
   }
 
+  /**
+   * Gets the canvas for a given pass ID.
+   * @param {number} passId - The pass ID.
+   * @returns {Object|null} The canvas widget or null.
+   */
   _getPassIdCanvas(passId) {
     const passFrame = this._frameImageList[passId];
     if (!passFrame) {
@@ -2852,6 +3157,11 @@ export class CapturePanel {
     return this._findCanvas(passFrame);
   }
 
+  /**
+   * Handles texture loaded event, updating the frame image display.
+   * @param {Object} texture - The texture that was loaded.
+   * @param {number} passId - Render pass identifier.
+   */
   _textureLoaded(texture, passId) {
     if (!this._captureData) {
       return;
@@ -2918,6 +3228,10 @@ export class CapturePanel {
   }
 }
 
+/**
+ * Matrix type definitions with column and row counts for WGSL matrix types.
+ * @type {Object}
+ */
 CapturePanel.matrixTypes = {
   "mat2x2": { columns: 2, rows: 2 },
   "mat2x2f": { columns: 2, rows: 2 },
@@ -2941,6 +3255,11 @@ CapturePanel.matrixTypes = {
   "mat4x4f": { columns: 4, rows: 4 }
 };
 
+/**
+ * Mapping of WebGPU command methods to their argument names.
+ * Used for displaying command arguments with meaningful names.
+ * @type {Object}
+ */
 CapturePanel._commandArgs = {
   "beginComputePass": ["descriptor"],
   "beginOcclusionQuery": ["queryIndex"],
