@@ -328,7 +328,7 @@ export class CapturePanel {
   /**
    * Handles capture frame results and builds the UI to display them.
    * @param {number} frame - The frame number.
-   * @param {Array} commands - Array of commands for the frame.
+   * @param {Array<Command>} commands - Array of commands for the frame.
    */
   _captureFrameResults(frame, commands) {
     const contents = this._capturePanel;
@@ -3211,9 +3211,13 @@ export class CapturePanel {
 
       this._createTextureWidget(passFrame, texture, passId, 256);
 
-      this._gpuTextureMap.set(passId, texture.gpuTexture)
+      this._gpuTextureMap.set(passId, texture.gpuTexture);
       texture.gpuTexture.addReference();
 
+      // Hang on to the texture in the CaptureData so it's available for serialization.
+      this._captureData.addRenderPassTexture(passId, texture);
+
+      // When you click on a render pass texture, scroll to the corresponding command in the command list.
       passFrame.element.onclick = () => {
         const element = document.getElementById(`RenderPass_${passIndex}`);
         if (element) {

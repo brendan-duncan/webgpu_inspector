@@ -36,6 +36,12 @@ import { Signal } from "../utils/signal.js";
     chunk: string;
 }*/
 
+/*interface Command {
+    id: number;
+    method: string;
+    args: any[];
+}*/
+
 export class CaptureData {
   /**
    * @param {ObjectDatabase} objectDatabase 
@@ -45,7 +51,10 @@ export class CaptureData {
 
     this.frameIndex = 0;
     this.commands = [];
+    this.renderPassTextures = new Map(); // Map of render pass IDs to their associated textures <number, [Texture]>
 
+    // Emitted when frame results are captured and processed, providing the frame index and the list of commands.
+    // (frame: number, commands: Object[])
     this.onCaptureFrameResults = new Signal();
     this.onUpdateCaptureStatus = new Signal();
 
@@ -178,6 +187,18 @@ export class CaptureData {
   }
 
   /**
+   * Adds a texture to a render pass.
+   * @param {number} passId - The ID of the render pass.
+   * @param {Texture} texture - The texture to add.
+   */
+  addRenderPassTexture(passId, texture) {
+    if (!this.renderPassTextures.has(passId)) {
+      this.renderPassTextures.set(passId, []);
+    }
+    this.renderPassTextures.get(passId).push(texture);
+  }
+
+  /**
    * Retrieves an object from the database by its ID.
    * @param {number} id - The ID of the object to retrieve.
    * @returns {Object} The object with the specified ID.
@@ -214,7 +235,6 @@ export class CaptureData {
           const timestampMap = new Array();
 
           const timestampData = new BigInt64Array(self._timestampBuffer.buffer);
-          //console.log(timestampData.length / 2);
 
           const firstTime = Number(timestampData[0]) / 1000000.0;
 
