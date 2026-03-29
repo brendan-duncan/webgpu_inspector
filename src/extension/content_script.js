@@ -1,21 +1,88 @@
+/**
+ * The content script runs in the context of the web page, can send and receive messages
+ * to/from the extension background script, and can inject scripts into the web page.
+ * We use this to inject the webgpu_inspector_loader.js script into the page context,
+ * and register to listen to messages from the background script and forward them to the page,
+ * as well as messages from the page to the background script.
+ * @module content_script
+ */
+
 import { MessagePort } from "../utils/message_port.js";
 import { Actions, PanelActions } from "../utils/actions.js";
-
-// The content script runs in the context of the web page, can send and receive messages
-// to/from the extension background script, and can inject scripts into the web page.
-// We use this to inject the webgpu_inspector_loader.js script into the page context,
-// and register to listen to messages from the background script and forward them to the page,
-// as well as messages from the page to the background script.
 
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
 const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
-const isRunningInFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
+
+/** Reload delay in milliseconds */
+const RELOAD_DELAY_MS = 50;
+
+/**
+ * Checks if the browser is Firefox.
+ * @returns {boolean} True if running in Firefox
+ */
+function isFirefox() {
+  return navigator.userAgent.toLowerCase().includes('firefox');
+}
+
+/**
+ * Checks if the browser is Chrome-based (Chrome, Edge, etc.)
+ * @returns {boolean} True if running in a Chromium-based browser
+ */
+function isChromium() {
+  return navigator.userAgent.indexOf("Chrom") !== -1;
+}
+
+/**
+ * Forwards a valid inspector message to the background script.
+ * @param {Object} message - The message to forward
+ */
+function forwardToBackground(message) {
+  if (!message.action || !Actions.values.has(message.action)) {
+    return;
+  }
+
+  try {
+    port.postMessage(message);
+  } catch (e) {
+    console.error("[WebGPU Inspector] Error sending message from page:", e);
+  }
+}
+
+/**
+ * Forwards a valid inspector/recorder message to the background script.
+ * @param {CustomEvent} event - The event containing the message
+ */
+function handleMessageEvent(event) {
+  const message = event.detail;
+  if (typeof message !== 'object' || message === null) {
+    return;
+  }
+  forwardToBackground(message);
+}
+
+/**
+ * Injects a script element into the document.
+ * @param {string} name - The id name for the script
+ * @param {string} url - The URL of the script
+ * @param {Object|null} attributes - Optional attributes to set on the script
+ */
+function injectScriptNode(name, url, attributes) {
+  const script = document.createElement("script");
+  script.id = name;
+  script.src = url;
+
+  if (attributes) {
+    for (const key in attributes) {
+      script.setAttribute(key, attributes[key]);
+    }
+  }
+
+  (document.head || document.documentElement).appendChild(script);
+}
 
 // Create a message port to communicate with the background script.
 const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
-  // We store the message type in the action field, so if that's empty, it's
-  // not a valid message for the inspector.
   let action = message.action;
   if (!action) {
     return;
@@ -23,13 +90,12 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
 
   // Handle connection handshake from panel
   if (action === Actions.PanelReady) {
-    //console.log("[WebGPU Inspector] Received PanelReady, sending ConnectionAck");
     port.postMessage({ action: Actions.ConnectionAck });
     return;
   }
 
   if (action === PanelActions.RequestTexture || action === PanelActions.CompileShader || action === PanelActions.RevertShader) {
-    const msg = isRunningInFirefox ? cloneInto(message, document.defaultView) : message;
+    const msg = isFirefox() ? cloneInto(message, document.defaultView) : message;
     window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: msg }));
     return;
   }
@@ -38,7 +104,7 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
     sessionStorage.setItem(webgpuRecorderLoadedKey, `${message.frames}%${message.filename}%${message.download}`);
     setTimeout(function () {
       window.location.reload();
-    }, 50);
+    }, RELOAD_DELAY_MS);
     return;
   }
 
@@ -54,9 +120,9 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
       inspectMessage = messageString;
     } else {
       sessionStorage.setItem(webgpuInspectorCaptureFrameKey, messageString);
-      const message = { __webgpuInspector: true, __webgpuInspectorPanel: true, action: PanelActions.Capture,
+      const captureMsg = { __webgpuInspector: true, __webgpuInspectorPanel: true, action: PanelActions.Capture,
         data: messageString };
-      const msg = isRunningInFirefox ? cloneInto(message, document.defaultView) : message;
+      const msg = isFirefox() ? cloneInto(captureMsg, document.defaultView) : captureMsg;
       window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: msg }))
     }
   }
@@ -65,76 +131,22 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
     sessionStorage.setItem(webgpuInspectorLoadedKey, inspectMessage);
     setTimeout(function () {
       window.location.reload();
-    }, 50);
+    }, RELOAD_DELAY_MS);
   }
 });
 
 window.addEventListener('pageshow', (event) => {
   if (event.persisted) {
-    // The page is restored from BFCache, set up a new connection.
     port.reset();
   }
 });
 
-// Listen for messages from the page. If it's a valid
-// inspector message, forward it to the background script through the port.
-window.addEventListener("__WebGPUInspector", (event) => {
-  const message = event.detail;
-  if (typeof message !== 'object' || message === null) {
-    return;
-  }
-
-  const action = message.action;
-
-  if (!Actions.values.has(action)) {
-    return;
-  }
-
-  try {
-    port.postMessage(message);
-  } catch (e) {
-    console.error("[WebGPU Inspector] Error sending message from page:", e);
-  }
-});
-
-// Listen for messages from the page. If it's a valid
-// recorder message, forward it to the background script through the port.
-window.addEventListener("__WebGPURecorder", (event) => {
-  const message = event.detail;
-  if (typeof message !== 'object' || message === null) {
-    return;
-  }
-
-  const action = message.action;
-
-  if (!Actions.values.has(action)) {
-    return;
-  }
-
-  try {
-    port.postMessage(message);
-  } catch (e) {
-    console.error("[WebGPU Inspector] Error sending message from page:", e);
-  }
-});
-
-function injectScriptNode(name, url, attributes) {
-  const script = document.createElement("script");
-  script.id = name;
-  script.src = url;
-
-  if (attributes) {
-    for (const key in attributes) {
-      script.setAttribute(key, attributes[key]);
-    }
-  }
-
-  (document.head || document.documentElement).appendChild(script);
-}
+// Listen for messages from the page and forward to background script
+window.addEventListener("__WebGPUInspector", handleMessageEvent);
+window.addEventListener("__WebGPURecorder", handleMessageEvent);
 
 // Fallback for browsers which don't support the "world" property on content_scripts
-if (navigator.userAgent.indexOf("Chrom") === -1 &&
-  (navigator.userAgent.indexOf("Safari") !== -1 || navigator.userAgent.indexOf("Firefox") !== -1)) {
+if (!isChromium() && (navigator.userAgent.indexOf("Safari") !== -1 || isFirefox())) {
   if (sessionStorage.getItem(webgpuInspectorLoadedKey)) {
     injectScriptNode("__webgpu_inspector", chrome.runtime.getURL("webgpu_inspector_loader.js"));
   }
@@ -153,5 +165,4 @@ if (navigator.userAgent.indexOf("Chrom") === -1 &&
 }
 
 // Send PageReady message to the background script to signal content script is ready.
-//console.log("[WebGPU Inspector] Content script ready, sending PageReady");
 port.postMessage({ action: Actions.PageReady });
