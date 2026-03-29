@@ -539,13 +539,6 @@ export class CapturePanel {
         };
         currentBlock = block;
         currentBlock._passIndex = passIndex;
-      } else if (method === "popDebugGroup") {
-        debugGroupStack.pop();
-        debugGroup = debugGroupStack[debugGroupStack.length - 1];
-        if (!currentBlock.children.length) {
-          currentBlock.remove();
-        }
-        currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
       } else if (method === "createRenderBundleEncoder") {
         const passIndex = command.result.__id ?? passEncoderMap.get(command.result);
 
