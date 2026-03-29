@@ -1,4 +1,13 @@
+/**
+ * Manages a Chrome extension message port connection with automatic reconnection
+ * and message queuing capabilities.
+ */
 export class MessagePort {
+  /**
+   * @param {string} name The name of the port (used for identification)
+   * @param {number?} tabId Optional tab ID to associate with messages
+   * @param {function?} listener Optional message listener to add immediately
+   */
   constructor(name, tabId, listener) {
     this.name = name;
     this.tabId = tabId ?? 0;
@@ -13,9 +22,11 @@ export class MessagePort {
     this.reset();
   }
 
+  /**
+   * Establishes a connection to the Chrome extension runtime.
+   * Sets up disconnect and message listeners, and attempts reconnection on failure.
+   */
   reset() {
-    //console.log(`[WebGPU Inspector] MessagePort ${this.name} resetting connection`);
-
     const self = this;
     this._isConnected = false;
     this._isConnecting = true;
@@ -24,18 +35,15 @@ export class MessagePort {
       this._port = chrome.runtime.connect({ name: this.name });
 
       this._port.onDisconnect.addListener(() => {
-        //console.warn(`[WebGPU Inspector] MessagePort ${self.name} disconnected`);
         self._isConnected = false;
         self._isConnecting = false;
 
-        // Attempt to reconnect after a short delay
         setTimeout(() => {
           self.reset();
         }, 100);
       });
 
       this._port.onMessage.addListener((message) => {
-        // Handle connection handshake acknowledgment
         if (message.action === "ConnectionAck") {
           self._handleConnectionAck();
           return;
@@ -50,38 +58,37 @@ export class MessagePort {
         }
       });
 
-      // Mark as connected immediately for now
-      // Will be updated to wait for handshake in next step
       this._isConnecting = false;
       this._isConnected = true;
       this._flushMessageQueue();
-
-      //console.log(`[WebGPU Inspector] MessagePort ${this.name} connected`);
     } catch (e) {
-      //console.error(`[WebGPU Inspector] Failed to connect MessagePort ${this.name}:`, e);
       this._isConnecting = false;
       this._isConnected = false;
 
-      // Retry connection after delay
       setTimeout(() => {
         self.reset();
       }, 1000);
     }
   }
 
+  /**
+   * Handles the connection acknowledgment message from the runtime.
+   * @private
+   */
   _handleConnectionAck() {
-    //console.log(`[WebGPU Inspector] MessagePort ${this.name} received connection acknowledgment`);
     this._isConnecting = false;
     this._isConnected = true;
     this._flushMessageQueue();
   }
 
+  /**
+   * Sends all queued messages that were pending during disconnection.
+   * @private
+   */
   _flushMessageQueue() {
     if (!this._isConnected || this._messageQueue.length === 0) {
       return;
     }
-
-    //console.log(`[WebGPU Inspector] Flushing ${this._messageQueue.length} queued messages for port ${this.name}`);
 
     const queue = this._messageQueue.slice();
     this._messageQueue = [];
@@ -91,31 +98,41 @@ export class MessagePort {
     }
   }
 
+  /**
+   * Sends a single message through the port.
+   * @param {Object} message The message to send
+   * @private
+   */
   _sendMessage(message) {
     try {
       this._port.postMessage(message);
     } catch (e) {
       console.error(`[WebGPU Inspector] Failed to send message on port ${this.name}:`, e);
-      // Queue the message and reset connection
       this._messageQueue.push(message);
       this._isConnected = false;
       this.reset();
     }
   }
 
+  /**
+   * Adds a message listener to receive messages from this port.
+   * @param {function} listener The listener function to add
+   */
   addListener(listener) {
     this.listeners.push(listener);
   }
 
+  /**
+   * Sends a message through the port. Messages are queued if not yet connected.
+   * @param {Object} message The message to send
+   */
   postMessage(message) {
     message.__webgpuInspector = true;
     if (this.tabId) {
       message.tabId = this.tabId;
     }
 
-    // If not connected yet, queue the message
     if (!this._isConnected) {
-      //console.log(`[WebGPU Inspector] Queuing message (port ${this.name} not connected yet)`);
       this._messageQueue.push(message);
       return;
     }
