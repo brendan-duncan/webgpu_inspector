@@ -10,7 +10,7 @@ export class Widget {
    * @param {Object?} options 
    */
   constructor(element, parent, options) {
-    this.id = `${this.constructor.name}${Widget.id++}`;
+    this.id = `widget_${Widget.id++}`;
     if (element && typeof element === 'string') {
       element = document.createElement(element);
     }
@@ -239,7 +239,87 @@ export class Widget {
   }
 
   remove() {
+    if (this._parent) {
+      this._parent.removeChild(this);
+    }
+    this._removeEventListeners();
     this.element.remove();
+  }
+
+  _removeEventListeners() {
+    if (this._element) {
+      if (this._boundMouseDown) {
+        this._element.removeEventListener('mousedown', this._boundMouseDown);
+      }
+      if (this._boundMouseMove) {
+        this._element.removeEventListener('mousemove', this._boundMouseMove);
+      }
+      if (this._boundMouseUp) {
+        this._element.removeEventListener('mouseup', this._boundMouseUp);
+      }
+      if (this._boundContextMenu) {
+        this._element.removeEventListener('contextmenu', this._boundContextMenu);
+      }
+      if (this._boundClick) {
+        this._element.removeEventListener('click', this._boundClick);
+      }
+      if (this._boundDoubleClick) {
+        this._element.removeEventListener('dblclick', this._boundDoubleClick);
+      }
+      if (this._boundMouseWheel) {
+        this._element.removeEventListener('mousewheel', this._boundMouseWheel);
+      }
+      if (this._boundMouseOver) {
+        this._element.removeEventListener('mouseover', this._boundMouseOver);
+      }
+      if (this._boundMouseOut) {
+        this._element.removeEventListener('mouseout', this._boundMouseOut);
+      }
+      if (this._boundTouchStart) {
+        this._element.removeEventListener('touchstart', this._boundTouchStart);
+      }
+      if (this._boundTouchEnd) {
+        this._element.removeEventListener('touchend', this._boundTouchEnd);
+      }
+      if (this._boundTouchCancel) {
+        this._element.removeEventListener('touchcancel', this._boundTouchCancel);
+      }
+      if (this._boundTouchMove) {
+        this._element.removeEventListener('touchmove', this._boundTouchMove);
+      }
+      if (this._boundPointerDown) {
+        this._element.removeEventListener('pointerdown', this._boundPointerDown);
+      }
+      if (this._boundPointerMove) {
+        if (this._pointerEventsBoundToWindow) {
+          window.removeEventListener('pointermove', this._boundPointerMove);
+        } else {
+          this._element.removeEventListener('pointermove', this._boundPointerMove);
+        }
+      }
+      if (this._boundPointerUp) {
+        if (this._pointerEventsBoundToWindow) {
+          window.removeEventListener('pointerup', this._boundPointerUp);
+        } else {
+          this._element.removeEventListener('pointerup', this._boundPointerUp);
+        }
+      }
+      if (this._boundDrag) {
+        this._element.removeEventListener('drag', this._boundDrag);
+      }
+      if (this._boundDragStart) {
+        this._element.removeEventListener('dragstart', this._boundDragStart);
+      }
+      if (this._boundDragEnd) {
+        this._element.removeEventListener('dragend', this._boundDragEnd);
+      }
+    }
+    if (this._boundKeyPress) {
+      document.removeEventListener('keydown', this._boundKeyPress);
+    }
+    if (this._boundKeyRelease) {
+      document.removeEventListener('keyup', this._boundKeyRelease);
+    }
   }
 
   /**
@@ -248,7 +328,7 @@ export class Widget {
    */
   removeChild(child) {
     const index = this.children.indexOf(child);
-    if (index != -1) {
+    if (index !== -1) {
       this.children.splice(index, 1);
     }
     child._parent = null;
@@ -342,7 +422,7 @@ export class Widget {
   get visible() {
     let e = this;
     while (e) {
-      if (e._element.style.display == 'none') {
+      if (e._element.style.display === 'none') {
         return false;
       }
       e = e.parent;
@@ -517,17 +597,17 @@ export class Widget {
   set draggable(v) {
     this._element.draggable = v;
     if (v) {
-      this._dragStartEvent = this.dragStartEvent.bind(this);
-      this._dragEndEvent = this.dragEndEvent.bind(this);
-      this._dragEvent = this.dragEvent.bind(this);
-      this.addEventListener('drag', this._dragEvent);
-      this.addEventListener('dragstart', this._dragStartEvent);
-      this.addEventListener('dragend', this._dragEndEvent);
+      this._boundDrag = this.dragEvent.bind(this);
+      this._boundDragStart = this.dragStartEvent.bind(this);
+      this._boundDragEnd = this.dragEndEvent.bind(this);
+      this.addEventListener('drag', this._boundDrag);
+      this.addEventListener('dragstart', this._boundDragStart);
+      this.addEventListener('dragend', this._boundDragEnd);
     } else {
-      if (this._dragEvent) {
-        this.removeEventListener('drag', this._dragEvent);
-        this.removeEventListener('dragstart', this._dragStartEvent);
-        this.removeEventListener('dragend', this._dragEndEvent);
+      if (this._boundDrag) {
+        this.removeEventListener('drag', this._boundDrag);
+        this.removeEventListener('dragstart', this._boundDragStart);
+        this.removeEventListener('dragend', this._boundDragEnd);
       }
     }
   }
@@ -600,15 +680,18 @@ export class Widget {
   enableMouseEvents() {
     if (!this._mouseDownEnabled && this._element) {
       this._mouseDownEnabled = true;
-      this._element.addEventListener('mousedown', this._onMouseDown.bind(this));
+      this._boundMouseDown = this._onMouseDown.bind(this);
+      this._element.addEventListener('mousedown', this._boundMouseDown);
     }
     if (!this._mouseMoveEnabled && this._element) {
-      this.__mouseMoveEnabled = true;
-      this._element.addEventListener('mousemove', this._onMouseMove.bind(this));
+      this._mouseMoveEnabled = true;
+      this._boundMouseMove = this._onMouseMove.bind(this);
+      this._element.addEventListener('mousemove', this._boundMouseMove);
     }
     if (!this._mouseUpEnabled && this._element) {
       this._mouseUpEnabled = true;
-      this._element.addEventListener('mouseup', this._onMouseUp.bind(this));
+      this._boundMouseUp = this._onMouseUp.bind(this);
+      this._element.addEventListener('mouseup', this._boundMouseUp);
     }
   }
 
@@ -617,8 +700,9 @@ export class Widget {
    */
   enableMouseMoveEvent() {
     if (!this._mouseMoveEnabled && this._element) {
-      this.__mouseMoveEnabled = true;
-      this._element.addEventListener('mousemove', this._onMouseMove.bind(this));
+      this._mouseMoveEnabled = true;
+      this._boundMouseMove = this._onMouseMove.bind(this);
+      this._element.addEventListener('mousemove', this._boundMouseMove);
     }
   }
 
@@ -629,7 +713,8 @@ export class Widget {
     this.enableMouseMoveEvent();
     if (!this._contextMenuEnabled && this._element) {
       this._contextMenuEnabled = true;
-      this._element.addEventListener('contextmenu', this._onContextMenu.bind(this));
+      this._boundContextMenu = this._onContextMenu.bind(this);
+      this._element.addEventListener('contextmenu', this._boundContextMenu);
     }
   }
 
@@ -638,8 +723,9 @@ export class Widget {
    */
   enableClickEvent() {
     if (!this._clickEnabled && this._element) {
-      this.__clickEnabled = true;
-      this._element.addEventListener('click', this._onClick.bind(this));
+      this._clickEnabled = true;
+      this._boundClick = this._onClick.bind(this);
+      this._element.addEventListener('click', this._boundClick);
     }
   }
 
@@ -647,10 +733,10 @@ export class Widget {
    * Start listening for DoubleClick events.
    */
   enableDoubleClickEvent() {
-    //this.enableMouseMoveEvent();
     if (!this._doubleClickEnabled && this._element) {
       this._doubleClickEnabled = true;
-      this._element.addEventListener('dblclick', this._onDoubleClick.bind(this));
+      this._boundDoubleClick = this._onDoubleClick.bind(this);
+      this._element.addEventListener('dblclick', this._boundDoubleClick);
     }
   }
 
@@ -660,7 +746,8 @@ export class Widget {
   enableMouseWheelEvent() {
     if (!this._mouseWheelEnabled && this._element) {
       this._mouseWheelEnabled = true;
-      this._element.addEventListener('mousewheel', this._onMouseWheel.bind(this));
+      this._boundMouseWheel = this._onMouseWheel.bind(this);
+      this._element.addEventListener('mousewheel', this._boundMouseWheel);
     }
   }
 
@@ -671,7 +758,8 @@ export class Widget {
     this.enableMouseMoveEvent();
     if (!this._mouseOverEnabled && this._element) {
       this._mouseOverEnabled = true;
-      this._element.addEventListener('mouseover', this._onMouseOver.bind(this));
+      this._boundMouseOver = this._onMouseOver.bind(this);
+      this._element.addEventListener('mouseover', this._boundMouseOver);
     }
   }
 
@@ -682,7 +770,8 @@ export class Widget {
     this.enableMouseMoveEvent();
     if (!this._mouseOutEnabled && this._element) {
       this._mouseOutEnabled = true;
-      this._element.addEventListener('mouseout', this._onMouseOut.bind(this));
+      this._boundMouseOut = this._onMouseOut.bind(this);
+      this._element.addEventListener('mouseout', this._boundMouseOut);
     }
   }
 
@@ -692,11 +781,14 @@ export class Widget {
   enableTouchEvents() {
     if (!this._touchEventsEnabled) {
       this._touchEventsEnabled = true;
-      this._element.addEventListener('touchstart', this._onTouchStart.bind(this));
-      this._element.addEventListener('touchend', this._onTouchEnd.bind(this));
-      this._element.addEventListener('touchcancel', this._onTouchCancel.bind(this));
-      this._element.addEventListener('touchmove', this._onTouchMove.bind(this));
-      // Without this, Android Chrome will hijack touch events.
+      this._boundTouchStart = this._onTouchStart.bind(this);
+      this._boundTouchEnd = this._onTouchEnd.bind(this);
+      this._boundTouchCancel = this._onTouchCancel.bind(this);
+      this._boundTouchMove = this._onTouchMove.bind(this);
+      this._element.addEventListener('touchstart', this._boundTouchStart);
+      this._element.addEventListener('touchend', this._boundTouchEnd);
+      this._element.addEventListener('touchcancel', this._boundTouchCancel);
+      this._element.addEventListener('touchmove', this._boundTouchMove);
       this.style.touchAction = 'none';
     }
   }
@@ -704,15 +796,18 @@ export class Widget {
   enablePointerEvents(bindToWindow) {
     if (!this._pointerEventsEnabled) {
       this._pointerEventsEnabled = true;
-      this._element.addEventListener('pointerdown', this._onPointerDown.bind(this));
+      this._pointerEventsBoundToWindow = bindToWindow;
+      this._boundPointerDown = this._onPointerDown.bind(this);
+      this._boundPointerMove = this._onPointerMove.bind(this);
+      this._boundPointerUp = this._onPointerUp.bind(this);
+      this._element.addEventListener('pointerdown', this._boundPointerDown);
       if (bindToWindow) {
-        window.addEventListener('pointermove', this._onPointerMove.bind(this));
-        window.addEventListener('pointerup', this._onPointerUp.bind(this));
+        window.addEventListener('pointermove', this._boundPointerMove);
+        window.addEventListener('pointerup', this._boundPointerUp);
       } else {
-        this._element.addEventListener('pointermove', this._onPointerMove.bind(this));
-        this._element.addEventListener('pointerup', this._onPointerUp.bind(this));
+        this._element.addEventListener('pointermove', this._boundPointerMove);
+        this._element.addEventListener('pointerup', this._boundPointerUp);
       }
-      // Without this, Android Chrome will hijack touch events.
       this.style.touchAction = 'none';
     }
   }
@@ -759,7 +854,7 @@ export class Widget {
     //if (Widget.currentPointers.some((p) => p.id === pointer.id))
     //this.element.releasePointerCapture(e.pointerId);
     const index = Widget.currentPointers.findIndex((p) => p.id === pointer.id);
-    if (index != -1) {
+    if (index !== -1) {
       Widget.currentPointers.splice(index, 1);
     }
 
@@ -792,11 +887,8 @@ export class Widget {
     this.enableMouseMoveEvent();
     if (!this._keyPressEnabled) {
       this._keyPressEnabled = true;
-      // key events seem to only work on the document level. That's
-      // why we enable enter/leave events, to filter the events to only
-      // accept events for the widget if the mouse is over the widget.
-      document.addEventListener('keydown', this._onKeyPress.bind(this));
-      //this.element.addEventListener("keydown", this._onKeyPress.bind(this));
+      this._boundKeyPress = this._onKeyPress.bind(this);
+      document.addEventListener('keydown', this._boundKeyPress);
     }
   }
 
@@ -809,11 +901,8 @@ export class Widget {
     this.enableMouseMoveEvent();
     if (!this._keyReleaseEnabled) {
       this._keyReleaseEnabled = true;
-      // key events seem to only work on the document level. That's
-      // why we enable enter/leave events, to filter the events to only
-      // accept events for the widget if the mouse is over the widget.
-      document.addEventListener('keyup', this._onKeyRelease.bind(this));
-      //this.element.addEventListener("keyup", this._onKeyRelease.bind(this));
+      this._boundKeyRelease = this._onKeyRelease.bind(this);
+      document.addEventListener('keyup', this._boundKeyRelease);
     }
   }
 
@@ -1277,18 +1366,18 @@ export class Widget {
   onDragEvent(event) {
     const element = this.element;
 
-    if (event.type == 'dragenter') {
+    if (event.type === 'dragenter') {
       element.addEventListener('dragleave', this._onDragEvent);
       element.addEventListener('dragover', this._onDragEvent);
       element.addEventListener('drop', this._onDropEvent);
     }
-    if (event.type == 'dragenter') {
+    if (event.type === 'dragenter') {
       this.dragEnterEvent(event);
     }
-    if (event.type == 'dragleave') {
+    if (event.type === 'dragleave') {
       this.dragLeaveEvent(event);
     }
-    if (event.type == 'dragover') {
+    if (event.type === 'dragover') {
       this.dragOverEvent(event);
     }
   }
