@@ -9,8 +9,8 @@ export class PlotData {
     this.data = new Float32Array(size);
     this.index = 0;
     this.count = 0;
-    this.min = 1.0e10;
-    this.max = -1.0e10;
+    this.min = Infinity;
+    this.max = -Infinity;
   }
 
   reset() {
@@ -18,6 +18,7 @@ export class PlotData {
     this.count = 0;
     this.min = Infinity;
     this.max = -Infinity;
+    this.data.fill(0);
   }
 
   get size() {
@@ -35,29 +36,35 @@ export class PlotData {
   }
 
   add(value) {
-    const oldValue = this.data[this.index];
     this.data[this.index] = value;
     this.index = (this.index + 1) % this._size;
-    this.count = Math.min(this.count + 1, this._size);
 
-    if (this.count === this._size && oldValue !== undefined) {
-      if (oldValue === this.min || oldValue === this.max) {
-        this._recalculateMinMax();
-        return;
+    if (this.count < this._size) {
+      this.count++;
+      if (value < this.min) {
+        this.min = value;
+      } else if (value > this.max) {
+        this.max = value;
       }
+    } else {
+      // Can probably find a way to effectively only call this if the min or max value is being overwritten,
+      // but this is simpler and not too expensive.
+      this._recalculateMinMax();
     }
-    this.min = Math.min(this.min, value);
-    this.max = Math.max(this.max, value);
   }
 
   _recalculateMinMax() {
-    this.min = Infinity;
-    this.max = -Infinity;
-    for (let i = 0; i < this.count; ++i) {
-      const v = this.data[i];
-      if (v < this.min) this.min = v;
-      if (v > this.max) this.max = v;
+    let min = Infinity;
+    let max = -Infinity;
+    const data = this.data;
+    const count = this.count;
+    for (let i = 0; i < count; ++i) {
+      const v = data[i];
+      if (v < min) min = v;
+      if (v > max) max = v;
     }
+    this.min = min;
+    this.max = max;
   }
 
   get(index) {
