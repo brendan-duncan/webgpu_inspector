@@ -602,7 +602,7 @@ export let webgpuInspector = null;
             if (view.__id < 0) {
               Object.defineProperty(object, "__rendersToCanvas", { value: true, enumerable: false, writable: true });
               const texture = view.__texture;
-              if (texture.__frameIndex < this._frameIndex) {
+              if (texture && texture.__frameIndex < this._frameIndex) {
                 const message = "An expired canvas texture is being used as an attachment for a RenderPass.";
                 this._postMessage({ "action": Actions.ValidationError, id: 0, message, stacktrace });
               }
