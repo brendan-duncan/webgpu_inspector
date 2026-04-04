@@ -1,3 +1,8 @@
+## v1.0.2 - April 04, 2026
+
+* Optimize performance issues with the frame and object count plot widget.
+* Fix error when inspecting a page that destructs the canvas texture.
+
 ## v1.0.1 - March 01, 2026
 
 * Version updated to 1.0 to improve the version naming scheme.
