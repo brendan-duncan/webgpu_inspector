@@ -65,12 +65,12 @@ export class ObjectDatabase {
           break;
         }
         case Actions.DeleteObject:
-          self._deleteObject(message.id);
+          self._deleteObject(message.id, true);
           break;
         case Actions.DeleteObjects: {
           const objects = message.idList;
           for (const id of objects) {
-            self._deleteObject(id);
+            self._deleteObject(id, true);
           }
           break;
         }
@@ -422,7 +422,7 @@ export class ObjectDatabase {
     }
   }
 
-  _deleteObject(id) {
+  _deleteObject(id, force) {
     const object = this.allObjects.get(id);
     if (!object) {
       return;
@@ -436,7 +436,7 @@ export class ObjectDatabase {
       self._deleteObject(obj.id);
     });
 
-    if (object.referenceCount > 0) {
+    if (!force && object.referenceCount > 0) {
       return;
     }
 
@@ -477,7 +477,7 @@ export class ObjectDatabase {
       this.pendingRenderPipelines.delete(id, object);
       this.renderPipelines.delete(id, object);
     } else if (object instanceof GPU.ComputePipeline) {
-      this.computePipelines.set(id, object);
+      this.computePipelines.delete(id, object);
       this.pendingComputePipelines.delete(id, object);
     }
 

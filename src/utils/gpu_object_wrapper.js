@@ -192,8 +192,18 @@ export class GPUObjectWrapper {
         return undefined;
       }
 
-      // Call the original method
-      const result = origMethod.call(object, ...args);
+      // Call the original method.
+      // destroy() on a buffer with pending mapAsync throws AbortError — suppress it.
+      let result;
+      try {
+        result = origMethod.call(object, ...args);
+      } catch (e) {
+        if (method === "destroy") {
+          self.onPostCall.emit(object, method, args, undefined, undefined);
+          return undefined;
+        }
+        throw e;
+      }
 
       const isCreate = GPUCreateMethods.has(method) || (self instanceof GPURenderBundleEncoder && method === "finish");
 
