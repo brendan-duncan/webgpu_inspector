@@ -2258,11 +2258,27 @@ export let webgpuInspector = null;
       const texelByteSize = formatInfo.bytesPerBlock;
       const bytesPerRow = (width * texelByteSize + 255) & ~0xff;
       const rowsPerImage = height;
-      const bufferSize = bytesPerRow * rowsPerImage * depthOrArrayLayers;
+      let bufferSize = bytesPerRow * rowsPerImage * depthOrArrayLayers;
       if (!bufferSize || width < formatInfo.blockWidth || height < formatInfo.blockHeight) {
         return;
       }
       const copySize = { width, height, depthOrArrayLayers };
+
+      const maxBufferSize = device.limits.maxBufferSize;
+      if (bufferSize > maxBufferSize) {
+        // Limit layers to fit within the max buffer size
+        const maxLayers = Math.max(1, Math.floor(maxBufferSize / (bytesPerRow * rowsPerImage)));
+        copySize.depthOrArrayLayers = Math.min(depthOrArrayLayers, maxLayers);
+        bufferSize = bytesPerRow * rowsPerImage * copySize.depthOrArrayLayers;
+        // If a single layer still exceeds the limit, limit the height
+        if (bufferSize > maxBufferSize) {
+          const blockHeight = formatInfo.blockHeight || 1;
+          const maxRows = Math.max(blockHeight, Math.floor(maxBufferSize / bytesPerRow) & ~(blockHeight - 1));
+          copySize.height = Math.min(height, maxRows);
+          copySize.depthOrArrayLayers = 1;
+          bufferSize = bytesPerRow * copySize.height;
+        }
+      }
 
       let tempBuffer = null;
       try {
@@ -2277,7 +2293,7 @@ export let webgpuInspector = null;
 
         commandEncoder.copyTextureToBuffer(
           { texture, aspect, mipLevel },
-          { buffer: tempBuffer, bytesPerRow, rowsPerImage: height },
+          { buffer: tempBuffer, bytesPerRow, rowsPerImage: copySize.height },
           copySize
         );
 
@@ -2292,7 +2308,7 @@ export let webgpuInspector = null;
       this.enableRecording();
 
      if (tempBuffer) {
-        this._captureTexturedBuffers.push({ id, tempBuffer, width, height, depthOrArrayLayers, format, passId, mipLevel });
+        this._captureTexturedBuffers.push({ id, tempBuffer, width: copySize.width, height: copySize.height, depthOrArrayLayers: copySize.depthOrArrayLayers, format, passId, mipLevel });
         this._updateStatusMessage();
       }
     }

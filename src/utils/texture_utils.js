@@ -12,6 +12,10 @@ export class TextureUtils {
     this.computeTextureMinMaxU32Module = device.createShaderModule({ code: _getComputeTextureMinMax("u32") });
     this.computeTextureMinMaxS32Module = device.createShaderModule({ code: _getComputeTextureMinMax("i32") });
 
+    this.computeTextureMinMax3dModule = device.createShaderModule({ code: _getComputeTextureMinMax3d("f32") });
+    this.computeTextureMinMax3dU32Module = device.createShaderModule({ code: _getComputeTextureMinMax3d("u32") });
+    this.computeTextureMinMax3dS32Module = device.createShaderModule({ code: _getComputeTextureMinMax3d("i32") });
+
     this.blit3dShaderModule = device.createShaderModule({ code: TextureUtils.blit3dShader });
     this.multisampleBlitShaderModule = device.createShaderModule({ code: TextureUtils.multisampleBlitShader });
     this.depthToFloatShaderModule = device.createShaderModule({ code: TextureUtils.depthToFloatShader });
@@ -86,6 +90,21 @@ export class TextureUtils {
         layout: 'auto',
         compute: { module: this.computeTextureMinMaxS32Module, entryPoint: 'main' }
     });
+
+    this.computeMinMax3dPipeline = device.createComputePipeline({
+        layout: 'auto',
+        compute: { module: this.computeTextureMinMax3dModule, entryPoint: 'main' }
+    });
+
+    this.computeMinMax3dU32Pipeline = device.createComputePipeline({
+        layout: 'auto',
+        compute: { module: this.computeTextureMinMax3dU32Module, entryPoint: 'main' }
+    });
+
+    this.computeMinMax3dS32Pipeline = device.createComputePipeline({
+        layout: 'auto',
+        compute: { module: this.computeTextureMinMax3dS32Module, entryPoint: 'main' }
+    });
   }
 
   copyDepthTexture(src, format, commandEncoder) {
@@ -129,19 +148,15 @@ export class TextureUtils {
     const bgLayoutKey = `${sampleType}#${sampleCount}#${dimension}`;
 
     if (!this.bindGroupLayouts.has(bgLayoutKey)) {
-      const bindGroupLayout = this.device.createBindGroupLayout({
-        entries: [
-          {
-            binding: 0,
-            visibility: GPUShaderStage.FRAGMENT,
-            texture: {
-              viewDimension: dimension,
-              sampleType: sampleType,
-              multisampled: sampleCount > 1
-            }
-          }
-        ]
-      });
+      const entries = dimension === "3d"
+        ? [
+            { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+            { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { viewDimension: "3d", sampleType } }
+          ]
+        : [
+            { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { viewDimension: dimension, sampleType, multisampled: sampleCount > 1 } }
+          ];
+      const bindGroupLayout = this.device.createBindGroupLayout({ entries });
       this.bindGroupLayouts.set(bgLayoutKey, bindGroupLayout);
 
       const pipelineLayout = this.device.createPipelineLayout({
@@ -184,15 +199,18 @@ export class TextureUtils {
 
     const bindGroup = this.device.createBindGroup({
       layout: bindGroupLayout,
-      entries: [
-        { binding: 0, resource: srcView }
-      ]
+      entries: dimension === "3d"
+        ? [{ binding: 0, resource: this.pointSampler }, { binding: 1, resource: srcView }]
+        : [{ binding: 0, resource: srcView }]
     });
 
     const commandEncoder = this.device.createCommandEncoder();
 
-    const minMaxPipeline = (formatInfo?.sampleType === "uint") ? this.computeMinMaxU32Pipeline :
-        (formatInfo?.sampleType === "sint") ? this.computeMinMaxS32Pipeline : this.computeMinMaxPipeline;
+    const minMaxPipeline = dimension === "3d"
+        ? ((formatInfo?.sampleType === "uint") ? this.computeMinMax3dU32Pipeline :
+           (formatInfo?.sampleType === "sint") ? this.computeMinMax3dS32Pipeline : this.computeMinMax3dPipeline)
+        : ((formatInfo?.sampleType === "uint") ? this.computeMinMaxU32Pipeline :
+           (formatInfo?.sampleType === "sint") ? this.computeMinMaxS32Pipeline : this.computeMinMaxPipeline);
 
     const minMaxBindGroup = this.device.createBindGroup({
         layout: minMaxPipeline.getBindGroupLayout(0),
@@ -390,6 +408,33 @@ function _getComputeTextureMinMax(fmt) {
               let color = vec4f(textureLoad(inputTexture, vec2<u32>(x, y), 0));
               minValue = min(minValue, color);
               maxValue = max(maxValue, color);
+          }
+      }
+      output.minValue = minValue;
+      output.maxValue = maxValue;
+  }`;
+}
+
+function _getComputeTextureMinMax3d(fmt) {
+  return `
+  struct Result {
+      minValue: vec4f,
+      maxValue: vec4f,
+  };
+  @group(0) @binding(0) var inputTexture: texture_3d<${fmt}>;
+  @group(0) @binding(1) var<storage, read_write> output: Result;
+  @compute @workgroup_size(1)
+  fn main() {
+      let dims = textureDimensions(inputTexture);
+      var minValue = vec4f(3.402823466e+38);
+      var maxValue = vec4f(0.0);
+      for (var x = 0u; x < dims.x; x++) {
+          for (var y = 0u; y < dims.y; y++) {
+              for (var z = 0u; z < dims.z; z++) {
+                  let color = vec4f(textureLoad(inputTexture, vec3u(x, y, z), 0));
+                  minValue = min(minValue, color);
+                  maxValue = max(maxValue, color);
+              }
           }
       }
       output.minValue = minValue;
