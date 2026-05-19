@@ -15,7 +15,7 @@
     --fg-muted: #cfcfcf;
     
     --accent-primary: #0078d4;
-    --accent-success: #4ec9b0;
+    --accent-success: #338329;
     --accent-warning: #dcdcaa;
     --accent-error: #f14c4c;
     --accent-info: #569cd6;
@@ -133,8 +133,12 @@
     background-color: transparent;
 }
 
-/* Buttons */
-.btn {
+/* Buttons.
+ * Selectors are written as `button.btn*` so they out-rank the legacy `.button`
+ * rule further down in this file (added by the Button widget itself); without
+ * that extra specificity, `.button { background-color: rgb(60,60,60) }` wins
+ * by source order and every .btn variant ends up gray. */
+button.btn {
     background-color: var(--accent-primary);
     border: none;
     border-radius: var(--radius-sm);
@@ -145,30 +149,29 @@
     transition: background-color 0.2s, filter 0.2s;
 }
 
-.btn:hover {
+button.btn:hover {
     filter: brightness(1.2);
 }
 
-.btn:disabled {
+button.btn:disabled {
     color: var(--fg-muted);
     cursor: not-allowed;
     filter: brightness(0.7);
 }
 
-.btn-secondary {
+button.btn-secondary {
     background-color: var(--bg-elevated);
 }
 
-.btn-success {
+button.btn-success {
     background-color: var(--accent-success);
-    color: #000;
 }
 
-.btn-danger {
+button.btn-danger {
     background-color: var(--accent-error);
 }
 
-.btn-info {
+button.btn-info {
     background-color: var(--bg-elevated);
     border: 1px solid var(--border-color);
 }

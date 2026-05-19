@@ -127,7 +127,7 @@ export class CapturePanel {
       }
     });
 
-    new Button(_controlBar, { label: "Capture", class: "btn", callback: () => {
+    new Button(_controlBar, { label: "Capture", class: "btn btn-success", callback: () => {
       try {
         this._captureData = new CaptureData(this.database);
         this._captureData.onCaptureFrameResults.addListener(self._captureFrameResults, self);
