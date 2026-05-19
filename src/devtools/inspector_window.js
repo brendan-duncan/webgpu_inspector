@@ -14,12 +14,19 @@ import { decodeBase64 } from "../utils/base64.js";
 import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import { Texture } from "./gpu_objects/texture.js";
 import { GPUObjectRef } from "./gpu_objects/gpu_object_ref.js";
+import { takeCaptureHandoff } from "../utils/capture_handoff.js";
 
 export class InspectorWindow extends Window {
   constructor() {
     super();
 
-    const tabId = chrome.devtools.inspectedWindow.tabId;
+    // chrome.devtools is only available when this page is loaded as a DevTools
+    // panel. When opened standalone (e.g. via "Open in New Window" from a
+    // capture tab), it is undefined; the panel still works as a capture viewer.
+    const tabId = (typeof chrome !== "undefined" && chrome.devtools?.inspectedWindow)
+      ? chrome.devtools.inspectedWindow.tabId
+      : 0;
+    this.isStandalone = !tabId;
     // readyAction posts PanelReady on every (re)connect, so a service-worker
     // restart re-registers this port in the background without requiring the
     // user to trigger a message first.
@@ -75,6 +82,29 @@ export class InspectorWindow extends Window {
     });
 
     this.initialize();
+    this._loadPendingCapture();
+  }
+
+  async _loadPendingCapture() {
+    try {
+      const hash = (typeof window !== "undefined" && window.location.hash) || "";
+      const match = /pendingCapture=([^&]+)/.exec(hash);
+      if (!match) {
+        return;
+      }
+      const key = decodeURIComponent(match[1]);
+      const text = await takeCaptureHandoff(key);
+      if (!text) {
+        return;
+      }
+      // Activate the Capture tab and feed the JSON through the existing
+      // import flow as if the user had loaded it from disk.
+      this._tabs.activeTab = 1;
+      const label = key.replace(/^webgpu_inspector_pending_capture_/, "") || "imported";
+      this._capturePanel._importCaptureJson(text, label);
+    } catch (e) {
+      console.error("Failed to load pending capture:", e);
+    }
   }
 
   async initialize() {

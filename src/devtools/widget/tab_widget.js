@@ -64,6 +64,7 @@ export class TabWidget extends Div {
    * Add a tab.
    * @param {String} label
    * @param {Widget} panel
+   * @returns {TabHandle} The handle widget for the new tab.
    */
   addTab(label, panel) {
     panel._tabLabel = label;
@@ -82,6 +83,8 @@ export class TabWidget extends Div {
     }
 
     panel.domChanged();
+
+    return handle;
   }
 
   /**

@@ -1494,6 +1494,11 @@ ol::-webkit-scrollbar-thumb:hover {
   padding-left: 5px;
 }
 
+/* Capture tab right-click menu */
+.capture-tab-context-menu {
+  z-index: 2000;
+}
+
 /* Inspector filter panel */
 .inspector-filter-collapsible > .title_bar {
   background-color: #2f7d32;
@@ -1850,11 +1855,16 @@ li.tree-item .expandbutton
 }
 
 .capture_filterArea {
-  padding-top:5px;
-  padding-bottom: 5px;
-  padding-left: 10px;
+  padding: 5px 10px;
   border-bottom: 1px solid #000;
   background-color: #444;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.capture_filter_stats {
+  margin-left: auto;
 }
 
 .capture_array_view {

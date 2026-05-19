@@ -259,12 +259,21 @@ export class CaptureData {
               timestampMap.push(command);
 
               if (command.header) {
+                const passLabel = command.args?.[0]?.label;
                 if (command.method === "beginRenderPass") {
-                  const headerText = `Render Pass ${renderPassIndex} Duration: ${command.duration}ms`;
+                  let headerText = `Render Pass ${renderPassIndex}`;
+                  if (passLabel) {
+                    headerText += ` "${passLabel}"`;
+                  }
+                  headerText += ` Duration: ${command.duration}ms`;
                   command.header.text = headerText;
                   renderPassIndex++;
                 } else {
-                  const headerText = `Compute Pass ${computePassIndex} Duration: ${command.duration}ms`;
+                  let headerText = `Compute Pass ${computePassIndex}`;
+                  if (passLabel) {
+                    headerText += ` "${passLabel}"`;
+                  }
+                  headerText += ` Duration: ${command.duration}ms`;
                   command.header.text = headerText;
                   computePassIndex++;
                 }

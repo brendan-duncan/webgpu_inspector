@@ -23,8 +23,9 @@ import { getFormatFromReflection } from "../utils/reflection_format.js";
 import { ResourceType, WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
 import { CaptureData } from "./capture_data.js";
 import { ShaderDebugger } from "./shader_debugger.js";
-import { downloadCaptureJson } from "./capture_export.js";
+import { buildCaptureJson, downloadCaptureJson } from "./capture_export.js";
 import { importCaptureJson } from "./capture_import.js";
+import { putCaptureHandoff } from "../utils/capture_handoff.js";
 
 const _inspectButtonStyle = "btn btn-info";
 
@@ -212,8 +213,7 @@ export class CapturePanel {
       this.captureStacktraces = value;
     });
 
-    this._captureFrame = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });
-    this._captureStats = new Button(_controlBar, { label: "Frame Stats", style: "display: none;" });
+    //this._captureFrame = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });
     this._captureStatus = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });
 
     new Div(_controlBar, { class: "control-bar-spacer" });
@@ -515,12 +515,13 @@ export class CapturePanel {
     this.filterEdit = new TextInput(filterArea, { style: "width: 200px;", placeholder: "Filter", onEdit: (value) => {
       self._filterCommands(value, commands);
     } });
+    state.statsButton = new Button(filterArea, {
+      label: "Frame Stats",
+      class: "btn capture_filter_stats",
+      callback: () => self._inspectStats(commandInfoContents)
+    });
 
     const frameContents = new Div(_frameContents, { class: "capture_frame" });
-
-    this._captureStats.callback = () => {
-      self._inspectStats(commandInfoContents);
-    };
 
     const debugGroupStack = [frameContents];
     const debugGroupLabelStack = [];
@@ -625,7 +626,11 @@ export class CapturePanel {
 
         const header = new Div(currentBlock, { id: `RenderPass_${passIndex}`, class: "capture_renderpass_header" });
         const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
+        const renderPassLabel = args[0]?.label;
         let headerText = `Render Pass ${passIndex}`;
+        if (renderPassLabel) {
+          headerText += ` "${renderPassLabel}"`;
+        }
         if (command.duration !== undefined) {
           headerText += ` Duration:${command.duration}ms`;
         }
@@ -671,7 +676,12 @@ export class CapturePanel {
         currentBlock = new Div(debugGroup, { class: "capture_computepass" });
         const header = new Div(currentBlock, { id: `ComputePass_${passIndex}`, class: "capture_computepass_header" });
         const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
-        command.header = new Span(header, { text: `Compute Pass ${passIndex}` });
+        const computePassLabel = args[0]?.label;
+        let computeHeaderText = `Compute Pass ${passIndex}`;
+        if (computePassLabel) {
+          computeHeaderText += ` "${computePassLabel}"`;
+        }
+        command.header = new Span(header, { text: computeHeaderText });
         const extra = new Span(header, { style: "margin-left: 10px;" });
         const block = new Div(currentBlock);
         header.element.onclick = () => {
@@ -849,12 +859,182 @@ export class CapturePanel {
     this._captureTabs.push(state);
     const wasFirst = this._captureTab.numTabs === 0;
     const tabLabel = source === "live" ? `Frame ${frame}` : source;
-    this._captureTab.addTab(tabLabel, captureContents);
+    const handle = this._captureTab.addTab(tabLabel, captureContents);
+    state.tabHandle = handle;
+    state.tabLabel = tabLabel;
+    this._installCaptureTabContextMenu(handle, state);
     if (!wasFirst) {
       this._captureTab.activeTab = this._captureTab.numTabs - 1;
     }
 
     this.database.onCapturedObjectsChanged.emit();
+  }
+
+  /**
+   * Attach a right-click context menu to a capture tab handle, offering to
+   * re-open the captured frame in a new tab or in a separate browser window.
+   * Both options re-import the capture through the same JSON-based path that
+   * "Load Capture" uses, so the source tab is left untouched.
+   * @param {TabHandle} handle
+   * @param {Object} state - The per-tab state stored on captureContents._captureState.
+   */
+  _installCaptureTabContextMenu(handle, state) {
+    if (!handle || !handle.element) {
+      return;
+    }
+    const self = this;
+    handle.element.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      self._showCaptureTabContextMenu(e.clientX, e.clientY, state);
+    });
+  }
+
+  /**
+   * Build and display the capture-tab context menu at the given screen coords.
+   * The menu is anchored to document.body so it can escape its containing
+   * scroll/overflow regions, and is dismissed on any click or Escape.
+   */
+  _showCaptureTabContextMenu(x, y, state) {
+    this._closeCaptureTabContextMenu();
+
+    const self = this;
+    const menu = document.createElement("div");
+    menu.className = "menu-dropdown capture-tab-context-menu open";
+    menu.style.position = "fixed";
+    menu.style.top = `${y}px`;
+    menu.style.left = `${x}px`;
+
+    const addItem = (label, onClick) => {
+      const item = document.createElement("div");
+      item.className = "menu-item";
+      item.textContent = label;
+      item.addEventListener("click", (e) => {
+        e.stopPropagation();
+        self._closeCaptureTabContextMenu();
+        try {
+          onClick();
+        } catch (err) {
+          console.error(err);
+        }
+      });
+      menu.appendChild(item);
+    };
+
+    addItem("Open in New Tab", () => self._reopenCaptureInNewTab(state));
+    addItem("Open in New Window", () => self._reopenCaptureInNewWindow(state));
+
+    document.body.appendChild(menu);
+    this._activeContextMenu = menu;
+
+    const dismiss = (e) => {
+      if (e && menu.contains(e.target)) {
+        return;
+      }
+      self._closeCaptureTabContextMenu();
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        self._closeCaptureTabContextMenu();
+      }
+    };
+    this._contextMenuDismiss = dismiss;
+    this._contextMenuKey = onKey;
+    // The contextmenu event that triggered this method has already passed its
+    // capture-phase document listeners, so registering now is safe; the only
+    // events that will reach `dismiss` are subsequent user actions.
+    document.addEventListener("mousedown", dismiss, true);
+    document.addEventListener("contextmenu", dismiss, true);
+    document.addEventListener("keydown", onKey);
+  }
+
+  _closeCaptureTabContextMenu() {
+    if (this._activeContextMenu) {
+      this._activeContextMenu.remove();
+      this._activeContextMenu = null;
+    }
+    if (this._contextMenuDismiss) {
+      document.removeEventListener("mousedown", this._contextMenuDismiss, true);
+      document.removeEventListener("contextmenu", this._contextMenuDismiss, true);
+      this._contextMenuDismiss = null;
+    }
+    if (this._contextMenuKey) {
+      document.removeEventListener("keydown", this._contextMenuKey);
+      this._contextMenuKey = null;
+    }
+  }
+
+  /**
+   * Serialize the given tab's capture state to a JSON string, the same shape
+   * "Save Capture" would write to disk.
+   */
+  _captureStateToJson(state) {
+    const data = buildCaptureJson(
+      state.frame,
+      state.commands,
+      this.database,
+      state.statistics,
+      "__buildVersion"
+    );
+    return JSON.stringify(data);
+  }
+
+  /**
+   * Re-import the given capture as a fresh tab within this panel. Uses the
+   * same code path as loading a saved JSON file so the new tab is fully
+   * independent of the source.
+   */
+  _reopenCaptureInNewTab(state) {
+    let text;
+    try {
+      text = this._captureStateToJson(state);
+    } catch (e) {
+      console.error("Failed to serialize capture:", e);
+      return;
+    }
+    const label = state.source === "live"
+      ? `Frame ${state.frame} (copy)`
+      : `${state.tabLabel || state.source} (copy)`;
+    this._importCaptureJson(text, label);
+  }
+
+  /**
+   * Open the given capture in a separate browser window. The new window loads
+   * the same panel HTML; we hand off the JSON through IndexedDB keyed by a
+   * hash fragment, because capture payloads with mip data routinely exceed
+   * localStorage's ~5MB-per-origin cap.
+   */
+  async _reopenCaptureInNewWindow(state) {
+    let text;
+    try {
+      text = this._captureStateToJson(state);
+    } catch (e) {
+      console.error("Failed to serialize capture:", e);
+      return;
+    }
+    const labelSource = state.source === "live"
+      ? `frame_${state.frame}`
+      : (state.tabLabel || state.source || "capture");
+    const safeLabel = labelSource.replace(/[^A-Za-z0-9_.-]+/g, "_") || "capture";
+    const key = `webgpu_inspector_pending_capture_${safeLabel}_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+    try {
+      await putCaptureHandoff(key, text);
+    } catch (e) {
+      console.error("Failed to stash capture for new window:", e);
+      return;
+    }
+    let panelUrl;
+    try {
+      panelUrl = chrome.runtime.getURL("/webgpu_inspector_panel.html");
+    } catch (e) {
+      console.error("chrome.runtime.getURL is unavailable:", e);
+      return;
+    }
+    const url = `${panelUrl}#pendingCapture=${encodeURIComponent(key)}`;
+    const newWindow = window.open(url, "_blank", "noopener,width=1280,height=800");
+    if (!newWindow) {
+      console.error("Failed to open new window (popup blocked?).");
+    }
   }
 
   /**
@@ -872,13 +1052,8 @@ export class CapturePanel {
       this._frameImages = state.frameImages;
       this._lastSelectedCommand = state.lastSelectedCommand;
       this.statistics = state.statistics;
-      this._captureFrame.text = `Frame ${state.frame}${state.source !== "live" ? ` (${state.source})` : ""}`;
-      this._captureStats.style.display = "inline-block";
+      //this._captureFrame.text = `Frame ${state.frame}${state.source !== "live" ? ` (${state.source})` : ""}`;
       this._saveMenuItem.element.classList.remove("disabled");
-      const commandInfoContents = state.commandInfoContents;
-      this._captureStats.callback = () => {
-        this._inspectStats(commandInfoContents);
-      };
     } else if (panel == null) {
       // All tabs closed.
       this._activeTabState = null;
@@ -888,8 +1063,7 @@ export class CapturePanel {
       this._passEncoderCommands = new Map();
       this._frameImages = null;
       this._lastSelectedCommand = null;
-      this._captureFrame.text = "";
-      this._captureStats.style.display = "none";
+      //this._captureFrame.text = "";
       this._saveMenuItem.element.classList.add("disabled");
     }
     // Otherwise the active tab is something like a shader editor; leave the
