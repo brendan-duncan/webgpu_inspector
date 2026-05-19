@@ -23,6 +23,7 @@ import { ResourceType, WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
 import { CaptureData } from "./capture_data.js";
 import { ShaderDebugger } from "./shader_debugger.js";
 import { downloadCaptureJson } from "./capture_export.js";
+import { importCaptureJson } from "./capture_import.js";
 
 const _inspectButtonStyle = "btn btn-info";
 
@@ -45,8 +46,84 @@ export class CapturePanel {
     this.statistics = new CaptureStatistics();
 
     this._captureData = null;
+    // The TabWidget is created once and survives every capture. Each capture or
+    // imported JSON file adds a new tab. The active and live tabs may differ:
+    // active is the one the user is looking at, live is the one currently
+    // receiving stream-in data from a running capture.
+    this._captureTabs = [];
+    this._activeTabState = null;
+    this._liveTabState = null;
+    // Imported captures are placed in their own ID namespace so they don't
+    // collide with live objects in the database. Each import bumps this by 1B.
+    this._nextImportIdOffset = 1_000_000_000;
 
     const _controlBar = new Div(parent, { class: "control-bar" });
+
+    // Hamburger menu for Save / Load actions. Sits to the left of Capture.
+    const menuContainer = new Div(_controlBar, { class: "menu-container" });
+    const menuButton = new Widget("button", menuContainer, {
+      class: "menu-button",
+      title: "Menu"
+    });
+    menuButton.element.innerHTML = "&#9776;";
+    const menuDropdown = new Div(menuContainer, { class: "menu-dropdown" });
+
+    this._saveMenuItem = new Div(menuDropdown, { class: ["menu-item", "disabled"], text: "Save Capture" });
+    this._saveMenuItem.element.addEventListener("click", () => {
+      if (this._saveMenuItem.element.classList.contains("disabled")) {
+        return;
+      }
+      menuDropdown.element.classList.remove("open");
+      const state = self._activeTabState;
+      if (!state) {
+        return;
+      }
+      try {
+        downloadCaptureJson(
+          state.frame,
+          state.commands,
+          self.database,
+          state.statistics,
+          "__buildVersion"
+        );
+      } catch (e) {
+        console.error("Failed to save capture JSON:", e);
+      }
+    });
+
+    const loadMenuItem = new Div(menuDropdown, { class: "menu-item", text: "Load Capture" });
+    loadMenuItem.element.addEventListener("click", () => {
+      menuDropdown.element.classList.remove("open");
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".json,application/json";
+      input.style.display = "none";
+      input.addEventListener("change", () => {
+        const file = input.files && input.files[0];
+        input.remove();
+        if (!file) {
+          return;
+        }
+        file.text().then((text) => {
+          self._importCaptureJson(text, file.name);
+        }).catch((e) => {
+          console.error("Failed to read capture JSON:", e);
+        });
+      });
+      document.body.appendChild(input);
+      input.click();
+    });
+
+    menuButton.element.addEventListener("click", (e) => {
+      e.stopPropagation();
+      menuDropdown.element.classList.toggle("open");
+    });
+    // Click anywhere else closes the menu.
+    document.addEventListener("click", (e) => {
+      if (!menuContainer.element.contains(e.target)) {
+        menuDropdown.element.classList.remove("open");
+      }
+    });
 
     new Button(_controlBar, { label: "Capture", class: "btn", callback: () => {
       try {
@@ -133,26 +210,6 @@ export class CapturePanel {
 
     this._captureFrame = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });
     this._captureStats = new Button(_controlBar, { label: "Frame Stats", style: "display: none;" });
-    this._exportJsonButton = new Button(_controlBar, { label: "Export JSON", class: "btn",
-      tooltip: "Download the last captured frame as a JSON file for use by external tools.",
-      style: "display: none;",
-      callback: () => {
-        if (!self._captureCommands) {
-          return;
-        }
-        try {
-          downloadCaptureJson(
-            self._captureData?.frameIndex ?? 0,
-            self._captureCommands,
-            self.database,
-            self.statistics,
-            "__buildVersion"
-          );
-        } catch (e) {
-          console.error("Failed to export capture JSON:", e);
-        }
-      }
-    });
     this._captureStatus = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });
 
     new Div(_controlBar, { class: "control-bar-spacer" });
@@ -163,9 +220,17 @@ export class CapturePanel {
 
     this._capturePanel = new Div(parent, { style: "overflow: hidden; white-space: nowrap; height: calc(-85px + 100vh); display: flex;" });
 
+    this._captureTab = new TabWidget(this._capturePanel, { displayCloseButton: true, style: "width: 100%;" });
+    this._captureTab.onActiveTabChanged.addListener(this._onCaptureTabChanged, this);
+    this._captureTab.onTabClosed.addListener(this._onCaptureTabClosed, this);
+
     this.window.onTextureLoaded.addListener(this._textureLoaded, this);
     this.window.onTextureDataChunkLoaded.addListener(this._textureDataChunkLoaded, this);
 
+    // These mirror the active tab's per-tab state so the existing render loop
+    // (which writes through `this._frameImages` etc.) keeps working unchanged.
+    // `_onCaptureTabChanged` rewires them whenever the user switches tabs.
+    this._frameImages = null;
     this._frameImageList = [];
     this._lastSelectedCommand = null;
     this._gpuTextureMap = new Map();
@@ -331,10 +396,13 @@ export class CapturePanel {
   }
 
   /**
-   * Captures objects from command arguments, tracking them in the database.
+   * Captures objects from command arguments, tracking them in the database and
+   * recording which IDs the active tab is referencing so they can be released
+   * when the tab is closed.
    * @param {*} args - Command arguments to process.
    */
   _captureObjectsFromArgs(args) {
+    const state = this._activeTabState;
     if (args instanceof Array || args instanceof Object) {
       for (const m in args) {
         const arg = args[m];
@@ -344,12 +412,18 @@ export class CapturePanel {
             if (obj) {
               this.database.capturedObjects.set(arg.__id, obj);
               obj.incrementReferenceCount();
+              if (state) {
+                state.capturedObjectIds.add(arg.__id);
+              }
 
               if (obj instanceof TextureView) {
                 const texture = this.database.getTextureFromView(obj);
                 if (texture) {
                   this.database.capturedObjects.set(texture.id, texture);
                   texture.incrementReferenceCount();
+                  if (state) {
+                    state.capturedObjectIds.add(texture.id);
+                  }
                 }
               }
             }
@@ -367,36 +441,68 @@ export class CapturePanel {
    * @param {Array<Command>} commands - Array of commands for the frame.
    */
   _captureFrameResults(frame, commands) {
-    const contents = this._capturePanel;
+    this._buildCaptureTab({ frame, commands, source: "live", captureData: this._captureData });
+  }
 
-    this._captureFrame.text = `Frame ${frame}`;
-    this._captureStats.style.display = "inline-block";
-    this._exportJsonButton.style.display = "inline-block";
+  /**
+   * Build a tab to display a captured frame. Used for both live captures and
+   * captures loaded from a previously-exported JSON file. After this returns,
+   * a new tab has been added to the TabWidget and made active; the existing
+   * tabs are left intact.
+   * @param {Object} init - Tab seed: { frame, commands, source, captureData?, statistics?, importedObjectIds? }
+   */
+  _buildCaptureTab(init) {
+    const frame = init.frame;
+    const commands = init.commands;
+    const source = init.source || "live";
 
-    contents.html = "";
+    // Per-tab state. Lives for the lifetime of the tab. `_onCaptureTabChanged`
+    // will re-point `this.*` mirrors at this state when the tab is activated.
+    const state = {
+      frame,
+      source,
+      commands,
+      statistics: init.statistics || new CaptureStatistics(),
+      frameImages: null,
+      frameImageList: [],
+      passEncoderCommands: new Map(),
+      gpuTextureMap: new Map(),
+      commandInfoContents: null,
+      captureContents: null,
+      lastSelectedCommand: null,
+      capturedObjectIds: new Set(),
+      importedObjectIds: init.importedObjectIds || new Set(),
+      captureData: init.captureData || null
+    };
 
-    this._captureTab = new TabWidget(contents, { displayCloseButton: true, style: "width: 100%;" });
+    // Activate the new state immediately so that render-time click handlers
+    // (which write `lastSelectedCommand`, `capturedObjectIds`, etc.) target
+    // this tab. The tab's content won't be visible to the user until addTab +
+    // activeTab assignment at the end of the function.
+    this._activeTabState = state;
+    this._captureCommands = state.commands;
+    this._frameImageList = state.frameImageList;
+    this._passEncoderCommands = state.passEncoderCommands;
+    this._gpuTextureMap = state.gpuTextureMap;
+    this.statistics = state.statistics;
+    this._lastSelectedCommand = null;
+
+    if (source === "live") {
+      this._liveTabState = state;
+    }
+
     const captureContents = new Div(null, { style: "overflow: hidden; white-space: nowrap; height: calc(-100px + 100vh); display: flex;" });
-    this._captureTab.addTab(`Frame ${frame}`, captureContents);
+    state.captureContents = captureContents;
+    captureContents._captureState = state;
 
-    this._captureCommands = commands;
-
-    this.database.clearCapturedObjects();
-
-    this._frameImageList.length = 0;
-    this._passEncoderCommands.clear();
-
-    this._gpuTextureMap.forEach((value) => {
-      value.removeReference();
-    });
-    this._gpuTextureMap.clear();
-
-    this._frameImages = new Span(captureContents, { class: "capture_frameImages", style: "flex: 0 0 auto;" });
-    this._frameImages.style.display = "none";
+    state.frameImages = new Span(captureContents, { class: "capture_frameImages", style: "flex: 0 0 auto;" });
+    state.frameImages.style.display = "none";
+    this._frameImages = state.frameImages;
 
     const _frameContents = new Span(captureContents, { class: "capture_frameContents", style: "flex: 0 0 auto; width: 590px; height: calc(-105px + 100vh);" });
     const commandInfo = new Span(captureContents, { class: "capture_commandInfo", style: "flex: 1 1 auto; display: flex;" });
     const commandInfoContents = new Div(commandInfo, { style: "flex: 1 1 auto;" });
+    state.commandInfoContents = commandInfoContents;
 
     const self = this;
 
@@ -724,6 +830,128 @@ export class CapturePanel {
         currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
       }
     }
+
+    // Add the tab and make it the active one. The first tab is auto-activated
+    // by addTab (which fires onActiveTabChanged); subsequent tabs need an
+    // explicit activeTab assignment to switch focus.
+    this._captureTabs.push(state);
+    const wasFirst = this._captureTab.numTabs === 0;
+    const tabLabel = source === "live" ? `Frame ${frame}` : source;
+    this._captureTab.addTab(tabLabel, captureContents);
+    if (!wasFirst) {
+      this._captureTab.activeTab = this._captureTab.numTabs - 1;
+    }
+  }
+
+  /**
+   * Listener for the capture TabWidget. Mirrors the active tab's state on
+   * `this.*` so existing accessors keep working, and refreshes the control bar.
+   */
+  _onCaptureTabChanged(_index, panel) {
+    const state = panel && panel._captureState;
+    if (state) {
+      this._activeTabState = state;
+      this._captureCommands = state.commands;
+      this._frameImageList = state.frameImageList;
+      this._gpuTextureMap = state.gpuTextureMap;
+      this._passEncoderCommands = state.passEncoderCommands;
+      this._frameImages = state.frameImages;
+      this._lastSelectedCommand = state.lastSelectedCommand;
+      this.statistics = state.statistics;
+      this._captureFrame.text = `Frame ${state.frame}${state.source !== "live" ? ` (${state.source})` : ""}`;
+      this._captureStats.style.display = "inline-block";
+      this._saveMenuItem.element.classList.remove("disabled");
+      const commandInfoContents = state.commandInfoContents;
+      this._captureStats.callback = () => {
+        this._inspectStats(commandInfoContents);
+      };
+    } else if (panel == null) {
+      // All tabs closed.
+      this._activeTabState = null;
+      this._captureCommands = null;
+      this._frameImageList = [];
+      this._gpuTextureMap = new Map();
+      this._passEncoderCommands = new Map();
+      this._frameImages = null;
+      this._lastSelectedCommand = null;
+      this._captureFrame.text = "";
+      this._captureStats.style.display = "none";
+      this._saveMenuItem.element.classList.add("disabled");
+    }
+    // Otherwise the active tab is something like a shader editor; leave the
+    // capture-related mirrors pointing at the previous capture tab so when the
+    // user returns to it, state is unchanged.
+  }
+
+  /**
+   * Listener for the capture TabWidget. Releases resources held by the tab.
+   */
+  _onCaptureTabClosed(panel) {
+    const state = panel && panel._captureState;
+    if (!state) {
+      return;
+    }
+    const idx = this._captureTabs.indexOf(state);
+    if (idx >= 0) {
+      this._captureTabs.splice(idx, 1);
+    }
+    if (state === this._liveTabState) {
+      this._liveTabState = null;
+      this._captureData = null;
+    }
+    // Release preview GPU textures.
+    if (state.gpuTextureMap) {
+      state.gpuTextureMap.forEach((t) => {
+        if (t && typeof t.removeReference === "function") {
+          t.removeReference();
+        }
+      });
+      state.gpuTextureMap.clear();
+    }
+    // Decrement reference counts for objects this tab captured. Stale entries
+    // in `database.capturedObjects` are harmless — `getObject` checks
+    // `allObjects` first — so we don't try to surgically remove them here.
+    for (const id of state.capturedObjectIds) {
+      const obj = this.database.getObject(id);
+      if (obj) {
+        obj.decrementReferenceCount();
+      }
+    }
+    // Imported tabs own their objects outright; drop them from the database.
+    for (const id of state.importedObjectIds) {
+      this.database.capturedObjects.delete(id);
+    }
+  }
+
+  /**
+   * Load a previously-exported capture JSON file as a new tab.
+   * @param {string} text - The file contents.
+   * @param {string} filename - The originating filename (used as the tab label).
+   */
+  _importCaptureJson(text, filename) {
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error("Capture JSON parse error:", e);
+      return;
+    }
+    let imported;
+    try {
+      const offset = this._nextImportIdOffset;
+      this._nextImportIdOffset += 1_000_000_000;
+      imported = importCaptureJson(data, this.database, offset);
+    } catch (e) {
+      console.error("Failed to load capture JSON:", e);
+      return;
+    }
+    this._buildCaptureTab({
+      frame: imported.frame,
+      commands: imported.commands,
+      statistics: imported.statistics,
+      importedObjectIds: imported.importedObjectIds,
+      source: filename || "imported"
+    });
   }
 
   /**
@@ -948,6 +1176,9 @@ export class CapturePanel {
         }
         cmd.classList.add("capture_command_selected");
         self._lastSelectedCommand = cmd;
+        if (self._activeTabState) {
+          self._activeTabState.lastSelectedCommand = cmd;
+        }
       }
 
       self._showCaptureCommandInfo(command, ""/*name*/, commandInfo);
@@ -3193,19 +3424,26 @@ export class CapturePanel {
    * @param {number} passId - Render pass identifier.
    */
   _textureLoaded(texture, passId) {
-    if (!this._captureData) {
+    // Textures stream in for the currently live capture. Route them to the
+    // live tab state — which may or may not be the active tab.
+    const liveState = this._liveTabState;
+    if (!this._captureData || !liveState) {
       return;
     }
 
     this._captureData.captureTextureLoaded();
 
-    if (this._lastSelectedCommand) {
+    // Only refresh the command-info pane if the active tab is the live one;
+    // otherwise we'd churn another tab the user is looking at.
+    if (liveState === this._activeTabState && this._lastSelectedCommand) {
       this._lastSelectedCommand.element.click();
     }
 
     this._updateCaptureStatus();
 
-    const frameImages = this._frameImages;
+    const frameImages = liveState.frameImages;
+    const frameImageList = liveState.frameImageList;
+    const gpuTextureMap = liveState.gpuTextureMap;
 
     if (passId != -1 && frameImages) {
       const passIdValue = passId / 10;
@@ -3215,15 +3453,15 @@ export class CapturePanel {
       frameImages.style.display = "block";
       let passFrame = null;
 
-      if (passId >= this._frameImageList.length) {
+      if (passId >= frameImageList.length) {
         passFrame = new Div(frameImages, { class: "capture_pass_texture" });
-        this._frameImageList[passId] = passFrame;
+        frameImageList[passId] = passFrame;
       } else {
         passFrame = new Div(null, { class: "capture_pass_texture" });
         let found = false;
         for (let i = passId - 1; i >= 0; --i) {
-          if (this._frameImageList[i]) {
-            frameImages.insertAfter(passFrame, this._frameImageList[i]); // This needs to be an insertAfter
+          if (frameImageList[i]) {
+            frameImages.insertAfter(passFrame, frameImageList[i]); // This needs to be an insertAfter
             found = true;
             break;
           }
@@ -3231,7 +3469,7 @@ export class CapturePanel {
         if (!found) {
           frameImages.insertBefore(passFrame, frameImages.children[0]);
         }
-        this._frameImageList[passId] = passFrame;
+        frameImageList[passId] = passFrame;
       }
 
       new Div(passFrame, { text: `Render Pass ${passIndex} ${`Attachment ${attachment}`}`, class: "text-secondary mb-sm" });
@@ -3241,7 +3479,7 @@ export class CapturePanel {
 
       this._createTextureWidget(passFrame, texture, passId, 256);
 
-      this._gpuTextureMap.set(passId, texture.gpuTexture);
+      gpuTextureMap.set(passId, texture.gpuTexture);
       texture.gpuTexture.addReference();
 
       // Hang on to the texture in the CaptureData so it's available for serialization.

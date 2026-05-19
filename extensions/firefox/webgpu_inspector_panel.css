@@ -71,6 +71,68 @@
     flex-grow: 1;
 }
 
+/* Hamburger menu */
+.menu-container {
+    position: relative;
+    display: inline-block;
+}
+
+.menu-button {
+    background-color: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--fg-primary);
+    cursor: pointer;
+    font-size: 14pt;
+    line-height: 14pt;
+    padding: 2px 8px 4px 8px;
+}
+
+.menu-button:hover {
+    filter: brightness(1.2);
+}
+
+.menu-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    min-width: 180px;
+    background-color: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+    z-index: 1000;
+    padding: 4px 0;
+    display: none;
+}
+
+.menu-dropdown.open {
+    display: block;
+}
+
+.menu-item {
+    padding: 6px 16px;
+    cursor: pointer;
+    font-size: 10pt;
+    color: var(--fg-primary);
+    white-space: nowrap;
+    user-select: none;
+}
+
+.menu-item:hover {
+    background-color: var(--accent-primary);
+}
+
+.menu-item.disabled {
+    color: var(--fg-muted);
+    cursor: not-allowed;
+}
+
+.menu-item.disabled:hover {
+    background-color: transparent;
+}
+
 /* Buttons */
 .btn {
     background-color: var(--accent-primary);

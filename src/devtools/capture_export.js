@@ -124,6 +124,29 @@ function _serializeObject(obj, database) {
     if (gpuSize >= 0) {
       record.gpuSize = gpuSize;
     }
+    // Loaded pixel data, per mip level. Render-pass attachments captured
+    // during the frame populate this automatically; other textures land here
+    // when the user requests their data via the Inspect panel.
+    const mipData = [];
+    if (Array.isArray(obj.imageData)) {
+      for (let level = 0; level < obj.imageData.length; ++level) {
+        const bytes = obj.imageData[level];
+        if (!(bytes instanceof Uint8Array)) {
+          continue;
+        }
+        if (Array.isArray(obj.isImageDataLoaded) && obj.isImageDataLoaded[level] === false) {
+          continue;
+        }
+        mipData.push({
+          mipLevel: level,
+          byteLength: bytes.length,
+          base64: encodeBase64(bytes)
+        });
+      }
+    }
+    if (mipData.length) {
+      record.mipData = mipData;
+    }
   }
   if (obj instanceof TextureView && obj.texture != null) {
     record.texture = _objectRef(obj.texture, database);

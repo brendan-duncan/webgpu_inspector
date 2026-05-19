@@ -1,6 +1,7 @@
 import { Div } from './div.js';
 import { TabHandle } from './tab_handle.js';
 import { TabPage } from './tab_page.js';
+import { Signal } from '../../utils/signal.js';
 
 /**
  * A TabWidget has multiple children widgets, only one of which is visible at a time. Selecting
@@ -12,6 +13,11 @@ export class TabWidget extends Div {
 
     this._activeTab = -1;
     this.displayCloseButton = false;
+
+    // Emitted when the active tab changes. Receives (activeIndex, panel).
+    this.onActiveTabChanged = new Signal();
+    // Emitted when a tab is closed. Receives the panel widget being removed.
+    this.onTabClosed = new Signal();
 
     this._element.classList.add('tab-widget');
 
@@ -72,6 +78,7 @@ export class TabWidget extends Div {
       if (page) {
         page.repaint(true);
       }
+      this.onActiveTabChanged.emit(0, panel);
     }
 
     panel.domChanged();
@@ -88,12 +95,14 @@ export class TabWidget extends Div {
     }
 
     const page = this.contentElement.children[index];
-    /*if (page) {
-      page.children[0].close();
-    }*/
+    const closedPanel = page?.children?.[0];
 
     this.tabListElement.removeChild(handle);
     this.contentElement.removeChild(page);
+
+    if (closedPanel) {
+      this.onTabClosed.emit(closedPanel);
+    }
 
     if (this._activeTab == index) {
       this._activeTab = -1;
@@ -101,6 +110,8 @@ export class TabWidget extends Div {
 
     if (this._activeTab == -1 && this.numTabs > 0) {
       this.activeTab = 0;
+    } else if (this.numTabs === 0) {
+      this.onActiveTabChanged.emit(-1, null);
     }
   }
 
@@ -126,6 +137,8 @@ export class TabWidget extends Div {
       return;
     }
 
+    const changed = index !== this._activeTab;
+
     for (let i = 0, l = this.tabListElement.children.length; i < l; ++i) {
       const handle = this.tabListElement.children[i];
       handle.isActive = i == index;
@@ -136,6 +149,10 @@ export class TabWidget extends Div {
     const page = this.contentElement.children[this._activeTab].children[0];
     if (page) {
       page.repaint(true);
+    }
+
+    if (changed) {
+      this.onActiveTabChanged.emit(index, page);
     }
   }
 
