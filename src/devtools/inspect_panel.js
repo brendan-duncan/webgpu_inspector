@@ -1,8 +1,10 @@
 import { Button } from "./widget/button.js";
+import { Checkbox } from "./widget/checkbox.js";
 import { collapsible } from "./widget/collapsible.js";
 import { Div } from "./widget/div.js";
 import { Span } from "./widget/span.js";
 import { TabWidget } from "./widget/tab_widget.js";
+import { TextInput } from "./widget/text_input.js";
 import { Widget } from "./widget/widget.js";
 import { Select } from "./widget/select.js";
 import {
@@ -95,6 +97,7 @@ export class InspectPanel {
     this.database.onDeltaFrameTime.addListener(this._updateFrameStats, this);
     this.database.onValidationError.addListener(this._validationError, this);
     this.database.onResolvePendingObject.addListener(this._resolvePendingObject, this);
+    this.database.onCapturedObjectsChanged.addListener(this._capturedObjectsChanged, this);
 
     // Keep track of previously inspected objects for history navigation.
     this._inspectedObjectBack = [];
@@ -213,6 +216,7 @@ export class InspectPanel {
 
     this._selectedObject = null;
     this._selectedGroup = null;
+    this._resetFilterState();
     this.inspectorGUI.html = "";
 
     const split = new Split(this.inspectorGUI, { direction: Split.Horizontal, position: 340 });
@@ -248,6 +252,8 @@ export class InspectPanel {
     this.inspectPanel = new Div(null, { class: "inspector_panel_content" });
     inspectTab.addTab("Inspect", this.inspectPanel);
 
+    this._buildFilterUI(objectsPanel);
+
     this.uiAdapters = this._createObjectListUI(objectsPanel, "Adapters");
     this.uiDevices = this._createObjectListUI(objectsPanel, "Devices");
     this.uiRenderPipelines = this._createObjectListUI(objectsPanel, "Render Pipelines");
@@ -264,6 +270,14 @@ export class InspectPanel {
     this.uiPendingAsyncRenderPipelines = this._createObjectListUI(objectsPanel, "Pending Async Render Pipelines");
     this.uiPendingAsyncComputePipelines = this._createObjectListUI(objectsPanel, "Pending Async Compute Pipelines");
     this.uiValidationErrors = this._createObjectListUI(objectsPanel, "Validation Errors");
+
+    this._objectListUIs = [
+      this.uiAdapters, this.uiDevices, this.uiRenderPipelines, this.uiComputePipelines,
+      this.uiShaderModules, this.uiBuffers, this.uiTextures, this.uiTextureViews,
+      this.uiSamplers, this.uiBindGroups, this.uiBindGroupLayouts, this.uiPipelineLayouts,
+      this.uiRenderBundles, this.uiPendingAsyncRenderPipelines,
+      this.uiPendingAsyncComputePipelines, this.uiValidationErrors
+    ];
   }
 
   _validationError(error) {
@@ -309,6 +323,13 @@ export class InspectPanel {
   _objectLabelChanged(id, object, label) {
     if (object?.widget?.nameWidget) {
       object.widget.nameWidget.text = label || object.constructor.className;
+    }
+    this._applyFilterToObject(object);
+  }
+
+  _capturedObjectsChanged() {
+    if (this._filters && this._filters.onlyInLastCapture) {
+      this._applyFilters();
     }
   }
 
@@ -369,35 +390,48 @@ export class InspectPanel {
 
   _updateObjectStat(object) {
     if (object instanceof Adapter) {
-      this.uiAdapters.label.text = `Adapters ${this.database.adapters.size}`;
+      this._setListLabel(this.uiAdapters, "Adapters", this.database.adapters.size);
     } else if (object instanceof Device) {
-      this.uiDevices.label.text = `Devices ${this.database.devices.size}`;
+      this._setListLabel(this.uiDevices, "Devices", this.database.devices.size);
     } else if (object instanceof Buffer) {
-      this.uiBuffers.label.text = `Buffers ${this.database.buffers.size}`;
+      this._setListLabel(this.uiBuffers, "Buffers", this.database.buffers.size);
     } else if (object instanceof Sampler) {
-      this.uiSamplers.label.text = `Samplers ${this.database.samplers.size}`;
+      this._setListLabel(this.uiSamplers, "Samplers", this.database.samplers.size);
     } else if (object instanceof Texture) {
-      this.uiTextures.label.text = `Textures ${this.database.textures.size}`;
+      this._setListLabel(this.uiTextures, "Textures", this.database.textures.size);
     } else if (object instanceof TextureView) {
-      this.uiTextureViews.label.text = `Texture Views ${this.database.textureViews.size}`;
+      this._setListLabel(this.uiTextureViews, "Texture Views", this.database.textureViews.size);
     } else if (object instanceof ShaderModule) {
-      this.uiShaderModules.label.text = `Shader Modules ${this.database.shaderModules.size}`;
+      this._setListLabel(this.uiShaderModules, "Shader Modules", this.database.shaderModules.size);
     } else if (object instanceof BindGroupLayout) {
-      this.uiBindGroupLayouts.label.text = `Bind Group Layouts ${this.database.bindGroupLayouts.size}`;
+      this._setListLabel(this.uiBindGroupLayouts, "Bind Group Layouts", this.database.bindGroupLayouts.size);
     } else if (object instanceof PipelineLayout) {
-      this.uiPipelineLayouts.label.text = `Pipeline Layouts ${this.database.pipelineLayouts.size}`;
+      this._setListLabel(this.uiPipelineLayouts, "Pipeline Layouts", this.database.pipelineLayouts.size);
     } else if (object instanceof BindGroup) {
-      this.uiBindGroups.label.text = `Bind Groups ${this.database.bindGroups.size}`;
+      this._setListLabel(this.uiBindGroups, "Bind Groups", this.database.bindGroups.size);
     } else if (object instanceof RenderPipeline) {
-      this.uiPendingAsyncRenderPipelines.label.text = `Pending Async Render Pipelines ${this.database.pendingRenderPipelines.size}`;
-      this.uiRenderPipelines.label.text = `Render Pipelines ${this.database.renderPipelines.size}`;
+      this._setListLabel(this.uiPendingAsyncRenderPipelines, "Pending Async Render Pipelines", this.database.pendingRenderPipelines.size);
+      this._setListLabel(this.uiRenderPipelines, "Render Pipelines", this.database.renderPipelines.size);
     } else if (object instanceof ComputePipeline) {
-      this.uiPendingAsyncComputePipelines.label.text = `Pending Async Compute Pipelines ${this.database.pendingComputePipelines.size}`;
-      this.uiComputePipelines.label.text = `Compute Pipelines ${this.database.computePipelines.size}`;
+      this._setListLabel(this.uiPendingAsyncComputePipelines, "Pending Async Compute Pipelines", this.database.pendingComputePipelines.size);
+      this._setListLabel(this.uiComputePipelines, "Compute Pipelines", this.database.computePipelines.size);
     } else if (object instanceof ValidationError) {
-      this.uiValidationErrors.label.text = `Validation Errors ${this.database.validationErrors.size}`;
+      this._setListLabel(this.uiValidationErrors, "Validation Errors", this.database.validationErrors.size);
     } else if (object instanceof RenderBundle) {
-      this.uiRenderBundles.label.text = `Render Bundles ${this.database.renderBundles.size}`;
+      this._setListLabel(this.uiRenderBundles, "Render Bundles", this.database.renderBundles.size);
+    }
+  }
+
+  _setListLabel(ui, name, total) {
+    if (!ui) {
+      return;
+    }
+    ui._labelName = name;
+    ui._labelTotal = total;
+    if (this._isFilterActive() && ui._labelVisible !== undefined && ui._labelVisible !== total) {
+      ui.label.text = `${name} ${ui._labelVisible}/${total}`;
+    } else {
+      ui.label.text = `${name} ${total}`;
     }
   }
 
@@ -529,6 +563,8 @@ export class InspectPanel {
     object.widget = widget;
     widget.group = ui;
 
+    this._applyFilterToObject(object);
+
     const self = this;
     object.widget.element.onclick = () => {
       if (self._selectedObject && self._selectedObject.widget) {
@@ -597,6 +633,374 @@ export class InspectPanel {
       }
     } else if (type.name === "array") {
       this._addShaderTypeInfo(type.format);
+    }
+  }
+
+  _resetFilterState() {
+    this._filters = {
+      search: "",
+      onlyInLastCapture: false,
+      texture: { format: "", width: "", height: "", depth: "" },
+      buffer: { size: "", usageMask: 0 },
+      shaderModule: { vertex: false, fragment: false, compute: false },
+      bindGroup: { contains: "" }
+    };
+  }
+
+  _isFilterActive() {
+    const f = this._filters;
+    if (!f) {
+      return false;
+    }
+    if (f.search) return true;
+    if (f.onlyInLastCapture) return true;
+    if (f.texture.format || f.texture.width || f.texture.height || f.texture.depth) return true;
+    if (f.buffer.size || f.buffer.usageMask) return true;
+    if (f.shaderModule.vertex || f.shaderModule.fragment || f.shaderModule.compute) return true;
+    if (f.bindGroup.contains) return true;
+    return false;
+  }
+
+  _parseNumericFilter(str) {
+    if (!str) return null;
+    str = str.trim();
+    if (!str) return null;
+    const match = /^(>=|<=|>|<|=)?\s*(-?\d+(?:\.\d+)?)\s*$/.exec(str);
+    if (!match) return null;
+    return { op: match[1] || "=", value: Number(match[2]) };
+  }
+
+  _numericMatches(filter, n) {
+    if (!filter) return true;
+    if (typeof n !== "number" || isNaN(n)) return false;
+    switch (filter.op) {
+      case ">=": return n >= filter.value;
+      case "<=": return n <= filter.value;
+      case ">": return n > filter.value;
+      case "<": return n < filter.value;
+      default: return n === filter.value;
+    }
+  }
+
+  _buildFilterUI(parent) {
+    const self = this;
+    const panel = new collapsible(parent, { collapsed: true, label: "Filter", class: "inspector-filter-collapsible" });
+    panel.body.style.maxHeight = "unset";
+    panel.body.style.padding = "6px 10px 10px 10px";
+    this._filterPanel = panel;
+
+    const onChange = () => self._applyFilters();
+
+    const addField = (row, labelText, labelClass, makeChild) => {
+      const field = new Div(row, { class: "inspector-filter-field" });
+      new Span(field, { text: labelText, class: labelClass });
+      makeChild(field);
+      return field;
+    };
+
+    // Common search row.
+    const row1 = new Div(panel.body, { class: "inspector-filter-row" });
+    addField(row1, "Search:", "inspector-filter-label", (field) => {
+      new TextInput(field, {
+        placeholder: "name or id",
+        class: "inspector-filter-input",
+        onEdit: (value) => {
+          self._filters.search = (value ?? "").trim();
+          onChange();
+        }
+      });
+    });
+
+    const row2 = new Div(panel.body, { class: "inspector-filter-row" });
+    const captureCheckbox = new Checkbox(row2, {
+      label: "Only objects used in last capture",
+      class: "inspector-filter-field",
+      onChange: (checked) => {
+        self._filters.onlyInLastCapture = !!checked;
+        onChange();
+      }
+    });
+    this._captureFilterCheckbox = captureCheckbox;
+
+    // Texture filters.
+    const texGrp = new collapsible(panel.body, { collapsed: true, label: "Textures / Views" });
+    texGrp.body.style.padding = "4px 10px";
+    const texRow = new Div(texGrp.body, { class: "inspector-filter-row" });
+    addField(texRow, "Format:", "inspector-filter-label-sm", (field) => {
+      new TextInput(field, {
+        placeholder: "e.g. rgba8unorm",
+        class: "inspector-filter-input-sm",
+        onEdit: (v) => { self._filters.texture.format = (v ?? "").trim().toLowerCase(); onChange(); }
+      });
+    });
+    addField(texRow, "Width:", "inspector-filter-label-sm", (field) => {
+      new TextInput(field, {
+        placeholder: ">=256",
+        class: "inspector-filter-input-sm",
+        onEdit: (v) => { self._filters.texture.width = (v ?? "").trim(); onChange(); }
+      });
+    });
+    addField(texRow, "Height:", "inspector-filter-label-sm", (field) => {
+      new TextInput(field, {
+        placeholder: ">=256",
+        class: "inspector-filter-input-sm",
+        onEdit: (v) => { self._filters.texture.height = (v ?? "").trim(); onChange(); }
+      });
+    });
+    addField(texRow, "Depth:", "inspector-filter-label-sm", (field) => {
+      new TextInput(field, {
+        placeholder: ">1",
+        class: "inspector-filter-input-sm",
+        onEdit: (v) => { self._filters.texture.depth = (v ?? "").trim(); onChange(); }
+      });
+    });
+
+    // Buffer filters.
+    const bufGrp = new collapsible(panel.body, { collapsed: true, label: "Buffers" });
+    bufGrp.body.style.padding = "4px 10px";
+    const bufRow = new Div(bufGrp.body, { class: "inspector-filter-row" });
+    addField(bufRow, "Size:", "inspector-filter-label-sm", (field) => {
+      new TextInput(field, {
+        placeholder: ">=1024",
+        class: "inspector-filter-input-sm",
+        onEdit: (v) => { self._filters.buffer.size = (v ?? "").trim(); onChange(); }
+      });
+    });
+    const bufRow2 = new Div(bufGrp.body, { class: "inspector-filter-row" });
+    new Span(bufRow2, { text: "Usage:", class: "inspector-filter-label-sm" });
+    const bufferUsages = [
+      { label: "Index", flag: GPUBufferUsage.INDEX },
+      { label: "Vertex", flag: GPUBufferUsage.VERTEX },
+      { label: "Uniform", flag: GPUBufferUsage.UNIFORM },
+      { label: "Storage", flag: GPUBufferUsage.STORAGE },
+      { label: "Indirect", flag: GPUBufferUsage.INDIRECT },
+      { label: "QueryResolve", flag: GPUBufferUsage.QUERY_RESOLVE }
+    ];
+    for (const usage of bufferUsages) {
+      new Checkbox(bufRow2, {
+        label: usage.label,
+        class: "inspector-filter-field",
+        onChange: (checked) => {
+          if (checked) {
+            self._filters.buffer.usageMask |= usage.flag;
+          } else {
+            self._filters.buffer.usageMask &= ~usage.flag;
+          }
+          onChange();
+        }
+      });
+    }
+
+    // Shader Module filters.
+    const shaderGrp = new collapsible(panel.body, { collapsed: true, label: "Shader Modules" });
+    shaderGrp.body.style.padding = "4px 10px";
+    const shaderRow = new Div(shaderGrp.body, { class: "inspector-filter-row" });
+    new Span(shaderRow, { text: "Type:", class: "inspector-filter-label-sm" });
+    new Checkbox(shaderRow, {
+      label: "Vertex",
+      class: "inspector-filter-field",
+      onChange: (checked) => { self._filters.shaderModule.vertex = !!checked; onChange(); }
+    });
+    new Checkbox(shaderRow, {
+      label: "Fragment",
+      class: "inspector-filter-field",
+      onChange: (checked) => { self._filters.shaderModule.fragment = !!checked; onChange(); }
+    });
+    new Checkbox(shaderRow, {
+      label: "Compute",
+      class: "inspector-filter-field",
+      onChange: (checked) => { self._filters.shaderModule.compute = !!checked; onChange(); }
+    });
+
+    // Bind group filters.
+    const bgGrp = new collapsible(panel.body, { collapsed: true, label: "Bind Groups" });
+    bgGrp.body.style.padding = "4px 10px";
+    const bgRow = new Div(bgGrp.body, { class: "inspector-filter-row" });
+    addField(bgRow, "Contains:", "inspector-filter-label-sm", (field) => {
+      new TextInput(field, {
+        placeholder: "name or id of resource",
+        class: "inspector-filter-input",
+        onEdit: (v) => { self._filters.bindGroup.contains = (v ?? "").trim().toLowerCase(); onChange(); }
+      });
+    });
+  }
+
+  _matchesString(haystack, needle) {
+    if (!needle) return true;
+    if (!haystack) return false;
+    return String(haystack).toLowerCase().includes(needle.toLowerCase());
+  }
+
+  _bindGroupContainsMatch(bindGroup, query) {
+    const entries = bindGroup.descriptor?.entries;
+    if (!entries) return false;
+    query = query.toLowerCase();
+    for (const entry of entries) {
+      const resource = entry.resource;
+      if (!resource) continue;
+      let id = null;
+      if (resource.buffer?.__id !== undefined) {
+        id = resource.buffer.__id;
+      } else if (resource.__id !== undefined) {
+        id = resource.__id;
+      }
+      if (id === null) continue;
+      const obj = this.database.getObject(id);
+      if (!obj) continue;
+      if (String(obj.idName).toLowerCase().includes(query)) {
+        return true;
+      }
+      if ((obj.label || "").toLowerCase().includes(query)) {
+        return true;
+      }
+      if (obj instanceof TextureView) {
+        const tex = this.database.getTextureFromView(obj);
+        if (tex) {
+          if (String(tex.idName).toLowerCase().includes(query)) return true;
+          if ((tex.label || "").toLowerCase().includes(query)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  _filterMatches(object) {
+    const f = this._filters;
+    if (!f) return true;
+
+    // Global search applies to all object types.
+    if (f.search) {
+      const q = f.search.toLowerCase();
+      const nameMatch = (object.label || "").toLowerCase().includes(q) ||
+                        object.constructor.className.toLowerCase().includes(q);
+      const idMatch = String(object.idName).toLowerCase().includes(q);
+      if (!nameMatch && !idMatch) {
+        return false;
+      }
+    }
+
+    if (f.onlyInLastCapture) {
+      if (!this.database.capturedObjects.has(object.id)) {
+        return false;
+      }
+    }
+
+    // Type-specific filters.
+    if (object instanceof Texture) {
+      if (!this._textureMatchesFilter(object)) return false;
+    } else if (object instanceof TextureView) {
+      const tex = this.database.getTextureFromView(object);
+      if (tex) {
+        if (!this._textureMatchesFilter(tex)) return false;
+      } else if (f.texture.format || f.texture.width || f.texture.height || f.texture.depth) {
+        return false;
+      }
+    } else if (object instanceof Buffer) {
+      if (!this._bufferMatchesFilter(object)) return false;
+    } else if (object instanceof ShaderModule) {
+      if (!this._shaderModuleMatchesFilter(object)) return false;
+    } else if (object instanceof BindGroup) {
+      if (f.bindGroup.contains) {
+        if (!this._bindGroupContainsMatch(object, f.bindGroup.contains)) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  _textureMatchesFilter(texture) {
+    const f = this._filters.texture;
+    if (f.format && !this._matchesString(texture.format, f.format)) return false;
+    const wf = this._parseNumericFilter(f.width);
+    if (wf && !this._numericMatches(wf, texture.width)) return false;
+    const hf = this._parseNumericFilter(f.height);
+    if (hf && !this._numericMatches(hf, texture.height)) return false;
+    const df = this._parseNumericFilter(f.depth);
+    if (df && !this._numericMatches(df, texture.depthOrArrayLayers)) return false;
+    return true;
+  }
+
+  _bufferMatchesFilter(buffer) {
+    const f = this._filters.buffer;
+    if (f.size) {
+      const sf = this._parseNumericFilter(f.size);
+      if (sf && !this._numericMatches(sf, buffer.descriptor?.size ?? 0)) return false;
+    }
+    if (f.usageMask) {
+      const usage = buffer.descriptor?.usage ?? 0;
+      if ((usage & f.usageMask) === 0) return false;
+    }
+    return true;
+  }
+
+  _shaderModuleMatchesFilter(shader) {
+    const f = this._filters.shaderModule;
+    if (!f.vertex && !f.fragment && !f.compute) return true;
+    if (f.vertex && shader.hasVertexEntries) return true;
+    if (f.fragment && shader.hasFragmentEntries) return true;
+    if (f.compute && shader.hasComputeEntries) return true;
+    return false;
+  }
+
+  _applyFilterToObject(object) {
+    const widget = object?.widget;
+    if (!widget || !widget.element) return;
+    // Hidden state for deleted objects is managed separately. Don't override it.
+    if (widget.element.style.display === "none" && object.isDeleted) return;
+
+    const match = this._filterMatches(object);
+    widget.element.style.display = match ? "list-item" : "none";
+    return match;
+  }
+
+  _applyFilters() {
+    if (!this._objectListUIs) return;
+    const filterActive = this._isFilterActive();
+
+    // Iterate objects by type for accurate counts.
+    const buckets = [
+      { ui: this.uiAdapters, map: this.database.adapters },
+      { ui: this.uiDevices, map: this.database.devices },
+      { ui: this.uiRenderPipelines, map: this.database.renderPipelines },
+      { ui: this.uiComputePipelines, map: this.database.computePipelines },
+      { ui: this.uiShaderModules, map: this.database.shaderModules },
+      { ui: this.uiBuffers, map: this.database.buffers },
+      { ui: this.uiTextures, map: this.database.textures },
+      { ui: this.uiTextureViews, map: this.database.textureViews },
+      { ui: this.uiSamplers, map: this.database.samplers },
+      { ui: this.uiBindGroups, map: this.database.bindGroups },
+      { ui: this.uiBindGroupLayouts, map: this.database.bindGroupLayouts },
+      { ui: this.uiPipelineLayouts, map: this.database.pipelineLayouts },
+      { ui: this.uiRenderBundles, map: this.database.renderBundles },
+      { ui: this.uiPendingAsyncRenderPipelines, map: this.database.pendingRenderPipelines },
+      { ui: this.uiPendingAsyncComputePipelines, map: this.database.pendingComputePipelines },
+      { ui: this.uiValidationErrors, map: this.database.validationErrors }
+    ];
+
+    for (const bucket of buckets) {
+      const { ui, map } = bucket;
+      if (!ui) continue;
+      let visible = 0;
+      let total = 0;
+      map.forEach((obj) => {
+        if (!obj.widget || !obj.widget.element) return;
+        total++;
+        const match = this._filterMatches(obj);
+        obj.widget.element.style.display = match ? "list-item" : "none";
+        if (match) visible++;
+      });
+      ui._labelVisible = visible;
+      ui._labelTotal = total;
+      const name = ui._labelName;
+      if (name !== undefined) {
+        if (filterActive && visible !== total) {
+          ui.label.text = `${name} ${visible}/${total}`;
+        } else {
+          ui.label.text = `${name} ${total}`;
+        }
+      }
     }
   }
 

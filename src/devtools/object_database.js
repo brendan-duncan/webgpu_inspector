@@ -38,6 +38,7 @@ export class ObjectDatabase {
     this.onAdapterInfo = new Signal();
     this.onObjectLabelChanged = new Signal();
     this.onValidationError = new Signal();
+    this.onCapturedObjectsChanged = new Signal();
 
     this.totalTextureMemory = 0;
     this.totalBufferMemory = 0;
@@ -327,6 +328,7 @@ export class ObjectDatabase {
       obj.decrementReferenceCount();
     });
     this.capturedObjects.clear();
+    this.onCapturedObjectsChanged.emit();
   }
 
   _setObjectLabel(id, label) {

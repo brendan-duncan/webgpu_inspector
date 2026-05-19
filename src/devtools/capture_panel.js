@@ -853,6 +853,8 @@ export class CapturePanel {
     if (!wasFirst) {
       this._captureTab.activeTab = this._captureTab.numTabs - 1;
     }
+
+    this.database.onCapturedObjectsChanged.emit();
   }
 
   /**
@@ -933,6 +935,8 @@ export class CapturePanel {
     for (const id of state.importedObjectIds) {
       this.database.capturedObjects.delete(id);
     }
+
+    this.database.onCapturedObjectsChanged.emit();
   }
 
   /**

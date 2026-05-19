@@ -1494,6 +1494,65 @@ ol::-webkit-scrollbar-thumb:hover {
   padding-left: 5px;
 }
 
+/* Inspector filter panel */
+.inspector-filter-collapsible > .title_bar {
+  background-color: #2f7d32;
+}
+
+.inspector-filter-collapsible > .title_bar:hover {
+  background-color: #3d9c40;
+}
+
+.inspector-filter-collapsible > .title_bar .object_type {
+  color: #fff;
+}
+
+.inspector-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 10pt;
+}
+
+.inspector-filter-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.inspector-filter-label {
+  width: 60px;
+  color: var(--fg-muted);
+  font-size: 10pt;
+}
+
+.inspector-filter-label-sm {
+  min-width: 50px;
+  color: var(--fg-muted);
+  font-size: 9pt;
+}
+
+.inspector-filter-input {
+  width: 200px;
+  background-color: #222;
+  color: #ddd;
+  border: 1px solid #000;
+  padding-left: 5px;
+  height: 18px;
+}
+
+.inspector-filter-input-sm {
+  width: 80px;
+  background-color: #222;
+  color: #ddd;
+  border: 1px solid #000;
+  padding-left: 5px;
+  height: 18px;
+}
+
 /* ---------------------------------------- */
 
 .collapse-button
