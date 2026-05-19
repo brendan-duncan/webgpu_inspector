@@ -93,7 +93,45 @@ To pin to a specific release instead of tracking `main`, replace `@main` with a 
 <script src="https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@1.0.2/extensions/chrome/webgpu_inspector.js"></script>
 ```
 
-The WebGPU Inspector DevTools panel from the browser extension is still required to view the inspected data — manually loading the script only installs the page-side instrumentation, it does not provide a UI on its own. The DevTools panel should be open when the page is loaded (refreshing the page may be necessary) in order for the DevTools panel to recieve all of the WebGPU data from the beginning of the page's execution.
+When loaded this way, the script wraps the page's WebGPU API and exposes the inspector instance as `webgpuInspector` on the global (i.e. `window.webgpuInspector` in a page context, `self.webgpuInspector` in a worker context).
+
+Once the inspector is loaded, you have two ways to view what it records:
+
+1. Open the WebGPU Inspector DevTools panel from the browser extension. The DevTools panel must be open when the page is loaded (refreshing the page may be necessary) in order to receive all of the WebGPU data from the beginning of the page's execution.
+2. Drive capture from the page itself with the local capture API described below — no DevTools panel required.
+
+#### Local Capture API
+
+The manually-injected script exposes a small JavaScript API that lets the page record one or more frames of WebGPU activity entirely on the page side and save the result as a JSON file. The JSON file is in the same format as **Save Capture** in the DevTools Capture panel produces, so it can be opened with **Load Capture** in the Capture panel for inspection.
+
+```js
+// 1. Turn on the local capture store. Must be called BEFORE any WebGPU object
+// is created — the inspector does not retroactively replay 
+// descriptors for objects that existed before this call.
+webgpuInspector.initialize();
+
+// 2. Wrap one frame's worth of WebGPU work between 
+// begin/end. Repeat the pair as many times as you want;
+// each pair appends another frame's commands (and the 
+// textures/buffers they reference) to the export.
+webgpuInspector.beginFrameCapture();
+renderOneFrame();           // your normal WebGPU rendering code
+webgpuInspector.endFrameCapture();
+
+// (optional) capture more frames
+webgpuInspector.beginFrameCapture();
+renderOneFrame();
+webgpuInspector.endFrameCapture();
+
+// 3. Wait for any in-flight texture/buffer readbacks, 
+// build the JSON, and trigger a browser download. 
+// The filename argument is optional.
+await webgpuInspector.saveCaptureData("my_capture.json");
+```
+
+`saveCaptureData()` returns a `Promise` that resolves with the JSON object once the download is initiated. The returned object is the parsed JSON, so callers that want to handle the bytes themselves (e.g. send to a server) can stringify it instead of relying on the download.
+
+After `saveCaptureData()` resolves, captured commands are cleared. You can call `beginFrameCapture()` / `endFrameCapture()` again to record more frames and `saveCaptureData()` again to produce another file. Object descriptors that were created earlier remain in the store so they continue to be available in subsequent captures.
 
 ### From Source
 

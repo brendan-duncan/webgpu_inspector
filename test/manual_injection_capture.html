@@ -1,0 +1,312 @@
+
+<html>
+  <head>
+    <title>Manual Injection / Local Capture Test</title>
+    <!--
+      Load the inspector script as a regular <script> tag, the same way a page
+      pulling it from the CDN would. The path is relative to this file so the
+      built extension is exercised directly:
+
+        test/manual_injection_capture.html  ->  extensions/chrome/webgpu_inspector.js
+
+      Importantly: this is loaded BEFORE the renderer code below, so the
+      inspector's WebGPU wrappers are in place before any GPU object is
+      created. `webgpuInspector.initialize()` then captures everything from
+      adapter/device creation onward.
+    -->
+    <script src="../extensions/chrome/webgpu_inspector.js"></script>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 16px; background: #1a1a1a; color: #eee; }
+      .row { margin-bottom: 12px; }
+      button { padding: 6px 12px; margin-right: 8px; font-size: 14px; cursor: pointer; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      #log { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px;
+             background: #111; padding: 8px; min-height: 80px; max-height: 200px; overflow: auto;
+             border: 1px solid #333; }
+      canvas { border: 1px solid #333; display: block; }
+      .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px;
+              background: #333; margin-left: 6px; }
+      .pill.on { background: #265; }
+      .pill.cap { background: #964; }
+    </style>
+  </head>
+  <body>
+    <h2>WebGPU Inspector — Manual Injection Capture Test</h2>
+    <div class="row">
+      <button id="btn-init">1. initialize()</button>
+      <button id="btn-capture" disabled>2. Capture One Frame</button>
+      <button id="btn-capture-multi" disabled>2b. Capture 3 Frames</button>
+      <button id="btn-save" disabled>3. saveCaptureData()</button>
+      <span id="state" class="pill">idle</span>
+      <span id="frames" class="pill">frames captured: 0</span>
+    </div>
+    <div class="row">
+      <canvas id="webgpu_canvas" width="512" height="320"></canvas>
+    </div>
+    <div class="row">
+      <div id="log"></div>
+    </div>
+    <script>
+      const $log = document.getElementById("log");
+      const $state = document.getElementById("state");
+      const $frames = document.getElementById("frames");
+      const $btnInit = document.getElementById("btn-init");
+      const $btnCapture = document.getElementById("btn-capture");
+      const $btnCaptureMulti = document.getElementById("btn-capture-multi");
+      const $btnSave = document.getElementById("btn-save");
+
+      let framesCaptured = 0;
+
+      function log(...args) {
+        const s = args.map((a) => typeof a === "string" ? a : JSON.stringify(a)).join(" ");
+        $log.textContent += s + "\n";
+        $log.scrollTop = $log.scrollHeight;
+        console.log(...args);
+      }
+
+      function setState(label, kind) {
+        $state.textContent = label;
+        $state.className = "pill" + (kind ? " " + kind : "");
+      }
+
+      function updateFrames() {
+        $frames.textContent = `frames captured: ${framesCaptured}`;
+      }
+
+      // Sanity check: webgpu_inspector.js sets `window.webgpuInspector`
+      // synchronously during its IIFE. If this is missing, the <script> tag
+      // either didn't load or didn't run (404, wrong path, no WebGPU support).
+      if (!window.webgpuInspector) {
+        log("ERROR: window.webgpuInspector is not defined. Did webgpu_inspector.js load?");
+      } else {
+        log("webgpuInspector loaded.");
+      }
+
+      // ---- Rendering ----
+      // Single-frame draw of a vertex-buffer-backed triangle with a uniform
+      // buffer + small storage texture. Enough WebGPU surface area that the
+      // capture contains a non-trivial object graph (Buffer, Texture,
+      // TextureView, BindGroup, BindGroupLayout, PipelineLayout, ShaderModule,
+      // RenderPipeline) and a non-trivial command list.
+      let device = null;
+      let context = null;
+      let pipeline = null;
+      let vertexBuffer = null;
+      let uniformBuffer = null;
+      let bindGroup = null;
+      let depthView = null;
+      let presentationFormat = null;
+
+      async function setupWebGPU() {
+        if (!navigator.gpu) {
+          log("ERROR: WebGPU not supported.");
+          return false;
+        }
+        const adapter = await navigator.gpu.requestAdapter();
+        if (!adapter) {
+          log("ERROR: requestAdapter returned null.");
+          return false;
+        }
+        device = await adapter.requestDevice();
+
+        const canvas = document.getElementById("webgpu_canvas");
+        context = canvas.getContext("webgpu");
+        presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+        context.configure({ device, format: presentationFormat });
+
+        const depthTexture = device.createTexture({
+          label: "depth",
+          size: [canvas.width, canvas.height],
+          format: "depth24plus",
+          usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+        depthView = depthTexture.createView();
+
+        // x, y, r, g, b for three vertices.
+        const vertexData = new Float32Array([
+           0.0,  0.5, 1.0, 0.2, 0.2,
+          -0.5, -0.5, 0.2, 1.0, 0.2,
+           0.5, -0.5, 0.2, 0.2, 1.0,
+        ]);
+        vertexBuffer = device.createBuffer({
+          label: "vertices",
+          size: vertexData.byteLength,
+          usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        });
+        device.queue.writeBuffer(vertexBuffer, 0, vertexData);
+
+        // A trivially-sized uniform buffer; the value is written every frame
+        // so writeBuffer commands show up in the capture too.
+        uniformBuffer = device.createBuffer({
+          label: "uniforms",
+          size: 16,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+
+        const shader = device.createShaderModule({
+          label: "tri",
+          code: `
+            struct Uniforms { angle: f32 };
+            @group(0) @binding(0) var<uniform> u: Uniforms;
+            struct VSOut {
+              @builtin(position) pos: vec4<f32>,
+              @location(0) color: vec3<f32>,
+            };
+            @vertex
+            fn vs(@location(0) pos: vec2<f32>, @location(1) color: vec3<f32>) -> VSOut {
+              let c = cos(u.angle);
+              let s = sin(u.angle);
+              let rotated = vec2<f32>(c * pos.x - s * pos.y, s * pos.x + c * pos.y);
+              var out: VSOut;
+              out.pos = vec4<f32>(rotated, 0.0, 1.0);
+              out.color = color;
+              return out;
+            }
+            @fragment
+            fn fs(in: VSOut) -> @location(0) vec4<f32> {
+              return vec4<f32>(in.color, 1.0);
+            }`,
+        });
+
+        const bindGroupLayout = device.createBindGroupLayout({
+          entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: "uniform" } }],
+        });
+        bindGroup = device.createBindGroup({
+          layout: bindGroupLayout,
+          entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
+        });
+        const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+
+        pipeline = device.createRenderPipeline({
+          label: "tri-pipeline",
+          layout: pipelineLayout,
+          vertex: {
+            module: shader, entryPoint: "vs",
+            buffers: [{
+              arrayStride: 5 * 4,
+              attributes: [
+                { shaderLocation: 0, offset: 0,     format: "float32x2" },
+                { shaderLocation: 1, offset: 2 * 4, format: "float32x3" },
+              ],
+            }],
+          },
+          fragment: { module: shader, entryPoint: "fs", targets: [{ format: presentationFormat }] },
+          primitive: { topology: "triangle-list" },
+          depthStencil: { depthWriteEnabled: true, depthCompare: "less", format: "depth24plus" },
+        });
+
+        log("WebGPU set up. Adapter/device/pipeline/buffers ready.");
+        return true;
+      }
+
+      function renderFrame(angle) {
+        device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([angle, 0, 0, 0]));
+
+        const encoder = device.createCommandEncoder({ label: "frame" });
+        const colorView = context.getCurrentTexture().createView();
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: colorView,
+            clearValue: { r: 0.05, g: 0.05, b: 0.08, a: 1 },
+            loadOp: "clear",
+            storeOp: "store",
+          }],
+          depthStencilAttachment: {
+            view: depthView,
+            depthClearValue: 1,
+            depthLoadOp: "clear",
+            depthStoreOp: "store",
+          },
+        });
+        pass.setPipeline(pipeline);
+        pass.setBindGroup(0, bindGroup);
+        pass.setVertexBuffer(0, vertexBuffer);
+        pass.draw(3);
+        pass.end();
+        device.queue.submit([encoder.finish()]);
+      }
+
+      let rafAngle = 0;
+      function rafLoop() {
+        rafAngle += 0.01;
+        renderFrame(rafAngle);
+        requestAnimationFrame(rafLoop);
+      }
+
+      // ---- Capture controls ----
+      // The pattern the README documents:
+      //   initialize() once, then begin/end around any frame the user wants
+      //   recorded. Begin/end can be called multiple times before save —
+      //   each pair appends one more frame to the same JSON file.
+
+      $btnInit.addEventListener("click", async () => {
+        $btnInit.disabled = true;
+
+        // initialize() must run before the FIRST WebGPU object is created.
+        // Calling it here, before setupWebGPU(), satisfies that.
+        webgpuInspector.initialize();
+        log("initialize() called.");
+        setState("initialized", "on");
+
+        const ok = await setupWebGPU();
+        if (!ok) {
+          setState("error");
+          return;
+        }
+        // Kick off the animation so the canvas isn't blank between captures.
+        // Captures only happen for frames bracketed by begin/end — the rAF
+        // loop here is not recorded.
+        requestAnimationFrame(rafLoop);
+
+        $btnCapture.disabled = false;
+        $btnCaptureMulti.disabled = false;
+        $btnSave.disabled = false;
+      });
+
+      // Capture exactly the next rendered frame. We call begin/end *around*
+      // a single direct renderFrame() call so the capture isn't entangled
+      // with the rAF loop above. The recorded commands cover writeBuffer +
+      // beginRenderPass + setPipeline + setBindGroup + setVertexBuffer +
+      // draw + end + finish + submit.
+      $btnCapture.addEventListener("click", () => {
+        setState("capturing", "cap");
+        webgpuInspector.beginFrameCapture();
+        renderFrame(rafAngle);
+        webgpuInspector.endFrameCapture();
+        framesCaptured++;
+        updateFrames();
+        log("Captured 1 frame.");
+        setState("initialized", "on");
+      });
+
+      // Capture three back-to-back frames into the same accumulated buffer.
+      $btnCaptureMulti.addEventListener("click", () => {
+        setState("capturing", "cap");
+        for (let i = 0; i < 3; ++i) {
+          webgpuInspector.beginFrameCapture();
+          renderFrame(rafAngle + i * 0.05);
+          webgpuInspector.endFrameCapture();
+          framesCaptured++;
+        }
+        updateFrames();
+        log("Captured 3 frames.");
+        setState("initialized", "on");
+      });
+
+      $btnSave.addEventListener("click", async () => {
+        setState("saving", "cap");
+        log("saveCaptureData() — waiting for any in-flight readbacks...");
+        try {
+          const data = await webgpuInspector.saveCaptureData();
+          log(`Saved. frame=${data.frame}, objects=${Object.keys(data.objects).length}, commands=${data.commands.length}.`);
+          log("Download triggered. Load it in the WebGPU Inspector DevTools Capture panel via 'Load Capture'.");
+          framesCaptured = 0;
+          updateFrames();
+        } catch (e) {
+          log("Save failed: " + e.message);
+        }
+        setState("initialized", "on");
+      });
+    </script>
+  </body>
+</html>

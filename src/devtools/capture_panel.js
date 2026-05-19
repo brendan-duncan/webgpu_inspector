@@ -180,16 +180,19 @@ export class CapturePanel {
 
     this.captureFrameCount = 1;
     new Span(_controlBar, { text: "Frames:", class: "text-secondary ml-sm mr-sm" });
-    new NumberInput(_controlBar, { value: this.captureFrameCount, min: 1, step: 1, precision: 0, class: "mr-sm", onChange: (value) => {
+    // NumberInput's root `.dragger` is flex: 1 1 auto, which would stretch
+    // these inputs to fill the toolbar. Cap with max-width sized for the
+    // longest value the field should ever need to show.
+    new NumberInput(_controlBar, { value: this.captureFrameCount, min: 1, step: 1, precision: 0, class: "mr-sm", style: "max-width: 50px;", onChange: (value) => {
       self.captureFrameCount = Math.max(value, 1);
     } });
 
     this.maxBufferSize = 1 * (1024 * 1024);
     this.useMaxBufferSize = false;
-    const useMaxBufferSizeBtn = new Checkbox(_controlBar, { value: this.useMaxBufferSize, title: "Use Max Buffer Size", 
+    const useMaxBufferSizeBtn = new Checkbox(_controlBar, { value: this.useMaxBufferSize, title: "Use Max Buffer Size",
       label: "Max Buffer Size (Bytes):", class: "ml-sm" });
     const maxBufferSizeInput = new NumberInput(_controlBar, { value: this.maxBufferSize, min: 1, step: 1, precision: 0,
-        class: "mr-sm", onChange: (value) => {
+        class: "mr-sm", style: "max-width: 100px;", onChange: (value) => {
       self.maxBufferSize = Math.max(value, 1);
     } });
 

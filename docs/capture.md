@@ -3,6 +3,7 @@
 
 * [Introduction](#introduction)
 * [Capturing Frame Data](#capturing-frame-data)
+* [Saving and Loading Captures](#saving-and-loading-captures)
 * [Frame Commands](#frame-commands)
 * [Render Pass Textures](#render-pass-textures)
 * [Command Stacktrace](#command-stacktrace)
@@ -57,6 +58,40 @@ The **Max Buffer Size** value specifies the maximum buffer size Capture will rec
 #### Note
 
 Frame capture works best when requestAnimationFrame is used, as Capture uses that to identify what commands to capture for a frame. Immediate capture will not work without requestAnimationFrame. In that case, use **Specific Frame** capture with frame 0, to start recording after page load.
+
+
+## Saving and Loading Captures
+###### [Back to top](#capture)
+
+Captures can be saved to disk as a JSON file and re-opened later in the panel. This is useful for sharing a frame capture in bug reports, comparing captures from different builds, or returning to a capture after closing the DevTools.
+
+The Save / Load actions live in the hamburger (**☰**) menu on the left side of the Capture panel's toolbar, next to the **Capture** button.
+
+### Save Capture
+
+**Save Capture** is enabled whenever a capture tab is active. Selecting it downloads the active tab as a `webgpu_capture_frame_<N>.json` file, where `<N>` is the captured frame index.
+
+The JSON file contains everything the panel needs to fully reconstruct the capture:
+
+* The full GPU object graph (adapters, devices, buffers, textures, texture views, samplers, bind groups, bind group layouts, pipeline layouts, render and compute pipelines, render bundles, shader modules) with their descriptors and stacktraces.
+* The recorded command list for the frame, with arguments, results, and captured stacktraces.
+* The image data for each render pass color/depth attachment that was read back during capture, stored as base64-encoded mip data on the corresponding Texture record.
+* The buffer data captured for `setVertexBuffer`, `setIndexBuffer`, indirect draws/dispatches, and any Uniform / Storage buffer bound for inspection, attached to the command record it belongs to.
+* Validation errors raised during the capture.
+
+The file is self-contained, so once saved it can be shared and opened on any machine without needing the original page.
+
+### Load Capture
+
+**Load Capture** opens a file picker; selecting a previously-saved capture JSON file opens it as a new tab in the Capture panel alongside any live or already-loaded captures. The loaded tab supports all of the same inspection features (command list, render pass thumbnails, BindGroup / vertex buffer / pipeline inspection, frame stats), driven entirely off the data in the file.
+
+Imported textures with serialized image data are uploaded back onto the inspector's WebGPU device when the tab is built, so render-pass thumbnails and BindGroup texture previews render the same way they did in the original live capture. Textures that didn't have image data captured (e.g. resources that weren't bound or written to as an attachment) show their descriptor without a preview.
+
+Each imported capture lives in its own ID namespace, so loading multiple captures (or loading a capture while a live capture is also open) won't cause object ID collisions between them.
+
+### Capturing Outside DevTools
+
+The same JSON format can also be produced *without* the DevTools panel by loading `webgpu_inspector.js` directly via a `<script>` tag and using the page-side capture API (`initialize()` / `beginFrameCapture()` / `endFrameCapture()` / `saveCaptureData()`). Files produced that way are loadable here through **Load Capture** the same as panel-produced files. See the **Local Capture API** under [Manual Injection](../README.md#manual-injection) in the main README for the script-side workflow.
 
 
 ## Frame Commands

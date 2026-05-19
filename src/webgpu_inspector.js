@@ -5,6 +5,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
 import { Actions, PanelActions } from "./utils/actions.js";
 import { RollingAverage } from "./utils/rolling_average.js";
 import { alignTo } from "./utils/align.js";
+import { LocalCaptureStore } from "./utils/local_capture.js";
 
 export let webgpuInspector = null;
 
@@ -65,6 +66,15 @@ export let webgpuInspector = null;
       this._captureFrameCount = 0;
       this._pendingMapCount = 0; // Number of pending async map requests
       this._hasPendingDeviceDestroy = false;
+
+      // Local-capture mode (manual injection): when `initialize()` is called,
+      // the same messages that would have gone to the devtools panel are also
+      // routed into a `LocalCaptureStore` so `saveCaptureData()` can write
+      // them out as the same JSON format the panel's Save Capture produces.
+      this._localCapture = null;
+      // True between beginFrameCapture()/endFrameCapture() — drives the same
+      // `_captureFrameRequest` plumbing the devtools-initiated path uses.
+      this._localCaptureActive = false;
 
       // Iframe origin tagging is invariant for the lifetime of the page. Compute once
       // so _postMessage doesn't redo the parent-access try/catch on every chunk.
@@ -440,6 +450,171 @@ export let webgpuInspector = null;
       this._gpuWrapper.enableRecording();
     }
 
+    // -------- Local capture API (manual injection use case) --------
+    //
+    // For pages that load `webgpu_inspector.js` directly via a script tag
+    // (no DevTools panel involved): keep the same lifecycle/command messages
+    // the panel would have consumed in a local store, and then write them
+    // out as a JSON file in the format the Capture panel's Save Capture
+    // produces. The resulting file is loadable via "Load Capture" in
+    // DevTools.
+
+    // Enable local capture mode. Must be called before any WebGPU object is
+    // created — captured object descriptors arrive via AddObject messages
+    // and are not retroactively re-emitted for objects created earlier.
+    initialize() {
+      if (this._localCapture) {
+        return;
+      }
+      this._localCapture = new LocalCaptureStore();
+    }
+
+    // Begin recording GPU commands for one frame. Pairs with
+    // `endFrameCapture()`. Each pair captures one frame; multiple pairs
+    // accumulate multiple frames into the same export.
+    beginFrameCapture() {
+      if (!this._localCapture) {
+        throw new Error("WebGPU Inspector: call initialize() before beginFrameCapture()");
+      }
+      if (this._localCaptureActive) {
+        return;
+      }
+      this._localCaptureActive = true;
+      this._captureMaxBufferSize = maxBufferCaptureSize;
+      this._captureFrameRequest = true;
+    }
+
+    // Stop recording GPU commands and flush the captured commands to the
+    // local store. Async texture/buffer readbacks finish in the background
+    // and are picked up by `saveCaptureData()`.
+    endFrameCapture() {
+      if (!this._localCapture || !this._localCaptureActive) {
+        return;
+      }
+      // Mirror the trailing portion of `_frameEnd` for the in-flight frame:
+      // hand the command list to `_frameCaptureCommands` so the existing
+      // `_sendCapturedCommands` shape (one CaptureFrameResults + N
+      // CaptureFrameCommands batches) flows to the local store.
+      if (this._captureFrameCommands.length) {
+        this._frameCaptureCommands.push(this._captureFrameCommands);
+        this._captureFrameCommands = [];
+      }
+      this._captureFrameRequest = false;
+      this._localCaptureActive = false;
+      this._flushLocalCapturedCommands();
+    }
+
+    // Send accumulated commands to the local store without resetting
+    // `_commandId`. The reset matters: async buffer readbacks (from
+    // copyBufferToBuffer/setVertexBuffer captures) reference commands by id,
+    // and those readbacks can land between pairs — keeping ids monotonic
+    // across pairs prevents collisions.
+    _flushLocalCapturedCommands() {
+      if (!this._frameCaptureCommands.length) {
+        return;
+      }
+      const maxFrameCount = 2000;
+      let commands;
+      if (this._frameCaptureCommands.length === 1) {
+        commands = this._frameCaptureCommands[0];
+      } else {
+        commands = [];
+        for (const frameCommands of this._frameCaptureCommands) {
+          commands.push(...frameCommands);
+        }
+      }
+      this._frameCaptureCommands = [];
+
+      const batches = Math.ceil(commands.length / maxFrameCount);
+      this._postMessage({
+        "action": Actions.CaptureFrameResults,
+        "frame": this._frameIndex,
+        "count": commands.length,
+        batches
+      });
+      for (let i = 0; i < commands.length; i += maxFrameCount) {
+        const length = Math.min(maxFrameCount, commands.length - i);
+        const commandsSlice = commands.slice(i, i + length);
+        this._postMessage({
+          "action": Actions.CaptureFrameCommands,
+          "frame": this._frameIndex,
+          "commands": commandsSlice,
+          "index": i,
+          "count": length
+        });
+      }
+    }
+
+    // Wait for all outstanding texture/buffer readbacks (`mapAsync`s
+    // queued during `submit`) to complete and their data messages to land
+    // in the store. Returns once `_pendingMapCount` settles at 0.
+    async _waitForCapturedReadbacks() {
+      // Poll on rAF where available, otherwise setTimeout; ~16ms cadence.
+      const sleep = () => new Promise((resolve) => {
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(() => resolve());
+        } else {
+          setTimeout(resolve, 16);
+        }
+      });
+      // Bound the wait so a stuck mapAsync (lost device, destroyed buffer)
+      // doesn't hang `saveCaptureData()` forever.
+      const deadline = Date.now() + 30000;
+      while (this._pendingMapCount > 0 && Date.now() < deadline) {
+        await sleep();
+      }
+      // One extra tick to drain microtasks (the mapAsync.then chain posts
+      // data messages synchronously after decrementing the counter).
+      await sleep();
+    }
+
+    // Build the capture JSON and trigger a download. Returns the JSON
+    // object for callers that want to handle the bytes themselves.
+    async saveCaptureData(filename) {
+      if (!this._localCapture) {
+        throw new Error("WebGPU Inspector: call initialize() before saveCaptureData()");
+      }
+      if (this._localCaptureActive) {
+        this.endFrameCapture();
+      } else {
+        // Flush anything still pending from a prior unsynced end.
+        this._flushLocalCapturedCommands();
+      }
+
+      await this._waitForCapturedReadbacks();
+
+      const data = this._localCapture.buildCaptureJson("__buildVersion");
+
+      // Subsequent begin/end pairs start a fresh frame list. Object records
+      // stay so anything created before this save (and still referenced by
+      // a later capture) is exported next time too.
+      this._commandId = 0;
+      this._frameRenderPassCount = 0;
+      this._localCapture.resetCaptures();
+
+      const frame = data.frame ?? 0;
+      const name = filename || `webgpu_capture_frame_${frame}.json`;
+      this._downloadCaptureJson(data, name);
+
+      return data;
+    }
+
+    _downloadCaptureJson(data, filename) {
+      if (!_document) {
+        return;
+      }
+      const text = JSON.stringify(data, null, 2);
+      const blob = new Blob([text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = _document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      _document.body.appendChild(a);
+      a.click();
+      _document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+
     // Send a message to the devtools panel.
     _postMessage(message) {
       message.__webgpuInspector = true;
@@ -449,6 +624,13 @@ export let webgpuInspector = null;
       if (this._iframeOrigin !== null) {
         message.__webgpuInspectorFrame = true;
         message.__webgpuInspectorFrameOrigin = this._iframeOrigin;
+      }
+
+      // Feed the local capture store (manual-injection use case). Same
+      // payload the devtools panel consumes, so the resulting JSON is
+      // identical to a panel-side Save Capture.
+      if (this._localCapture) {
+        this._localCapture.processMessage(message);
       }
 
       // If _window is null, we're in a worker context. Send the message to the main thread,
@@ -2463,6 +2645,19 @@ export let webgpuInspector = null;
   }
 
   webgpuInspector = new WebGPUInspector();
+
+  // Expose the inspector instance on the global so a page that loaded
+  // webgpu_inspector.js via a script tag (manual injection / CDN) can call
+  // initialize(), beginFrameCapture(), endFrameCapture(), saveCaptureData().
+  try {
+    Object.defineProperty(_self, "webgpuInspector", {
+      value: webgpuInspector,
+      writable: true,
+      configurable: true
+    });
+  } catch (e) {
+    _self.webgpuInspector = webgpuInspector;
+  }
 
   // Because of how WebGPUInspector is injected into WebWorkers, worker scripts lose their local
   // path context. This code snippet fixes that by prepending the base address to all
