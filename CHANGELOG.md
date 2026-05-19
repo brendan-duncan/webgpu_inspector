@@ -13,6 +13,7 @@
 * Save and Load captures
 * Open capture in new tab (right click on capture tab)
 * Open capture in new window  (right click on capture tab)
+* Misc fixes for compute shader debugging.
 
 ## v1.0.2 - April 04, 2026
 
