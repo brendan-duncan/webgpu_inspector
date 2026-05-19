@@ -6,6 +6,7 @@
 * [Starting the Inspect Tool](#starting-the-inspect-tool)
 * [GPU Stats](#gpu-stats)
 * [GPU Objects](#gpu-objects)
+* [Filters](#filters)
 * [Object Stacktrace](#object-stacktrace)
 * [Textures](#textures)
 * [Shaders](#shaders)
@@ -76,6 +77,42 @@ Each object category displays how many objects of that type are allocated.
 <a href="images/inspect_objects.png">
 <img src="images/inspect_objects.png" style="width: 512px;">
 </a>
+
+
+## Filters
+###### [Back to top](#inspect)
+
+Large applications can allocate hundreds or thousands of GPU objects, making it difficult to find the one you care about. The **Filter** panel at the top of the GPU Objects list lets you narrow the lists down by name, by type-specific properties, or to just the objects referenced by the most recent frame capture.
+
+When a filter is active, each object category's header shows the number of visible objects over the total (for example, `Textures 12/184`). Clearing all filter fields restores the full lists.
+
+### Search
+
+A free-text **Search** field at the top of the Filter panel matches against every object's label, id, and class name. The match is case-insensitive and applies across all object categories simultaneously.
+
+### Only objects used in last capture
+
+The **Only objects used in last capture** checkbox hides every object that was not referenced by the most recent frame capture. This makes it easy to focus on the resources that participated in a specific frame after running a capture from the [Capture panel](capture.md). The list updates automatically when a new capture is taken or cleared.
+
+### Textures / Views
+
+* **Format**: substring match against the texture's format (for example, `rgba8unorm`, `depth`).
+* **Width**, **Height**, **Depth**: numeric comparisons. Each field accepts a plain number for equality, or one of the operators `>`, `>=`, `<`, `<=`, `=` followed by a number (for example, `>=256`, `<1024`, `>1` for array layers).
+
+The texture filters apply to both the Textures list and the Texture Views list (a view inherits its texture's dimensions and format).
+
+### Buffers
+
+* **Size**: numeric comparison against the buffer's size in bytes (for example, `>=1024`).
+* **Usage**: checkboxes for `Index`, `Vertex`, `Uniform`, `Storage`, `Indirect`, and `QueryResolve`. A buffer matches if it has any of the selected usages.
+
+### Shader Modules
+
+The **Type** checkboxes (`Vertex`, `Fragment`, `Compute`) keep only shader modules that define an entry point of the selected stage. A module with multiple entry stages matches if any selected stage is present.
+
+### Bind Groups
+
+The **Contains** field matches a bind group if any of its bound resources (buffers, texture views, or the textures underlying those views) match the given name or id substring. This is useful for finding every bind group that uses a particular texture or buffer.
 
 
 ## Object Stacktrace
