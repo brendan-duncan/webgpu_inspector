@@ -1,4 +1,4 @@
-import { encodeDataUrl } from "./utils/base64.js";
+import { encodeBase64 } from "./utils/base64.js";
 import { GPUObjectTypes, GPUObjectWrapper } from "./utils/gpu_object_wrapper.js";
 import { TextureFormatInfo } from "./utils/texture_format_info.js";
 import { TextureUtils } from "./utils/texture_utils.js";
@@ -54,9 +54,7 @@ export let webgpuInspector = null;
       this._captureBuffersCount = 0;
       this._captureTempBuffers = [];
       this._mappedTextureBufferCount = 0;
-      this._encodingTextureChunkCount = 0;
       this._mappedBufferCount = 0;
-      this._encodingBufferChunkCount = 0;
       this._captureData = null;
       this._frameRate = new RollingAverage(60);
       this._captureTimestamps = false;
@@ -67,6 +65,20 @@ export let webgpuInspector = null;
       this._captureFrameCount = 0;
       this._pendingMapCount = 0; // Number of pending async map requests
       this._hasPendingDeviceDestroy = false;
+
+      // Iframe origin tagging is invariant for the lifetime of the page. Compute once
+      // so _postMessage doesn't redo the parent-access try/catch on every chunk.
+      this._iframeOrigin = null;
+      if (_window && _window.parent && _window.parent !== _window) {
+        try {
+          // Touching parent.location throws for cross-origin frames.
+          if (_window.parent.location) {
+            this._iframeOrigin = _window.location.origin;
+          }
+        } catch (e) {
+          this._iframeOrigin = "cross-origin";
+        }
+      }
 
       // If there is no WebGPU support, then there's nothing to inspect.
       if (!navigator.gpu) {
@@ -434,19 +446,9 @@ export let webgpuInspector = null;
       message.__webgpuInspectorPage = true;
       message.__webgpuInspectorWorker = !_window;
 
-      // Check if we're in an iframe context and tag the message accordingly
-      if (_window && _window.parent && _window.parent !== _window) {
-        try {
-          // Try to access parent to see if it's same-origin
-          if (_window.parent.location) {
-            message.__webgpuInspectorFrame = true;
-            message.__webgpuInspectorFrameOrigin = _window.location.origin;
-          }
-        } catch (e) {
-          // Cross-origin iframe - cannot access parent
-          message.__webgpuInspectorFrame = true;
-          message.__webgpuInspectorFrameOrigin = 'cross-origin';
-        }
+      if (this._iframeOrigin !== null) {
+        message.__webgpuInspectorFrame = true;
+        message.__webgpuInspectorFrameOrigin = this._iframeOrigin;
       }
 
       // If _window is null, we're in a worker context. Send the message to the main thread,
@@ -1268,9 +1270,6 @@ export let webgpuInspector = null;
       if (this._mappedTextureBufferCount > 0) {
         status += `Pending Texture Reads: ${this._mappedTextureBufferCount} `;
       }
-      if (this._encodingTextureChunkCount > 0) {
-        status += `Pending Texture Encoding: ${this._encodingTextureChunkCount} `;
-      }
 
       if (this._captureBuffersCount) {
         status += `Buffers: ${this._captureBuffersCount} `;
@@ -1278,10 +1277,6 @@ export let webgpuInspector = null;
 
       if (this._mappedBufferCount > 0) {
         status += `Pending Buffer Reads: ${this._mappedBufferCount} `;
-      }
-
-      if (this._encodingBufferChunkCount > 0) {
-        status += `Pending Buffer Encoding: ${this._encodingBufferChunkCount} `;
       }
 
       if (status) {
@@ -1325,7 +1320,10 @@ export let webgpuInspector = null;
         this._captureMaxBufferSize = this._captureData.maxBufferSize || maxBufferCaptureSize;
         this._captureFrameCount = this._captureData.captureFrameCount || captureFrameCount;
         this._captureFrameRequest = true;
-        this._gpuWrapper.recordStacktraces = true;
+        // Stacktraces during frame capture are opt-in: they're cheap individually but
+        // a few thousand per frame dominates the CaptureFrameCommands payload size.
+        // Create-method stacktraces (in GPUObjectWrapper) are unaffected and still fire.
+        this._gpuWrapper.recordStacktraces = !!this._captureData.captureStacktraces;
         this._captureData = null;
         this._commandId = 0;
         this._updateStatusMessage();
@@ -1749,64 +1747,54 @@ export let webgpuInspector = null;
 
         const dynamicOffsets = (newArgs.length > 2) ? newArgs[2] : null;
 
-        // Sort out which dynamic offsets correspond to which bindings by looking at the bind group layout entries
-        // for buffer resources that have hasDynamicOffset set to true.
-        const bindGroupDesc = bindGroup?.__descriptor;
-        const bindGroupLayoutDesc = bindGroupDesc?.layout?.__descriptor;
-        const bglEntries = bindGroupLayoutDesc?.entries;
-        const dynamicOffsetMap = new Map();
-        if (dynamicOffsets && bglEntries) {
-          let dynamicOffsetIndex = 0;
-          for (let i = 0; i < bglEntries.length; i++) {
-            if (bglEntries[i].buffer?.hasDynamicOffset) {
-              const binding = bglEntries[i].binding;
-              dynamicOffsetMap.set(parseInt(binding), dynamicOffsets[dynamicOffsetIndex++]);
+        // Bind groups are immutable, so the static parts of the capture plan (which
+        // entries reference buffers/views, sizes, and the dynamic-offset remap) only
+        // need to be computed once per bind group. Cache the plan on the bind group.
+        const plan = this._getBindGroupCapturePlan(bindGroup);
+        if (plan) {
+          // Reorder dynamic offsets by binding number once, instead of per-iteration
+          // Map/sort/Uint32Array allocations.
+          let mappedDynamicOffsets = null;
+          if (plan.dynOffsetRemap !== null && dynamicOffsets) {
+            const remap = plan.dynOffsetRemap;
+            mappedDynamicOffsets = new Uint32Array(remap.length);
+            for (let i = 0; i < remap.length; i++) {
+              mappedDynamicOffsets[i] = dynamicOffsets[remap[i]];
             }
           }
-        }
-        const sortedEntries = Array.from(dynamicOffsetMap.entries()).sort((a, b) => a[0] - b[0]);
 
-        const mappedDynamicOffsets = new Uint32Array(sortedEntries.length);
-        for (let i = 0; i < sortedEntries.length; i++) {
-          mappedDynamicOffsets[i] = sortedEntries[i][1];
-        }
-
-        let dynamicOffsetIndex = 0;
-        if (bindGroupDesc) {
-          // For each resource in the bind group, if it's a buffer, capture its contents.
-          for (const entryIndex in bindGroupDesc.entries) {
-            const entry = bindGroupDesc.entries[entryIndex];
-            const layoutEntry = bglEntries ? bglEntries[entryIndex] : undefined;
-            const buffer = entry?.resource?.buffer;
-
-            if (buffer) {
-              let offset = entry.resource.offset ?? 0;
-              const origSize = entry.resource.size ?? (buffer.size - offset);
-              const size = alignTo(origSize, 4);
-
-              if (this._captureMaxBufferSize < 0 || size <= this._captureMaxBufferSize) {
-                // If the buffer uses a dynamic offset, get the correct offset from the dynamic offsets array.
-                const usesDynamicOffset = layoutEntry?.buffer?.hasDynamicOffset ?? false;
-                if (usesDynamicOffset && dynamicOffsets !== null) {
-                  offset = mappedDynamicOffsets[dynamicOffsetIndex++];
-                }
-
-                if (!object.__captureBuffers) {
-                  object.__captureBuffers = [];
-                }
-                // Record the buffer to be captured when the command encoder is finished.
-                object.__captureBuffers.push({ commandId, entryIndex, buffer, offset, size });
-                this._captureBuffersCount++;
-
-                this._updateStatusMessage();
-              }
-            } else if (entry?.resource instanceof GPUTextureView) {
-              if (!object.__captureTextureViews) {
-                object.__captureTextureViews = new Set();
-              }
-              object.__captureTextureViews.add(entry.resource);
-              this._updateStatusMessage();
+          const bufferEntries = plan.bufferEntries;
+          let dynIdx = 0;
+          for (let i = 0; i < bufferEntries.length; i++) {
+            const be = bufferEntries[i];
+            const size = be.size;
+            if (this._captureMaxBufferSize >= 0 && size > this._captureMaxBufferSize) {
+              if (be.hasDynamicOffset && mappedDynamicOffsets) dynIdx++;
+              continue;
             }
+            let offset = be.baseOffset;
+            if (be.hasDynamicOffset && mappedDynamicOffsets) {
+              offset = mappedDynamicOffsets[dynIdx++];
+            }
+            if (!object.__captureBuffers) {
+              object.__captureBuffers = [];
+            }
+            object.__captureBuffers.push({ commandId, entryIndex: be.entryIndex, buffer: be.buffer, offset, size });
+            this._captureBuffersCount++;
+          }
+
+          const textureViewEntries = plan.textureViewEntries;
+          if (textureViewEntries.length > 0) {
+            if (!object.__captureTextureViews) {
+              object.__captureTextureViews = new Set();
+            }
+            for (let i = 0; i < textureViewEntries.length; i++) {
+              object.__captureTextureViews.add(textureViewEntries[i]);
+            }
+          }
+
+          if (bufferEntries.length > 0 || textureViewEntries.length > 0) {
+            this._updateStatusMessage();
           }
         }
       } else if (method === "writeBuffer") {
@@ -1989,10 +1977,10 @@ export let webgpuInspector = null;
           self._mappedTextureBufferCount--;
           self._updateStatusMessage();
           self.disableRecording();
-          const range = tempBuffer.getMappedRange();
-          const data = new Uint8Array(range);
-          self._sendTextureData(id, passId, data, mipLevel);
+          // Own the data so we can destroy the temp buffer before encoding chunks.
+          const owned = new Uint8Array(tempBuffer.getMappedRange()).slice();
           tempBuffer.destroy();
+          self._sendTextureData(id, passId, owned, mipLevel);
           self.enableRecording();
           self._pendingMapFinished();
         }).catch((e) => {
@@ -2006,30 +1994,20 @@ export let webgpuInspector = null;
       const size = data.length;
       const numChunks = Math.ceil(size / maxDataChunkSize);
 
-      const self = this;
       for (let i = 0; i < numChunks; ++i) {
         const offset = i * maxDataChunkSize;
         const chunkSize = Math.min(maxDataChunkSize, size - offset);
-        const chunk = data.slice(offset, offset + chunkSize);
-
-        this._encodingTextureChunkCount++;
-        this._updateStatusMessage();
-        encodeDataUrl(chunk).then((chunkData) => {
-          self._postMessage({
-            "action": Actions.CaptureTextureData,
-            id,
-            passId,
-            mipLevel,
-            offset,
-            size,
-            index: i,
-            count: numChunks,
-            chunk: chunkData
-          });
-         self._encodingTextureChunkCount--;
-          self._updateStatusMessage();
-        }).catch((e) => {
-          console.log("Error encoding texture data:", e);
+        const chunk = data.subarray(offset, offset + chunkSize);
+        this._postMessage({
+          "action": Actions.CaptureTextureData,
+          id,
+          passId,
+          mipLevel,
+          offset,
+          size,
+          index: i,
+          count: numChunks,
+          chunk: encodeBase64(chunk)
         });
       }
     }
@@ -2050,31 +2028,23 @@ export let webgpuInspector = null;
     _sendBufferData(commandId, entryIndex, data) {
       const size = data.length;
       const numChunks = Math.ceil(size / maxDataChunkSize);
-      const self = this;
 
-      let count = numChunks;
       for (let i = 0; i < numChunks; ++i) {
         const offset = i * maxDataChunkSize;
         const chunkSize = Math.min(maxDataChunkSize, size - offset);
-        const chunk = data.slice(offset, offset + chunkSize);
-
-        this._encodingBufferChunkCount++;
-        this._updateStatusMessage();
-        encodeDataUrl(chunk).then((chunkData) => {
-          self._postMessage({
-            "action": Actions.CaptureBufferData,
-            commandId,
-            entryIndex,
-            offset,
-            size,
-            index: i,
-            count: numChunks,
-            chunk: chunkData
-          });
-          self._encodingBufferChunkCount--;
-          self._updateStatusMessage();
-        }).catch((error) => {
-          console.error(error.message);
+        // subarray (not slice): the caller owns `data`, so a copy per chunk would be wasted.
+        // encodeBase64 reads bytes synchronously into a fresh string, so the chunk view's
+        // lifetime is bounded by this call.
+        const chunk = data.subarray(offset, offset + chunkSize);
+        this._postMessage({
+          "action": Actions.CaptureBufferData,
+          commandId,
+          entryIndex,
+          offset,
+          size,
+          index: i,
+          count: numChunks,
+          chunk: encodeBase64(chunk)
         });
       }
     }
@@ -2097,25 +2067,27 @@ export let webgpuInspector = null;
 
     // Buffers associated with a command are recorded and then sent to the inspector server.
     // The data is sent in chunks since the message pipe can't handle very much data at a time.
+    // Each entry in `buffers` is a pool: { tempBuffer, ranges: [{commandId, entryIndex, offset, size}] }.
     _sendCapturedBuffers(buffers) {
       if (buffers.length > 0) {
         let totalChunks = 0;
-        for (const bufferInfo of buffers) {
-          const size = bufferInfo.tempBuffer.size;
-          const numChunks = Math.ceil(size / maxDataChunkSize);
-          totalChunks += numChunks;
+        let totalRanges = 0;
+        for (const pool of buffers) {
+          totalRanges += pool.ranges.length;
+          for (const r of pool.ranges) {
+            totalChunks += Math.ceil(r.size / maxDataChunkSize);
+          }
         }
 
         this._postMessage({
           "action": Actions.CaptureBuffers,
-          "count": buffers.length,
+          "count": totalRanges,
           "chunkCount": totalChunks });
       }
 
-      for (const bufferInfo of buffers) {
-        const tempBuffer = bufferInfo.tempBuffer;
-        const commandId = bufferInfo.commandId;
-        const entryIndex = bufferInfo.entryIndex;
+      for (const pool of buffers) {
+        const tempBuffer = pool.tempBuffer;
+        const ranges = pool.ranges;
         const self = this;
         this._mappedBufferCount++;
         this._updateStatusMessage();
@@ -2123,10 +2095,14 @@ export let webgpuInspector = null;
           self._mappedBufferCount--;
           self.disableRecording();
           self._updateStatusMessage();
-          const range = tempBuffer.getMappedRange();
-          const data = new Uint8Array(range);
-          self._sendBufferData(commandId, entryIndex, data);
+          // Copy out of the mapped range so we can destroy immediately and don't
+          // pin GPU memory while we're encoding chunks.
+          const owned = new Uint8Array(tempBuffer.getMappedRange()).slice();
           tempBuffer.destroy();
+          for (let i = 0; i < ranges.length; i++) {
+            const r = ranges[i];
+            self._sendBufferData(r.commandId, r.entryIndex, owned.subarray(r.offset, r.offset + r.size));
+          }
           self.enableRecording();
           self._pendingMapFinished();
         }).catch((error) => {
@@ -2135,9 +2111,74 @@ export let webgpuInspector = null;
       }
     }
 
+    // Builds (and memoizes) the per-bind-group capture plan: which entries reference
+    // buffers (with their static offset/size and whether they consume a dynamic offset)
+    // and which reference texture views. Also computes the remap from dynamic-offset
+    // input order (positional in the BGL entries) to binding-number order.
+    _getBindGroupCapturePlan(bindGroup) {
+      if (!bindGroup) {
+        return null;
+      }
+      if (bindGroup.__capturePlan) {
+        return bindGroup.__capturePlan;
+      }
+      const desc = bindGroup.__descriptor;
+      if (!desc || !desc.entries) {
+        return null;
+      }
+      const bglEntries = desc.layout?.__descriptor?.entries;
+
+      // Dynamic-offset remap: callers pass dynamic offsets in positional BGL-entry order,
+      // but the original code reordered them by binding number before consuming positionally
+      // against bindGroupDesc.entries. Preserve that behavior by building a fixed remap.
+      let dynOffsetRemap = null;
+      if (bglEntries) {
+        const dynEntries = []; // [{binding, srcIndex}]
+        let srcIndex = 0;
+        for (let i = 0; i < bglEntries.length; i++) {
+          if (bglEntries[i].buffer?.hasDynamicOffset) {
+            dynEntries.push({ binding: parseInt(bglEntries[i].binding), srcIndex: srcIndex++ });
+          }
+        }
+        if (dynEntries.length > 0) {
+          dynEntries.sort((a, b) => a.binding - b.binding);
+          dynOffsetRemap = new Uint32Array(dynEntries.length);
+          for (let i = 0; i < dynEntries.length; i++) {
+            dynOffsetRemap[i] = dynEntries[i].srcIndex;
+          }
+        }
+      }
+
+      const bufferEntries = [];
+      const textureViewEntries = [];
+      for (const entryIndex in desc.entries) {
+        const entry = desc.entries[entryIndex];
+        const layoutEntry = bglEntries ? bglEntries[entryIndex] : undefined;
+        const buffer = entry?.resource?.buffer;
+        if (buffer) {
+          const baseOffset = entry.resource.offset ?? 0;
+          const origSize = entry.resource.size ?? (buffer.size - baseOffset);
+          bufferEntries.push({
+            entryIndex,
+            buffer,
+            baseOffset,
+            size: alignTo(origSize, 4),
+            hasDynamicOffset: layoutEntry?.buffer?.hasDynamicOffset ?? false,
+          });
+        } else if (entry?.resource instanceof GPUTextureView) {
+          textureViewEntries.push(entry.resource);
+        }
+      }
+
+      const plan = { bufferEntries, textureViewEntries, dynOffsetRemap };
+      bindGroup.__capturePlan = plan;
+      return plan;
+    }
+
     // Buffers associated with a command are recorded and then sent to the inspector server.
-    // The data is copied to a temp buffer so that the original buffer can continue to be used
-    // by the page.
+    // The data is copied to one or more pool buffers so that the original buffers can continue
+    // to be used by the page, and so a render/compute pass only triggers one mapAsync per pool
+    // instead of one per bound buffer.
     _recordCaptureBuffers(commandEncoder, buffers) {
       const device = commandEncoder?.__device;
       if (!device) {
@@ -2145,33 +2186,81 @@ export let webgpuInspector = null;
         return;
       }
 
-      for (const bufferInfo of buffers) {
-        const { commandId, entryIndex, buffer, offset, size } = bufferInfo;
-
-        if (buffer.__destroyed) {
+      // Build the packed plan: filter out destroyed buffers and assign each one a
+      // 4-byte-aligned slot in a pool buffer.
+      const plan = [];
+      for (const info of buffers) {
+        if (info.buffer.__destroyed) {
           continue;
         }
-        let tempBuffer = null;
-        this.disableRecording();
-
-        try {
-          tempBuffer = device.createBuffer({
-            size,
-            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-            label: `BUFFER CAPTURE TEMP [${commandId},${entryIndex}]`
-          });
-
-          commandEncoder.copyBufferToBuffer(buffer, offset, tempBuffer, 0, size);
-
-          this._captureTempBuffers.push({ commandId, entryIndex, tempBuffer });
-        } catch (e) {
-          console.log(e);
-        }
-
-        this.enableRecording();
+        plan.push({
+          commandId: info.commandId,
+          entryIndex: info.entryIndex,
+          buffer: info.buffer,
+          srcOffset: info.offset,
+          size: info.size,
+          alignedSize: (info.size + 3) & ~3,
+        });
       }
 
       this._captureBuffersCount -= buffers.length;
+
+      if (plan.length === 0) {
+        return;
+      }
+
+      const maxBufferSize = device.limits.maxBufferSize;
+
+      this.disableRecording();
+      try {
+        // Pack into as few pool buffers as possible while respecting maxBufferSize.
+        let poolStart = 0;
+        while (poolStart < plan.length) {
+          let poolEnd = poolStart;
+          let poolSize = 0;
+          while (poolEnd < plan.length && poolSize + plan[poolEnd].alignedSize <= maxBufferSize) {
+            poolSize += plan[poolEnd].alignedSize;
+            poolEnd++;
+          }
+          if (poolEnd === poolStart) {
+            // A single entry is larger than maxBufferSize; skip it. The _captureMaxBufferSize
+            // gate in _captureCommand normally prevents this, but be defensive.
+            poolStart++;
+            continue;
+          }
+
+          let poolBuffer = null;
+          try {
+            poolBuffer = device.createBuffer({
+              size: poolSize,
+              usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+              label: "BUFFER CAPTURE POOL",
+            });
+          } catch (e) {
+            console.log(e);
+            poolStart = poolEnd;
+            continue;
+          }
+
+          const ranges = new Array(poolEnd - poolStart);
+          let cur = 0;
+          for (let i = poolStart; i < poolEnd; i++) {
+            const p = plan[i];
+            try {
+              commandEncoder.copyBufferToBuffer(p.buffer, p.srcOffset, poolBuffer, cur, p.alignedSize);
+            } catch (e) {
+              console.log(e);
+            }
+            ranges[i - poolStart] = { commandId: p.commandId, entryIndex: p.entryIndex, offset: cur, size: p.size };
+            cur += p.alignedSize;
+          }
+
+          this._captureTempBuffers.push({ tempBuffer: poolBuffer, ranges });
+          poolStart = poolEnd;
+        }
+      } finally {
+        this.enableRecording();
+      }
     }
 
     _isCompatibilityMode(device) {

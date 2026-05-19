@@ -10,7 +10,7 @@ import { CapturePanel } from "./capture_panel.js";
 import { RecorderPanel } from "./recorder_panel.js";
 import { InspectPanel } from "./inspect_panel.js";
 import { Signal } from "../utils/signal.js";
-import { decodeDataUrl } from "../utils/base64.js";
+import { decodeBase64 } from "../utils/base64.js";
 import { TextureFormatInfo } from "../utils/texture_format_info.js";
 import { Texture } from "./gpu_objects/texture.js";
 import { GPUObjectRef } from "./gpu_objects/gpu_object_ref.js";
@@ -20,7 +20,10 @@ export class InspectorWindow extends Window {
     super();
 
     const tabId = chrome.devtools.inspectedWindow.tabId;
-    this.port = new MessagePort("webgpu-inspector-panel", tabId);
+    // readyAction posts PanelReady on every (re)connect, so a service-worker
+    // restart re-registers this port in the background without requiring the
+    // user to trigger a message first.
+    this.port = new MessagePort("webgpu-inspector-panel", tabId, null, Actions.PanelReady);
     this.database = new ObjectDatabase(this.port);
     this.classList.add("main-window");
     this._selectedObject = null;
@@ -75,7 +78,7 @@ export class InspectorWindow extends Window {
   }
 
   async initialize() {
-    this.port.postMessage({action: "PanelLoaded"});
+    // PanelReady is sent automatically by MessagePort on every (re)connect.
 
     if (!navigator.gpu) {
       return;
@@ -133,39 +136,42 @@ export class InspectorWindow extends Window {
     }
 
     object._startTime[index] = performance.now();
-    const self = this;
-    decodeDataUrl(chunk).then((data) => {
-      const t1 = object._startTime[index];
-      const t2 = performance.now();
-      const dt = t2 - t1;
-      object.dataLoadTime += dt;
-      //console.log(`TEXTURE CHUNK ${dt}ms size:${data.length} chunkSize:${chunk.length}`);
-      self.onTextureDataChunkLoaded.emit(id, passId, mipLevel, offset, size, index, count, chunk);
-      object.loadedImageDataChunks[mipLevel][index] = 1;
-      try {
-        //console.log("TEXTURE IMAGE DATA", id, passId, mipLevel, offset, data.length, object.imageData[mipLevel].length);
-        object.imageData[mipLevel].set(data, offset);
-      } catch (e) {
-        console.log("TEXTURE IMAGE DATA SET ERROR", id, passId, mipLevel, offset, data.length, object.imageData[mipLevel].length);
-        object.loadedImageDataChunks[mipLevel].length = 0;
-        object.isImageDataLoaded[mipLevel] = false;
+
+    let data;
+    try {
+      data = decodeBase64(chunk);
+    } catch (e) {
+      console.error("Error decoding texture chunk:", e);
+      return;
+    }
+
+    const t1 = object._startTime[index];
+    const t2 = performance.now();
+    object.dataLoadTime += (t2 - t1);
+    this.onTextureDataChunkLoaded.emit(id, passId, mipLevel, offset, size, index, count, chunk);
+    object.loadedImageDataChunks[mipLevel][index] = 1;
+    try {
+      object.imageData[mipLevel].set(data, offset);
+    } catch (e) {
+      console.log("TEXTURE IMAGE DATA SET ERROR", id, passId, mipLevel, offset, data.length, object.imageData[mipLevel].length);
+      object.loadedImageDataChunks[mipLevel].length = 0;
+      object.isImageDataLoaded[mipLevel] = false;
+    }
+
+    let loaded = true;
+    for (let i = 0; i < count; ++i) {
+      if (!object.loadedImageDataChunks[mipLevel][i]) {
+        loaded = false;
+        break;
       }
-  
-      let loaded = true;
-      for (let i = 0; i < count; ++i) {
-        if (!object.loadedImageDataChunks[mipLevel][i]) {
-          loaded = false;
-          break;
-        }
-      }
-      object.isImageDataLoaded[mipLevel] = loaded;
-  
-      if (object.isImageDataLoaded[mipLevel]) {
-        object.loadedImageDataChunks[mipLevel].length = 0;
-        object.imageDataPending[mipLevel] = false;
-        this._createTexture(object, passId, mipLevel);
-      }
-    });
+    }
+    object.isImageDataLoaded[mipLevel] = loaded;
+
+    if (object.isImageDataLoaded[mipLevel]) {
+      object.loadedImageDataChunks[mipLevel].length = 0;
+      object.imageDataPending[mipLevel] = false;
+      this._createTexture(object, passId, mipLevel);
+    }
   }
 
   _createTexture(texture, passId, mipLevel) {

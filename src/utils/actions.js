@@ -21,10 +21,11 @@ export const Actions = {
   RecordingDataCount: "webgpu_record_data_count",
   RecordingData: "webgpu_record_data",
 
-  // Connection handshake actions
+  // Connection handshake actions. Sent automatically by MessagePort on every
+  // (re)connect via its readyAction option so the background can re-register
+  // each port after a service-worker restart.
   PageReady: "webgpu_inspect_page_ready",
   PanelReady: "webgpu_inspect_panel_ready",
-  ConnectionAck: "webgpu_inspect_connection_ack"
 };
 
 Actions.values = new Set(Object.values(Actions));

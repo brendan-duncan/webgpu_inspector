@@ -82,15 +82,19 @@ function injectScriptNode(name, url, attributes) {
 }
 
 // Create a message port to communicate with the background script.
+// readyAction posts PageReady on every (re)connect so the background can
+// re-register this port after a service-worker restart without waiting for
+// user-driven traffic.
 const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
   let action = message.action;
   if (!action) {
     return;
   }
 
-  // Handle connection handshake from panel
+  // PanelReady arrives whenever the panel reconnects. It exists to register the
+  // panel port in the background; the content script doesn't need to do anything
+  // with it.
   if (action === Actions.PanelReady) {
-    port.postMessage({ action: Actions.ConnectionAck });
     return;
   }
 
@@ -133,7 +137,7 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
       window.location.reload();
     }, RELOAD_DELAY_MS);
   }
-});
+}, Actions.PageReady);
 
 window.addEventListener('pageshow', (event) => {
   if (event.persisted) {
@@ -164,5 +168,4 @@ if (!isChromium() && (navigator.userAgent.indexOf("Safari") !== -1 || isFirefox(
   }
 }
 
-// Send PageReady message to the background script to signal content script is ready.
-port.postMessage({ action: Actions.PageReady });
+// PageReady is sent automatically by MessagePort on every (re)connect via readyAction.

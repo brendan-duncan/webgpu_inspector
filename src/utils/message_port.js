@@ -7,8 +7,12 @@ export class MessagePort {
    * @param {string} name The name of the port (used for identification)
    * @param {number?} tabId Optional tab ID to associate with messages
    * @param {function?} listener Optional message listener to add immediately
+   * @param {string?} readyAction Optional action posted automatically on every
+   *   successful (re)connect. Used so both ends re-announce themselves after a
+   *   Manifest V3 service-worker restart, which registers each port in the
+   *   background without waiting for user-driven traffic.
    */
-  constructor(name, tabId, listener) {
+  constructor(name, tabId, listener, readyAction) {
     this.name = name;
     this.tabId = tabId ?? 0;
     this.listeners = [];
@@ -19,6 +23,7 @@ export class MessagePort {
     this._messageQueue = [];
     this._isConnected = false;
     this._isConnecting = false;
+    this._readyAction = readyAction ?? null;
     this.reset();
   }
 
@@ -44,11 +49,6 @@ export class MessagePort {
       });
 
       this._port.onMessage.addListener((message) => {
-        if (message.action === "ConnectionAck") {
-          self._handleConnectionAck();
-          return;
-        }
-
         for (const listener of self.listeners) {
           try {
             listener(message);
@@ -60,6 +60,15 @@ export class MessagePort {
 
       this._isConnecting = false;
       this._isConnected = true;
+
+      // Re-announce on every (re)connect so the background can register this port
+      // even after a service-worker restart. Without this, a panel-port reconnect
+      // would stay unregistered until the user did something that emitted a message.
+      // Sent before flushing the queue so the registration happens first.
+      if (this._readyAction) {
+        this.postMessage({ action: this._readyAction });
+      }
+
       this._flushMessageQueue();
     } catch (e) {
       this._isConnecting = false;
@@ -69,16 +78,6 @@ export class MessagePort {
         self.reset();
       }, 1000);
     }
-  }
-
-  /**
-   * Handles the connection acknowledgment message from the runtime.
-   * @private
-   */
-  _handleConnectionAck() {
-    this._isConnecting = false;
-    this._isConnected = true;
-    this._flushMessageQueue();
   }
 
   /**

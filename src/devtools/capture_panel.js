@@ -57,7 +57,13 @@ export class CapturePanel {
         const maxBufferSize = self.useMaxBufferSize ? self.maxBufferSize : -1;
 
         // Send the capture request to the backend with the specified frame count and buffer size.
-        self.port.postMessage({ action: PanelActions.Capture, captureFrameCount: this.captureFrameCount, maxBufferSize, frame });
+        self.port.postMessage({
+          action: PanelActions.Capture,
+          captureFrameCount: this.captureFrameCount,
+          maxBufferSize,
+          frame,
+          captureStacktraces: self.captureStacktraces,
+        });
       } catch (e) {
         console.error(e.message);
       }
@@ -113,6 +119,15 @@ export class CapturePanel {
     useMaxBufferSizeBtn.input.onChange.addListener((value) => {
       this.useMaxBufferSize = value;
       maxBufferSizeInput.disabled = !value;
+    });
+
+    // Stacktraces per recorded command are useful but can dominate the payload size
+    // when a frame contains thousands of commands. Off by default; opt in here.
+    this.captureStacktraces = false;
+    const stacktraceBtn = new Checkbox(_controlBar, { value: this.captureStacktraces,
+      title: "Capture Stacktraces", label: "Stacktraces", class: "ml-sm" });
+    stacktraceBtn.input.onChange.addListener((value) => {
+      this.captureStacktraces = value;
     });
 
     this._captureFrame = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });

@@ -1,5 +1,5 @@
 
-import { decodeDataUrl } from "../utils/base64.js";
+import { decodeBase64 } from "../utils/base64.js";
 import { Signal } from "../utils/signal.js";
 
 /*interface CaptureTextureFramesMessage {
@@ -215,7 +215,7 @@ export class CaptureData {
    * @param {number} size - The size of the buffer data chunk.
    * @param {number} index - The index of the chunk within the entry.
    * @param {number} count - The total number of chunks for the entry.
-   * @param {string} chunk - The base64-encoded buffer data chunk.
+   * @param {string} chunk - The base64-encoded buffer data chunk (plain base64, no data: prefix).
    */
   _captureBufferData(id, entryIndex, offset, size, index, count, chunk) {
     if (id === -1000) {
@@ -224,63 +224,65 @@ export class CaptureData {
         this._timestampBuffer = new Uint8Array(size);
         this._timestampChunkCount = count;
       }
-      const self = this;
-      decodeDataUrl(chunk).then((chunkData) => {
-        self._timestampBuffer.set(chunkData, offset);
-        self._timestampChunkCount--;
-        if (self._timestampChunkCount === 0) {
-          let renderPassIndex = 0;
-          let computePassIndex = 0;
+      let chunkData;
+      try {
+        chunkData = decodeBase64(chunk);
+      } catch (error) {
+        console.error(error.message);
+        this.onUpdateCaptureStatus.emit();
+        return;
+      }
+      this._timestampBuffer.set(chunkData, offset);
+      this._timestampChunkCount--;
+      if (this._timestampChunkCount === 0) {
+        let renderPassIndex = 0;
+        let computePassIndex = 0;
 
-          const timestampMap = new Array();
+        const timestampMap = new Array();
 
-          const timestampData = new BigInt64Array(self._timestampBuffer.buffer);
+        const timestampData = new BigInt64Array(this._timestampBuffer.buffer);
 
-          const firstTime = Number(timestampData[0]) / 1000000.0;
+        const firstTime = Number(timestampData[0]) / 1000000.0;
 
-          for (let i = 2, k = 0; i < timestampData.length; i += 2) {
-            const start = timestampData[i];
-            const end = timestampData[i + 1];
-            const duration = Number(end - start) / 1000000.0; // convert ns to ms
-            for (; k < self.commands.length; k++) {
-              const command = self.commands[k];
-              if (command.method === "beginRenderPass" ||
-                  command.method === "beginComputePass") {
-                command.duration = duration;
-                command.startTime = Number(start) / 1000000.0;
-                command.endTime = Number(end) / 1000000.0;
+        for (let i = 2, k = 0; i < timestampData.length; i += 2) {
+          const start = timestampData[i];
+          const end = timestampData[i + 1];
+          const duration = Number(end - start) / 1000000.0; // convert ns to ms
+          for (; k < this.commands.length; k++) {
+            const command = this.commands[k];
+            if (command.method === "beginRenderPass" ||
+                command.method === "beginComputePass") {
+              command.duration = duration;
+              command.startTime = Number(start) / 1000000.0;
+              command.endTime = Number(end) / 1000000.0;
 
-                timestampMap.push(command);
+              timestampMap.push(command);
 
-                if (command.header) {
-                  if (command.method === "beginRenderPass") {
-                    const headerText = `Render Pass ${renderPassIndex} Duration: ${command.duration}ms`;
-                    command.header.text = headerText;
-                    renderPassIndex++;
-                  } else {
-                    const headerText = `Compute Pass ${computePassIndex} Duration: ${command.duration}ms`;
-                    command.header.text = headerText;
-                    computePassIndex++;
-                  }
+              if (command.header) {
+                if (command.method === "beginRenderPass") {
+                  const headerText = `Render Pass ${renderPassIndex} Duration: ${command.duration}ms`;
+                  command.header.text = headerText;
+                  renderPassIndex++;
+                } else {
+                  const headerText = `Compute Pass ${computePassIndex} Duration: ${command.duration}ms`;
+                  command.header.text = headerText;
+                  computePassIndex++;
                 }
-
-                k++;
-                break;
               }
+
+              k++;
+              break;
             }
           }
-
-          timestampMap.sort((a, b) => { return a.startTime - b.startTime; });
-          for (const command of timestampMap) {
-            console.log(`${command.startTime - firstTime}: [${command.id}]: ${command.method} -> ${command.duration}ms`);
-          }
-
-          self.onUpdateCaptureStatus.emit();
         }
-      }).catch((error) => {
-        console.error(error.message);
-        self.onUpdateCaptureStatus.emit();
-      });
+
+        timestampMap.sort((a, b) => { return a.startTime - b.startTime; });
+        for (const command of timestampMap) {
+          console.log(`${command.startTime - firstTime}: [${command.id}]: ${command.method} -> ${command.duration}ms`);
+        }
+
+        this.onUpdateCaptureStatus.emit();
+      }
       return;
     }
 
@@ -290,38 +292,13 @@ export class CaptureData {
       this._pendingCommandBufferData[id] = command;
     }
 
-    const self = this;
-    decodeDataUrl(chunk).then((chunkData) => {
-      const command = self.commands[id] ?? self._pendingCommandBufferData[id];
-      self._addDataMembersToCommand(command, entryIndex, size, count);
-      self._loadedDataChunks--;
-      try {
-        command.bufferData[entryIndex].set(chunkData, offset);
-        command.loadedDataChunks[entryIndex][index] = true;
-      } catch (e) {
-        console.log(e);
-        command.loadedDataChunks[entryIndex].length = 0;
-        command.isBufferDataLoaded[entryIndex] = false;
-      }
-
-      let loaded = true;
-      for (let i = 0; i < count; ++i) {
-        if (!command.loadedDataChunks[entryIndex][i]) {
-          loaded = false;
-          break;
-        }
-      }
-      command.isBufferDataLoaded[entryIndex] = loaded;
-
-      if (command.isBufferDataLoaded[entryIndex]) {
-        self._loadingBuffers--;
-        command.loadedDataChunks[entryIndex].length = 0;
-      }
-
-      self.onUpdateCaptureStatus.emit();
-    }).catch((error) => {
+    let chunkData;
+    try {
+      chunkData = decodeBase64(chunk);
+    } catch (error) {
       console.error(error);
-      self._loadedDataChunks--;
+      this._loadedDataChunks--;
+      this._addDataMembersToCommand(command, entryIndex, size, count);
       command.loadedDataChunks[entryIndex][index] = true;
       let loaded = true;
       for (let i = 0; i < count; ++i) {
@@ -332,12 +309,40 @@ export class CaptureData {
       }
       command.isBufferDataLoaded[entryIndex] = loaded;
       if (command.isBufferDataLoaded[entryIndex]) {
-        self._loadingBuffers--;
+        this._loadingBuffers--;
         command.loadedDataChunks[entryIndex].length = 0;
       }
+      this.onUpdateCaptureStatus.emit();
+      return;
+    }
 
-      self.onUpdateCaptureStatus.emit();
-    });
+    command = this.commands[id] ?? this._pendingCommandBufferData[id];
+    this._addDataMembersToCommand(command, entryIndex, size, count);
+    this._loadedDataChunks--;
+    try {
+      command.bufferData[entryIndex].set(chunkData, offset);
+      command.loadedDataChunks[entryIndex][index] = true;
+    } catch (e) {
+      console.log(e);
+      command.loadedDataChunks[entryIndex].length = 0;
+      command.isBufferDataLoaded[entryIndex] = false;
+    }
+
+    let loaded = true;
+    for (let i = 0; i < count; ++i) {
+      if (!command.loadedDataChunks[entryIndex][i]) {
+        loaded = false;
+        break;
+      }
+    }
+    command.isBufferDataLoaded[entryIndex] = loaded;
+
+    if (command.isBufferDataLoaded[entryIndex]) {
+      this._loadingBuffers--;
+      command.loadedDataChunks[entryIndex].length = 0;
+    }
+
+    this.onUpdateCaptureStatus.emit();
   }
 
   /**

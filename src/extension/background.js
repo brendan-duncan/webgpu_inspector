@@ -78,6 +78,16 @@ chrome.runtime.onConnect.addListener((port) => {
   /** @type {boolean} Whether the port has been registered */
   let registered = false;
 
+  // Page ports always carry tab info in port.sender, so register them eagerly.
+  // Otherwise a service-worker restart can leave the reconnected page port
+  // unregistered until the page sends a message — which it normally doesn't do
+  // until the panel asks it to. The panel-driven Start command would then have
+  // no page port to route to, and the user has to refresh the tab to unstick it.
+  if (port.name === "webgpu-inspector-page" && port.sender?.tab?.id !== undefined) {
+    registerPort(port, port.sender.tab.id);
+    registered = true;
+  }
+
   /**
    * Handles incoming messages, queuing them until registered.
    * @param {Object} message - The incoming message
