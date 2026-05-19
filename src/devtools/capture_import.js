@@ -122,8 +122,16 @@ export function importCaptureJson(data, database, idOffset) {
     const desc = _rewriteValue(rec.descriptor, idOffset);
     let obj;
     if (Ctor === GPU.TextureView) {
-      const texRef = rec.texture ? _rewriteValue(rec.texture, idOffset) : { __id: 0 };
-      obj = new Ctor(newId, texRef, desc || {}, rec.stacktrace || "");
+      // Live TextureViews store `texture` as the parent texture's numeric id
+      // (set from `message.parent` in object_database.js _addObject). The
+      // export records this as an `{__id, __class, __label}` ref; pull the
+      // numeric id back out so getTextureFromView() can Map.get() it.
+      const rawTexRef = rec.texture;
+      const parentRawId = rawTexRef && typeof rawTexRef.__id === "number"
+        ? rawTexRef.__id
+        : Number(rawTexRef ?? 0);
+      const parentId = Number.isFinite(parentRawId) ? parentRawId + idOffset : 0;
+      obj = new Ctor(newId, parentId, desc || {}, rec.stacktrace || "");
     } else {
       obj = new Ctor(newId, desc || {}, rec.stacktrace || "");
     }

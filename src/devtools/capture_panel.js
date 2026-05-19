@@ -2,6 +2,7 @@ import { CaptureStatistics } from "./capture_statistics.js";
 import { StacktraceViewer } from "./stacktrace_viewer.js";
 import {
   Sampler,
+  Texture,
   TextureView
 } from "./gpu_objects/index.js";
 import { Button } from "./widget/button.js";
@@ -829,6 +830,14 @@ export class CapturePanel {
         }
         currentBlock = new Div(debugGroup, { class: "capture_commandBlock" });
       }
+    }
+
+    // For imported captures, the live texture-streaming path that normally
+    // uploads pixel data to GPU and builds left-pane thumbnails never fires.
+    // Rebuild both now from the serialized mip data.
+    if (source !== "live") {
+      this._uploadImportedTextureData(state);
+      this._buildImportedRenderPassThumbnails(state);
     }
 
     // Add the tab and make it the active one. The first tab is auto-activated
@@ -3441,61 +3450,180 @@ export class CapturePanel {
 
     this._updateCaptureStatus();
 
-    const frameImages = liveState.frameImages;
-    const frameImageList = liveState.frameImageList;
-    const gpuTextureMap = liveState.gpuTextureMap;
-
-    if (passId != -1 && frameImages) {
-      const passIdValue = passId / 10;
-      const passIndex = Math.floor(passIdValue);
-      const attachment = passId - (passIndex * 10);
-
-      frameImages.style.display = "block";
-      let passFrame = null;
-
-      if (passId >= frameImageList.length) {
-        passFrame = new Div(frameImages, { class: "capture_pass_texture" });
-        frameImageList[passId] = passFrame;
-      } else {
-        passFrame = new Div(null, { class: "capture_pass_texture" });
-        let found = false;
-        for (let i = passId - 1; i >= 0; --i) {
-          if (frameImageList[i]) {
-            frameImages.insertAfter(passFrame, frameImageList[i]); // This needs to be an insertAfter
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          frameImages.insertBefore(passFrame, frameImages.children[0]);
-        }
-        frameImageList[passId] = passFrame;
-      }
-
-      new Div(passFrame, { text: `Render Pass ${passIndex} ${`Attachment ${attachment}`}`, class: "text-secondary mb-sm" });
-      const textureId = texture.id < 0 ? "CANVAS" : texture.id;
-      new Div(passFrame, { text: `${texture.name} ID:${textureId}`, class: "text-secondary mb-md" });
-      new Div(passFrame, { text: `${texture.format} ${texture.resolutionString}`, class: "text-secondary mb-md font-sm" });
-
-      this._createTextureWidget(passFrame, texture, passId, 256);
-
-      gpuTextureMap.set(passId, texture.gpuTexture);
-      texture.gpuTexture.addReference();
-
+    if (passId !== -1 && this._addRenderPassThumbnail(liveState, texture, passId)) {
       // Hang on to the texture in the CaptureData so it's available for serialization.
       this._captureData.addRenderPassTexture(passId, texture);
+    }
+  }
 
-      // When you click on a render pass texture, scroll to the corresponding command in the command list.
-      passFrame.element.onclick = () => {
-        const element = document.getElementById(`RenderPass_${passIndex}`);
-        if (element) {
-          element.scrollIntoView();
-          const beginElement = document.getElementById(`RenderPass_${passIndex}_begin`);
-          if (beginElement) {
-            beginElement.click();
+  /**
+   * Build (or rebuild) the thumbnail tile for one render-pass attachment in the
+   * given tab's state. Returns true if the tile was added.
+   * Used by both the live texture-loaded path and the import-time rebuild path.
+   * @param {Object} state - Tab state from `_buildCaptureTab`.
+   * @param {Object} texture - The Texture with a populated `gpuTexture`.
+   * @param {number} passId - encoded as renderPassIndex * 10 + attachmentSlot.
+   * @returns {boolean}
+   */
+  _addRenderPassThumbnail(state, texture, passId) {
+    const frameImages = state?.frameImages;
+    const frameImageList = state?.frameImageList;
+    const gpuTextureMap = state?.gpuTextureMap;
+    if (!frameImages || !frameImageList) {
+      return false;
+    }
+
+    const passIdValue = passId / 10;
+    const passIndex = Math.floor(passIdValue);
+    const attachment = passId - (passIndex * 10);
+
+    frameImages.style.display = "block";
+    let passFrame = null;
+
+    if (passId >= frameImageList.length) {
+      passFrame = new Div(frameImages, { class: "capture_pass_texture" });
+      frameImageList[passId] = passFrame;
+    } else {
+      passFrame = new Div(null, { class: "capture_pass_texture" });
+      let found = false;
+      for (let i = passId - 1; i >= 0; --i) {
+        if (frameImageList[i]) {
+          frameImages.insertAfter(passFrame, frameImageList[i]);
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        frameImages.insertBefore(passFrame, frameImages.children[0]);
+      }
+      frameImageList[passId] = passFrame;
+    }
+
+    new Div(passFrame, { text: `Render Pass ${passIndex} ${`Attachment ${attachment}`}`, class: "text-secondary mb-sm" });
+    const textureId = texture.id < 0 ? "CANVAS" : texture.id;
+    new Div(passFrame, { text: `${texture.name} ID:${textureId}`, class: "text-secondary mb-md" });
+    new Div(passFrame, { text: `${texture.format} ${texture.resolutionString}`, class: "text-secondary mb-md font-sm" });
+
+    // _createTextureWidget needs a live GPUTexture handle to blit from.
+    // Imported textures may not have one (no loaded mip data) — show the tile
+    // header without the preview rather than blowing up.
+    const prevGpuMap = this._gpuTextureMap;
+    this._gpuTextureMap = gpuTextureMap;
+    try {
+      if (texture.gpuTexture) {
+        this._createTextureWidget(passFrame, texture, passId, 256);
+        gpuTextureMap.set(passId, texture.gpuTexture);
+        texture.gpuTexture.addReference();
+      }
+    } finally {
+      this._gpuTextureMap = prevGpuMap;
+    }
+
+    passFrame.element.onclick = () => {
+      const element = document.getElementById(`RenderPass_${passIndex}`);
+      if (element) {
+        element.scrollIntoView();
+        const beginElement = document.getElementById(`RenderPass_${passIndex}_begin`);
+        if (beginElement) {
+          beginElement.click();
+        }
+      }
+    };
+
+    return true;
+  }
+
+  /**
+   * Upload every imported texture's restored mip data to a GPUTexture on the
+   * inspector's device. After this runs, `texture.gpuTexture` is populated for
+   * any imported Texture that had serialized mip data, so the existing preview
+   * widgets (render-pass thumbnails, BindGroup texture previews) can blit from
+   * it the same way they do for live captures.
+   * @param {Object} state - Tab state from `_buildCaptureTab`.
+   */
+  _uploadImportedTextureData(state) {
+    const inspectorWindow = this.window;
+    if (!state || !inspectorWindow?.device) {
+      return;
+    }
+    const ids = state.importedObjectIds;
+    if (!ids || ids.size === 0) {
+      return;
+    }
+    for (const id of ids) {
+      const obj = this.database.capturedObjects.get(id);
+      if (!(obj instanceof Texture)) {
+        continue;
+      }
+      if (obj.gpuTexture || !Array.isArray(obj.imageData)) {
+        continue;
+      }
+      for (let mip = 0; mip < obj.imageData.length; ++mip) {
+        if (!(obj.imageData[mip] instanceof Uint8Array)) {
+          continue;
+        }
+        if (Array.isArray(obj.isImageDataLoaded) && obj.isImageDataLoaded[mip] === false) {
+          continue;
+        }
+        try {
+          // passId -1: don't try to build a live-style thumbnail; we will
+          // walk render-pass attachments separately in _buildImportedRenderPassThumbnails.
+          inspectorWindow._createTexture(obj, -1, mip);
+        } catch (e) {
+          console.error("Failed to upload imported texture data:", e);
+        }
+      }
+    }
+  }
+
+  /**
+   * Walk an imported tab's commands and build the left-pane render-pass
+   * thumbnail tiles. Mirrors the work `_textureLoaded` does as data streams
+   * in during a live capture. Assumes `_uploadImportedTextureData` has already
+   * populated `texture.gpuTexture` on the imported textures.
+   * @param {Object} state - Tab state from `_buildCaptureTab`.
+   */
+  _buildImportedRenderPassThumbnails(state) {
+    if (!state || !Array.isArray(state.commands)) {
+      return;
+    }
+
+    let renderPassIndex = 0;
+    for (const command of state.commands) {
+      if (!command || command.method !== "beginRenderPass") {
+        continue;
+      }
+      const desc = command.args?.[0];
+      if (!desc) {
+        renderPassIndex++;
+        continue;
+      }
+
+      // Match the live passId layout used by webgpu_inspector.js: each
+      // attachment in the captured set gets the next slot (color first, then
+      // depth-stencil), with the slot range starting at renderPassIndex * 10.
+      let attachmentSlot = 0;
+      const attachments = [];
+      if (Array.isArray(desc.colorAttachments)) {
+        for (const a of desc.colorAttachments) {
+          if (a) {
+            attachments.push(a);
           }
         }
-      };
+      }
+      if (desc.depthStencilAttachment) {
+        attachments.push(desc.depthStencilAttachment);
+      }
+
+      for (const attachment of attachments) {
+        const texture = this._getTextureFromAttachment(attachment);
+        const passId = renderPassIndex * 10 + attachmentSlot++;
+        if (texture) {
+          this._addRenderPassThumbnail(state, texture, passId);
+        }
+      }
+
+      renderPassIndex++;
     }
   }
 }
