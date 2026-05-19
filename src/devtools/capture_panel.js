@@ -213,7 +213,6 @@ export class CapturePanel {
       this.captureStacktraces = value;
     });
 
-    //this._captureFrame = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });
     this._captureStatus = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });
 
     new Div(_controlBar, { class: "control-bar-spacer" });
@@ -1052,7 +1051,6 @@ export class CapturePanel {
       this._frameImages = state.frameImages;
       this._lastSelectedCommand = state.lastSelectedCommand;
       this.statistics = state.statistics;
-      //this._captureFrame.text = `Frame ${state.frame}${state.source !== "live" ? ` (${state.source})` : ""}`;
       this._saveMenuItem.element.classList.remove("disabled");
     } else if (panel == null) {
       // All tabs closed.
@@ -1063,7 +1061,6 @@ export class CapturePanel {
       this._passEncoderCommands = new Map();
       this._frameImages = null;
       this._lastSelectedCommand = null;
-      //this._captureFrame.text = "";
       this._saveMenuItem.element.classList.add("disabled");
     }
     // Otherwise the active tab is something like a shader editor; leave the
