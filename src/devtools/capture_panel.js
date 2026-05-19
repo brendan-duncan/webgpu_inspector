@@ -22,6 +22,7 @@ import { getFormatFromReflection } from "../utils/reflection_format.js";
 import { ResourceType, WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
 import { CaptureData } from "./capture_data.js";
 import { ShaderDebugger } from "./shader_debugger.js";
+import { downloadCaptureJson } from "./capture_export.js";
 
 const _inspectButtonStyle = "btn btn-info";
 
@@ -132,6 +133,26 @@ export class CapturePanel {
 
     this._captureFrame = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });
     this._captureStats = new Button(_controlBar, { label: "Frame Stats", style: "display: none;" });
+    this._exportJsonButton = new Button(_controlBar, { label: "Export JSON", class: "btn",
+      tooltip: "Download the last captured frame as a JSON file for use by external tools.",
+      style: "display: none;",
+      callback: () => {
+        if (!self._captureCommands) {
+          return;
+        }
+        try {
+          downloadCaptureJson(
+            self._captureData?.frameIndex ?? 0,
+            self._captureCommands,
+            self.database,
+            self.statistics,
+            "__buildVersion"
+          );
+        } catch (e) {
+          console.error("Failed to export capture JSON:", e);
+        }
+      }
+    });
     this._captureStatus = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });
 
     new Div(_controlBar, { class: "control-bar-spacer" });
@@ -350,6 +371,7 @@ export class CapturePanel {
 
     this._captureFrame.text = `Frame ${frame}`;
     this._captureStats.style.display = "inline-block";
+    this._exportJsonButton.style.display = "inline-block";
 
     contents.html = "";
 
