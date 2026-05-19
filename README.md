@@ -8,6 +8,7 @@
 * [Installation](#installation)
   * [Chrome Web Store](#chrome-web-store)
   * [Firefox Add-Ons Store](#firefox-add-ons-store)
+  * [Manual Installation (CDN)](#manual-installation-cdn)
   * [From Source](#from-source)
     * [Chrome](#chrome)
     * [Firefox](#firefox-nightly)
@@ -73,6 +74,26 @@ Install WebGPU Inspector from the [Chrome Web Store](https://chromewebstore.goog
 ### Firefox Add-Ons Store
 
 Install WebGPU Inspector from the [Firefox Add-Ons Store](https://addons.mozilla.org/en-US/firefox/addon/webgpu-inspector).
+
+### Manual Injection
+
+##### [Back to top](#webgpu-inspector)
+
+If the WebGPU Inspectors automatic injection isn't working to inspect the page (workers inside of iframes cause trouble), you can include `webgpu_inspector.js` directly in a page.
+
+Add the script tag to your page **before** any code that uses WebGPU, so the inspector can patch the WebGPU API before it's used:
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@main/extensions/chrome/webgpu_inspector.js"></script>
+```
+
+To pin to a specific release instead of tracking `main`, replace `@main` with a version tag, for example:
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@1.0.2/extensions/chrome/webgpu_inspector.js"></script>
+```
+
+The WebGPU Inspector DevTools panel from the browser extension is still required to view the inspected data — manually loading the script only installs the page-side instrumentation, it does not provide a UI on its own. The DevTools panel should be open when the page is loaded (refreshing the page may be necessary) in order for the DevTools panel to recieve all of the WebGPU data from the beginning of the page's execution.
 
 ### From Source
 

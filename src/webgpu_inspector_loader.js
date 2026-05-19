@@ -14,7 +14,20 @@ const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 // When the page reloads we see the key here and start the inspector.
 const inspectMessage = sessionStorage.getItem(webgpuInspectorLoadedKey);
 if (inspectMessage) {
-  sessionStorage.removeItem(webgpuInspectorLoadedKey);
+  // Defer removal until the window's load event. Same-origin iframes share
+  // sessionStorage with the top frame: if the first loader to run removes
+  // the key immediately, the other frames' loaders see null at their own
+  // document_start and never start their inspectors. That in particular
+  // breaks workers created in iframes, because the Worker proxy is only
+  // installed once the inspector starts, so any worker spawned by the
+  // iframe before that proxy is in place runs unpatched.
+  //
+  // By the time load fires, every frame's loader has already read the
+  // value, so the cleanup is still complete in time to keep subsequent
+  // navigations from auto-starting the inspector.
+  window.addEventListener("load", () => {
+    sessionStorage.removeItem(webgpuInspectorLoadedKey);
+  }, { once: true });
 
   if (inspectMessage !== "true") {
     sessionStorage.setItem(webgpuInspectorCaptureFrameKey, inspectMessage);
