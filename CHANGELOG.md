@@ -1,3 +1,19 @@
+## v1.1.0
+
+### Manual Inspection
+
+* Added API to enable webgpu_inspector.js to be added to a html, with an API to start capture frames and save capture data from Javascript.
+
+### Inspector Panel
+
+* Filter displayed objects, making it easier to find objects of interest.
+
+### Capture Panel
+
+* Save and Load captures
+* Open capture in new tab (right click on capture tab)
+* Open capture in new window  (right click on capture tab)
+
 ## v1.0.2 - April 04, 2026
 
 * Optimize performance issues with the frame and object count plot widget.
