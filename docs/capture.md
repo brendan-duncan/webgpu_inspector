@@ -4,6 +4,7 @@
 * [Introduction](#introduction)
 * [Capturing Frame Data](#capturing-frame-data)
 * [Saving and Loading Captures](#saving-and-loading-captures)
+* [Reopening a Capture in a New Tab or Window](#reopening-a-capture-in-a-new-tab-or-window)
 * [Frame Commands](#frame-commands)
 * [Render Pass Textures](#render-pass-textures)
 * [Command Stacktrace](#command-stacktrace)
@@ -92,6 +93,19 @@ Each imported capture lives in its own ID namespace, so loading multiple capture
 ### Capturing Outside DevTools
 
 The same JSON format can also be produced *without* the DevTools panel by loading `webgpu_inspector.js` directly via a `<script>` tag and using the page-side capture API (`initialize()` / `beginFrameCapture()` / `endFrameCapture()` / `saveCaptureData()`). Files produced that way are loadable here through **Load Capture** the same as panel-produced files. See the **Local Capture API** under [Manual Injection](../README.md#manual-injection) in the main README for the script-side workflow.
+
+
+## Reopening a Capture in a New Tab or Window
+###### [Back to top](#capture)
+
+Right-clicking on a capture tab handle opens a context menu with two actions for duplicating the capture without going through a file on disk:
+
+* **Open in New Tab** — Serializes the active capture to the same JSON format that **Save Capture** would write, then immediately re-imports it as a fresh tab in the Capture panel. The new tab is fully independent of the original (its own ID namespace, its own selection state) and survives the original tab being closed.
+* **Open in New Window** — Same serialization, but the result is handed off to a new browser window loading the inspector panel as a standalone page. Useful for putting two captures side-by-side across monitors, or keeping a reference capture visible while you continue capturing in DevTools.
+
+Both actions operate purely in memory — nothing is written to the filesystem. The "Open in New Window" handoff goes through IndexedDB (rather than localStorage) so captures larger than a few megabytes — including ones with full mip data for render-pass attachments — transfer cleanly.
+
+The standalone window opened by **Open in New Window** is a viewer: it loads the capture and provides the same inspection features as a loaded JSON file, but it isn't attached to a DevTools-inspected page, so the **Inspect** and **Record** tabs won't show live data there. Use the original DevTools panel for live capture and inspection.
 
 
 ## Frame Commands
