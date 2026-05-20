@@ -84,3 +84,29 @@ The highlighted statement indicates the next statement to be executed, not the s
 </p>
 </div>
 </div>
+
+## Race Detection
+###### [Back to top](#shader-debugger-experimental)
+
+The **Detect Races** button runs a data-race detector over the compute kernel. Unlike
+stepping, which executes a single thread, the detector runs every invocation of a
+workgroup in lockstep, parking each one when it reaches a barrier. The memory accesses
+between barriers are cross-checked: if two invocations touch overlapping memory in the
+same barrier phase and at least one is a write, that is a data race.
+
+The results appear in the **Race Detection** panel. Each reported race describes the
+buffer, the conflicting invocations and the source lines involved; clicking a race
+jumps the editor to the relevant line. Barrier divergence issues (barriers that are not
+reached uniformly by all invocations) are reported as well.
+
+A data race usually means a `workgroupBarrier()` or `storageBarrier()` is missing
+between the conflicting accesses.
+
+<div style="background-color: #ffedcc; color: #000; border-radius: 5px;">
+<div style="background-color: #f0b37e; color: #fff; padding-left: 5px; padding-right: 5px;"><b>Note</b></div>
+<div style="padding-left: 5px; padding-right: 5px;">
+<p>
+The race detector scans a single workgroup. It detects races <b>within</b> a workgroup, caused by missing barriers. Races between different workgroups on storage memory are not decidable, as WebGPU provides no cross-workgroup ordering guarantees.
+</p>
+</div>
+</div>

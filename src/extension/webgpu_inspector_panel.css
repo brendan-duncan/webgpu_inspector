@@ -1826,6 +1826,151 @@ li.tree-item .expandbutton
   width: calc(100% - 390px);
 }
 
+/* Shader debugger - Variables filter and change highlighting */
+
+.watch-filter {
+  padding: 6px 10px 6px 0;
+}
+
+.watch-filter-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+.watch-row-changed {
+  color: #f0b03c;
+  font-weight: bold;
+}
+
+.watch-empty {
+  color: #999;
+  font-style: italic;
+  padding: 6px 0;
+}
+
+/* Shader debugger - Callstack */
+
+.callstack-frame {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 3px 6px;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.callstack-frame:hover {
+  background-color: #444;
+}
+
+.callstack-frame-active {
+  background-color: #3a3a24;
+  border-left: 3px solid #f0b03c;
+}
+
+.callstack-frame-icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  flex: 0 0 auto;
+  filter: invert(0.65);
+}
+
+.callstack-frame-active .callstack-frame-icon {
+  filter: invert(1);
+}
+
+.callstack-frame-name {
+  color: #ddd;
+  font-weight: bold;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.callstack-frame-active .callstack-frame-name {
+  color: #f0d68c;
+}
+
+.callstack-frame-line {
+  color: #888;
+  margin-left: 8px;
+  font-size: 9pt;
+  flex: 0 0 auto;
+}
+
+.callstack-empty {
+  color: #999;
+  font-style: italic;
+  padding: 6px 0;
+}
+
+/* Shader debugger - Race detection */
+
+.race-hint {
+  color: #999;
+  font-style: italic;
+  padding: 6px 0;
+}
+
+.race-status {
+  color: #ddd;
+  padding: 6px 0;
+}
+
+.race-clean {
+  color: #6fcf6f;
+  padding: 6px 0;
+}
+
+.race-error {
+  color: #e07a5a;
+  padding: 6px 0;
+}
+
+.race-summary {
+  color: #eee;
+  font-weight: bold;
+  padding: 6px 0 4px 0;
+}
+
+.race-row {
+  display: flex;
+  flex-direction: row;
+  padding: 4px 6px;
+  margin-bottom: 3px;
+  margin-right: 10px;
+  border-left: 3px solid #c0392b;
+  background-color: #3a2725;
+  cursor: pointer;
+}
+
+.race-row:hover {
+  background-color: #4a3230;
+}
+
+.race-row-issue {
+  border-left: 3px solid #d99a2b;
+  background-color: #3a3324;
+  cursor: default;
+}
+
+.race-row-issue:hover {
+  background-color: #3a3324;
+}
+
+.race-row-message {
+  color: #e6d2cf;
+  white-space: normal;
+}
+
+.race-row-issue .race-row-message {
+  color: #e6dcc2;
+}
+
 .cm-breakpoint-marker {
   background: #f00;
   border: 1px solid #000;

@@ -3,7 +3,7 @@ import { Span } from "./widget/span.js";
 import { Split } from "./widget/split.js";
 import { Img } from "./widget/img.js";
 import { collapsible } from "./widget/collapsible.js";
-import { WgslDebug } from "wgsl_reflect/wgsl_reflect.module.js";
+import { WgslDebug, detectRaces } from "wgsl_reflect/wgsl_reflect.module.js";
 import { TextureView } from "./gpu_objects/index.js";
 import { ShaderWatchView } from "./shader_watch_view.js";
 
@@ -21,6 +21,7 @@ import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
 import { cobalt } from 'thememirror';
 import { Button } from "./widget/button.js";
 import { NumberInput } from "./widget/number_input.js";
+import { TextInput } from "./widget/text_input.js";
 
 const breakpointEffect = StateEffect.define({
     map: (val, mapping) => ({ pos: mapping.mapPos(val.pos), on: val.on })
@@ -333,6 +334,15 @@ export class ShaderDebugger extends Div {
 
         new Div(this.controls, { style: "flex-grow: 2;" });
 
+        this.detectRacesButton = new Button(this.controls, {
+            text: "Detect Races",
+            title: "Scan the workgroup for data races caused by missing barriers",
+            style: "background-color: #777;",
+            onClick: () => {
+                this._detectRaces();
+            }
+        });
+
         new Button(this.controls, {
             text: "Help",
             title: "Help",
@@ -362,10 +372,23 @@ export class ShaderDebugger extends Div {
 
         this.watch = new Div(pane2, { style: "overflow: auto; background-color: #333; color: #bbb; width: 100%; height: 100%;" });
 
-        this.variables = new collapsible(this.watch, { collapsed: false, label: `Variables` });;
+        this.variables = new collapsible(this.watch, { collapsed: false, label: `Variables` });
+
+        const variableFilterRow = new Div(this.variables.body, { class: "watch-filter" });
+        this.variableFilter = new TextInput(variableFilterRow, {
+            class: "watch-filter-input",
+            placeholder: "Filter variables by name",
+            onEdit: (value) => {
+                this.watchVariables.setFilter(value);
+            }
+        });
+
         this.watchVariables = new ShaderWatchView(this.variables.body);
-        //this.globals = new collapsible(this.watch, { collapsed: false, label: `Globals` });;
-        this.callstack = new collapsible(this.watch, { collapsed: false, label: `Callstack` });;
+
+        this.callstack = new collapsible(this.watch, { collapsed: false, label: `Callstack` });
+
+        this.raceDetection = new collapsible(this.watch, { collapsed: false, label: `Race Detection` });
+        new Div(this.raceDetection.body, { class: "race-hint", text: "Press “Detect Races” to scan the workgroup for data races." });
 
         this.debug();
     }
@@ -422,6 +445,7 @@ export class ShaderDebugger extends Div {
             this.debugger.pause();
             this.update();
         } else {
+            this.watchVariables.commitValues();
             this.debugger.run();
             this.update();
         }
@@ -432,10 +456,29 @@ export class ShaderDebugger extends Div {
     }
 
     debug() {
+        this.watchVariables?.reset();
+        if (this.variableFilter) {
+            this.variableFilter.value = "";
+        }
+
+        const config = this._buildDebugConfig();
+        if (!config) {
+            return;
+        }
+
         const idx = Math.floor(this._idX);
         const idy = Math.floor(this._idY);
         const idz = Math.floor(this._idZ);
 
+        this.debugger = new WgslDebug(config.code, this.runStateChanged.bind(this));
+        this.debugger.debugWorkgroup(config.kernelName, [idx, idy, idz], config.dispatchCount, config.bindGroups, config.options);
+        this.update();
+    }
+
+    // Gather the shader source, entry point, dispatch dimensions and bound
+    // resources needed to run the debugger or the race detector. Returns null
+    // if the shader can't be set up (e.g. it has no compute reflection).
+    _buildDebugConfig() {
         const dispatchCount = [1, 1, 1];
         const dispatchArg = this.command.args[0];
         if (dispatchArg instanceof Array) {
@@ -452,7 +495,7 @@ export class ShaderDebugger extends Div {
 
         const reflection = this.module?.reflection;
         if (!reflection) {
-            return;
+            return null;
         }
 
         let kernel = null;
@@ -463,7 +506,7 @@ export class ShaderDebugger extends Div {
         if (!kernel) {
             kernel = reflection.entry.compute[0]
             if (!kernel) {
-                return;
+                return null;
             }
         }
 
@@ -516,13 +559,115 @@ export class ShaderDebugger extends Div {
         }
 
         const code = this.module.descriptor.code;
-        this.debugger = new WgslDebug(code, this.runStateChanged.bind(this));
-        this.debugger.debugWorkgroup(kernelName, [idx, idy, idz], dispatchCount, bindGroups, options);
-        this.update();
+
+        return { code, kernelName, dispatchCount, bindGroups, options };
+    }
+
+    // Run the wgsl_reflect data-race detector over the shader and display the
+    // results in the Race Detection panel.
+    _detectRaces() {
+        const body = this.raceDetection.body;
+        body.removeAllChildren();
+        this.raceDetection.collapsed = false;
+
+        const config = this._buildDebugConfig();
+        if (!config) {
+            new Div(body, { class: "race-error", text: "Unable to set up the shader for race detection." });
+            return;
+        }
+
+        new Div(body, { class: "race-status", text: "Detecting data races…" });
+        this.detectRacesButton.disabled = true;
+
+        // detectRaces is synchronous and can take a moment, so defer it to let
+        // the status message paint first. Only a single workgroup is scanned:
+        // the detector reports data races within a workgroup, and races between
+        // workgroups are not decidable in WebGPU.
+        setTimeout(() => {
+            let result = null;
+            let error = null;
+            try {
+                const bindGroups = this._cloneBindGroups(config.bindGroups);
+                result = detectRaces(config.code, config.kernelName, [1, 1, 1], bindGroups, config.options);
+            } catch (e) {
+                error = e;
+            }
+
+            this.detectRacesButton.disabled = false;
+            body.removeAllChildren();
+
+            if (error !== null) {
+                new Div(body, { class: "race-error", text: `Race detection failed: ${error}` });
+                return;
+            }
+
+            this._showRaceResults(result);
+        }, 10);
+    }
+
+    // Deep-copy the bound buffers so the race detector, which executes the
+    // kernel, cannot corrupt the buffers used by the live debug session.
+    _cloneBindGroups(bindGroups) {
+        const clone = {};
+        for (const group in bindGroups) {
+            const src = bindGroups[group];
+            const dst = {};
+            for (const binding in src) {
+                const entry = src[binding];
+                if (entry instanceof ArrayBuffer) {
+                    dst[binding] = entry.slice(0);
+                } else if (ArrayBuffer.isView(entry)) {
+                    dst[binding] = new entry.constructor(entry);
+                } else {
+                    // Texture entries are skipped by the detector; pass as-is.
+                    dst[binding] = entry;
+                }
+            }
+            clone[group] = dst;
+        }
+        return clone;
+    }
+
+    _showRaceResults(result) {
+        const body = this.raceDetection.body;
+
+        const races = result?.races ?? [];
+        const errors = result?.errors ?? [];
+
+        if (races.length === 0 && errors.length === 0) {
+            new Div(body, { class: "race-clean", text: "No data races detected in the workgroup." });
+            return;
+        }
+
+        const raceLabel = races.length === 1 ? "data race" : "data races";
+        const issueLabel = errors.length === 1 ? "barrier issue" : "barrier issues";
+        new Div(body, {
+            class: "race-summary",
+            text: `Found ${races.length} ${raceLabel} and ${errors.length} ${issueLabel}.`
+        });
+
+        for (const race of races) {
+            const row = new Div(body, { class: "race-row" });
+            new Span(row, { class: "race-row-message", text: race.message });
+
+            const line = race?.a?.line ?? -1;
+            if (line > 0) {
+                row.title = `Go to line ${line}`;
+                row.addEventListener("click", () => {
+                    this._highlightLine(line);
+                });
+            }
+        }
+
+        for (const issue of errors) {
+            const row = new Div(body, { class: "race-row race-row-issue" });
+            new Span(row, { class: "race-row-message", text: issue });
+        }
     }
 
     stepInto() {
         if (this.debugger) {
+            this.watchVariables.commitValues();
             this.debugger.stepInto();
             this.update();
         }
@@ -530,6 +675,7 @@ export class ShaderDebugger extends Div {
 
     stepOver() {
         if (this.debugger) {
+            this.watchVariables.commitValues();
             this.debugger.stepOver();
             this.update();
         }
@@ -537,6 +683,7 @@ export class ShaderDebugger extends Div {
 
     stepOut() {
         if (this.debugger) {
+            this.watchVariables.commitValues();
             this.debugger.stepOut();
             this.update();
         }
@@ -577,65 +724,80 @@ export class ShaderDebugger extends Div {
             this._highlightLine(0);
         }
 
-        //this.variables.body.removeAllChildren();
-        //this.globals.body.removeAllChildren();
-        this.callstack.body.removeAllChildren();
-
         this.watchVariables.update(this.debugger._exec, this.debugger.context);
 
+        this._updateCallstack();
+    }
+
+    _updateCallstack() {
+        this.callstack.body.removeAllChildren();
+
+        // Collect the active function call frames, innermost first. The
+        // debugger's state chain has a separate frame for every nested block
+        // (if/for/...), so consecutive frames belonging to the same function
+        // are collapsed into a single call frame.
+        const frames = [];
         let state = this.debugger.currentState;
+
         if (state === null) {
             const context = this.debugger.context;
-            const currentFunctionName = context.currentFunctionName;
-            //new Div(this.variables.body, { text: currentFunctionName || "<shader>", style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
-
-            new Div(this.callstack.body, { text: currentFunctionName || "<shader>", style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
-
-            /*context.variables.forEach((v, name) => {
-                if (!name.startsWith("@")) {
-                    this._createVariableDiv(v, this.variables.body);
-                }
+            frames.push({
+                name: context.currentFunctionName || "<shader>",
+                line: this.debugger.currentCommand?.line ?? -1
             });
-
-            context.variables.forEach((v, name) => {
-                if (name.startsWith("@")) {
-                    this._createVariableDiv(v, this.globals.body);
-                }
-            });*/
         } else {
-            let lastState = state;
-            let lastFunctionName = null;
+            let lastName = null;
             while (state !== null) {
-                const context = state.context;
-                const currentFunctionName = context.currentFunctionName || "<shader>";
-
-                //new Div(this.variables.body, { text: currentFunctionName, style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
-
-                if (currentFunctionName !== lastFunctionName) {
-                    new Div(this.callstack.body, { text: currentFunctionName, style: "font-weight: bold; color: #eee; padding-bottom: 2px;" });
+                const name = state.context.currentFunctionName || "<shader>";
+                if (name !== lastName) {
+                    frames.push({ name, state });
+                    lastName = name;
                 }
-
-                lastFunctionName = currentFunctionName;
-
-                /*context.variables.forEach((v, name) => {
-                    if (!name.startsWith("@")) {
-                        this._createVariableDiv(v, this.variables.body);
-                    }
-                });*/
-
-                lastState = state;
                 state = state.parent;
             }
 
-            /*if (lastState) {
-                const context = lastState.context;
-                context.variables.forEach((v, name) => {
-                    if (name.startsWith("@")) {
-                        this._createVariableDiv(v, this.globals.body);
-                    }
-                });
-            }*/
+            for (let i = 0; i < frames.length; ++i) {
+                const frame = frames[i];
+                // The innermost frame is at the debugger's current command;
+                // caller frames are sitting on the call that descended into
+                // the next frame.
+                let line = i === 0 ? (this.debugger.currentCommand?.line ?? -1) : -1;
+                if (line < 0 && frame.state.getCurrentCommand) {
+                    line = frame.state.getCurrentCommand()?.line ?? -1;
+                }
+                frame.line = line;
+            }
         }
+
+        if (frames.length === 0) {
+            new Div(this.callstack.body, { class: "callstack-empty", text: "Not running" });
+            return;
+        }
+
+        frames.forEach((frame, index) => {
+            const isActive = index === 0;
+            const row = new Div(this.callstack.body, {
+                class: isActive ? "callstack-frame callstack-frame-active" : "callstack-frame"
+            });
+
+            new Img(row, {
+                class: "callstack-frame-icon",
+                src: isActive ? "img/debug-stackframe-active.svg" : "img/debug-stackframe.svg"
+            });
+
+            new Span(row, { class: "callstack-frame-name", text: frame.name });
+
+            if (frame.line > 0) {
+                new Span(row, { class: "callstack-frame-line", text: `line ${frame.line}` });
+                row.title = `${frame.name} — line ${frame.line}`;
+                // Clicking a frame jumps the editor to that line.
+                row.addEventListener("click", () => {
+                    this._highlightLine(frame.line);
+                });
+            } else {
+                row.title = frame.name;
+            }
+        });
     }
 
     _highlightLine(lineNo) {

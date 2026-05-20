@@ -15,6 +15,12 @@
 * Open capture in new window  (right click on capture tab)
 * Misc fixes for compute shader debugging.
 
+### Shader Debugger
+
+* Variables panel: filter variables by name, and values that changed since the last step are highlighted.
+* Callstack panel: shows each call frame with its current line, highlights the active frame, and clicking a frame jumps the editor to that line.
+* Added a Detect Races button that runs the wgsl_reflect data-race detector, reporting data races and barrier issues caused by missing workgroup/storage barriers.
+
 ## v1.0.2 - April 04, 2026
 
 * Optimize performance issues with the frame and object count plot widget.

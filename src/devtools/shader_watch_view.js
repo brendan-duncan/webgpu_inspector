@@ -9,9 +9,53 @@ export class ShaderWatchView extends Div {
         super(parent, options);
         this.id = 0;
         this.treeWidgets = [];
+        this.filter = "";
+        this._exec = null;
+        this._context = null;
+        // Snapshots of variable values used to highlight values that changed
+        // between debugger steps.
+        this._previousValues = new Map();
+        this._currentValues = new Map();
+        this._rowCount = 0;
+    }
+
+    // Clear any change-highlighting state and filtering. Called when a new
+    // debug session is started.
+    reset() {
+        this.filter = "";
+        this._previousValues = new Map();
+        this._currentValues = new Map();
+    }
+
+    // Snapshot the currently displayed values as the baseline to compare
+    // against. Called right before the debugger advances a step, so the next
+    // render can highlight which values changed.
+    commitValues() {
+        this._previousValues = this._currentValues;
+    }
+
+    // Set the variable name filter and re-render the current state.
+    setFilter(filter) {
+        this.filter = (filter || "").toLowerCase();
+        this.refresh();
     }
 
     update(exec, context) {
+        this._exec = exec;
+        this._context = context;
+        this._render();
+    }
+
+    // Re-render using the last exec/context, without advancing the debugger
+    // state. Used when only the filter changed.
+    refresh() {
+        if (this._context === null || this._context === undefined) {
+            return;
+        }
+        this._render();
+    }
+
+    _render() {
         const previousData = [];
         for (const treeWidget of this.treeWidgets) {
             const data = treeWidget.data;
@@ -20,7 +64,10 @@ export class ShaderWatchView extends Div {
 
         this.treeWidgets.length = 0;
         this.removeAllChildren();
-        this.initialize(exec, context);
+
+        this._currentValues = new Map();
+        this._rowCount = 0;
+        this.initialize(this._exec, this._context);
 
         for (const data of previousData) {
             for (const treeWidget of this.treeWidgets) {
@@ -36,6 +83,13 @@ export class ShaderWatchView extends Div {
                     }
                 }
             }
+        }
+
+        if (this._rowCount === 0) {
+            const message = this.filter
+                ? `No variables match "${this.filter}"`
+                : "No variables in scope";
+            new Div(this, { class: "watch-empty", text: message });
         }
     }
 
@@ -59,6 +113,21 @@ export class ShaderWatchView extends Div {
         };
 
         context.variables.forEach((variable) => {
+            const varData = variable.value;
+            const valueStr = varData?.toString() ?? "null";
+
+            // Track every variable's value for change detection, even ones
+            // hidden by the filter.
+            const valueKey = `${context.id}:${variable.name}`;
+            this._currentValues.set(valueKey, valueStr);
+
+            if (this.filter && !variable.name.toLowerCase().includes(this.filter)) {
+                return;
+            }
+
+            const changed = this._previousValues.has(valueKey) &&
+                this._previousValues.get(valueKey) !== valueStr;
+
             const row = new Span(null, { class: "watch-row"});
             const name = new Span(row, { class: "watch-row-name"});
             name.textContent = variable.name;
@@ -69,10 +138,11 @@ export class ShaderWatchView extends Div {
             type.title = type.textContent;
 
             const value = new Span(row, { class: "watch-row-value"});
-
-            let varData = variable.value;
-            value.textContent = varData.toString();
+            value.textContent = valueStr;
             value.title = value.textContent;
+            if (changed) {
+                value.classList.add("watch-row-changed");
+            }
 
             const variableData = {
                 id: `${variable.id}`,
@@ -90,9 +160,14 @@ export class ShaderWatchView extends Div {
             }
 
             data.children.push(variableData);
+            this._rowCount++;
         });
 
-        this.treeWidgets.push(new TreeWidget(this, { data }));
+        // When filtering, skip scopes that have no matching variables so the
+        // panel only shows relevant call frames.
+        if (!this.filter || data.children.length > 0) {
+            this.treeWidgets.push(new TreeWidget(this, { data }));
+        }
 
         if (context.parent) {
             this.initialize(exec, context.parent);
@@ -230,7 +305,7 @@ export class ShaderWatchView extends Div {
 
                 const memberValue = new Span(memberRow, { class: "watch-row-value"});
                 memberValue.textContent = subData?.toString() ?? "null";
-                memberValue.textContent = memberValue.textContent;
+                memberValue.title = memberValue.textContent;
 
                 const item = {
                     id: `${parent.id}.${member.name}`,
