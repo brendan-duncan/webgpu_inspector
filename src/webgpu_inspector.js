@@ -6,6 +6,7 @@ import { Actions, PanelActions } from "./utils/actions.js";
 import { RollingAverage } from "./utils/rolling_average.js";
 import { alignTo } from "./utils/align.js";
 import { LocalCaptureStore } from "./utils/local_capture.js";
+import { BridgeClient } from "./utils/bridge_client.js";
 
 export let webgpuInspector = null;
 
@@ -75,6 +76,10 @@ export let webgpuInspector = null;
       // True between beginFrameCapture()/endFrameCapture() — drives the same
       // `_captureFrameRequest` plumbing the devtools-initiated path uses.
       this._localCaptureActive = false;
+      // Set only when `initializeServer()` is called: the opt-in live bridge
+      // client. Regular `initialize()` users leave this null, so no socket is
+      // ever opened for the normal file-download capture workflow.
+      this._bridgeClient = null;
 
       // Iframe origin tagging is invariant for the lifetime of the page. Compute once
       // so _postMessage doesn't redo the parent-access try/catch on every chunk.
@@ -169,10 +174,20 @@ export let webgpuInspector = null;
             }
           });
 
-          observer.observe(_document.body || _document.documentElement, {
-            childList: true,
-            subtree: true
-          });
+          // When the inspector is injected very early (e.g. a CDP preload
+          // script, before the document body/element exist), there is nothing
+          // to observe yet — defer until the DOM is ready.
+          const observeTarget = _document.body || _document.documentElement;
+          if (observeTarget) {
+            observer.observe(observeTarget, { childList: true, subtree: true });
+          } else {
+            _document.addEventListener("DOMContentLoaded", () => {
+              const target = _document.body || _document.documentElement;
+              if (target) {
+                observer.observe(target, { childList: true, subtree: true });
+              }
+            }, { once: true });
+          }
         }
       }
 
@@ -469,6 +484,29 @@ export let webgpuInspector = null;
       this._localCapture = new LocalCaptureStore();
     }
 
+    // Opt-in live bridge mode for the WebGPU Inspector Claude Code plugin.
+    // Enables local capture (like `initialize()`), then connects to a local
+    // bridge server so capture requests can be driven remotely and the
+    // resulting capture JSON uploaded back instead of downloaded as a file.
+    //
+    // Regular `initialize()` / `saveCaptureData()` users never call this, so
+    // the normal file-download workflow never opens a socket. Like
+    // `initialize()`, this must run before the first WebGPU object is created.
+    //
+    // `options` (all optional):
+    //   url        - bridge WebSocket URL (default "ws://localhost:9690/page")
+    //   httpBase   - bridge HTTP base for capture uploads (derived from `url`)
+    //   name       - label for this page shown to the plugin
+    //   token      - shared token if the bridge was started with one
+    initializeServer(options) {
+      this.initialize();
+      if (this._bridgeClient) {
+        return;
+      }
+      this._bridgeClient = new BridgeClient(this, options || {});
+      this._bridgeClient.connect();
+    }
+
     // Begin recording GPU commands for one frame. Pairs with
     // `endFrameCapture()`. Each pair captures one frame; multiple pairs
     // accumulate multiple frames into the same export.
@@ -570,7 +608,9 @@ export let webgpuInspector = null;
 
     // Build the capture JSON and trigger a download. Returns the JSON
     // object for callers that want to handle the bytes themselves.
-    async saveCaptureData(filename) {
+    // Pass `{ download: false }` as `options` to skip the file download and
+    // only return the data (used by the live bridge to upload instead).
+    async saveCaptureData(filename, options) {
       if (!this._localCapture) {
         throw new Error("WebGPU Inspector: call initialize() before saveCaptureData()");
       }
@@ -594,7 +634,9 @@ export let webgpuInspector = null;
 
       const frame = data.frame ?? 0;
       const name = filename || `webgpu_capture_frame_${frame}.json`;
-      this._downloadCaptureJson(data, name);
+      if (!options || options.download !== false) {
+        this._downloadCaptureJson(data, name);
+      }
 
       return data;
     }
@@ -2648,7 +2690,8 @@ export let webgpuInspector = null;
 
   // Expose the inspector instance on the global so a page that loaded
   // webgpu_inspector.js via a script tag (manual injection / CDN) can call
-  // initialize(), beginFrameCapture(), endFrameCapture(), saveCaptureData().
+  // initialize(), beginFrameCapture(), endFrameCapture(), saveCaptureData(),
+  // or initializeServer() for the Claude Code plugin live bridge.
   try {
     Object.defineProperty(_self, "webgpuInspector", {
       value: webgpuInspector,

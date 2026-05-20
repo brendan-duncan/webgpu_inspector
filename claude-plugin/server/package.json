@@ -1,0 +1,16 @@
+{
+  "name": "webgpu-inspector-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bridge + MCP server for the WebGPU Inspector Claude Code plugin.",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "puppeteer-core": "^25.0.4",
+    "ws": "^8.18.0"
+  }
+}

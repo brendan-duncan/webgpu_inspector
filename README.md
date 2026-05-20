@@ -13,6 +13,7 @@
     * [Chrome](#chrome)
     * [Firefox](#firefox-nightly)
     * [Safari](#safari-technology-preview)
+* [Claude Code Integration](#claude-code-integration)
 * [Development](#development)
 
 ## Introduction
@@ -190,6 +191,22 @@ export {};
 ```
 
 Swap `@main` for a version tag (e.g. `@1.1.0`) to pin a release, as described above.
+
+### Claude Code Integration
+
+##### [Back to top](#webgpu-inspector)
+
+WebGPU Inspector can be integrated with [Claude Code](https://claude.com/claude-code) as a plugin that brings WebGPU frame capture and analysis into a conversation with Claude.
+
+Claude can launch (or attach to) a browser, instrument any page — with no
+browser extension and no changes to the page being analyzed — capture one or
+more frames, and then analyze the result: command and draw-call counts, the GPU
+object graph, shaders, validation errors, and common performance problems. It
+builds on the [Local Capture API](#local-capture-api) and produces the same
+capture JSON the DevTools Capture panel reads.
+
+The plugin lives in [claude-plugin/](claude-plugin/) — see
+[claude-plugin/README.md](claude-plugin/README.md) for installation and usage.
 
 ### Building From Source
 

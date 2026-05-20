@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+  <head>
+    <title>WebGPU Inspector — Bridge Example</title>
+    <!--
+      Load the inspector BEFORE any WebGPU code so its wrappers are in place
+      before the first GPU object is created. This example loads the locally
+      built extension; in your own app you can load it from the CDN instead:
+
+        <script src="https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@main/extensions/chrome/webgpu_inspector.js"></script>
+    -->
+    <script src="../../extensions/chrome/webgpu_inspector.js"></script>
+    <script>
+      // Opt in to the live bridge. This is the ONLY line that differs from a
+      // normal page — it connects to the Claude Code plugin's bridge server.
+      // It must run before the first WebGPU object is created.
+      webgpuInspector.initializeServer({ name: "bridge-example" });
+    </script>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 16px; background: #1a1a1a; color: #eee; }
+      canvas { border: 1px solid #333; display: block; margin-top: 12px; }
+      code { background: #111; padding: 2px 5px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h2>WebGPU Inspector — Bridge Example</h2>
+    <p>
+      This page renders a spinning triangle in a <code>requestAnimationFrame</code>
+      loop and is connected to the bridge. In Claude Code, run
+      <code>/webgpu-inspector:capture</code> to capture a frame from it.
+    </p>
+    <canvas id="webgpu_canvas" width="512" height="320"></canvas>
+
+    <script>
+      async function main() {
+        if (!navigator.gpu) {
+          document.body.insertAdjacentHTML("beforeend", "<p>WebGPU not supported.</p>");
+          return;
+        }
+        const adapter = await navigator.gpu.requestAdapter();
+        const device = await adapter.requestDevice();
+
+        const canvas = document.getElementById("webgpu_canvas");
+        const context = canvas.getContext("webgpu");
+        const format = navigator.gpu.getPreferredCanvasFormat();
+        context.configure({ device, format });
+
+        const vertexData = new Float32Array([
+           0.0,  0.5, 1.0, 0.2, 0.2,
+          -0.5, -0.5, 0.2, 1.0, 0.2,
+           0.5, -0.5, 0.2, 0.2, 1.0,
+        ]);
+        const vertexBuffer = device.createBuffer({
+          label: "vertices",
+          size: vertexData.byteLength,
+          usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        });
+        device.queue.writeBuffer(vertexBuffer, 0, vertexData);
+
+        const uniformBuffer = device.createBuffer({
+          label: "uniforms",
+          size: 16,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+
+        const shader = device.createShaderModule({
+          label: "triangle",
+          code: `
+            struct Uniforms { angle: f32 };
+            @group(0) @binding(0) var<uniform> u: Uniforms;
+            struct VSOut {
+              @builtin(position) pos: vec4<f32>,
+              @location(0) color: vec3<f32>,
+            };
+            @vertex
+            fn vs(@location(0) pos: vec2<f32>, @location(1) color: vec3<f32>) -> VSOut {
+              let c = cos(u.angle);
+              let s = sin(u.angle);
+              let r = vec2<f32>(c * pos.x - s * pos.y, s * pos.x + c * pos.y);
+              var out: VSOut;
+              out.pos = vec4<f32>(r, 0.0, 1.0);
+              out.color = color;
+              return out;
+            }
+            @fragment
+            fn fs(in: VSOut) -> @location(0) vec4<f32> {
+              return vec4<f32>(in.color, 1.0);
+            }`,
+        });
+
+        const bindGroupLayout = device.createBindGroupLayout({
+          entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: "uniform" } }],
+        });
+        const bindGroup = device.createBindGroup({
+          layout: bindGroupLayout,
+          entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
+        });
+
+        const pipeline = device.createRenderPipeline({
+          label: "triangle-pipeline",
+          layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+          vertex: {
+            module: shader, entryPoint: "vs",
+            buffers: [{
+              arrayStride: 5 * 4,
+              attributes: [
+                { shaderLocation: 0, offset: 0, format: "float32x2" },
+                { shaderLocation: 1, offset: 8, format: "float32x3" },
+              ],
+            }],
+          },
+          fragment: { module: shader, entryPoint: "fs", targets: [{ format }] },
+          primitive: { topology: "triangle-list" },
+        });
+
+        let angle = 0;
+        function frame() {
+          angle += 0.01;
+          device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([angle, 0, 0, 0]));
+
+          const encoder = device.createCommandEncoder({ label: "frame" });
+          const pass = encoder.beginRenderPass({
+            colorAttachments: [{
+              view: context.getCurrentTexture().createView(),
+              clearValue: { r: 0.05, g: 0.05, b: 0.08, a: 1 },
+              loadOp: "clear",
+              storeOp: "store",
+            }],
+          });
+          pass.setPipeline(pipeline);
+          pass.setBindGroup(0, bindGroup);
+          pass.setVertexBuffer(0, vertexBuffer);
+          pass.draw(3);
+          pass.end();
+          device.queue.submit([encoder.finish()]);
+
+          requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+      }
+
+      main();
+    </script>
+  </body>
+</html>
