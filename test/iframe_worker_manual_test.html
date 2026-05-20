@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WebGPU Inspector — Iframe Worker Manual Injection Test</title>
+  <!--
+    Manual-injection counterpart of test/iframe_worker_test.html.
+
+    iframe_worker_test.html relies on the browser extension to AUTO-INJECT the
+    inspector across the page -> iframe -> worker boundary. That boundary is
+    exactly the case the README calls out as fragile ("workers inside of
+    iframes cause trouble").
+
+    This sample takes the manual-injection route instead. All WebGPU work
+    happens inside a worker that runs inside an iframe, and the inspector is
+    loaded MANUALLY in that worker (and only there).
+
+    The page offers two mutually exclusive modes:
+
+      * Local capture mode  — the worker calls initialize() and drives the
+        local capture API (beginFrameCapture / endFrameCapture /
+        saveCaptureData) to record frames and produce the same JSON the
+        DevTools Capture panel's "Save Capture" produces. Nothing depends on
+        the extension.
+
+      * DevTools panel mode — the worker does NOT call initialize(). The
+        inspector still posts its normal messages; this page relays them so
+        the WebGPU Inspector extension's DevTools panel shows the worker live.
+        This mode needs the extension installed and its panel open.
+
+    Three files, one per context:
+      iframe_worker_manual_test.html     (this file) — UI + capture download
+        -> iframe_worker_manual_content.html         — relay, owns the canvas
+             -> iframe_worker_manual_worker.js       — WebGPU + manual inspector
+
+    For local capture mode: a worker has no `document`, so saveCaptureData()
+    inside the worker can't trigger a download — it just returns the JSON. The
+    worker posts that JSON up to the iframe, the iframe forwards it to this
+    parent page, and this page performs the download.
+
+    For DevTools panel mode: the worker's __WebGPUInspector messages are
+    relayed worker -> iframe -> parent, and this page re-dispatches them as
+    __WebGPUInspector DOM events that the extension's content script forwards
+    to the panel (and panel messages are relayed the other way). That worker
+    -> iframe -> parent hop crosses the same boundary iframe_worker_test.html
+    exercises.
+
+    Serve this over a local web server (workers cannot be loaded from file://).
+    Open a downloaded capture JSON with "Load Capture" in the WebGPU Inspector
+    DevTools Capture panel.
+  -->
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; background: #1a1a1a; color: #eee; }
+    h2 { margin-bottom: 4px; }
+    .note { color: #aaa; font-size: 13px; margin: 4px 0 16px; max-width: 720px; }
+    .row { margin-bottom: 12px; }
+    .row .label { display: inline-block; min-width: 130px; color: #ccc; font-weight: bold; }
+    .hint { color: #888; font-size: 12px; margin-left: 8px; }
+    button { padding: 6px 12px; margin-right: 8px; font-size: 14px; cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    iframe { width: 540px; height: 380px; border: 1px solid #333; background: #fff; }
+    #log { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px;
+           background: #111; padding: 8px; min-height: 80px; max-height: 220px; overflow: auto;
+           border: 1px solid #333; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px;
+            background: #333; margin-left: 6px; }
+    .pill.on { background: #265; }
+    .pill.cap { background: #964; }
+    .err { color: #f88; }
+  </style>
+</head>
+<body>
+  <h2>WebGPU Inspector — Iframe Worker Manual Injection Test</h2>
+  <p class="note">
+    The inspector is manually injected inside the worker (which runs inside the
+    iframe below). Pick one of the two modes — local capture, or live in the
+    DevTools panel.
+  </p>
+
+  <div class="row">
+    <span class="label">Local capture:</span>
+    <button id="btn-init">1. initialize() + setup WebGPU</button>
+    <button id="btn-capture" disabled>2. Capture 1 Frame</button>
+    <button id="btn-capture-multi" disabled>2b. Capture 3 Frames</button>
+    <button id="btn-save" disabled>3. Save Capture (download)</button>
+  </div>
+
+  <div class="row">
+    <span class="label">DevTools panel:</span>
+    <button id="btn-devtools" disabled>Inspect worker in DevTools panel</button>
+    <span class="hint">no local capture — open the WebGPU Inspector DevTools panel first</span>
+  </div>
+
+  <div class="row">
+    <span id="state" class="pill">idle</span>
+    <span id="frames" class="pill">frames captured: 0</span>
+  </div>
+
+  <div class="row">
+    <iframe id="content" src="iframe_worker_manual_content.html"></iframe>
+  </div>
+
+  <div class="row">
+    <div id="log"></div>
+  </div>
+
+  <script>
+    const $log = document.getElementById("log");
+    const $state = document.getElementById("state");
+    const $frames = document.getElementById("frames");
+    const $iframe = document.getElementById("content");
+    const $btnInit = document.getElementById("btn-init");
+    const $btnCapture = document.getElementById("btn-capture");
+    const $btnCaptureMulti = document.getElementById("btn-capture-multi");
+    const $btnSave = document.getElementById("btn-save");
+    const $btnDevtools = document.getElementById("btn-devtools");
+
+    function log(message, level) {
+      const line = document.createElement("div");
+      if (level === "error") {
+        line.className = "err";
+      }
+      line.textContent = message;
+      $log.appendChild(line);
+      $log.scrollTop = $log.scrollHeight;
+      console.log(message);
+    }
+
+    function setState(label, kind) {
+      $state.textContent = label;
+      $state.className = "pill" + (kind ? " " + kind : "");
+    }
+
+    // Send a command down to the iframe, which relays it to the worker.
+    function send(cmd) {
+      $iframe.contentWindow.postMessage({ __manualCmd: cmd }, "*");
+    }
+
+    // The actual file download. The worker built the JSON; the worker and the
+    // iframe both could be limited contexts, so the top-level page does this.
+    function downloadJson(data, filename) {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+
+    // Messages relayed up from the worker (via the iframe).
+    window.addEventListener("message", (event) => {
+      const data = event.data;
+      if (!data) {
+        return;
+      }
+
+      // DevTools panel mode: inspector messages relayed up from the worker.
+      // Re-dispatch each one as a __WebGPUInspector DOM event — the WebGPU
+      // Inspector extension's content script listens for exactly that and
+      // forwards it to the DevTools panel. This is the manual equivalent of
+      // what the inspector's auto-injected Worker proxy does.
+      if (data.__WebGPUInspectorUp) {
+        window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: data.__WebGPUInspectorUp }));
+        return;
+      }
+
+      const msg = data.__manualTest;
+      if (!msg) {
+        return;
+      }
+      switch (msg.type) {
+        case "ready":
+          log("Worker ready — webgpu_inspector.js manually injected inside it.");
+          $btnInit.disabled = false;
+          $btnDevtools.disabled = false;
+          break;
+        case "log":
+          log(msg.message, msg.level);
+          break;
+        case "state":
+          setState(msg.label, msg.kind);
+          break;
+        case "frames":
+          $frames.textContent = `frames captured: ${msg.count}`;
+          break;
+        case "setup-done":
+          $btnCapture.disabled = false;
+          $btnCaptureMulti.disabled = false;
+          $btnSave.disabled = false;
+          break;
+        case "capture-data":
+          downloadJson(msg.data, msg.filename);
+          log(`Downloaded ${msg.filename}. Open it with "Load Capture" in the ` +
+              `WebGPU Inspector DevTools Capture panel.`);
+          break;
+      }
+    });
+
+    // Panel -> worker. The WebGPU Inspector extension's content script
+    // dispatches __WebGPUInspector DOM events on this window for panel-driven
+    // actions (texture requests, capture, live shader edits). Forward those
+    // down to the iframe, and on to the worker.
+    //
+    // Messages the inspector itself emitted carry __webgpuInspectorPage — that
+    // includes the worker messages this page re-dispatches above — so skip
+    // them here to avoid echoing worker output straight back down.
+    window.addEventListener("__WebGPUInspector", (event) => {
+      const detail = event.detail;
+      if (detail && detail.__webgpuInspector && !detail.__webgpuInspectorPage) {
+        $iframe.contentWindow.postMessage({ __WebGPUInspectorDown: detail }, "*");
+      }
+    });
+
+    // The two init buttons are mutually exclusive: one transfer of the canvas,
+    // one choice of mode. Clicking either disables both.
+    $btnInit.addEventListener("click", () => {
+      $btnInit.disabled = true;
+      $btnDevtools.disabled = true;
+      log("Local capture mode — sending init to the worker (via the iframe)...");
+      send({ cmd: "init" });
+    });
+
+    $btnDevtools.addEventListener("click", () => {
+      $btnInit.disabled = true;
+      $btnDevtools.disabled = true;
+      log("DevTools panel mode — the worker will NOT call initialize().");
+      log("Make sure the WebGPU Inspector DevTools panel is open to see the worker.");
+      send({ cmd: "init-devtools" });
+    });
+
+    $btnCapture.addEventListener("click", () => send({ cmd: "capture", count: 1 }));
+    $btnCaptureMulti.addEventListener("click", () => send({ cmd: "capture", count: 3 }));
+    $btnSave.addEventListener("click", () => send({ cmd: "save" }));
+  </script>
+</body>
+</html>

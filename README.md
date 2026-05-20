@@ -9,7 +9,7 @@
   * [Chrome Web Store](#chrome-web-store)
   * [Firefox Add-Ons Store](#firefox-add-ons-store)
   * [Manual Installation (CDN)](#manual-installation-cdn)
-  * [From Source](#from-source)
+  * [Building From Source](#from-source)
     * [Chrome](#chrome)
     * [Firefox](#firefox-nightly)
     * [Safari](#safari-technology-preview)
@@ -133,7 +133,65 @@ await webgpuInspector.saveCaptureData("my_capture.json");
 
 After `saveCaptureData()` resolves, captured commands are cleared. You can call `beginFrameCapture()` / `endFrameCapture()` again to record more frames and `saveCaptureData()` again to produce another file. Object descriptors that were created earlier remain in the store so they continue to be available in subsequent captures.
 
-### From Source
+#### Loading the script from JavaScript / TypeScript
+
+The snippets above assume `webgpu_inspector.js` was added with a `<script>` tag. If your project is driven from JavaScript or TypeScript rather than hand-edited HTML, you can pull the script from the CDN in code instead.
+
+`webgpu_inspector.js` is not an ES module and exports nothing — it runs as a side effect when loaded and attaches the inspector instance to the global object (`window.webgpuInspector` in a page, `self.webgpuInspector` in a worker). It must finish loading **before the first WebGPU object is created**, so load it ahead of your WebGPU code.
+
+The most portable option — it behaves the same with or without a bundler — is to append a `<script>` tag at runtime and `await` it. `tsc` and most bundlers won't resolve a remote URL handed to a static `import`, so this avoids the module resolver entirely:
+
+```ts
+function loadWebGPUInspector(
+  src = "https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@main/extensions/chrome/webgpu_inspector.js",
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+await loadWebGPUInspector();
+// webgpuInspector is now on the global — safe to create WebGPU objects after this.
+```
+
+If you ship native ES modules with no bundler, a static side-effect import at the top of your entry module also works. Imports are evaluated before the rest of the module body, so the inspector is patched in first:
+
+```js
+// Keep this as the first import of your entry point.
+import "https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@main/extensions/chrome/webgpu_inspector.js";
+```
+
+Inside a worker, load it synchronously as the worker's first statement:
+
+```js
+importScripts("https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@main/extensions/chrome/webgpu_inspector.js");
+```
+
+TypeScript doesn't know `webgpuInspector` exists on the global, so declare it once and the local capture calls below will type-check:
+
+```ts
+// webgpu_inspector.d.ts
+interface WebGPUInspector {
+  initialize(): void;
+  beginFrameCapture(): void;
+  endFrameCapture(): void;
+  saveCaptureData(filename?: string): Promise<Record<string, unknown>>;
+}
+
+declare global {
+  var webgpuInspector: WebGPUInspector;
+}
+
+export {};
+```
+
+Swap `@main` for a version tag (e.g. `@1.1.0`) to pin a release, as described above.
+
+### Building From Source
 
 ##### [Back to top](#webgpu-inspector)
 

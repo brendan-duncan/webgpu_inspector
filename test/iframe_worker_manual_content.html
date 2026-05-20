@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WebGPU Inspector — Iframe Worker Manual Injection (iframe content)</title>
+  <!--
+    Iframe content for iframe_worker_manual_test.html.
+
+    This page is a pure relay plus the owner of the canvas. It does NO WebGPU
+    itself, so it does NOT load webgpu_inspector.js — manual injection only
+    needs the inspector where the WebGPU work happens, which is the worker.
+
+    Not loading the inspector here also keeps things simple: the inspector's
+    Worker proxy is never installed in this frame, so the worker is created at
+    its real URL and the importScripts("../extensions/chrome/webgpu_inspector.js")
+    inside the worker resolves against the worker's own location.
+  -->
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 8px; background: #fff; color: #222; }
+    p { font-size: 12px; color: #555; margin: 4px 0; }
+    canvas { border: 1px solid #333; display: block; }
+  </style>
+</head>
+<body>
+  <p>iframe content — owns the canvas, relays commands to/from the worker.</p>
+  <canvas id="webgpu-canvas" width="512" height="320"></canvas>
+
+  <script>
+    // Classic worker (no { type: "module" }) so it can use importScripts() to
+    // load webgpu_inspector.js synchronously as its very first action.
+    const worker = new Worker("iframe_worker_manual_worker.js");
+
+    // transferControlToOffscreen() may only be called once per canvas, so the
+    // OffscreenCanvas is created up front and held until the parent's "init"
+    // command arrives.
+    let offscreenCanvas = document.getElementById("webgpu-canvas").transferControlToOffscreen();
+
+    // worker -> parent.
+    worker.addEventListener("message", (event) => {
+      const data = event.data;
+      if (!data) {
+        return;
+      }
+      // Inspector messages from the worker — relay them up to the parent page
+      // so the WebGPU Inspector extension's DevTools panel can see this worker.
+      if (data.__WebGPUInspector) {
+        window.parent.postMessage({ __WebGPUInspectorUp: data.__WebGPUInspector }, "*");
+        return;
+      }
+      // The sample's own UI messages (these carry a `type`).
+      if (data.type) {
+        window.parent.postMessage({ __manualTest: data }, "*");
+      }
+    });
+
+    worker.addEventListener("error", (event) => {
+      window.parent.postMessage({
+        __manualTest: { type: "log", level: "error", message: "Worker error: " + event.message },
+      }, "*");
+    });
+
+    // parent -> worker.
+    window.addEventListener("message", (event) => {
+      const data = event.data;
+      if (!data) {
+        return;
+      }
+
+      // Panel -> worker: inspector messages relayed down from the parent page.
+      // The worker's own inspector listens for these {__WebGPUInspector: ...}
+      // envelopes (texture requests, panel-driven capture, live shader edits).
+      if (data.__WebGPUInspectorDown) {
+        worker.postMessage({ __WebGPUInspector: data.__WebGPUInspectorDown });
+        return;
+      }
+
+      const cmd = data.__manualCmd;
+      if (!cmd) {
+        return;
+      }
+      switch (cmd.cmd) {
+        case "init":
+          // Local capture mode. Hand the OffscreenCanvas to the worker; the
+          // worker calls webgpuInspector.initialize() before touching it.
+          worker.postMessage({ type: "init", offscreenCanvas }, [offscreenCanvas]);
+          break;
+        case "init-devtools":
+          // DevTools panel mode. Same canvas hand-off, but the worker does NOT
+          // call initialize() — see iframe_worker_manual_worker.js.
+          worker.postMessage({ type: "init-devtools", offscreenCanvas }, [offscreenCanvas]);
+          break;
+        case "capture":
+          worker.postMessage({ type: "capture", count: cmd.count });
+          break;
+        case "save":
+          worker.postMessage({ type: "save" });
+          break;
+      }
+    });
+  </script>
+</body>
+</html>
