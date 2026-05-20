@@ -35,6 +35,14 @@ When the WebGPU Inspector is active on the page, there will be a small icon draw
 
 ![Inspector Status](images/inspect_status.png)
 
+### Inspecting Web Workers
+
+The **Inspect Workers** checkbox next to the **Start** button controls whether the inspector also instruments WebGPU calls made inside **Web Workers** the page creates.
+
+It is **on by default**, so worker-side WebGPU objects and frames show up in the panel without any extra steps. Injecting into workers requires the inspector to wrap the worker's `Worker` constructor and rewrite worker URLs, which can interfere with some applications — if a page misbehaves only while being inspected, turn this off and press **Start** again. When disabled, the page's `Worker` constructor is left completely untouched.
+
+The setting is remembered between DevTools sessions, and the Capture panel uses it too.
+
 ### Notes
 
 * If you press the Start button and the page does not reload, manually refresh the page and press the Start button again. Sometimes the DevTools extension doesn't get injected into the page correctly.

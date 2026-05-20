@@ -26,6 +26,7 @@ import { ShaderDebugger } from "./shader_debugger.js";
 import { buildCaptureJson, downloadCaptureJson } from "./capture_export.js";
 import { importCaptureJson } from "./capture_import.js";
 import { putCaptureHandoff } from "../utils/capture_handoff.js";
+import { getInspectWorkers } from "../utils/inspector_settings.js";
 
 const _inspectButtonStyle = "btn btn-info";
 
@@ -137,12 +138,16 @@ export class CapturePanel {
         const maxBufferSize = self.useMaxBufferSize ? self.maxBufferSize : -1;
 
         // Send the capture request to the backend with the specified frame count and buffer size.
+        // A specific-frame capture (frame >= 0) reloads the page to initialize
+        // the inspector, so it carries the "Inspect Workers" setting the same
+        // way the Inspect panel's Start button does.
         self.port.postMessage({
           action: PanelActions.Capture,
           captureFrameCount: this.captureFrameCount,
           maxBufferSize,
           frame,
           captureStacktraces: self.captureStacktraces,
+          inspectWorkers: getInspectWorkers(),
         });
       } catch (e) {
         console.error(e.message);

@@ -2702,90 +2702,109 @@ export let webgpuInspector = null;
     _self.webgpuInspector = webgpuInspector;
   }
 
-  // Because of how WebGPUInspector is injected into WebWorkers, worker scripts lose their local
-  // path context. This code snippet fixes that by prepending the base address to all
-  // fetch, Request, URL, and WebSocket requests.
-  let _webgpuHostAddress = "<%=_webgpuHostAddress%>";
+  // WebGPUInspector can inject itself into Web Workers (see the Worker proxy
+  // below). Such a worker is created from a `blob:` URL, so it loses the
+  // directory context of its original script — relative URLs passed to
+  // fetch / importScripts / new URL() / new WebSocket() / new Request() would
+  // resolve against the blob instead of the worker's real location.
+  //
+  // To compensate, an injected worker has the directory of its real script
+  // baked into this placeholder and resolves relative URLs against it. The
+  // placeholder is ONLY substituted for inspector-injected workers; on the
+  // main page (and in manually-injected workers) it keeps its `<%=...%>` form,
+  // so none of the URL rewriting below is installed there and the native
+  // URL / WebSocket / Request globals are left untouched.
   let _webgpuBaseAddress = "<%=_webgpuBaseAddress%>";
 
   const _URL = URL;
+  const _isInjectedWorker = !_webgpuBaseAddress.startsWith("<%=");
 
-  function _getFixedUrl(url) {
-    if (_webgpuHostAddress.startsWith("<%=")) {
-      return url;
-    }
-
-    if (url?.constructor === String) {
-      if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("ws://") ||
-          url.startsWith("wss://")|| url.startsWith("blob:") || url.startsWith("data:")){
+  if (_isInjectedWorker) {
+    // Resolve a possibly-relative URL against the worker's real base address.
+    const _getFixedUrl = (url) => {
+      if (typeof url !== "string") {
         return url;
       }
+      // A URL that parses standalone already has a scheme (http:, https:,
+      // ws:, wss:, blob:, data:, ...). Leave it untouched so an already-
+      // absolute URL is never re-encoded or normalized.
       try {
-        const _url = new _URL(url);
-        if (_url.protocol) {
-          return url;
-        }
+        new _URL(url);
+        return url;
       } catch (e) {
+        // Not absolute — fall through and resolve it against the base.
       }
-
-      if (url.startsWith("/")) {
-        return `${_webgpuHostAddress}/${url}`;
-      } else {
-        return `${_webgpuBaseAddress}/${url}`;
+      // `new URL(relative, base)` performs correct RFC-3986 resolution, which
+      // handles "/abs", "rel", "./rel", "../rel", "?query" and "#hash" — all
+      // cases the previous hand-rolled string concatenation got wrong.
+      try {
+        return new _URL(url, `${_webgpuBaseAddress}/`).href;
+      } catch (e) {
+        return url;
       }
-    }
-    return url;
-  }
-
-  const _origFetch = self.fetch;
-  self.fetch = function (input, init) {
-    let url = input instanceof Request ? input.url : input;
-    url = _getFixedUrl(url);
-    return _origFetch(url, init);
-  };
-
-  if (self.importScripts) {
-    const _origImportScripts = self.importScripts;
-    self.importScripts = function (...args) {
-      for (let i = 0; i < args.length; ++i) {
-        args[i] = _getFixedUrl(args[i]);
-      }
-      return _origImportScripts(...args);
     };
+
+    const _origFetch = self.fetch;
+    self.fetch = function (input, init) {
+      // A Request argument already had its URL fixed when it was constructed
+      // (Request is proxied below), so pass it through untouched.
+      if (input instanceof Request) {
+        return _origFetch(input, init);
+      }
+      return _origFetch(_getFixedUrl(input), init);
+    };
+
+    if (self.importScripts) {
+      const _origImportScripts = self.importScripts;
+      self.importScripts = function (...args) {
+        return _origImportScripts(...args.map(_getFixedUrl));
+      };
+    }
+
+    URL = new Proxy(URL, {
+      construct(target, args, newTarget) {
+        // Only rewrite when the URL is parsed standalone. When a base argument
+        // is supplied, resolution is already correct relative to that base;
+        // rewriting args[0] to an absolute URL would make the base be ignored.
+        if (args.length > 0 && (args.length < 2 || args[1] === undefined)) {
+          args[0] = _getFixedUrl(args[0]);
+        }
+        return new target(...args);
+      }
+    });
+
+    WebSocket = new Proxy(WebSocket, {
+      construct(target, args, newTarget) {
+        if (args.length > 0) {
+          args[0] = _getFixedUrl(args[0]);
+        }
+        return new target(...args);
+      }
+    });
+
+    Request = new Proxy(Request, {
+      construct(target, args, newTarget) {
+        // The first argument may be an existing Request to clone; only a
+        // string URL needs to be rewritten.
+        if (args.length > 0 && typeof args[0] === "string") {
+          args[0] = _getFixedUrl(args[0]);
+        }
+        return new target(...args);
+      }
+    });
   }
 
-  URL = new Proxy(URL, {
-   construct(target, args, newTarget) {
-      if (args.length > 0) {
-        args[0] = _getFixedUrl(args[0]);
-      }
-      return new target(...args);
-    }
-  });
-
-  WebSocket = new Proxy(WebSocket, {
+  // Intercept Worker creation to inject the inspector. Opt-in: the proxy is
+  // only installed when the DevTools panel's "Inspect Workers" setting is on
+  // (webgpu_inspector_loader.js sets this global before running the inspector),
+  // or when a parent injected worker propagated the flag. Otherwise the native
+  // Worker global is left untouched and workers run unmodified.
+  if (_self.__webgpuInspectorInspectWorkers) {
+    Worker = new Proxy(Worker, {
     construct(target, args, newTarget) {
-      if (args.length > 0) {
-        args[0] = _getFixedUrl(args[0]);
-      }
-      return new target(...args);
-    }
-  });
-
-  Request = new Proxy(Request, {
-    construct(target, args, newTarget) {
-      if (args.length > 0) {
-        args[0] = _getFixedUrl(args[0]);
-      }
-      return new target(...args);
-    },
-  });
-
-  // Intercept Worker creation to inject inspector
-  Worker = new Proxy(Worker, {
-    construct(target, args, newTarget) {
-      // Inject inspector before the worker loads
-      let src = self.__webgpu_src ? `self.__webgpu_src = ${self.__webgpu_src.toString()};self.__webgpu_src();` : "";
+      // Inject the inspector before the worker loads. The injected worker also
+      // receives the inspect-workers flag so its own child workers are injected.
+      let src = self.__webgpu_src ? `self.__webgpuInspectorInspectWorkers = true;self.__webgpu_src = ${self.__webgpu_src.toString()};self.__webgpu_src();` : "";
 
       let url = args[0];
 
@@ -2799,11 +2818,13 @@ export let webgpuInspector = null;
         _url = new URL(`${baseUrl.protocol}//${baseUrl.host}${baseDir}${sep}${url}`);
       }
 
-      const _webgpuHostAddress = `${_url.protocol}//${_url.host}`;
+      // The base address is the worker script's host + directory. Relative
+      // URLs inside the injected worker are resolved against it (see the
+      // `_getFixedUrl` block above), since the worker itself loads from a
+      // `blob:` URL that carries no directory context.
       const baseDir = _url.pathname.substring(0, _url.pathname.lastIndexOf("/"));
-      const _webgpuBaseAddress = `${_webgpuHostAddress}${baseDir}`;
+      const _webgpuBaseAddress = `${_url.protocol}//${_url.host}${baseDir}`;
 
-      src = src.replaceAll(`<%=_webgpuHostAddress%>`, `${_webgpuHostAddress}`);
       src = src.replaceAll(`<%=_webgpuBaseAddress%>`, `${_webgpuBaseAddress}`);
 
       if (args.length > 1 && args[1]?.type === "module") {
@@ -2883,4 +2904,5 @@ export let webgpuInspector = null;
       })
     },
   });
+  }
 })();

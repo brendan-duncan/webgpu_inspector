@@ -13,6 +13,9 @@ import { Actions, PanelActions } from "../utils/actions.js";
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
 const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
+// Tells the injected inspector whether to inject itself into Web Workers.
+// Driven by the DevTools panel's "Inspect Workers" setting; off by default.
+const webgpuInspectorWorkersKey = "WEBGPU_INSPECTOR_WORKERS";
 
 /** Reload delay in milliseconds */
 const RELOAD_DELAY_MS = 50;
@@ -133,6 +136,14 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
   
   if (action === PanelActions.InitializeInspector) {
     sessionStorage.setItem(webgpuInspectorLoadedKey, inspectMessage);
+    // Carry the panel's "Inspect Workers" choice across the reload. Both the
+    // Inspect panel (InitializeInspector) and the Capture panel (Capture with
+    // a specific frame, which is routed here) set message.inspectWorkers.
+    if (message.inspectWorkers) {
+      sessionStorage.setItem(webgpuInspectorWorkersKey, "true");
+    } else {
+      sessionStorage.removeItem(webgpuInspectorWorkersKey);
+    }
     setTimeout(function () {
       window.location.reload();
     }, RELOAD_DELAY_MS);

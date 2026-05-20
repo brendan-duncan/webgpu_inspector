@@ -3,6 +3,9 @@ import coreLoader from "webgpu_inspector_core_func";
 
 const webgpuInspectorLoadedKey = "WEBGPU_INSPECTOR_LOADED";
 const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
+// Set by content_script.js from the DevTools panel's "Inspect Workers"
+// setting. Tells the inspector whether to inject itself into Web Workers.
+const webgpuInspectorWorkersKey = "WEBGPU_INSPECTOR_WORKERS";
 
 // The Inspector doesn't start listening for WebGPU calls until it is instructed
 // to do so. Otherwise we would be adding ovearhead to all WebGPU applications
@@ -27,11 +30,19 @@ if (inspectMessage) {
   // navigations from auto-starting the inspector.
   window.addEventListener("load", () => {
     sessionStorage.removeItem(webgpuInspectorLoadedKey);
+    sessionStorage.removeItem(webgpuInspectorWorkersKey);
   }, { once: true });
 
   if (inspectMessage !== "true") {
     sessionStorage.setItem(webgpuInspectorCaptureFrameKey, inspectMessage);
   }
+
+  // webgpu_inspector.js reads this global when deciding whether to install its
+  // Worker proxy. The DevTools panel's "Inspect Workers" setting controls it
+  // (on by default). Manual <script>-tag injection never runs this loader, so
+  // worker injection stays off for manual injection.
+  self.__webgpuInspectorInspectWorkers =
+    sessionStorage.getItem(webgpuInspectorWorkersKey) === "true";
 
   self.__webgpu_src = coreLoader;
   self.__webgpu_src();
@@ -47,6 +58,7 @@ if (window) {
     }
     if (message.action === "webgpu_inspector_start_inspection") {
       if (!self.__webgpu_src) {
+        self.__webgpuInspectorInspectWorkers = !!message.inspectWorkers;
         self.__webgpu_src = coreLoader;
         self.__webgpu_src();
       }

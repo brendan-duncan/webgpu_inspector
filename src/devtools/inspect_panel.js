@@ -24,6 +24,7 @@ import {
   ValidationError } from "./gpu_objects/index.js";
 import { getFlagString } from "../utils/flags.js";
 import { PanelActions } from "../utils/actions.js";
+import { getInspectWorkers, setInspectWorkers } from "../utils/inspector_settings.js";
 import { Plot } from "./widget/plot.js";
 import { Split } from "./widget/split.js";
 import { ShaderEditor } from "./shader_editor.js";
@@ -54,9 +55,31 @@ export class InspectPanel {
     this.inspectButton = new Button(controlBar, { label: "Start", class: "btn btn-success", callback: () => {
       try {
         self._reset();
-        self.port.postMessage({ action: PanelActions.InitializeInspector });
+        self.port.postMessage({
+          action: PanelActions.InitializeInspector,
+          inspectWorkers: self._inspectWorkers
+        });
       } catch (e) {}
     } });
+
+    // When enabled, Start also injects the inspector into Web Workers created
+    // by the page. On by default. The choice is persisted and is read by the
+    // Capture panel as well, so a specific-frame capture reload uses the same
+    // setting.
+    this._inspectWorkers = getInspectWorkers();
+    const inspectWorkersCheckbox = new Checkbox(controlBar, {
+      label: "Inspect Workers",
+      tooltip: "When enabled, Start also injects the inspector into Web Workers created by the page. On by default; turn it off if it interferes with the page.",
+      class: "ml-sm mr-sm",
+      onChange: (checked) => {
+        self._inspectWorkers = !!checked;
+        setInspectWorkers(self._inspectWorkers);
+      }
+    });
+    // Set checked state after construction: the Checkbox widget only switches
+    // its input to type="checkbox" after options are applied, so a `checked`
+    // option passed to the constructor would not stick.
+    inspectWorkersCheckbox.checked = this._inspectWorkers;
 
     const stats = new Span(controlBar, { class: "control-bar-stats" });
     this.uiFrameTime = new Span(stats, { style: "width: 140px; overflow: hidden;" });
