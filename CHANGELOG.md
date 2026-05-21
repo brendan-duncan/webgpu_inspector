@@ -1,3 +1,15 @@
+## v1.1.1
+
+### Inspector Panel
+
+* Add "Inspect Workers" option for Start inspection. When not checked, WebGPU Inspector will not try to inject into web workers. This can sometimes cause issues due to how this process happens. When checked, WebGPU Inspector will try to connect to web workers.
+
+* WebGPU running from a web worker, inside of an iframe, is able to be inspected more reliably now.
+
+### Manual Inspection
+
+* Adding webgpu_inspector.js directly to a page will no longer try to inject itself into web workers, resolving issues where the worker injection mechanism caused other problems.
+
 ## v1.1.0
 
 ### Manual Inspection
