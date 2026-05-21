@@ -32,7 +32,7 @@ The shader debugger is integrated into the [Capture](capture.md) tool. Capturing
 <div style="background-color: #f0b37e; color: #fff; padding-left: 5px; padding-right: 5px;"><b>Warning</b></div>
 <div style="padding-left: 5px; padding-right: 5px;">
 <p>
-To properly debug the shader, all buffers and textures used by the shader will need to have been captured. Large buffers may have been skipped, due to the <b>Max Buffer Size</b> capture property. If a buffer was skipped due to being too large, increase the Max Buffer Size to accomidate for the size needed by the buffer and capture the frame again.
+To properly debug the shader, all buffers and textures used by the shader will need to have been captured. Large buffers may have been skipped, due to the <b>Max Buffer Size</b> capture property. If a buffer was skipped due to being too large, increase the Max Buffer Size to accommodate for the size needed by the buffer and capture the frame again.
 </p>
 </div>
 </div>
@@ -84,6 +84,35 @@ The highlighted statement indicates the next statement to be executed, not the s
 </p>
 </div>
 </div>
+
+## Breakpoints
+###### [Back to top](#shader-debugger-experimental)
+
+Click in the gutter to the left of a line number in the shader editor to set a
+breakpoint on that line; a red marker appears. Click the marker again to remove
+the breakpoint. When you **Continue** (F5), the debugger runs until it reaches a
+breakpoint or the end of the shader.
+
+## Variables
+###### [Back to top](#shader-debugger-experimental)
+
+The **Variables** panel, on the right side of the debugger, shows every variable
+in scope at the current statement, along with its type and value. Each function
+call currently on the stack contributes its own group of variables.
+
+Composite values — structs, arrays, vectors, and matrices — can be expanded to
+inspect their members and elements. When stepping, any value that changed since
+the previous step is highlighted.
+
+The **Filter variables by name** field at the top of the panel narrows the list
+to variables whose name matches the entered text.
+
+## Callstack
+###### [Back to top](#shader-debugger-experimental)
+
+The **Callstack** panel lists the chain of function calls that led to the
+current statement, with the source line of each frame. It updates as you step
+into and out of functions.
 
 ## Race Detection
 ###### [Back to top](#shader-debugger-experimental)

@@ -11,6 +11,8 @@
 * [Command Inspection](#command-inspection)
 * [Uniform and Storage Buffer Inspection](#uniform-and-storage-buffer-inspection)
     * [Formatting Buffer Data](formatting_buffer_data.md)
+* [Vertex Buffer Data](#vertex-buffer-data)
+* [Debug Groups](#debug-groups)
 * [Frame Stats](#frame-stats)
 * [Shader Debugger](#shader-debugger)
 
@@ -50,11 +52,15 @@ A start frame of **0** will record all commands from the start of the page load,
 
 **Frames** indicates how many frames to capture once it has started recording.
 
-For pages that do not use requestAnimationFrame, the Frames valu does not do anything. In that case, recording will continue until the GPU device has been destroyed or gabage collected, or you press the inspector overlay on the page to stop the recording.
+For pages that do not use requestAnimationFrame, the Frames value does not do anything. In that case, recording will continue until the GPU device has been destroyed or garbage collected, or you press the inspector overlay on the page to stop the recording.
 
 #### Max Buffer Size
 
 The **Max Buffer Size** value specifies the maximum buffer size Capture will record, for Uniform and Storage buffers. Sending buffer data to the DevTools panel can be slow, so limiting the buffer size can help capture performance. Large buffers are typically used for storage buffers.
+
+#### Stacktraces
+
+The **Stacktraces** checkbox controls whether a stacktrace is recorded for each captured command. It is **off by default**, because recording a stacktrace per command can significantly increase the size of a capture for frames with many commands. Enable it when you need to know where in the page's code a command was issued. See [Command Stacktrace](#command-stacktrace).
 
 #### Note
 
@@ -120,8 +126,9 @@ Selecting a command will display information about the command, including associ
 </a>
 
 ## Render Pass Textures
+###### [Back to top](#capture)
 
-The color texture attachments of Render Passes will be captured and displayed in the capture panel.
+The color and depth-stencil texture attachments of Render Passes will be captured and displayed in the capture panel.
 
 Selecting a Render Pass image will select the associated beginRenderPass command.
 
@@ -130,7 +137,7 @@ Selecting a Render Pass image will select the associated beginRenderPass command
 ## Command Stacktrace
 ###### [Back to top](#capture)
 
-Each command will record the stacktrace of where it was executed.
+When the **Stacktraces** capture option is enabled, each command records the stacktrace of where it was executed. The stacktrace is shown in the command's inspection panel. Stacktraces are off by default — see [Stacktraces](#stacktraces) under Capturing Frame Data.
 
 ![Command Stacktrace](images/capture_stacktrace.png)
 
@@ -167,6 +174,7 @@ Array data can be quite large. To improve performance and readability, if the ar
 </a>
 
 ## Vertex Buffer Data
+###### [Back to top](#capture)
 
 If you select a Draw command, it will inspect any Vertex Buffers bound for the draw call. It will parse the data from the RenderPipeline descriptor, and the shader, to present the data as the shader will see it.
 
@@ -175,8 +183,9 @@ If you select a Draw command, it will inspect any Vertex Buffers bound for the d
 </a>
 
 ## Debug Groups
+###### [Back to top](#capture)
 
-If the page pushes/pops Debug Groups, they will be be used to group commands in the capture. This is useful for organizing rendering commands to make it easier to identify what the commands are contributing to the render.
+If the page pushes/pops Debug Groups, they will be used to group commands in the capture. This is useful for organizing rendering commands to make it easier to identify what the commands are contributing to the render.
 
 <a href="images/capture_debug_groups.png">
 <img src="images/capture_debug_groups.png" style="width:512px">

@@ -4,11 +4,11 @@
 
 * [Introduction](#introduction)
 * [Developer Tools Window](#developer-tools-window)
-  * [Extension Problem Solving](#problem-solving)
+  * [Extension Problem Solving](#extension-problem-solving)
 * [Installation](#installation)
   * [Chrome Web Store](#chrome-web-store)
   * [Firefox Add-Ons Store](#firefox-add-ons-store)
-  * [Manual Installation (CDN)](#manual-installation-cdn)
+  * [Manual Injection](#manual-injection)
   * [Building From Source](#from-source)
     * [Chrome](#chrome)
     * [Firefox](#firefox-nightly)
@@ -43,7 +43,7 @@ WebGPU Inspector provides the following capabilities:
 </a>
 
 ### Developer Tools window
-Select __More Tools / Developer Tools__, or press __F12__ or __Shit+CTRL+J__ (__Option + ⌘ + J__ on MacOS). You can also right-click on the page and select __Inspect__. When the WebGPU Inspector extension is enabled in the extension manager, there will be a **WebGPU Inspector** tab.
+Select __More Tools / Developer Tools__, or press __F12__ or __Shift+CTRL+J__ (__Option + ⌘ + J__ on MacOS). You can also right-click on the page and select __Inspect__. When the WebGPU Inspector extension is enabled in the extension manager, there will be a **WebGPU Inspector** tab.
 
 ![WebGPU Inspector Panel](docs/images/webgpu_inspector_panel.png)
 
@@ -217,7 +217,7 @@ To get the most up to date version of WebGPU Inspector, you can install the exte
 - Download project from Github.
   - git clone https://github.com/brendan-duncan/webgpu_inspector
 
-Crome and Firefox don't support the same version of extension plug-ins, so you'll need to load the correct version.
+Chrome and Firefox don't support the same version of extension plug-ins, so you'll need to load the correct version.
 
 #### Chrome
 - Open **chrome://extensions**

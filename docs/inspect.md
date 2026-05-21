@@ -137,7 +137,7 @@ The stacktrace for each object is recorded, identifying where in the code the ob
 
 When you inspect a texture, a Load button pulls the texture image from the page for visualizing.
 
-Mousing over the texture image will show the pixel color vlaues, if the Inspector can decode the texture format.
+Mousing over the texture image will show the pixel color values, if the Inspector can decode the texture format.
 
 The layer title bar will include the min and max pixel color values from the texture.
 
@@ -153,10 +153,10 @@ Channel: lets you inspect specific color channels of the image.
 
 Zoom: scale the display of the texture. You can also control the texture display zoom using **control+mouse-wheel**.
 
-Depth textures are always normalized for displayed. This means the min and max
+Depth textures are always normalized for display. This means the min and max
 values of the texture are found, then all values in the depth texture
 are normalized to that range. This makes it easier to visualize depth
-tetures, even if their values are in a compressed range. Other texture types can
+textures, even if their values are in a compressed range. Other texture types can
 be displayed normalized using the Auto Range setting.
 
 **Note:** if the page is using WebGPU compatibility mode, depth textures can't be viewed as compatibility mode lacks the feature needed to read depth textures.
@@ -191,8 +191,8 @@ There are limitations to the types of changes you can make to the shader. The pa
 ## Profiling Tips
 ###### [Back to top](#inspect)
 
-Profiling tools have not been added yet, but the Inspector can reveal some oportunities for optimizations.
+Profiling tools have not been added yet, but the Inspector can reveal some opportunities for optimizations.
 
-* Periodic spikes in the frame time graph indicate your page is probably doing garbage collection during those frames. Try to minimize Javascripts garbage collection by caching and re-using GPU objects as much as possible.
-* Object numbers rising and falling over time indicate the page is allocating and destroying objects frequently. If the objects accumilate quickly and go down gradually, it indicates you are creating objects and relying on garbage collection to destroy them.
+* Periodic spikes in the frame time graph indicate your page is probably doing garbage collection during those frames. Try to minimize JavaScript's garbage collection by caching and re-using GPU objects as much as possible.
+* Object numbers rising and falling over time indicate the page is allocating and destroying objects frequently. If the objects accumulate quickly and go down gradually, it indicates you are creating objects and relying on garbage collection to destroy them.
     * Buffer and texture objects in particular are expensive to create and destroy, so you should try to cache buffers and textures in particular as much as possible. Other types of objects, like Texture Views, may be inexpensive but can still cause garbage collection stalls.

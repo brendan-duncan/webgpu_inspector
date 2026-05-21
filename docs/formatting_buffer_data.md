@@ -42,10 +42,10 @@ Which would then present the buffer data as:
 
 ## Radix Views
 
-Not only can you change the format of the data, you can change the number radix of the display, from **Decimal**, **Hexidecimal**, **Octal**, or **Binary**. Changing the Radix to Hexidecimal will display all numbers as hexidecimal.
+Not only can you change the format of the data, you can change the number radix of the display, from **Decimal**, **Hexadecimal**, **Octal**, or **Binary**. Changing the Radix to Hexadecimal will display all numbers as hexadecimal.
 
-![Buffer Format Hexidecimal](images/buffer_edit_format_hex.png)
-![Buffer Format Hexidecimal](images/buffer_format_hex.png)
+![Buffer Format Hexadecimal](images/buffer_edit_format_hex.png)
+![Buffer Format Hexadecimal](images/buffer_format_hex.png)
 
 ## Format data types
 
@@ -53,7 +53,7 @@ Format types are specified as WGSL variable types. These can be either struct, a
 
 ### Basic Types
 
-WGSL supprots the following basic types:
+WGSL supports the following basic types:
 * i32 - signed 32-bit integer
 * u32 - unsigned 32-bit integer
 * f32 - 32-bit floating-point number
