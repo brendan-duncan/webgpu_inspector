@@ -166,11 +166,27 @@ If you ship native ES modules with no bundler, a static side-effect import at th
 import "https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@main/extensions/chrome/webgpu_inspector.js";
 ```
 
-Inside a worker, load it synchronously as the worker's first statement:
+#### Inside a Web Worker
+
+The `<script>` form does not apply to workers — a worker loads its entry script directly and has no DOM. Use one of these depending on the worker's type:
+
+**Classic worker** (`new Worker(url)`) — `importScripts` runs synchronously, so anything below it sees the inspector already loaded:
 
 ```js
 importScripts("https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@main/extensions/chrome/webgpu_inspector.js");
+// ...rest of the worker
 ```
+
+**Module worker** (`new Worker(url, { type: "module" })`) — a static `import` at the top of the worker's entry module:
+
+```js
+import "https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@main/extensions/chrome/webgpu_inspector.js";
+// ...rest of the worker
+```
+
+Top-level `await` is **not** required. ES module semantics hoist static imports: the inspector module is fully fetched and evaluated before any code in the importing module's body runs, so the WebGPU API is already wrapped before the worker's own first statement executes. `await import(...)` would also work but adds nothing for the manual-injection case.
+
+In both worker forms the inspector exposes itself as `self.webgpuInspector` in the worker's global scope, the same way the page-context form exposes `window.webgpuInspector`.
 
 TypeScript doesn't know `webgpuInspector` exists on the global, so declare it once and the local capture calls below will type-check:
 
