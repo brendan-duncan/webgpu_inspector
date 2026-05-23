@@ -42,7 +42,7 @@
 // a frame from the worker.
 
 // Test manual injection of the inspector
-//await import('../extensions/chrome/webgpu_inspector.js')
+//import('../extensions/chrome/webgpu_inspector.js')
 
 // ---------------------------------------------------------------------------
 // PART 1 — top-level fetch (the bug repro)
