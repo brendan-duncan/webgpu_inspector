@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WebGPU Inspector — Module Worker Blob Fetch Bug Repro</title>
+  <!--
+    Bug repro AND end-to-end worker inspection check.
+
+    Two things are exercised here:
+
+      1. The original bug: module worker created under the inspector's
+         Worker proxy fails its top-level fetch on a relative or absolute
+         path. With the fix (await import instead of static import in the
+         blob source) the fetch succeeds.
+
+      2. End-to-end worker inspection: after the fetch passes, the worker
+         drives a continuous WebGPU render loop on a transferred
+         OffscreenCanvas. Every adapter/device/buffer/texture/pipeline call
+         and every frame's command list should appear in the WebGPU
+         Inspector DevTools panel.
+
+    User report that motivated the bug repro:
+      "Worker thread error. Uncaught TypeError: Failed to execute 'fetch' on
+       'WorkerGlobalScope': Failed to parse URL from /src/assets/textures/atlas.png"
+
+    How to run this test
+      1. Install the WebGPU Inspector extension (load extensions/chrome as
+         an unpacked extension in chrome://extensions, or the equivalent
+         for Firefox).
+      2. Serve the repo over a local web server (workers can't be loaded
+         from file://).
+      3. Open this page.
+      4. Open DevTools and switch to the "WebGPU Inspector" panel.
+      5. Turn on the "Inspect Workers" toggle in the panel.
+      6. Click "Inspect" in the panel. The panel will reload this page
+         with the inspector active.
+      7. After the reload, read the banner:
+           PASS — top-level fetch in the wrapped module worker succeeded
+                  AND the worker is rendering. Switch to the Inspect tab
+                  to see the worker's GPU object tree, or the Capture tab
+                  to capture a frame from the worker.
+           FAIL — the wrapped module worker errored out before reporting
+                  a result. The log shows the browser's original error
+                  message.
+           INCONCLUSIVE — the iframe didn't see the inspector. Usually
+                  means inspection was never enabled (you skipped step
+                  5/6), or "Inspect Workers" was off in the panel.
+
+    The page does NOT load the inspector itself. The whole point of this
+    test is to exercise the real DevTools-driven auto-injection path; any
+    manual <script src="webgpu_inspector.js"> here would defeat that.
+  -->
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; background: #1a1a1a; color: #eee; }
+    h2 { margin-bottom: 4px; }
+    .note { color: #aaa; font-size: 13px; margin: 4px 0 16px; max-width: 760px; }
+    ol.howto { color: #ccc; font-size: 13px; max-width: 760px; padding-left: 22px; }
+    ol.howto li { margin-bottom: 4px; }
+    iframe { width: 640px; height: 320px; border: 1px solid #333; background: #fff; }
+    .banner { font-size: 18px; font-weight: bold; padding: 10px 14px; border-radius: 6px;
+              display: inline-block; margin: 8px 0; min-width: 240px; }
+    .banner.pending { background: #333; color: #ccc; }
+    .banner.pass    { background: #1f4f1f; color: #cfe9cf; }
+    .banner.fail    { background: #5b1f1f; color: #f9cfcf; }
+    .banner.warn    { background: #5b4a1f; color: #f6e4a7; }
+    .pills { margin: 6px 0; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px;
+            background: #333; margin-right: 6px; }
+    .pill.on  { background: #265; }
+    .pill.cap { background: #964; }
+    #log { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px;
+           background: #111; padding: 8px; min-height: 80px; max-height: 320px; overflow: auto;
+           border: 1px solid #333; max-width: 640px; }
+    .err { color: #f88; }
+    .ok  { color: #8f8; }
+    .warn { color: #fc8; }
+    code { background: #222; padding: 1px 4px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h2>Module Worker Blob Fetch Bug Repro</h2>
+  <p class="note">
+    Enable the WebGPU Inspector from its DevTools panel — the panel reloads
+    this page with worker injection turned on, the iframe below creates a
+    module worker, and the inspector wraps it in a <code>blob:</code> URL.
+    The wrapped worker first does a top-level
+    <code>fetch("/test/iframe_module_worker_fetch_test.html")</code> (the
+    original bug surface), then drives a continuous WebGPU render loop on
+    an <code>OffscreenCanvas</code>. The DevTools panel's Inspect tab
+    should show the worker's GPU object tree and Capture should be able to
+    record a frame from it.
+  </p>
+
+  <ol class="howto">
+    <li>Install the WebGPU Inspector extension (load <code>extensions/chrome</code>
+        as an unpacked extension, or the Firefox equivalent).</li>
+    <li>Open DevTools and switch to the <strong>WebGPU Inspector</strong> panel.</li>
+    <li>Turn on the <strong>Inspect Workers</strong> toggle in the panel.</li>
+    <li>Click <strong>Inspect</strong>. The panel reloads this page with
+        the inspector active.</li>
+    <li>After the reload, read the banner. If PASS, switch to the panel's
+        Inspect/Capture tabs to verify the worker's WebGPU calls are
+        visible.</li>
+  </ol>
+
+  <div id="banner" class="banner pending">Waiting for worker…</div>
+
+  <div class="pills">
+    <span id="pill-webgpu" class="pill">WebGPU: idle</span>
+    <span id="pill-frames" class="pill">frames rendered: 0</span>
+  </div>
+
+  <div>
+    <iframe id="frame" src="iframe_module_worker_fetch_content.html"></iframe>
+  </div>
+
+  <div id="log"></div>
+
+  <script>
+    const $banner = document.getElementById("banner");
+    const $log = document.getElementById("log");
+    const $pillWebgpu = document.getElementById("pill-webgpu");
+    const $pillFrames = document.getElementById("pill-frames");
+    const $iframe = document.getElementById("frame");
+
+    function log(message, level) {
+      const line = document.createElement("div");
+      if (level) {
+        line.className = level;
+      }
+      line.textContent = message;
+      $log.appendChild(line);
+      $log.scrollTop = $log.scrollHeight;
+      console.log(message);
+    }
+
+    function setBanner(label, kind) {
+      $banner.textContent = label;
+      $banner.className = "banner " + kind;
+    }
+
+    function setPill(el, label, kind) {
+      el.textContent = label;
+      el.className = "pill" + (kind ? " " + kind : "");
+    }
+
+    // Tracks what the iframe reported about its inspector state — used to
+    // disambiguate worker outcomes ("worker succeeded" means different
+    // things depending on whether the inspector was actually in play).
+    let inspectorState = null;
+
+    // Workers don't error instantly; if nothing arrives in a few seconds we
+    // flag the test as inconclusive rather than leaving the banner pending.
+    const TIMEOUT_MS = 4000;
+    const timeoutId = setTimeout(() => {
+      if ($banner.classList.contains("pending")) {
+        setBanner("INCONCLUSIVE — no result", "warn");
+        log("Timed out after " + (TIMEOUT_MS / 1000) + "s with no message and " +
+            "no error from the worker. If you have not enabled inspection " +
+            "via the WebGPU Inspector DevTools panel yet, follow the steps " +
+            "above first.", "warn");
+      }
+    }, TIMEOUT_MS);
+
+    window.addEventListener("message", (event) => {
+      const data = event.data;
+      if (!data) {
+        return;
+      }
+
+      // Inspector messages relayed up from the worker (via the iframe).
+      // Re-dispatch each one as a __WebGPUInspector DOM event — the WebGPU
+      // Inspector extension's content script listens for exactly that and
+      // forwards it to the DevTools panel.
+      if (data.__WebGPUInspectorUp) {
+        window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: data.__WebGPUInspectorUp }));
+        return;
+      }
+
+      const msg = data.__moduleWorkerFetchTest;
+      if (!msg) {
+        return;
+      }
+
+      switch (msg.type) {
+        case "inspector-state":
+          inspectorState = msg;
+          log("Iframe inspector state: " +
+              "webgpuInspector=" + msg.webgpuInspector + ", " +
+              "__webgpu_src=" + msg.webgpuSrc + ", " +
+              "__webgpuInspectorInspectWorkers=" + msg.inspectWorkers);
+          if (!msg.webgpuInspector) {
+            log("The inspector is NOT loaded in the iframe. Open the WebGPU " +
+                "Inspector DevTools panel, enable Inspect Workers, and click " +
+                "Inspect to reload this page with inspection active.", "warn");
+          } else if (!msg.inspectWorkers) {
+            log("Worker injection is OFF. Turn on 'Inspect Workers' in the " +
+                "WebGPU Inspector panel before clicking Inspect.", "warn");
+          } else if (!msg.webgpuSrc) {
+            log("__webgpu_src is missing — the wrapped worker's bootstrap " +
+                "would be empty. This usually means the inspector was loaded " +
+                "without the loader.", "warn");
+          } else {
+            log("Inspector is active with worker injection — the module " +
+                "worker below should be wrapped in a blob.", "ok");
+          }
+          break;
+
+        case "result":
+          clearTimeout(timeoutId);
+          log("Worker location: " + JSON.stringify(msg.location, null, 2));
+          if (msg.location.protocol !== "blob:") {
+            // The worker was not wrapped — either inspection wasn't
+            // enabled, or "Inspect Workers" was off. A passing fetch in
+            // this state does NOT prove the fix; it just means the native
+            // worker URL is well-formed.
+            setBanner("INCONCLUSIVE — worker not wrapped", "warn");
+            log("Worker self.location is not a blob: URL. The inspector " +
+                "did not wrap this worker, so this run does not exercise " +
+                "the bug surface. Enable inspection via the WebGPU " +
+                "Inspector DevTools panel and reload.", "warn");
+            break;
+          }
+          log("Fetch result: " + JSON.stringify(msg.fetch, null, 2), "ok");
+          log("fetch is patched in worker: " + msg.fetchIsPatched, "ok");
+          setBanner("PASS — top-level fetch succeeded", "pass");
+          break;
+
+        case "worker-error":
+          // This is the failure mode the user reported. Without the fix,
+          // the worker's module evaluation rejects before any postMessage
+          // can run, and the iframe surfaces it as an error event.
+          clearTimeout(timeoutId);
+          if (inspectorState && !inspectorState.inspectWorkers) {
+            // Worker errored without the inspector wrapping it — that is
+            // not the bug we're testing for.
+            setBanner("INCONCLUSIVE — worker error without inspector", "warn");
+            log("Worker errored, but the inspector was not wrapping it. " +
+                "This is not the bug under test. Error: " + msg.message, "warn");
+            break;
+          }
+          setBanner("FAIL — worker error", "fail");
+          log("Worker error: " + msg.message, "err");
+          if (msg.message && msg.message.includes("Failed to parse URL")) {
+            log("This is the bug. The inspector's fetch proxy wasn't " +
+                "installed by the time the worker ran its top-level fetch.", "err");
+          }
+          break;
+
+        case "webgpu-ready":
+          setPill($pillWebgpu, "WebGPU: rendering", "on");
+          log("Worker WebGPU setup complete. Render loop started. The " +
+              "WebGPU Inspector panel's Inspect tab should now show the " +
+              "worker's GPU objects; Capture should be able to record a " +
+              "frame from it.", "ok");
+          break;
+
+        case "webgpu-error":
+          setPill($pillWebgpu, "WebGPU: error", "cap");
+          log("Worker WebGPU error: " + msg.message, "err");
+          break;
+
+        case "frame-count":
+          setPill($pillFrames, "frames rendered: " + msg.count);
+          break;
+      }
+    });
+
+    // Panel -> worker: the WebGPU Inspector extension's content script
+    // dispatches __WebGPUInspector DOM events on this window for
+    // panel-driven actions (texture requests, capture, live shader edits).
+    // Forward those down to the iframe, and on to the worker. Messages
+    // the inspector itself emitted carry __webgpuInspectorPage — that
+    // includes the worker messages this page re-dispatches above — so
+    // skip them here to avoid echoing worker output straight back down.
+    window.addEventListener("__WebGPUInspector", (event) => {
+      const detail = event.detail;
+      if (detail && detail.__webgpuInspector && !detail.__webgpuInspectorPage) {
+        $iframe.contentWindow.postMessage({ __WebGPUInspectorDown: detail }, "*");
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Module Worker Blob Fetch — Iframe Content</title>
+  <!--
+    Iframe content for iframe_module_worker_fetch_test.html.
+
+    This frame does NOT load the inspector. The test is driven by the
+    WebGPU Inspector extension's DevTools panel:
+
+      * The user opens the panel for the top-level test page.
+      * The user enables "Inspect Workers" in the panel.
+      * The user clicks "Inspect" in the panel.
+      * The panel sets sessionStorage keys and reloads the top-level page.
+      * On reload, the extension's content script injects the loader into
+        the top frame AND this iframe at document_start. The loader sees
+        the sessionStorage keys and starts the inspector with worker
+        injection enabled — so the Worker proxy is in place by the time
+        the inline script below creates the module worker.
+
+    That is the EXACT auto-injection path the user's bug report came from.
+    No manual <script> tags here; the extension does the injection.
+
+    The iframe also owns the canvas. transferControlToOffscreen() can only
+    be called once per canvas, so the OffscreenCanvas is created up front
+    and shipped to the worker on its first message.
+  -->
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 8px; background: #fff; color: #222; }
+    p { font-size: 12px; color: #555; margin: 4px 0; }
+    code { background: #eee; padding: 1px 4px; border-radius: 3px; }
+    canvas { border: 1px solid #333; display: block; }
+  </style>
+</head>
+<body>
+  <p>
+    iframe content — creates a module worker. The worker's
+    <code>self.location</code> shows whether the WebGPU Inspector's Worker
+    proxy wrapped it in a <code>blob:</code> URL. The canvas below is
+    transferred to the worker as an <code>OffscreenCanvas</code>.
+  </p>
+  <canvas id="webgpu-canvas" width="384" height="240"></canvas>
+
+  <script>
+    function send(payload) {
+      window.parent.postMessage(payload, "*");
+    }
+
+    // Report whether the inspector has been injected into this iframe. If
+    // it has not, the worker below runs unwrapped, the fetch will succeed,
+    // and the top-level page reports INCONCLUSIVE — that catches the
+    // common "opened the page without enabling inspection" case so the
+    // user knows what to do.
+    send({
+      __moduleWorkerFetchTest: {
+        type: "inspector-state",
+        webgpuInspector: !!self.webgpuInspector,
+        webgpuSrc: !!self.__webgpu_src,
+        inspectWorkers: !!self.__webgpuInspectorInspectWorkers,
+      },
+    });
+
+    // Module worker. If the inspector's Worker proxy is in place, this is
+    // turned into a blob worker; see iframe_module_worker_fetch_worker.js
+    // for what the worker does and why it surfaces the bug.
+    const worker = new Worker("iframe_module_worker_fetch_worker.js", { type: "module" });
+
+    // transferControlToOffscreen() may only be called once per canvas, so
+    // the OffscreenCanvas is created up front and held until the worker
+    // reports it's ready (the "result" message, sent after the worker's
+    // top-level await on fetch resolves and its module body finishes
+    // setting up its own message listener). Posting init too early would
+    // detach the canvas before the worker can attach to it.
+    const canvas = document.getElementById("webgpu-canvas");
+    const offscreenCanvas = canvas.transferControlToOffscreen();
+    let initSent = false;
+
+    worker.addEventListener("message", (event) => {
+      const data = event.data;
+      if (!data) {
+        return;
+      }
+      // Inspector messages from the worker — relay them up to the parent
+      // page so the WebGPU Inspector DevTools panel can see this worker's
+      // WebGPU calls. Same iframe -> parent hop the existing
+      // iframe_worker_manual sample uses.
+      if (data.__WebGPUInspector) {
+        window.parent.postMessage({ __WebGPUInspectorUp: data.__WebGPUInspector }, "*");
+        return;
+      }
+      const msg = data.__moduleWorkerFetchTest;
+      if (msg) {
+        send(data);
+        // The worker's "result" message lands once its top-level await on
+        // fetch has resolved and module evaluation is complete — i.e. once
+        // its `message` listener is installed. Now it's safe to ship the
+        // OffscreenCanvas.
+        if (msg.type === "result" && !initSent) {
+          initSent = true;
+          worker.postMessage({ type: "init", offscreenCanvas }, [offscreenCanvas]);
+        }
+      }
+    });
+
+    // Without the fix, the top-level fetch in the worker throws "Failed to
+    // parse URL from /test/...". That rejects the worker module's evaluation
+    // and surfaces here as a worker error event. Forward it up so the page
+    // can report FAIL with the original browser message.
+    worker.addEventListener("error", (event) => {
+      send({
+        __moduleWorkerFetchTest: {
+          type: "worker-error",
+          message: event.message || "(no message)",
+          filename: event.filename || "",
+          lineno: event.lineno || 0,
+        },
+      });
+    });
+
+    // Panel -> worker: inspector messages relayed down from the parent
+    // page. The worker's own inspector listens for {__WebGPUInspector: ...}
+    // envelopes (texture requests, panel-driven capture, live shader edits).
+    window.addEventListener("message", (event) => {
+      const data = event.data;
+      if (!data) {
+        return;
+      }
+      if (data.__WebGPUInspectorDown) {
+        worker.postMessage({ __WebGPUInspector: data.__WebGPUInspectorDown });
+      }
+    });
+  </script>
+</body>
+</html>

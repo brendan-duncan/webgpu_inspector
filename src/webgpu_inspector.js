@@ -2828,7 +2828,16 @@ export let webgpuInspector = null;
       src = src.replaceAll(`<%=_webgpuBaseAddress%>`, `${_webgpuBaseAddress}`);
 
       if (args.length > 1 && args[1]?.type === "module") {
-        src += `import ${JSON.stringify(_url.href)};`;
+        // Use dynamic import with top-level await rather than a static import.
+        // Static `import` is hoisted: the imported module would evaluate before
+        // `self.__webgpu_src()` runs, so the fetch / URL / WebSocket / Request
+        // proxies installed by the inspector would not yet be in place when the
+        // user's worker code makes its first request against a relative URL.
+        // `await import(...)` runs at this textual point and keeps the worker
+        // module in evaluation state until the user's module finishes loading,
+        // so any messages posted by the parent are queued until the user's
+        // onmessage handler is installed.
+        src += `await import(${JSON.stringify(_url.href)});`;
       } else {
         src += `importScripts(${JSON.stringify(_url.href)});`;
       }
