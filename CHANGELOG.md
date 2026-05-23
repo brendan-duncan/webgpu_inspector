@@ -1,3 +1,9 @@
+## v1.1.2
+
+### Bug Fix
+
+* Fix WebWorkers using modules erroring when trying to inspect them, saying 'fetch' had an invalid URL. Module WebWorkers should be inspectable now.
+
 ## v1.1.1
 
 ### Inspector Panel
