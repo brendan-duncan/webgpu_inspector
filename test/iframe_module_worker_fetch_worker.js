@@ -41,6 +41,9 @@
 // adapter/device/buffers/pipeline/textures, and the Capture tab to record
 // a frame from the worker.
 
+// Test manual injection of the inspector
+//await import('../extensions/chrome/webgpu_inspector.js')
+
 // ---------------------------------------------------------------------------
 // PART 1 — top-level fetch (the bug repro)
 // ---------------------------------------------------------------------------
