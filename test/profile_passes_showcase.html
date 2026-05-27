@@ -1,0 +1,318 @@
+<html>
+  <head>
+    <title>Profile Passes Showcase</title>
+    <style>
+      body { font-family: sans-serif; background: #1a1a1a; color: #ddd; margin: 0; padding: 16px; }
+      canvas { display: block; background: #000; margin-bottom: 12px; border: 1px solid #333; }
+      h1 { font-size: 16px; margin: 0 0 6px 0; }
+      p { font-size: 13px; line-height: 1.5; max-width: 760px; }
+      ul { font-size: 13px; line-height: 1.6; max-width: 760px; }
+      code { background: #2a2a2a; padding: 1px 4px; border-radius: 3px; }
+    </style>
+  </head>
+  <body>
+    <canvas id="webgpu_canvas" width="960" height="540"></canvas>
+    <h1>Profile Passes — Timeline Showcase</h1>
+    <p>
+      This page renders a frame with five labeled GPU passes. Two of them are
+      deliberately expensive; the other three are cheap. To see which is which:
+    </p>
+    <ul>
+      <li>Open WebGPU Inspector, switch to the <strong>Capture</strong> panel.</li>
+      <li>Check <strong>Profile Passes</strong>, then click <strong>Capture</strong>.</li>
+      <li>The timeline above the command tree shows one segment per pass, sized by GPU time.</li>
+      <li>Click a segment to jump to that pass in the command list.</li>
+    </ul>
+    <p>
+      The page itself does <em>not</em> request the <code>timestamp-query</code> feature
+      and does <em>not</em> set <code>timestampWrites</code> on any pass — the inspector
+      handles all of that when <strong>Profile Passes</strong> is enabled.
+    </p>
+    <script>
+const particleCount = 65536;
+const workgroupSize = 64;
+
+async function main() {
+  if (!navigator.gpu) {
+    return;
+  }
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) {
+    return;
+  }
+  const device = await adapter.requestDevice();
+  const canvas = document.getElementById("webgpu_canvas");
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  const context = canvas.getContext("webgpu");
+  context.configure({ device, format });
+
+  const offscreen = device.createTexture({
+    label: "scene_color",
+    size: [canvas.width, canvas.height],
+    format,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+  });
+  const offscreenView = offscreen.createView();
+
+  const postTarget = device.createTexture({
+    label: "post_color",
+    size: [canvas.width, canvas.height],
+    format,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+  });
+  const postView = postTarget.createView();
+
+  const sampler = device.createSampler({ magFilter: "linear", minFilter: "linear" });
+
+  const particleBuffer = device.createBuffer({
+    label: "particles",
+    size: particleCount * 16,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+  });
+  // Seed with deterministic values so the heavy pass actually has work to do.
+  {
+    const seed = new Float32Array(particleCount * 4);
+    for (let i = 0; i < particleCount; i++) {
+      seed[i * 4 + 0] = Math.sin(i * 0.013);
+      seed[i * 4 + 1] = Math.cos(i * 0.027);
+      seed[i * 4 + 2] = Math.sin(i * 0.041);
+      seed[i * 4 + 3] = Math.cos(i * 0.011);
+    }
+    device.queue.writeBuffer(particleBuffer, 0, seed);
+  }
+
+  // -- Compute pass 1: heavy. 256-iter inner loop per particle. --
+  const heavyComputeModule = device.createShaderModule({
+    label: "heavy_particle_step_shader",
+    code: `
+      @group(0) @binding(0) var<storage, read_write> particles: array<vec4<f32>>;
+      @compute @workgroup_size(${workgroupSize})
+      fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+        let i = gid.x;
+        if (i >= ${particleCount}u) { return; }
+        var p = particles[i];
+        for (var k: u32 = 0u; k < 256u; k = k + 1u) {
+          p = vec4<f32>(p.y + 0.0001, p.z * 0.999, p.w + 0.0002, p.x * 0.998);
+          p = p + vec4<f32>(sin(p.x), cos(p.y), sin(p.z), cos(p.w)) * 0.001;
+        }
+        particles[i] = p;
+      }`
+  });
+  const heavyComputePipeline = device.createComputePipeline({
+    label: "heavy_particle_step_pipeline",
+    layout: "auto",
+    compute: { module: heavyComputeModule, entryPoint: "main" }
+  });
+  const heavyComputeBindGroup = device.createBindGroup({
+    label: "heavy_particle_step_bg",
+    layout: heavyComputePipeline.getBindGroupLayout(0),
+    entries: [{ binding: 0, resource: { buffer: particleBuffer } }]
+  });
+
+  // -- Compute pass 2: cheap. Single-pass touch over the buffer. --
+  const lightComputeModule = device.createShaderModule({
+    label: "light_accumulate_shader",
+    code: `
+      @group(0) @binding(0) var<storage, read_write> particles: array<vec4<f32>>;
+      @compute @workgroup_size(${workgroupSize})
+      fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+        let i = gid.x;
+        if (i >= ${particleCount}u) { return; }
+        particles[i] = particles[i] * 0.9999;
+      }`
+  });
+  const lightComputePipeline = device.createComputePipeline({
+    label: "light_accumulate_pipeline",
+    layout: "auto",
+    compute: { module: lightComputeModule, entryPoint: "main" }
+  });
+  const lightComputeBindGroup = device.createBindGroup({
+    label: "light_accumulate_bg",
+    layout: lightComputePipeline.getBindGroupLayout(0),
+    entries: [{ binding: 0, resource: { buffer: particleBuffer } }]
+  });
+
+  // Fullscreen vertex shader shared by all render passes.
+  const fullscreenVs = `
+    @vertex
+    fn vmain(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
+      var p = array<vec2<f32>, 3>(vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0));
+      return vec4<f32>(p[vi], 0.0, 1.0);
+    }`;
+
+  // -- Render pass 1: geometry. Cheap fragment shader. --
+  const geometryModule = device.createShaderModule({
+    label: "geometry_shader",
+    code: fullscreenVs + `
+      @fragment
+      fn fmain(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+        let uv = pos.xy / vec2<f32>(${canvas.width}.0, ${canvas.height}.0);
+        return vec4<f32>(uv.x, uv.y, 0.5, 1.0);
+      }`
+  });
+  const geometryPipeline = device.createRenderPipeline({
+    label: "geometry_pipeline",
+    layout: "auto",
+    vertex: { module: geometryModule, entryPoint: "vmain" },
+    fragment: { module: geometryModule, entryPoint: "fmain", targets: [{ format }] },
+    primitive: { topology: "triangle-list" }
+  });
+
+  // -- Render pass 2: postprocess. Heavy fragment shader (256-tap blur-like loop). --
+  const postProcessModule = device.createShaderModule({
+    label: "heavy_postprocess_shader",
+    code: `
+      @group(0) @binding(0) var src: texture_2d<f32>;
+      @group(0) @binding(1) var samp: sampler;
+      @vertex
+      fn vmain(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
+        var p = array<vec2<f32>, 3>(vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0));
+        return vec4<f32>(p[vi], 0.0, 1.0);
+      }
+      @fragment
+      fn fmain(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+        let uv = pos.xy / vec2<f32>(${canvas.width}.0, ${canvas.height}.0);
+        var sum = vec4<f32>(0.0);
+        // 256 weighted samples in a spiral — deliberately expensive.
+        for (var i: i32 = 0; i < 256; i = i + 1) {
+          let t = f32(i) * 0.39269908;
+          let r = f32(i) * 0.00025;
+          let o = vec2<f32>(cos(t), sin(t)) * r;
+          sum = sum + textureSampleLevel(src, samp, uv + o, 0.0);
+        }
+        return sum / 256.0;
+      }`
+  });
+  const postProcessPipeline = device.createRenderPipeline({
+    label: "heavy_postprocess_pipeline",
+    layout: "auto",
+    vertex: { module: postProcessModule, entryPoint: "vmain" },
+    fragment: { module: postProcessModule, entryPoint: "fmain", targets: [{ format }] },
+    primitive: { topology: "triangle-list" }
+  });
+  const postProcessBindGroup = device.createBindGroup({
+    label: "heavy_postprocess_bg",
+    layout: postProcessPipeline.getBindGroupLayout(0),
+    entries: [
+      { binding: 0, resource: offscreenView },
+      { binding: 1, resource: sampler }
+    ]
+  });
+
+  // -- Render pass 3: composite. Cheap copy to canvas. --
+  const compositeModule = device.createShaderModule({
+    label: "composite_shader",
+    code: `
+      @group(0) @binding(0) var src: texture_2d<f32>;
+      @group(0) @binding(1) var samp: sampler;
+      @vertex
+      fn vmain(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
+        var p = array<vec2<f32>, 3>(vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0));
+        return vec4<f32>(p[vi], 0.0, 1.0);
+      }
+      @fragment
+      fn fmain(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+        let uv = pos.xy / vec2<f32>(${canvas.width}.0, ${canvas.height}.0);
+        return textureSampleLevel(src, samp, uv, 0.0);
+      }`
+  });
+  const compositePipeline = device.createRenderPipeline({
+    label: "composite_pipeline",
+    layout: "auto",
+    vertex: { module: compositeModule, entryPoint: "vmain" },
+    fragment: { module: compositeModule, entryPoint: "fmain", targets: [{ format }] },
+    primitive: { topology: "triangle-list" }
+  });
+  const compositeBindGroup = device.createBindGroup({
+    label: "composite_bg",
+    layout: compositePipeline.getBindGroupLayout(0),
+    entries: [
+      { binding: 0, resource: postView },
+      { binding: 1, resource: sampler }
+    ]
+  });
+
+  const workgroups = Math.ceil(particleCount / workgroupSize);
+
+  function frame() {
+    const encoder = device.createCommandEncoder({ label: "frame_encoder" });
+
+    // Pass 1: heavy compute. Expected to dominate.
+    {
+      const pass = encoder.beginComputePass({ label: "Heavy Particle Step" });
+      pass.setPipeline(heavyComputePipeline);
+      pass.setBindGroup(0, heavyComputeBindGroup);
+      pass.dispatchWorkgroups(workgroups);
+      pass.end();
+    }
+
+    // Pass 2: light compute.
+    {
+      const pass = encoder.beginComputePass({ label: "Light Accumulate" });
+      pass.setPipeline(lightComputePipeline);
+      pass.setBindGroup(0, lightComputeBindGroup);
+      pass.dispatchWorkgroups(workgroups);
+      pass.end();
+    }
+
+    // Pass 3: cheap geometry to offscreen.
+    {
+      const pass = encoder.beginRenderPass({
+        label: "Geometry",
+        colorAttachments: [{
+          view: offscreenView,
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
+          loadOp: "clear",
+          storeOp: "store"
+        }]
+      });
+      pass.setPipeline(geometryPipeline);
+      pass.draw(3);
+      pass.end();
+    }
+
+    // Pass 4: heavy postprocess to a second offscreen. Expected to dominate the render passes.
+    {
+      const pass = encoder.beginRenderPass({
+        label: "Heavy Postprocess",
+        colorAttachments: [{
+          view: postView,
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
+          loadOp: "clear",
+          storeOp: "store"
+        }]
+      });
+      pass.setPipeline(postProcessPipeline);
+      pass.setBindGroup(0, postProcessBindGroup);
+      pass.draw(3);
+      pass.end();
+    }
+
+    // Pass 5: cheap composite to canvas.
+    {
+      const pass = encoder.beginRenderPass({
+        label: "Composite",
+        colorAttachments: [{
+          view: context.getCurrentTexture().createView(),
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
+          loadOp: "clear",
+          storeOp: "store"
+        }]
+      });
+      pass.setPipeline(compositePipeline);
+      pass.setBindGroup(0, compositeBindGroup);
+      pass.draw(3);
+      pass.end();
+    }
+
+    device.queue.submit([encoder.finish()]);
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(frame);
+}
+
+main();
+    </script>
+  </body>
+</html>

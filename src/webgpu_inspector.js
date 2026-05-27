@@ -60,6 +60,7 @@ export let webgpuInspector = null;
       this._captureData = null;
       this._frameRate = new RollingAverage(60);
       this._captureTimestamps = false;
+      this._timestampQuerySupported = false;
       this._timestampQuerySet = null;
       this._timestampBuffer = null;
       this._timestampIndex = 0;
@@ -702,15 +703,20 @@ export let webgpuInspector = null;
       }
 
       if (method === "requestDevice") {
-        // Make sure we enable timestamp queries so we can capture them.
+        // Opportunistically add "timestamp-query" so the capture panel can
+        // profile pass durations. Only request it on adapters that expose it —
+        // adding an unsupported feature here would make requestDevice reject.
         if (args.length === 0) {
           args[0] = {};
         }
-        /*if (!args[0].requiredFeatures) {
-          args[0].requiredFeatures = ["timestamp-query"];
-        } else {
-          args[0].requiredFeatures.push("timestamp-query");
-        }*/
+        if (object?.features?.has?.("timestamp-query")) {
+          if (!args[0].requiredFeatures) {
+            args[0].requiredFeatures = ["timestamp-query"];
+          } else if (Array.from(args[0].requiredFeatures).indexOf("timestamp-query") === -1) {
+            args[0].requiredFeatures = [...args[0].requiredFeatures, "timestamp-query"];
+          }
+          this._timestampQuerySupported = true;
+        }
       }
 
       if (method === "setPipeline") {
@@ -766,6 +772,10 @@ export let webgpuInspector = null;
       if (method === "beginRenderPass" || method === "beginComputePass") {
         if (this._captureTimestamps && this._captureFrameRequest) {
           if (!this._timestampQuerySet && object.__device) {
+            // Disable recording around the inspector's own device calls so the
+            // captured command list isn't polluted with the QuerySet/Buffer
+            // creation and command IDs stay aligned with what the page did.
+            this.disableRecording();
             this._timestampQuerySet = object.__device.createQuerySet({
               type: "timestamp",
               count: this._maxTimestamps
@@ -774,14 +784,17 @@ export let webgpuInspector = null;
               size: this._maxTimestamps * 8,
               usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
             });
+            this.enableRecording();
           }
 
-          if (!args[0].timestampWrites && this._timestampIndex < this._maxTimestamps) {
-            args[0].timestampWrites = {
+          if (this._timestampQuerySet &&
+              !args[0].timestampWrites &&
+              this._timestampIndex + 1 < this._maxTimestamps) {
+            args[0] = { ...args[0], timestampWrites: {
               querySet: this._timestampQuerySet,
               beginningOfPassWriteIndex: this._timestampIndex,
               endOfPassWriteIndex: this._timestampIndex + 1
-            };
+            } };
             this._timestampIndex += 2;
           }
         }
@@ -1548,41 +1561,15 @@ export let webgpuInspector = null;
         // a few thousand per frame dominates the CaptureFrameCommands payload size.
         // Create-method stacktraces (in GPUObjectWrapper) are unaffected and still fire.
         this._gpuWrapper.recordStacktraces = !!this._captureData.captureStacktraces;
+        // Profile Passes is opt-in from the panel. The actual per-pass timestampWrites
+        // injection happens in _preMethodCall on beginRenderPass/beginComputePass; the
+        // device must have been requested with "timestamp-query", which only happens
+        // when the adapter exposes it (see the guard around requestDevice).
+        this._captureTimestamps = !!this._captureData.captureTimestamps && this._timestampQuerySupported;
+        this._timestampIndex = 0;
         this._captureData = null;
         this._commandId = 0;
         this._updateStatusMessage();
-
-        // TODO: timestamp capture
-        /*if (this._captureTimestamps) {
-          this.disableRecording();
-
-          const device = this._device?.deref();
-          if (device) {
-            if (!this._timestampQuerySet) {
-              this._timestampQuerySet = device.createQuerySet({
-                type: "timestamp",
-                count: this._maxTimestamps
-              });
-              this._timestampBuffer = device.createBuffer({
-                size: this._maxTimestamps * 8,
-                usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
-              });
-            }
-
-            const commandEncoder = device.createCommandEncoder();
-            const pass = commandEncoder.beginComputePass({
-              timestampWrites:  {
-                querySet: this._timestampQuerySet,
-                beginningOfPassWriteIndex: 0,
-                endOfPassWriteIndex: 1
-              }
-            });
-            pass.end();
-            device.queue.submit([commandEncoder.finish()]);
-            this._timestampIndex = 2;
-          }
-          this.enableRecording();
-        }*/
       }
     }
 

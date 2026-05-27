@@ -39,6 +39,12 @@ export class LocalCaptureStore {
     // commandId -> array of CaptureBufferData messages that arrived before the
     // corresponding command record. Drained when the command lands.
     this._pendingBufferData = new Map();
+    // Timestamp readback (commandId === -1000). Accumulated chunks; once all
+    // chunks arrive, decode and merge per-pass timings onto the matching
+    // beginRenderPass/beginComputePass command records so they survive
+    // saveCaptureData()/importCaptureJson() round-trips.
+    this._timestampBytes = null;
+    this._timestampChunksRemaining = 0;
   }
 
   hasCapturedCommands() {
@@ -66,6 +72,8 @@ export class LocalCaptureStore {
     this._currentSlot = null;
     this._firstFrame = null;
     this._pendingBufferData.clear();
+    this._timestampBytes = null;
+    this._timestampChunksRemaining = 0;
   }
 
   processMessage(message) {
@@ -206,7 +214,7 @@ export class LocalCaptureStore {
 
   _handleCaptureBufferData(message) {
     if (message.commandId === -1000) {
-      // Timestamp readback — not part of the capture JSON.
+      this._handleTimestampChunk(message);
       return;
     }
     const cmd = this._commandsById.get(message.commandId);
@@ -255,6 +263,47 @@ export class LocalCaptureStore {
       }
     }
     cmd.isBufferDataLoaded[entryIndex] = loaded;
+  }
+
+  // Accumulates the raw u64 timestamp buffer streamed in CaptureBufferData
+  // messages with commandId === -1000. When the last chunk arrives, decodes the
+  // BigInt64Array and writes startTime/endTime/duration onto each
+  // beginRenderPass/beginComputePass command in capture order. Mirrors the
+  // decode in src/devtools/capture_data.js so the merged fields are picked up
+  // unchanged by _serializeCommand → saveCaptureData → importCaptureJson.
+  _handleTimestampChunk(message) {
+    if (this._timestampBytes === null) {
+      this._timestampBytes = new Uint8Array(message.size);
+      this._timestampChunksRemaining = message.count;
+    }
+    let chunk;
+    try {
+      chunk = decodeBase64(message.chunk);
+    } catch (e) {
+      return;
+    }
+    this._timestampBytes.set(chunk, message.offset);
+    this._timestampChunksRemaining--;
+    if (this._timestampChunksRemaining > 0) {
+      return;
+    }
+
+    const timestampData = new BigInt64Array(this._timestampBytes.buffer);
+    this._timestampBytes = null;
+
+    let i = 2;
+    for (let k = 0; k < this._commands.length && i < timestampData.length; k++) {
+      const command = this._commands[k];
+      if (!command || (command.method !== "beginRenderPass" && command.method !== "beginComputePass")) {
+        continue;
+      }
+      const start = timestampData[i];
+      const end = timestampData[i + 1];
+      command.startTime = Number(start) / 1000000.0;
+      command.endTime = Number(end) / 1000000.0;
+      command.duration = Number(end - start) / 1000000.0;
+      i += 2;
+    }
   }
 
   _handleCaptureTextureData(message) {

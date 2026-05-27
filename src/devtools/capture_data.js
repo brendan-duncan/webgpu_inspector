@@ -57,6 +57,11 @@ export class CaptureData {
     // (frame: number, commands: Object[])
     this.onCaptureFrameResults = new Signal();
     this.onUpdateCaptureStatus = new Signal();
+    // Emitted once the GPU timestamp buffer for the captured frame has been decoded and
+    // each beginRenderPass/beginComputePass command has been annotated with startTime,
+    // endTime, and duration. Carries the chronologically-sorted list of pass commands.
+    // ({ commands: Object[], firstTime: number })
+    this.onTimestampDataReady = new Signal();
 
     this._loadedDataChunks = 0;
     this._loadingImages = 0;
@@ -65,6 +70,10 @@ export class CaptureData {
     this._pendingCommandBufferData = new Map();
     this._timestampBuffer = null;
     this._timestampChunkCount = 0;
+    // Cached result of the latest onTimestampDataReady emit. Held on the instance so
+    // late subscribers (e.g. a TimelineWidget built after the readback finished) can
+    // pick up the data without depending on listener-registration ordering.
+    this.timestampData = null;
   }
 
   /**
@@ -244,7 +253,7 @@ export class CaptureData {
 
         const firstTime = Number(timestampData[0]) / 1000000.0;
 
-        for (let i = 2, k = 0; i < timestampData.length; i += 2) {
+        for (let i = 0, k = 0; i < timestampData.length; i += 2) {
           const start = timestampData[i];
           const end = timestampData[i + 1];
           const duration = Number(end - start) / 1000000.0; // convert ns to ms
@@ -286,10 +295,9 @@ export class CaptureData {
         }
 
         timestampMap.sort((a, b) => { return a.startTime - b.startTime; });
-        for (const command of timestampMap) {
-          console.log(`${command.startTime - firstTime}: [${command.id}]: ${command.method} -> ${command.duration}ms`);
-        }
 
+        this.timestampData = { commands: timestampMap, firstTime };
+        this.onTimestampDataReady.emit(this.timestampData);
         this.onUpdateCaptureStatus.emit();
       }
       return;

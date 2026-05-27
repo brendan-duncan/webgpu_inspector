@@ -1,3 +1,9 @@
+## v1.2.0
+
+### Capture Panel
+
+* **Profile Passes**: injects timestamp queries around render and compute passes. The data is presented in the frame capture as a timeline, to help identify what percentage of the frame the different passes are taking.
+
 ## v1.1.2
 
 ### Bug Fix

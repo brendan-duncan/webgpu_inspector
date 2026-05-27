@@ -14,6 +14,7 @@ import { NumberInput } from "./widget/number_input.js";
 import { Span } from "./widget/span.js";
 import { TextArea } from "./widget/text_area.js";
 import { TextInput } from "./widget/text_input.js";
+import { TimelineWidget } from "./widget/timeline.js";
 import { Widget } from "./widget/widget.js";
 import { TabWidget } from "./widget/tab_widget.js";
 import { getFlagString } from "../utils/flags.js";
@@ -131,6 +132,7 @@ export class CapturePanel {
     new Button(_controlBar, { label: "Capture", class: "btn btn-success", callback: () => {
       try {
         this._captureData = new CaptureData(this.database);
+        this._captureData.captureTimestampsRequested = this.captureTimestamps;
         this._captureData.onCaptureFrameResults.addListener(self._captureFrameResults, self);
         this._captureData.onUpdateCaptureStatus.addListener(self._updateCaptureStatus, self);
 
@@ -147,6 +149,7 @@ export class CapturePanel {
           maxBufferSize,
           frame,
           captureStacktraces: self.captureStacktraces,
+          captureTimestamps: self.captureTimestamps,
           inspectWorkers: getInspectWorkers(),
         });
       } catch (e) {
@@ -216,6 +219,18 @@ export class CapturePanel {
       title: "Capture Stacktraces", label: "Stacktraces", class: "ml-sm" });
     stacktraceBtn.input.onChange.addListener((value) => {
       this.captureStacktraces = value;
+    });
+
+    // Profile Passes injects timestamp queries around each render/compute pass so the
+    // panel can report per-pass GPU duration and render a frame timeline. Requires the
+    // page's adapter to support the "timestamp-query" feature; the page-side guard in
+    // webgpu_inspector.js silently skips the injection when it doesn't.
+    this.captureTimestamps = false;
+    const timestampsBtn = new Checkbox(_controlBar, { value: this.captureTimestamps,
+      title: "Inject GPU timestamp queries to measure per-pass duration",
+      label: "Profile Passes", class: "ml-sm" });
+    timestampsBtn.input.onChange.addListener((value) => {
+      this.captureTimestamps = value;
     });
 
     this._captureStatus = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });
@@ -525,6 +540,42 @@ export class CapturePanel {
       callback: () => self._inspectStats(commandInfoContents)
     });
 
+    // GPU pass timeline. Stays at 0 height until timestamp data arrives, so captures
+    // without "Profile Passes" enabled get no layout shift.
+    const timeline = new TimelineWidget(_frameContents);
+    state.timeline = timeline;
+    const populateTimelineFromCommands = () => {
+      const timed = [];
+      for (const cmd of commands) {
+        if (cmd && cmd.duration !== undefined &&
+            (cmd.method === "beginRenderPass" || cmd.method === "beginComputePass")) {
+          timed.push(cmd);
+        }
+      }
+      if (!timed.length) {
+        return false;
+      }
+      timed.sort((a, b) => a.startTime - b.startTime);
+      timeline.setData({ commands: timed, firstTime: timed[0].startTime });
+      return true;
+    };
+    // Imported captures and late-rebuilt live tabs already have the data on the
+    // command records. Scan eagerly so the timeline shows up immediately.
+    const hadData = populateTimelineFromCommands();
+    if (!hadData && init.captureData?.captureTimestampsRequested) {
+      // Show a visible placeholder so the user can tell the timeline is wired up
+      // and is just waiting on the async timestamp readback (or knows the adapter
+      // didn't grant the feature when the placeholder never gets replaced).
+      timeline.showPlaceholder("Profile Passes: waiting for GPU timestamp data...");
+    }
+    if (init.captureData) {
+      // Live captures: timestamp readback finishes asynchronously after the tab is
+      // built. Listen for the signal and re-scan when it lands.
+      init.captureData.onTimestampDataReady.addListener(() => {
+        populateTimelineFromCommands();
+      });
+    }
+
     const frameContents = new Div(_frameContents, { class: "capture_frame" });
 
     const debugGroupStack = [frameContents];
@@ -684,6 +735,9 @@ export class CapturePanel {
         let computeHeaderText = `Compute Pass ${passIndex}`;
         if (computePassLabel) {
           computeHeaderText += ` "${computePassLabel}"`;
+        }
+        if (command.duration !== undefined) {
+          computeHeaderText += ` Duration:${command.duration}ms`;
         }
         command.header = new Span(header, { text: computeHeaderText });
         const extra = new Span(header, { style: "margin-left: 10px;" });

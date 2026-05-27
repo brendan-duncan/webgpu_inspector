@@ -8,6 +8,7 @@ export * from './label.js';
 export * from './number_input.js';
 export * from './span.js';
 export * from './tab_handle.js';
+export * from './timeline.js';
 export * from './tab_page.js';
 export * from './tab_widget.js';
 export * from './text_area.js';
