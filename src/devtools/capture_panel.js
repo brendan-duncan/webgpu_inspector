@@ -31,6 +31,46 @@ import { getInspectWorkers } from "../utils/inspector_settings.js";
 
 const _inspectButtonStyle = "btn btn-info";
 
+const _statLabelOverrides = {
+  apiCalls: "API Calls",
+};
+
+function _prettifyStatKey(key) {
+  if (_statLabelOverrides[key]) {
+    return _statLabelOverrides[key];
+  }
+  const spaced = key.replace(/([a-z])([A-Z])/g, "$1 $2");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+const _byteStatKeys = new Set(["bufferBytesWritten", "totalBytesWritten"]);
+
+function _formatBytes(bytes) {
+  if (bytes === 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function _formatStatValue(key, value) {
+  if (_byteStatKeys.has(key)) {
+    return _formatBytes(value);
+  }
+  return Number(value).toLocaleString("en-US");
+}
+
+// Groupings for the Frame Statistics panel: title -> ordered field list.
+const _statSections = [
+  ["API Activity", ["apiCalls", "draw", "drawIndirect", "dispatch", "copyCommands"]],
+  ["Passes", ["renderPasses", "computePasses", "colorAttachments", "depthStencilAttachments"]],
+  ["Pipeline", ["setPipeline", "vertexShaders", "fragmentShaders", "computeShaders"]],
+  ["Bindings", ["setBindGroup", "setVertexBuffer", "setIndexBuffer",
+                "uniformBuffers", "storageBuffers", "textures", "samplers"]],
+  ["Memory", ["writeBuffer", "writeTexture", "bufferBytesWritten", "totalBytesWritten"]],
+  ["Geometry", ["totalInstances", "totalVertices", "totalTriangles", "totalLines", "totalPoints"]],
+];
+
 /**
  * Panel for displaying captured WebGPU frames and commands.
  * Provides UI for capturing, viewing, and inspecting GPU operations.
@@ -225,8 +265,8 @@ export class CapturePanel {
     // panel can report per-pass GPU duration and render a frame timeline. Requires the
     // page's adapter to support the "timestamp-query" feature; the page-side guard in
     // webgpu_inspector.js silently skips the injection when it doesn't.
-    this.captureTimestamps = false;
-    const timestampsBtn = new Checkbox(_controlBar, { value: this.captureTimestamps,
+    this.captureTimestamps = true;
+    const timestampsBtn = new Checkbox(_controlBar, { checked: this.captureTimestamps,
       title: "Inject GPU timestamp queries to measure per-pass duration",
       label: "Profile Passes", class: "ml-sm" });
     timestampsBtn.input.onChange.addListener((value) => {
@@ -3466,13 +3506,151 @@ export class CapturePanel {
   _inspectStats(commandInfo) {
     commandInfo.html = "";
 
-    const group = new collapsible(commandInfo, { label: "Frame Statistics" });
+    const root = new Div(commandInfo, { style:
+      "padding: 16px; overflow-y: auto; height: 100%; box-sizing: border-box; " +
+      "color: var(--fg-primary); font-family: var(--font-family);" });
 
-    const ol = new Widget("ul", group.body);
-    const stats = this.statistics;
-    for (const key in stats) {
-      new Widget("li", ol, { text: `${key}: ${stats[key].toLocaleString("en-US")}`, style: "padding-left: 20px; line-height: 25px; font-size: 12pt;" });
+    new Div(root, { text: "Frame Statistics", style:
+      "font-size: 14pt; font-weight: bold; margin-bottom: 12px; color: var(--fg-primary);" });
+
+    // Pass Timings section: only when at least one pass has timestamp data.
+    const timed = [];
+    for (const cmd of this._captureCommands || []) {
+      if (cmd && cmd.duration !== undefined &&
+          (cmd.method === "beginRenderPass" || cmd.method === "beginComputePass")) {
+        timed.push(cmd);
+      }
     }
+    if (timed.length) {
+      this._renderPassTimingsSection(root, timed);
+    }
+
+    const stats = this.statistics;
+    for (const [title, keys] of _statSections) {
+      let hasData = false;
+      for (const k of keys) {
+        if (stats[k]) { hasData = true; break; }
+      }
+      if (!hasData) {
+        continue;
+      }
+      this._renderStatsSection(root, title, keys, stats);
+    }
+  }
+
+  /**
+   * Render a sorted, clickable list of GPU pass durations inside the stats view.
+   * Each row's background bar shows that pass's share of total GPU time; click
+   * to jump to the pass in the command tree.
+   */
+  _renderPassTimingsSection(parent, passes) {
+    const sorted = [...passes].sort((a, b) => b.duration - a.duration);
+    const total = sorted.reduce((s, p) => s + (p.duration || 0), 0);
+
+    const section = new Div(parent, { style: "margin-bottom: 18px;" });
+    new Div(section, { text: "Pass Timings", style:
+      "font-size: 11pt; font-weight: bold; margin-bottom: 4px; color: var(--fg-primary);" });
+    new Div(section, {
+      text: `Total GPU: ${total.toFixed(3)} ms across ${sorted.length} passes`,
+      style: "font-size: 9pt; color: var(--fg-secondary); margin-bottom: 8px;"
+    });
+
+    const list = new Div(section, { style:
+      "background: var(--bg-elevated); border-radius: var(--radius-sm); padding: 4px;" });
+
+    for (const cmd of sorted) {
+      const isRender = cmd.method === "beginRenderPass";
+      const pct = total > 0 ? (cmd.duration / total) * 100 : 0;
+      const label = cmd.args?.[0]?.label ||
+        (isRender ? `Render Pass ${cmd._passIndex ?? ""}` : `Compute Pass ${cmd._passIndex ?? ""}`);
+
+      const row = document.createElement("div");
+      row.style.cssText =
+        "position: relative; padding: 6px 10px; margin: 2px 0; border-radius: var(--radius-sm); " +
+        "cursor: pointer; display: flex; align-items: center; gap: 10px; overflow: hidden;";
+
+      const bar = document.createElement("div");
+      bar.style.cssText =
+        `position: absolute; left: 0; top: 0; bottom: 0; width: ${pct}%; ` +
+        `background: ${isRender ? "rgba(74, 141, 184, 0.28)" : "rgba(168, 124, 208, 0.28)"}; z-index: 0;`;
+      row.appendChild(bar);
+
+      const chip = document.createElement("span");
+      chip.style.cssText =
+        "display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; z-index: 1; " +
+        `background: ${isRender ? "#4a8db8" : "#a87cd0"};`;
+      row.appendChild(chip);
+
+      const lbl = document.createElement("span");
+      lbl.style.cssText =
+        "z-index: 1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10pt;";
+      lbl.textContent = label;
+      row.appendChild(lbl);
+
+      const pctEl = document.createElement("span");
+      pctEl.style.cssText =
+        "z-index: 1; color: var(--fg-secondary); font-size: 9pt; min-width: 44px; text-align: right;";
+      pctEl.textContent = `${pct.toFixed(1)}%`;
+      row.appendChild(pctEl);
+
+      const dur = document.createElement("span");
+      dur.style.cssText =
+        "z-index: 1; font-variant-numeric: tabular-nums; min-width: 80px; text-align: right; font-size: 10pt;";
+      dur.textContent = `${cmd.duration.toFixed(3)} ms`;
+      row.appendChild(dur);
+
+      row.addEventListener("mouseenter", () => { row.style.background = "var(--bg-hover)"; });
+      row.addEventListener("mouseleave", () => { row.style.background = ""; });
+      row.addEventListener("click", () => { this._jumpToPass(cmd); });
+
+      list.element.appendChild(row);
+    }
+  }
+
+  /**
+   * Render one grouped section of the stats panel (title + a list of "label: value" rows).
+   */
+  _renderStatsSection(parent, title, keys, stats) {
+    const section = new Div(parent, { style: "margin-bottom: 16px;" });
+    new Div(section, { text: title, style:
+      "font-size: 11pt; font-weight: bold; margin-bottom: 6px; color: var(--fg-primary);" });
+
+    const list = new Div(section, { style:
+      "background: var(--bg-elevated); border-radius: var(--radius-sm); padding: 6px 10px;" });
+
+    for (const k of keys) {
+      const v = stats[k];
+      if (v == null) { continue; }
+      const row = document.createElement("div");
+      row.style.cssText =
+        "display: flex; justify-content: space-between; align-items: center; " +
+        "padding: 4px 0; font-size: 10pt; line-height: 1.4;";
+      const lbl = document.createElement("span");
+      lbl.style.cssText = "color: var(--fg-primary);";
+      lbl.textContent = _prettifyStatKey(k);
+      const val = document.createElement("span");
+      val.style.cssText = "color: var(--fg-muted); font-variant-numeric: tabular-nums;";
+      val.textContent = _formatStatValue(k, v);
+      row.appendChild(lbl);
+      row.appendChild(val);
+      list.element.appendChild(row);
+    }
+  }
+
+  /**
+   * Scroll the command tree to the given pass command, expanding it if collapsed.
+   * Shared by the Frame Stats Pass Timings list and the TimelineWidget.
+   */
+  _jumpToPass(command) {
+    const headerSpan = command.header;
+    if (!headerSpan?.element) { return; }
+    const headerDiv = headerSpan.element.parentElement;
+    if (!headerDiv) { return; }
+    const block = headerDiv.nextElementSibling;
+    if (block && block.classList.contains("collapsed")) {
+      headerDiv.click();
+    }
+    headerDiv.scrollIntoView({ block: "center", behavior: "smooth" });
   }
 
   /**
