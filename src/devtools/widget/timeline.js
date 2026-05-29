@@ -17,6 +17,11 @@ export class TimelineWidget extends Widget {
     this._element.style.cssText = [
       "width: 100%",
       "height: 0",
+      // Don't let a flex-column parent shrink the timeline away: because this
+      // element is overflow:hidden, its flex min-height resolves to 0, so
+      // without flex-shrink:0 a flex sibling (the command list) would squeeze
+      // it to nothing. The explicit height set in setData() then governs.
+      "flex: 0 0 auto",
       "overflow: hidden",
       "white-space: nowrap",
       "background: #1e1e1e",

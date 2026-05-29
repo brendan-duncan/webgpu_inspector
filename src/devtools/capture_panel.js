@@ -215,12 +215,15 @@ export class CapturePanel {
     });
 
     this.captureSpecificFrame = 0;
+    // Cap the width like the Frames input below; NumberInput's root `.dragger` is flex: 1 1 auto
+    // and would otherwise stretch this field to fill the toolbar.
     this.captureFrameEdit = new NumberInput(_controlBar, {
       value: this.captureSpecificFrame,
       min: -1,
       step: 1,
       precision: 0,
       class: "mr-sm",
+      style: "max-width: 60px;",
       onChange: (value) => {
         self.captureSpecificFrame = Math.max(value, -1);
       }
@@ -231,10 +234,11 @@ export class CapturePanel {
 
     this.captureFrameCount = 1;
     new Span(_controlBar, { text: "Frames:", class: "text-secondary ml-sm mr-sm" });
-    // NumberInput's root `.dragger` is flex: 1 1 auto, which would stretch
-    // these inputs to fill the toolbar. Cap with max-width sized for the
-    // longest value the field should ever need to show.
-    new NumberInput(_controlBar, { value: this.captureFrameCount, min: 1, step: 1, precision: 0, class: "mr-sm", style: "max-width: 50px;", onChange: (value) => {
+    // NumberInput's root `.dragger` is flex: 1 1 auto, which would both stretch
+    // these inputs to fill the toolbar and let them shrink small enough that the
+    // value text spills out onto the next control. Pin the width and disable
+    // grow/shrink so the field is exactly as wide as its longest value.
+    new NumberInput(_controlBar, { value: this.captureFrameCount, min: 1, step: 1, precision: 0, class: "mr-sm", style: "max-width: 50px; flex: 0 0 auto;", onChange: (value) => {
       self.captureFrameCount = Math.max(value, 1);
     } });
 
@@ -243,7 +247,7 @@ export class CapturePanel {
     const useMaxBufferSizeBtn = new Checkbox(_controlBar, { value: this.useMaxBufferSize, title: "Use Max Buffer Size",
       label: "Max Buffer Size (Bytes):", class: "ml-sm" });
     const maxBufferSizeInput = new NumberInput(_controlBar, { value: this.maxBufferSize, min: 1, step: 1, precision: 0,
-        class: "mr-sm", style: "max-width: 100px;", onChange: (value) => {
+        class: "mr-sm", style: "width: 100px; flex: 0 0 auto;", onChange: (value) => {
       self.maxBufferSize = Math.max(value, 1);
     } });
 
@@ -283,9 +287,9 @@ export class CapturePanel {
       window.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/capture.md", "_blank");
     }});
 
-    this._capturePanel = new Div(parent, { style: "overflow: hidden; white-space: nowrap; height: calc(-85px + 100vh); display: flex;" });
+    this._capturePanel = new Div(parent, { style: "overflow: hidden; white-space: nowrap; flex: 1 1 auto; min-height: 0; display: flex;" });
 
-    this._captureTab = new TabWidget(this._capturePanel, { displayCloseButton: true, style: "width: 100%;" });
+    this._captureTab = new TabWidget(this._capturePanel, { class: "capture_tabs", displayCloseButton: true, style: "width: 100%;" });
     this._captureTab.onActiveTabChanged.addListener(this._onCaptureTabChanged, this);
     this._captureTab.onTabClosed.addListener(this._onCaptureTabClosed, this);
 
@@ -532,7 +536,7 @@ export class CapturePanel {
       this._liveTabState = state;
     }
 
-    const captureContents = new Div(null, { style: "overflow: hidden; white-space: nowrap; height: calc(-100px + 100vh); display: flex;" });
+    const captureContents = new Div(null, { style: "overflow: hidden; white-space: nowrap; height: 100%; min-height: 0; display: flex;" });
     state.captureContents = captureContents;
     captureContents._captureState = state;
 
@@ -540,7 +544,7 @@ export class CapturePanel {
     state.frameImages.style.display = "none";
     this._frameImages = state.frameImages;
 
-    const _frameContents = new Span(captureContents, { class: "capture_frameContents", style: "flex: 0 0 auto; width: 590px; height: calc(-105px + 100vh);" });
+    const _frameContents = new Span(captureContents, { class: "capture_frameContents", style: "flex: 0 0 auto; width: 590px; height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden;" });
     const commandInfo = new Span(captureContents, { class: "capture_commandInfo", style: "flex: 1 1 auto; display: flex;" });
     const commandInfoContents = new Div(commandInfo, { style: "flex: 1 1 auto;" });
     state.commandInfoContents = commandInfoContents;

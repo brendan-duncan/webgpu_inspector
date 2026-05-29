@@ -120,6 +120,10 @@ export class CaptureData {
     this.commands.length = count;
     this.frameIndex = frame;
     this._captureCount = batches;
+    // Reset any timestamp buffer left over from a previous capture so this
+    // capture allocates a fresh buffer sized for its own timestamp data.
+    this._timestampBuffer = null;
+    this._timestampChunkCount = 0;
   }
 
   /**
@@ -241,6 +245,13 @@ export class CaptureData {
         this.onUpdateCaptureStatus.emit();
         return;
       }
+      if (offset + chunkData.length > this._timestampBuffer.length) {
+        // Stale or oversized chunk (e.g. from a previous capture); ignore it
+        // rather than throwing an out-of-bounds RangeError.
+        console.error("Timestamp buffer chunk out of bounds; ignoring.");
+        this.onUpdateCaptureStatus.emit();
+        return;
+      }
       this._timestampBuffer.set(chunkData, offset);
       this._timestampChunkCount--;
       if (this._timestampChunkCount === 0) {
@@ -299,6 +310,8 @@ export class CaptureData {
         this.timestampData = { commands: timestampMap, firstTime };
         this.onTimestampDataReady.emit(this.timestampData);
         this.onUpdateCaptureStatus.emit();
+
+        this._timestampBuffer = null;
       }
       return;
     }

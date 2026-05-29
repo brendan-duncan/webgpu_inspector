@@ -30,9 +30,14 @@ export class PlotData {
       return;
     }
     const oldData = this.data;
+    const copyCount = Math.min(this.count, value);
     this._size = value;
     this.data = new Float32Array(value);
-    this.data.set(oldData.subarray(0, this.count));
+    this.data.set(oldData.subarray(0, copyCount));
+    this.count = copyCount;
+    if (this.index >= value) {
+      this.index = 0;
+    }
   }
 
   add(value) {

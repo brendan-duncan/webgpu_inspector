@@ -41,8 +41,19 @@
     --spacing-xl: 24px;
 }
 
+/* Capture panel: flex column so the content area fills whatever space is left
+   below the (variable-height) control bar, instead of guessing with 100vh math. */
+.capture_panel {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 30px);
+    overflow: hidden;
+}
+
 /* Control Bar */
 .control-bar {
+    /* Take only the height it needs; the content area below gets the rest. */
+    flex: 0 0 auto;
     background-color: var(--bg-tertiary);
     box-shadow: var(--shadow-md);
     border-bottom: 1px solid var(--border-color);
@@ -50,6 +61,7 @@
     padding: 10px 20px;
     font-size: 10pt;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--spacing-sm);
 }
@@ -1252,6 +1264,20 @@ span {
   min-width: 20px;
 }
 
+/* Toolbar number fields (Frames, Max Buffer Size) are pinned to a fixed
+   .dragger width inline. The inner <input> otherwise keeps its intrinsic
+   width (flexbox auto-minimum) and its value text spills onto the next
+   control, so zero out the min-width and clip anything left over. */
+.control-bar .dragger {
+  overflow: hidden;
+}
+
+.control-bar .dragger .inputfield,
+.control-bar .dragger .full,
+.control-bar .dragger input {
+  min-width: 0;
+}
+
 .drag_widget {
   display: inline-block;
   width: 0.5em;
@@ -1998,11 +2024,34 @@ li.tree-item .expandbutton
   overflow: hidden;
 }
 
+/* Inner capture TabWidget (one tab per captured frame). Make it and its tab
+   pages fill the available height so the columns inside scroll, not the panel. */
+.capture_tabs {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.capture_tabs > .tab-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.capture_tabs > .tab-content > .tab-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
 .capture_frameContents {
   width: calc(50% - 10px);
 }
 
 .capture_filterArea {
+  flex: 0 0 auto;
   padding: 5px 10px;
   border-bottom: 1px solid #000;
   background-color: #444;
@@ -2033,7 +2082,10 @@ li.tree-item .expandbutton
 
 .capture_frame {
   overflow: auto;
-  height: calc(100% - 35px);
+  /* Fill the middle column below the filter bar and timeline; this is the only
+     scrollable region of the column. */
+  flex: 1 1 auto;
+  min-height: 0;
   scrollbar-width: thin;
   scrollbar-color: var(--thumbBG) var(--scrollbarBG);
   cursor: default;
@@ -2106,7 +2158,8 @@ li.tree-item .expandbutton
 .capture_commandInfo {
   overflow: auto;
   width: calc(50% - 10px);
-  height: calc(100% - 10px);
+  height: 100%;
+  min-height: 0;
   padding-left: 5px;
   font-size: 11pt;
 }
@@ -2224,7 +2277,8 @@ li.tree-item .expandbutton
   /*padding-left: 10px;*/
   width: 325px;
   /*min-width: 340px;*/
-  height: calc(-110px + 100vh);
+  height: 100%;
+  min-height: 0;
   scrollbar-width: thin;
   scrollbar-color: var(--thumbBG) var(--scrollbarBG);
   overflow: auto;
