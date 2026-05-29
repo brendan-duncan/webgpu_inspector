@@ -123,8 +123,11 @@ export let webgpuInspector = null;
                       action: "webgpu_inspector_start_inspection" } }));
                   }
                 } catch (e) {
-                  // Cross-origin iframe access denied - this is expected
-                  console.log("[WebGPU Inspector] Cannot access cross-origin iframe:", e.message);
+                  // Cross-origin iframe access denied - this is expected. The
+                  // extension injects into all frames independently, so the
+                  // iframe still gets inspected via its own content-script port;
+                  // this direct-DOM propagation is only a same-origin fast path.
+                  console.debug("[WebGPU Inspector] Cannot access cross-origin iframe:", e.message);
                 }
               });
             }
@@ -151,7 +154,8 @@ export let webgpuInspector = null;
                       }
                     } catch (e) {
                       // Cross-origin iframe access denied - this is expected
-                      console.log("[WebGPU Inspector] Cannot access cross-origin iframe:", e.message);
+                      // (see note above; per-frame injection still covers it).
+                      console.debug("[WebGPU Inspector] Cannot access cross-origin iframe:", e.message);
                     }
                   });
                 } else if (node.getElementsByTagName) {
@@ -166,7 +170,8 @@ export let webgpuInspector = null;
                         }
                       } catch (e) {
                         // Cross-origin iframe access denied - this is expected
-                        console.log("[WebGPU Inspector] Cannot access cross-origin iframe:", e.message);
+                        // (see note above; per-frame injection still covers it).
+                        console.debug("[WebGPU Inspector] Cannot access cross-origin iframe:", e.message);
                       }
                     });
                   }
@@ -275,7 +280,8 @@ export let webgpuInspector = null;
                 }
               } catch (e) {
                 // Cross-origin iframe access denied - this is expected
-                console.log("[WebGPU Inspector] Cannot access cross-origin iframe:", e.message);
+                // (see note above; per-frame injection still covers it).
+                console.debug("[WebGPU Inspector] Cannot access cross-origin iframe:", e.message);
               }
             });
           }

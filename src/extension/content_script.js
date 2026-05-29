@@ -21,6 +21,37 @@ const webgpuInspectorWorkersKey = "WEBGPU_INSPECTOR_WORKERS";
 const RELOAD_DELAY_MS = 50;
 
 /**
+ * True when this content script is running in the top-level frame (not an iframe).
+ * Comparing window references is allowed across origins; only property access throws.
+ * @returns {boolean}
+ */
+function isTopFrame() {
+  return window === window.top;
+}
+
+/**
+ * Reloads the page to (re)start the inspector/recorder from the sessionStorage
+ * key each frame set above.
+ *
+ * Only the top frame actually reloads: reloading the top document recreates the
+ * entire subframe tree, and every recreated frame's loader auto-starts from its
+ * own-origin key. If subframes also self-reloaded, a cross-origin iframe whose
+ * timer fired before the top frame's would start, consume (clear) its own-origin
+ * key on its load event, and then be recreated key-less by the top reload —
+ * leaving that frame permanently un-inspected. Letting only the top frame reload
+ * removes that race. Subframes still set their sessionStorage key (above) so they
+ * are ready when the top reload recreates them.
+ */
+function reloadFromTopFrame() {
+  if (!isTopFrame()) {
+    return;
+  }
+  setTimeout(function () {
+    window.location.reload();
+  }, RELOAD_DELAY_MS);
+}
+
+/**
  * Checks if the browser is Firefox.
  * @returns {boolean} True if running in Firefox
  */
@@ -116,9 +147,7 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
     const output = message.output || "html";
     sessionStorage.setItem(webgpuRecorderLoadedKey,
       `${message.frames}%${message.filename}%${message.download}%${recordMode}%${recordFrame}%${continuous}%${output}`);
-    setTimeout(function () {
-      window.location.reload();
-    }, RELOAD_DELAY_MS);
+    reloadFromTopFrame();
     return;
   }
 
@@ -163,9 +192,7 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
     } else {
       sessionStorage.removeItem(webgpuInspectorWorkersKey);
     }
-    setTimeout(function () {
-      window.location.reload();
-    }, RELOAD_DELAY_MS);
+    reloadFromTopFrame();
   }
 }, Actions.PageReady);
 
