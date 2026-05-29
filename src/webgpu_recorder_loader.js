@@ -21,7 +21,7 @@ function parseRecordFrame(str) {
 if (recorderMessage) {
   sessionStorage.removeItem(webgpuRecorderLoadedKey);
 
-  // Field order: frames%filename%download%recordMode%recordFrame%continuous
+  // Field order: frames%filename%download%recordMode%recordFrame%continuous%output
   const data = recorderMessage.split("%");
   const frames = data[0];
   const filename = data[1];
@@ -29,6 +29,7 @@ if (recorderMessage) {
   const recordMode = data[3] ? parseInt(data[3], 10) || 0 : 0;
   const recordFrame = parseRecordFrame(data[4]);
   const continuous = data[5] === "true";
+  const output = data[6] || "html";
   const removeUnusedResources = true;
   const messageRecording = true;
 
@@ -42,7 +43,8 @@ if (recorderMessage) {
     messageRecording,
     recordMode,
     recordFrame,
-    continuous
+    continuous,
+    output
   };
 
   self.__webgpu_src = coreLoader;
@@ -67,6 +69,7 @@ if (window) {
           ? parseRecordFrame(message.recordFrame)
           : (message.recordFrame ?? null);
         const continuous = !!message.continuous;
+        const output = message.output || "html";
         const removeUnusedResources = true;
         const messageRecording = true;
 
@@ -80,7 +83,8 @@ if (window) {
           messageRecording,
           recordMode,
           recordFrame,
-          continuous
+          continuous,
+          output
         };
 
         self.__webgpu_src = coreLoader;

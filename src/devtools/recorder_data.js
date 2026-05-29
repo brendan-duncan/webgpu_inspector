@@ -97,15 +97,27 @@ export class RecorderData {
     });
   }
 
+  // Parse a recorded command's args (a JSON string) in place. requestDevice/requestAdapter reuse
+  // the panel's existing adapter/device at replay (see _executeCommand), so their recorded args
+  // aren't needed. Never throws — on malformed args it logs and falls back to an empty arg list so
+  // the command stays in sequence (a hole would break the replay loop).
+  _parseCommandArgs(command) {
+    if (command.method === "requestDevice" || command.method === "requestAdapter") {
+      command.args = [];
+    } else {
+      try {
+        command.args = JSON.parse(command.args);
+      } catch (e) {
+        console.error(`Error parsing args for command ${command.method}:`, e.message);
+        command.args = [];
+      }
+    }
+    return command;
+  }
+
   addCommand(command, commandIndex, frame, index, count) {
     try {
-      if (command.method === "requestDevice" || command.method === "requestAdapter") {
-        // Replay reuses the panel's existing adapter/device (see _executeCommand), so the recorded
-        // args aren't needed — and parsing them isn't worth the risk of dropping the command.
-        command.args = [];
-      } else {
-        command.args = JSON.parse(command.args);
-      }
+      this._parseCommandArgs(command);
 
       if (frame < 0) {
         this.initializeCommands[commandIndex] = command;
@@ -121,6 +133,60 @@ export class RecorderData {
       this._checkReady();
     } catch (e) {
       console.error(`Error adding command: ${command.method}`, e.message);
+    }
+  }
+
+  // Load a binary (.wgpu) recording produced by webgpu_recorder, replacing any current recording.
+  // Container layout (see webgpu_recorder._buildBinaryRecording):
+  //   "WGPR" | version u32 | headerLen u32 | header(JSON utf8) | rawData
+  // header = { canvasWidth, canvasHeight, init:[cmd], frames:[[cmd]], data:[{type,length,offset}] }
+  // where each cmd has its args as a JSON string and the data table offsets index into rawData.
+  loadBinary(arrayBuffer) {
+    this.clear();
+
+    try {
+      const u8 = new Uint8Array(arrayBuffer);
+      if (u8.length < 12 || u8[0] !== 0x57 || u8[1] !== 0x47 || u8[2] !== 0x50 || u8[3] !== 0x52) {
+        console.error("Invalid binary recording: missing WGPR header.");
+        return;
+      }
+
+      const view = new DataView(arrayBuffer);
+      const headerLength = view.getUint32(8, true);
+      const dataStart = 12 + headerLength;
+      const header = JSON.parse(new TextDecoder().decode(new Uint8Array(arrayBuffer, 12, headerLength)));
+
+      // Raw data blobs, sliced into typed arrays matching the recorded type.
+      const dataTable = header.data || [];
+      for (let i = 0; i < dataTable.length; ++i) {
+        const d = dataTable[i];
+        if (!d || !d.type || !d.length) {
+          this.data[i] = new Uint8Array(0);
+          continue;
+        }
+        const slice = arrayBuffer.slice(dataStart + d.offset, dataStart + d.offset + d.length);
+        this.data[i] = d.type === "Uint32Array" ? new Uint32Array(slice) : new Uint8Array(slice);
+      }
+
+      const init = header.init || [];
+      for (let i = 0; i < init.length; ++i) {
+        this.initializeCommands[i] = this._parseCommandArgs(init[i]);
+      }
+
+      const frames = header.frames || [];
+      for (let f = 0; f < frames.length; ++f) {
+        this.frames[f] = [];
+        const commands = frames[f] || [];
+        for (let i = 0; i < commands.length; ++i) {
+          this.frames[f][i] = this._parseCommandArgs(commands[i]);
+        }
+      }
+
+      this.dataReady = true;
+      this._commandsReady = true;
+      this.onReady.emit();
+    } catch (e) {
+      console.error(`Failed to load binary recording: ${e.message}`);
     }
   }
 
@@ -304,6 +370,9 @@ export class RecorderData {
   }
 
   async _executeCommand(command, frameIndex, commandIndex) {
+    if (!command) {
+      return null;
+    }
     let method = command.method;
 
     // Reuse the panel's existing adapter/device rather than creating new ones during replay. This

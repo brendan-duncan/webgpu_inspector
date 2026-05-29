@@ -22,8 +22,8 @@ const PreviewMode = {
 // Recording modes shown in the Mode dropdown, in display order. All map to the recorder's
 // stateful recordMode 2; they differ only in which absolute frame indices get captured.
 const RecordModeIndex = {
-  Range: 0,     // contiguous start..end, one file per frame
-  Single: 1,    // a single arbitrary frame
+  Single: 0,    // a single arbitrary frame (default)
+  Range: 1,     // contiguous start..end, one file per frame
   Multi: 2,     // explicit comma-separated list, e.g. "5,10"
   OnDemand: 3   // no preset frames; capture is triggered at runtime via the Capture button
 };
@@ -54,8 +54,8 @@ export class RecorderPanel {
 
     new Span(recorderBar, { text: "Mode:", class: "text-secondary ml-sm mr-sm" });
     this.modeSelect = new Select(recorderBar, {
-      options: ["Frame Range", "Single Frame", "Multi-Frame", "On Demand"],
-      index: RecordModeIndex.Range,
+      options: ["Single Frame", "Frame Range", "Multi-Frame", "On Demand"],
+      index: RecordModeIndex.Single,
       style: "width: 120px;",
       onChange: () => { self._updateModeUI(); }
     });
@@ -82,10 +82,23 @@ export class RecorderPanel {
     this.onDemandGroup = new Span(recorderBar);
     this._continuousCheckbox = new Checkbox(this.onDemandGroup, { label: "Continuous", tooltip: "Keep recording so multiple frames can be captured", checked: true, class: "ml-sm" });
 
+    // Output format: HTML (self-contained playback page), Binary (compact .wgpu), or Both.
+    new Span(recorderBar, { text: "Format:", class: "text-secondary ml-sm mr-sm" });
+    this.formatSelect = new Select(recorderBar, {
+      options: ["HTML", "Binary", "Both"],
+      index: 0,
+      style: "width: 90px;"
+    });
+
     this._downloadCheckbox = new Checkbox(recorderBar, { label: "Download", tooltip: "Automatically Download Recording", checked: true, class: "ml-sm" });
 
     new Span(recorderBar, { text: "Name:", class: "text-secondary ml-sm mr-sm" });
     this.recordNameInput = new Input(recorderBar, { type: "text", value: "webgpu_record" });
+
+    // Load a previously-saved binary (.wgpu) recording for playback in the panel.
+    this.loadButton = new Button(recorderBar, { label: "Load Binary", class: "btn ml-sm", callback: () => {
+      self._loadBinaryRecording();
+    }});
 
     this._updateModeUI();
 
@@ -168,14 +181,39 @@ export class RecorderPanel {
       continuous = this._continuousCheckbox.checked;
     }
 
+    const output = this.formatSelect.index === 1 ? "binary" : this.formatSelect.index === 2 ? "both" : "html";
+
     this._recorderData.clear();
     port.postMessage({
       action: PanelActions.InitializeRecorder,
-      frames: 1, filename, download, recordMode, recordFrame, continuous
+      frames: 1, filename, download, recordMode, recordFrame, continuous, output
     });
 
     this._recordingStarted = idx === RecordModeIndex.OnDemand;
     this._updateModeUI();
+  }
+
+  // Prompt for a binary (.wgpu) recording file and load it into the panel for playback.
+  _loadBinaryRecording() {
+    const self = this;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".wgpu,application/octet-stream";
+    input.style.display = "none";
+    input.addEventListener("change", () => {
+      const file = input.files && input.files[0];
+      input.remove();
+      if (!file) {
+        return;
+      }
+      file.arrayBuffer().then((buffer) => {
+        self._recorderData.loadBinary(buffer);
+      }).catch((e) => {
+        console.error("Failed to read binary recording:", e);
+      });
+    });
+    document.body.appendChild(input);
+    input.click();
   }
 
   _recordingReady() {

@@ -108,13 +108,14 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
   }
 
   if (action === PanelActions.InitializeRecorder) {
-    // Field order: frames%filename%download%recordMode%recordFrame%continuous
+    // Field order: frames%filename%download%recordMode%recordFrame%continuous%output
     // recordFrame is a (possibly empty) comma-joined list of absolute frame indices.
     const recordMode = message.recordMode ?? 0;
     const recordFrame = message.recordFrame ?? "";
     const continuous = message.continuous ? "true" : "false";
+    const output = message.output || "html";
     sessionStorage.setItem(webgpuRecorderLoadedKey,
-      `${message.frames}%${message.filename}%${message.download}%${recordMode}%${recordFrame}%${continuous}`);
+      `${message.frames}%${message.filename}%${message.download}%${recordMode}%${recordFrame}%${continuous}%${output}`);
     setTimeout(function () {
       window.location.reload();
     }, RELOAD_DELAY_MS);
@@ -202,6 +203,9 @@ if (!isChromium() && (navigator.userAgent.indexOf("Safari") !== -1 || isFirefox(
     // The recorder treats the mere presence of the continuous attribute as true, so only set it when on.
     if (data[5] === "true") {
       attributes.continuous = "true";
+    }
+    if (data[6]) {
+      attributes.output = data[6];
     }
     injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder_loader.js"), attributes);
   }
