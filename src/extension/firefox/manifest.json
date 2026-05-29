@@ -5,7 +5,7 @@
   "short_name": "webgpu_inspector",
   "version": "__buildVersion",
   
-  "description": "WebGPU Inspector Debugging Tools",
+  "description": "DevTools debugger and profiler for WebGPU — inspect objects, capture frames, edit shaders live, and analyze GPU performance.",
   "author": "Brendan Duncan",
   "icons": {
     "19": "res/webgpu_inspector_on-19.png",
