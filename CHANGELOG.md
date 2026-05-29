@@ -4,6 +4,14 @@
 
 * **Profile Passes**: injects timestamp queries around render and compute passes. The data is presented in the frame capture as a timeline, to help identify what percentage of the frame the different passes are taking.
 
+### Record Panel
+
+* **Recording modes**: choose what to capture from the Mode dropdown — **Single Frame** (a specific frame by index), **Frame Range** (a contiguous range), **Multi-Frame** (an explicit list like `5,10`), or **On Demand** (run the page and capture frames with a **Capture Frame** button, with a **Continuous** option to keep capturing in the same session).
+* **Output format**: record as a self-contained **HTML** file, a compact **Binary** (`.wgpu`) file with no base64 inflation, or **Both**.
+* **Load Binary**: load a saved `.wgpu` binary recording back into the panel for playback.
+* **Recording view**: redesigned into a three-column layout — preview canvas, command list (grouped by render/compute pass with pass labels and debug groups, plus a filter), and a command-details pane (method, arguments, result), reusing the Capture panel's command display. The preview can show either the selected command or the full frame, with a Frame selector for multi-frame recordings.
+* Fixed command-selection and full-frame previews not rendering, and large recordings failing to stream to the panel.
+
 ## v1.1.2
 
 ### Bug Fix
