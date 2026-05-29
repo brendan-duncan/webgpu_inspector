@@ -108,10 +108,28 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
   }
 
   if (action === PanelActions.InitializeRecorder) {
-    sessionStorage.setItem(webgpuRecorderLoadedKey, `${message.frames}%${message.filename}%${message.download}`);
+    // Field order: frames%filename%download%recordMode%recordFrame%continuous
+    // recordFrame is a (possibly empty) comma-joined list of absolute frame indices.
+    const recordMode = message.recordMode ?? 0;
+    const recordFrame = message.recordFrame ?? "";
+    const continuous = message.continuous ? "true" : "false";
+    sessionStorage.setItem(webgpuRecorderLoadedKey,
+      `${message.frames}%${message.filename}%${message.download}%${recordMode}%${recordFrame}%${continuous}`);
     setTimeout(function () {
       window.location.reload();
     }, RELOAD_DELAY_MS);
+    return;
+  }
+
+  // On-demand capture trigger for a recorder already running in stateful mode. Forward it to the
+  // page as the recorder's "webgpu_recorder_record_frame" event (also picked up by worker recorders).
+  if (action === PanelActions.RecordFrame) {
+    const detail = { __webgpuRecorder: true, action: "webgpu_recorder_record_frame" };
+    if (typeof message.frame === "number") {
+      detail.frame = message.frame;
+    }
+    const msg = isFirefox() ? cloneInto(detail, document.defaultView) : detail;
+    window.dispatchEvent(new CustomEvent("__WebGPURecorder", { detail: msg }));
     return;
   }
 
@@ -169,13 +187,23 @@ if (!isChromium() && (navigator.userAgent.indexOf("Safari") !== -1 || isFirefox(
   const recordMessage = sessionStorage.getItem(webgpuRecorderLoadedKey);
   if (recordMessage) {
     const data = recordMessage.split("%");
-    injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder_loader.js"), {
+    const attributes = {
       filename: data[1],
       frames: data[0],
       download: data[2],
       removeUnusedResources: 1,
-      messageRecording: 1
-    });
+      messageRecording: 1,
+      recordMode: data[3] ?? "0"
+    };
+    // The recorder parses recordFrame's commas itself; only set it when non-empty.
+    if (data[4]) {
+      attributes.recordFrame = data[4];
+    }
+    // The recorder treats the mere presence of the continuous attribute as true, so only set it when on.
+    if (data[5] === "true") {
+      attributes.continuous = "true";
+    }
+    injectScriptNode("__webgpu_recorder", chrome.runtime.getURL("webgpu_recorder_loader.js"), attributes);
   }
 }
 

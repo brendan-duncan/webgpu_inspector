@@ -3,6 +3,7 @@ import { Checkbox } from "./widget/checkbox.js";
 import { collapsible } from "./widget/collapsible.js";
 import { Div } from "./widget/div.js";
 import { Input } from "./widget/input.js";
+import { Select } from "./widget/select.js";
 import { Span } from "./widget/span.js";
 import { Split } from "./widget/split.js";
 import { Widget } from "./widget/widget.js";
@@ -11,12 +12,22 @@ import { RecorderData } from "./recorder_data.js";
 import { NumberInput } from "./widget/number_input.js";
 import { TextInput } from "./widget/text_input.js";
 
+// Recording modes shown in the Mode dropdown, in display order. All map to the recorder's
+// stateful recordMode 2; they differ only in which absolute frame indices get captured.
+const RecordModeIndex = {
+  Range: 0,     // contiguous start..end, one file per frame
+  Single: 1,    // a single arbitrary frame
+  Multi: 2,     // explicit comma-separated list, e.g. "5,10"
+  OnDemand: 3   // no preset frames; capture is triggered at runtime via the Capture button
+};
+
 export class RecorderPanel {
   constructor(window, parent) {
     this.window = window;
 
     this._recorderData = new RecorderData(window);
     this._recorderData.onReady.addListener(this._recordingReady, this);
+    this._recordingStarted = false;
 
     const self = this;
     const port = window.port;
@@ -24,22 +35,56 @@ export class RecorderPanel {
     const recorderBar = new Div(parent, { class: "control-bar" });
 
     this.recordButton = new Button(recorderBar, { label: "Record", class: "btn btn-success", callback: () => {
-      const frames = self.recordFramesInput.value || 1;
-      const filename = self.recordNameInput.value;
-      const download = self._downloadCheckbox.checked;
-      self._recorderData.clear();
-      port.postMessage({ action: PanelActions.InitializeRecorder, frames, filename, download });
+      self._startRecording();
     }});
 
-    new Span(recorderBar, { text: "Frames:", class: "text-secondary ml-sm mr-sm" });
-    this.recordFramesInput = new Input(recorderBar, { id: "record_frames", type: "number", value: 1, style: "width: 60px;"});
+    // On-demand only: fires a runtime trigger to capture the next frame. Hidden until an
+    // on-demand recording has been started, and whenever a different mode is selected.
+    this.captureButton = new Button(recorderBar, { label: "Capture Frame", class: "btn btn-primary ml-sm", callback: () => {
+      port.postMessage({ action: PanelActions.RecordFrame });
+    }});
+    this.captureButton.element.style.display = "none";
+
+    new Span(recorderBar, { text: "Mode:", class: "text-secondary ml-sm mr-sm" });
+    this.modeSelect = new Select(recorderBar, {
+      options: ["Frame Range", "Single Frame", "Multi-Frame", "On Demand"],
+      index: RecordModeIndex.Range,
+      style: "width: 120px;",
+      onChange: () => { self._updateModeUI(); }
+    });
+
+    // Frame Range: contiguous [start..end] inclusive.
+    this.rangeGroup = new Span(recorderBar);
+    new Span(this.rangeGroup, { text: "Start:", class: "text-secondary ml-sm mr-sm" });
+    this.rangeStartInput = new Input(this.rangeGroup, { type: "number", value: 0, style: "width: 60px;" });
+    new Span(this.rangeGroup, { text: "End:", class: "text-secondary ml-sm mr-sm" });
+    this.rangeEndInput = new Input(this.rangeGroup, { type: "number", value: 10, style: "width: 60px;" });
+
+    // Single Frame: one arbitrary absolute frame index.
+    this.singleGroup = new Span(recorderBar);
+    new Span(this.singleGroup, { text: "Frame:", class: "text-secondary ml-sm mr-sm" });
+    this.singleFrameInput = new Input(this.singleGroup, { type: "number", value: 0, style: "width: 60px;" });
+
+    // Multi-Frame: explicit comma-separated list of absolute frame indices.
+    this.multiGroup = new Span(recorderBar);
+    new Span(this.multiGroup, { text: "Frames:", class: "text-secondary ml-sm mr-sm" });
+    this.multiFramesInput = new Input(this.multiGroup, { type: "text", value: "5,10", style: "width: 100px;" });
+
+    // On Demand: track state and wait for the Capture button. Continuous keeps tracking after
+    // a capture so multiple frames can be grabbed in one session.
+    this.onDemandGroup = new Span(recorderBar);
+    this._continuousCheckbox = new Checkbox(this.onDemandGroup, { label: "Continuous", tooltip: "Keep recording so multiple frames can be captured", checked: true, class: "ml-sm" });
 
     this._downloadCheckbox = new Checkbox(recorderBar, { label: "Download", tooltip: "Automatically Download Recording", checked: true, class: "ml-sm" });
 
     new Span(recorderBar, { text: "Name:", class: "text-secondary ml-sm mr-sm" });
-    this.recordNameInput = new Input(recorderBar, { id: "record_frames", type: "text", value: "webgpu_record" });
+    this.recordNameInput = new Input(recorderBar, { type: "text", value: "webgpu_record" });
 
-    this.recorderDataPanel = new Div(parent, { style: "width: 100%; min-height: calc(-85px + 100vh); position: relative;" });
+    this._updateModeUI();
+
+    // Flex column with a fixed height so the command list scrolls inside the split instead of
+    // growing the panel past the viewport (which gave the whole devtools page a scrollbar).
+    this.recorderDataPanel = new Div(parent, { style: "width: 100%; height: calc(-85px + 100vh); position: relative; display: flex; flex-direction: column; overflow: hidden;" });
 
     port.addListener((message) => {
       switch (message.action) {
@@ -70,12 +115,68 @@ export class RecorderPanel {
     });
   }
 
+  // Show only the inputs relevant to the selected mode, and reveal the Capture button only for
+  // an in-progress on-demand recording.
+  _updateModeUI() {
+    const idx = this.modeSelect.index;
+    const show = (group, visible) => { group.element.style.display = visible ? "inline" : "none"; };
+    show(this.rangeGroup, idx === RecordModeIndex.Range);
+    show(this.singleGroup, idx === RecordModeIndex.Single);
+    show(this.multiGroup, idx === RecordModeIndex.Multi);
+    show(this.onDemandGroup, idx === RecordModeIndex.OnDemand);
+    this.captureButton.element.style.display =
+      (idx === RecordModeIndex.OnDemand && this._recordingStarted) ? "inline-block" : "none";
+  }
+
+  // Build the recorder config for the selected mode and (re)load the page with it armed.
+  _startRecording() {
+    const port = this.window.port;
+    const filename = this.recordNameInput.value;
+    const download = this._downloadCheckbox.checked;
+    const idx = this.modeSelect.index;
+
+    // All modes use stateful recordMode 2; they differ only in recordFrame / continuous.
+    const recordMode = 2;
+    let recordFrame = ""; // comma-joined string; empty means "wait for a runtime trigger".
+    let continuous = false;
+
+    if (idx === RecordModeIndex.Range) {
+      const start = parseInt(this.rangeStartInput.value, 10) || 0;
+      const end = parseInt(this.rangeEndInput.value, 10) || 0;
+      const lo = Math.min(start, end);
+      const hi = Math.max(start, end);
+      const list = [];
+      for (let f = lo; f <= hi; ++f) {
+        list.push(f);
+      }
+      recordFrame = list.join(",");
+    } else if (idx === RecordModeIndex.Single) {
+      recordFrame = `${parseInt(this.singleFrameInput.value, 10) || 0}`;
+    } else if (idx === RecordModeIndex.Multi) {
+      // Normalize whitespace; the loader/recorder split on commas.
+      recordFrame = this.multiFramesInput.value
+        .split(",").map((s) => s.trim()).filter((s) => s !== "").join(",");
+    } else if (idx === RecordModeIndex.OnDemand) {
+      recordFrame = "";
+      continuous = this._continuousCheckbox.checked;
+    }
+
+    this._recorderData.clear();
+    port.postMessage({
+      action: PanelActions.InitializeRecorder,
+      frames: 1, filename, download, recordMode, recordFrame, continuous
+    });
+
+    this._recordingStarted = idx === RecordModeIndex.OnDemand;
+    this._updateModeUI();
+  }
+
   _recordingReady() {
     this.recorderDataPanel.html = "";
 
     const self = this;
 
-    const controls = new Div(this.recorderDataPanel, { class: "control-bar" });
+    const controls = new Div(this.recorderDataPanel, { class: "control-bar", style: "flex: 0 0 auto;" });
 
     const lastFrame = this._recorderData.frames.length - 1;
     new Span(controls, { text: "Frame:", class: "text-secondary ml-sm mr-sm" });
@@ -83,7 +184,8 @@ export class RecorderPanel {
       self._recorderData.executeCommands(canvas, value);
     } });
 
-    const split = new Split(this.recorderDataPanel, { direction: Split.Horizontal, position: 800, style: "height: calc(-118px + 100vh);" });
+    // Fill the remaining height under the controls bar; the panes scroll internally.
+    const split = new Split(this.recorderDataPanel, { direction: Split.Horizontal, position: 800, style: "flex: 1 1 auto; min-height: 0;" });
 
     const canvas = new Widget("canvas", new Div(split, { style: "overflow: auto;" }));
     canvas.element.width = 800;

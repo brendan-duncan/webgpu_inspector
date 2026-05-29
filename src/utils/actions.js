@@ -36,5 +36,8 @@ export const PanelActions = {
   RevertShader: "webgpu_inspect_revert_shader",
   Capture: "webgpu_inspector_capture",
   InitializeInspector: "webgpu_initialize_inspector",
-  InitializeRecorder: "webgpu_initialize_recorder"
+  InitializeRecorder: "webgpu_initialize_recorder",
+  // Runtime trigger for on-demand (stateful, recordMode 2) recording. Forwarded by the
+  // content script to the page as a "webgpu_recorder_record_frame" __WebGPURecorder event.
+  RecordFrame: "webgpu_record_frame"
 };

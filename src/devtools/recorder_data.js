@@ -156,17 +156,23 @@ export class RecorderData {
       for (const command of frame) {
         if (hasFrameCommandIndex && ci > commandIndex) {
           if (passes.size > 0 && command.method === "end") {
-            const object = await this._executeCommand(command, fi, ci);
-            if (object) {
-              passes.delete(object);
+            // _executeCommand returns the method's result (end() returns undefined), so resolve
+            // the pass encoder from the command's object, not from the return value.
+            const passObject = this._getObject(command.object);
+            await this._executeCommand(command, fi, ci);
+            if (passObject) {
+              passes.delete(passObject);
+              if (passObject instanceof GPURenderPassEncoder) {
+                lastPass = passObject;
+              }
             }
-            lastPass = object;
           }
 
           if (commandEncoders.size > 0 && command.method === "finish") {
-            const object = await this._executeCommand(command, fi, ci);
-            if (object) {
-              commandEncoders.delete(object);
+            const encoderObject = this._getObject(command.object);
+            await this._executeCommand(command, fi, ci);
+            if (encoderObject) {
+              commandEncoders.delete(encoderObject);
             }
             commandBuffers.add(command.result);
           }
@@ -215,6 +221,11 @@ export class RecorderData {
             const object = this._getObject(command.object);
             if (object) {
               passes.delete(object);
+              // Remember the most recent render pass so it can be previewed even when the
+              // selected command is at/after the pass end (e.g. finish or submit).
+              if (object instanceof GPURenderPassEncoder) {
+                lastPass = object;
+              }
             }
           } else if (command.method === "finish") {
             const object = this._getObject(command.object);
@@ -227,12 +238,12 @@ export class RecorderData {
     }
 
     if (lastPass instanceof GPURenderPassEncoder) {
-      if (lastPass.__descriptor.colorAttachments.length > 0) {
+      if (lastPass.__descriptor?.colorAttachments?.length > 0) {
         const colorOutput0 = this._getObject(
           lastPass.__descriptor.colorAttachments[0].resolveTarget?.__id ??
           lastPass.__descriptor.colorAttachments[0].view?.__id);
-        const colorOutputTexture = colorOutput0.texture;
-        if (!colorOutputTexture.isCanvasTexture) {
+        const colorOutputTexture = colorOutput0?.texture;
+        if (colorOutputTexture && !colorOutputTexture.isCanvasTexture) {
           const canvasTexture = this._context.getCurrentTexture();
           const canvasView = canvasTexture.createView();
 

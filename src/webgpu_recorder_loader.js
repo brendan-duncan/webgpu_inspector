@@ -5,13 +5,30 @@ import coreLoader from "webgpu_recorder_core_func";
 const webgpuRecorderLoadedKey = "WEBGPU_RECORDER_LOADED";
 const recorderMessage = sessionStorage.getItem(webgpuRecorderLoadedKey);
 
+// Parse a recordFrame field (a possibly-empty comma-joined list of absolute frame indices) into
+// the form the recorder expects: null (wait for a trigger), a single number, or an array.
+function parseRecordFrame(str) {
+  if (str === undefined || str === null || str === "") {
+    return null;
+  }
+  if (str.indexOf(",") !== -1) {
+    return str.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
+  }
+  const n = parseInt(str, 10);
+  return isNaN(n) ? null : n;
+}
+
 if (recorderMessage) {
   sessionStorage.removeItem(webgpuRecorderLoadedKey);
 
+  // Field order: frames%filename%download%recordMode%recordFrame%continuous
   const data = recorderMessage.split("%");
   const frames = data[0];
   const filename = data[1];
   const dl = data[2];
+  const recordMode = data[3] ? parseInt(data[3], 10) || 0 : 0;
+  const recordFrame = parseRecordFrame(data[4]);
+  const continuous = data[5] === "true";
   const removeUnusedResources = true;
   const messageRecording = true;
 
@@ -22,9 +39,12 @@ if (recorderMessage) {
     frames,
     download,
     removeUnusedResources,
-    messageRecording
+    messageRecording,
+    recordMode,
+    recordFrame,
+    continuous
   };
- 
+
   self.__webgpu_src = coreLoader;
   self.__webgpu_src();
 }
@@ -42,6 +62,11 @@ if (window) {
         const frames = message.frames;
         const filename = message.export;
         const dl = message.download;
+        const recordMode = message.recordMode ?? 0;
+        const recordFrame = typeof message.recordFrame === "string"
+          ? parseRecordFrame(message.recordFrame)
+          : (message.recordFrame ?? null);
+        const continuous = !!message.continuous;
         const removeUnusedResources = true;
         const messageRecording = true;
 
@@ -52,7 +77,10 @@ if (window) {
           frames,
           download,
           removeUnusedResources,
-          messageRecording
+          messageRecording,
+          recordMode,
+          recordFrame,
+          continuous
         };
 
         self.__webgpu_src = coreLoader;
