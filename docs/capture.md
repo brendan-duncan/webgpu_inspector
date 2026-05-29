@@ -62,6 +62,20 @@ The **Max Buffer Size** value specifies the maximum buffer size Capture will rec
 
 The **Stacktraces** checkbox controls whether a stacktrace is recorded for each captured command. It is **off by default**, because recording a stacktrace per command can significantly increase the size of a capture for frames with many commands. Enable it when you need to know where in the page's code a command was issued. See [Command Stacktrace](#command-stacktrace).
 
+#### Profile Passes
+
+The **Profile Passes** checkbox injects GPU timestamp queries around each render and compute pass so the capture can report per-pass GPU duration. It is **on by default**.
+
+This requires the page's adapter to support the `timestamp-query` feature. If the adapter doesn't grant it, the injection is silently skipped and no timing data is produced.
+
+When timing data is available, it is presented in three places:
+
+* A **GPU pass timeline** at the top of the frame's command list, showing each render/compute pass as a bar sized to the fraction of the frame it took.
+* Each pass header in the command list is annotated with its `Duration:<N>ms`.
+* The [Frame Stats](#frame-stats) panel includes a **Pass Timings** breakdown.
+
+Because the timing data travels with the capture, the timeline and pass timings also appear for [saved/loaded](#saving-and-loading-captures) captures.
+
 #### Note
 
 Frame capture works best when requestAnimationFrame is used, as Capture uses that to identify what commands to capture for a frame. Immediate capture will not work without requestAnimationFrame. In that case, use **Specific Frame** capture with frame 0, to start recording after page load.
@@ -194,7 +208,7 @@ If the page pushes/pops Debug Groups, they will be used to group commands in the
 ## Frame Stats
 ###### [Back to top](#capture)
 
-The Capture tool can provide various statistics about the capture. Press the **Frame Stats** to show the capture statistics. These include how many graphics commands were called; how many draw calls; and so on.
+The Capture tool can provide various statistics about the capture. Press the **Frame Stats** to show the capture statistics. These include how many graphics commands were called; how many draw calls; and so on. When [Profile Passes](#profile-passes) is enabled, Frame Stats also includes a **Pass Timings** breakdown of per-pass GPU duration.
 
 <a href="images/capture_frame_stats.png">
 <img src="images/capture_frame_stats.png" style="width:512px">

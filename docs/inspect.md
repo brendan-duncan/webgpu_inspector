@@ -6,8 +6,10 @@
 * [Starting the Inspect Tool](#starting-the-inspect-tool)
 * [GPU Stats](#gpu-stats)
 * [GPU Objects](#gpu-objects)
+* [Inspection History](#inspection-history)
 * [Filters](#filters)
 * [Object Stacktrace](#object-stacktrace)
+* [Validation Errors](#validation-errors)
 * [Textures](#textures)
 * [Shaders](#shaders)
 * [Editing Shaders](#editing-shaders)
@@ -78,13 +80,27 @@ A plot that has a saw-tooth pattern indicates you are allocating GPU objects and
 
 WebGPU is an object based API, and has different object types.
 
-Selecting an object will display information about the object in the Inspect tab.
+Selecting an object will display information about the object in the Inspect tab. The categories
+include Adapters, Devices, Render/Compute Pipelines, Shader Modules, Buffers, Textures, Texture
+Views, Samplers, Bind Groups, Bind Group Layouts, Pipeline Layouts, Render Bundles, pending async
+pipelines, and Validation Errors. Inspecting an Adapter shows its full set of features and limits.
 
 Each object category displays how many objects of that type are allocated.
+
+Objects that have an associated error are highlighted in red in the lists, and inspecting an object
+includes an **Errors** section listing any errors reported for it (see [Validation Errors](#validation-errors)).
 
 <a href="images/inspect_objects.png">
 <img src="images/inspect_objects.png" style="width: 512px;">
 </a>
+
+## Inspection History
+###### [Back to top](#inspect)
+
+The header of the GPU Objects list has **<** (Back) and **>** (Forward) buttons that step through the
+objects you have inspected, like browser history navigation. This makes it easy to return to a
+previously inspected object after following references — for example, jumping from a bind group to
+one of its textures and back. The buttons are disabled when there is nothing to navigate to.
 
 
 ## Filters
@@ -131,6 +147,21 @@ The stacktrace for each object is recorded, identifying where in the code the ob
 <a href="images/inspect_stacktrace.png">
 <img src="images/inspect_stacktrace.png" style="width: 750px;">
 </a>
+
+## Validation Errors
+###### [Back to top](#inspect)
+
+The inspector listens for WebGPU validation errors and collects them in a **Validation Errors**
+category at the bottom of the GPU Objects list. Selecting an error shows its message (and stacktrace
+when available) along with a button that jumps to the GPU object that caused it. The object that an
+error refers to is highlighted in red in the object lists.
+
+The inspector also reports some common mistakes as validation errors:
+
+* **Memory leaks** — a buffer, texture, or device that is garbage collected without being explicitly
+  destroyed. These objects should be explicitly destroyed to avoid GPU memory leaks.
+* **Expired canvas texture use** — using a canvas texture (or a bind group containing one) after it
+  has expired, for example as a render pass attachment in a later frame.
 
 ## Textures
 ###### [Back to top](#inspect)
@@ -191,7 +222,10 @@ There are limitations to the types of changes you can make to the shader. The pa
 ## Profiling Tips
 ###### [Back to top](#inspect)
 
-Profiling tools have not been added yet, but the Inspector can reveal some opportunities for optimizations.
+For per-pass GPU timing, the [Capture panel](capture.md) has a **Profile Passes** option that injects
+timestamp queries around render and compute passes and presents the results as a timeline, showing
+what percentage of the frame each pass takes. The Inspect panel's stats can also reveal some
+opportunities for optimization:
 
 * Periodic spikes in the frame time graph indicate your page is probably doing garbage collection during those frames. Try to minimize JavaScript's garbage collection by caching and re-using GPU objects as much as possible.
 * Object numbers rising and falling over time indicate the page is allocating and destroying objects frequently. If the objects accumulate quickly and go down gradually, it indicates you are creating objects and relying on garbage collection to destroy them.
