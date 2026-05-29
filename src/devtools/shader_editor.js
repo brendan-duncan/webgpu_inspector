@@ -5,7 +5,7 @@ import { EditorState } from "@codemirror/state";
 import { defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
   foldGutter, foldKeymap } from "@codemirror/language";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { searchKeymap } from "@codemirror/search";
+import { searchKeymap, openSearchPanel } from "@codemirror/search";
 import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { lintKeymap } from "@codemirror/lint";
 import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
@@ -48,20 +48,44 @@ export class ShaderEditor extends Div {
     super(parent);
     this.panel = panel;
 
+    // Fill the parent vertically as a flex column: the compile row takes its
+    // natural height and the editor area fills the rest, so there's no gap at
+    // the bottom regardless of the parent's height.
+    this.element.style.cssText = "height: 100%; min-height: 0; display: flex; flex-direction: column;";
+
     const text = object.replacementCode || object.descriptor.code;
 
     const isModified = object.replacementCode && object.replacementCode !== object.descriptor.code;
-    const compileRow = new Div(parent);
+    const compileRow = new Div(this, { style: "flex: 0 0 auto;" });
     const compileButton = new Button(compileRow, { label: "Compile", style: "background-color: rgb(200, 150, 51);" });
     const revertButton = isModified ? new Button(compileRow, { label: "Revert", style: "background-color: rgb(200, 150, 51);" }) : null;
-    
-    const editorDiv = new Div(parent, { style: "height: calc(-345px + 100vh); overflow: auto;" });
+
+    const editorDiv = new Div(this, { class: "shader-editor-cm", style: "flex: 1 1 auto; min-height: 0; overflow: hidden;" });
 
     const editor = new EditorView({
       doc: text,
       extensions: [ shaderEditorSetup ],
       parent: editorDiv.element,
     });
+
+    // Ctrl/Cmd+F should open the editor's own search panel and focus its Find
+    // input rather than triggering the browser's page-find. CodeMirror's
+    // searchKeymap only handles this while the view has focus and the keydown
+    // can still reach the host page, so intercept it for the whole editor area.
+    this.element.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "f" || e.key === "F")) {
+        e.preventDefault();
+        e.stopPropagation();
+        openSearchPanel(editor);
+        // openSearchPanel focuses the field when it first opens; refocus
+        // explicitly so a repeat Ctrl+F (panel already open) lands there too.
+        const field = editorDiv.element.querySelector(".cm-search input");
+        if (field) {
+          field.focus();
+          field.select();
+        }
+      }
+    }, true);
 
     if (object.__line) {
       const line = editor.state.doc.line(object.__line);

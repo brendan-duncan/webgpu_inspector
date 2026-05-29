@@ -112,7 +112,7 @@ export class InspectPanel {
     this.objectCountData = this.objectCountPlot.addData("Object Count");
     this._changeObjectCountPlot(0);
 
-    this.inspectorGUI = new Div(parent, { style: "overflow: hidden; white-space: nowrap; height: calc(-85px + 100vh); display: flex;" });
+    this.inspectorGUI = new Div(parent, { style: "overflow: hidden; white-space: nowrap; flex: 1 1 auto; min-height: 0; display: flex;" });
 
     this.database.onObjectLabelChanged.addListener(this._objectLabelChanged, this);
     this.database.onAddObject.addListener(this._addObject, this);
@@ -271,7 +271,7 @@ export class InspectPanel {
 
     const pane2 = new Span(split, { style: "flex-grow: 1; overflow: hidden;" });
 
-    const inspectTab = new TabWidget(pane2);
+    const inspectTab = new TabWidget(pane2, { class: "inspector-tabs" });
     this.inspectPanel = new Div(null, { class: "inspector_panel_content" });
     inspectTab.addTab("Inspect", this.inspectPanel);
 
@@ -1053,7 +1053,7 @@ export class InspectPanel {
       }
     }
 
-    const infoBox = new Div(this.inspectPanel, { class: object.isDeleted ? "info-box info-box-error" : "info-box info-box-success" });
+    const infoBox = new Div(this.inspectPanel, { class: object.isDeleted ? "info-box info-box-error" : "info-box info-box-success", style: "flex: 0 0 auto;" });
     const idName = object.idName;
     new Div(infoBox, { text: `${name} ID: ${idName} ${object.isDeleted ? "<deleted>" : ""}` });
     this._inspectedInfoBox = infoBox;
@@ -1258,7 +1258,7 @@ export class InspectPanel {
       }
     }
 
-    const descriptionBox = new Div(this.inspectPanel, { style: "height: calc(-320px + 100vh);" });
+    const descriptionBox = new Div(this.inspectPanel, { style: "flex: 1 1 auto; min-height: 150px; overflow: auto;" });
 
     if (object instanceof ShaderModule) {
       const self = this;

@@ -360,6 +360,11 @@ body {
   font-size: 14pt;
   height: calc(-30px + 100vh);
   overflow: hidden;
+  /* Flex column so the inspect GUI fills the space left below the (variable
+     height) control bar and plots row, instead of a 100vh guess that overshoots
+     the viewport and pushes the shader editor's scrollbar off-screen. */
+  display: flex;
+  flex-direction: column;
 }
 
 .title_bar {
@@ -487,10 +492,38 @@ li:hover {
   cursor: grab;
 }
 
+/* Fill the inspect TabWidget down to its container's bottom via flex instead
+   of a 100vh guess, so the content area ends exactly at the visible bottom and
+   doesn't clip the editor's horizontal scrollbar. */
+.inspector-tabs {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.inspector-tabs > .tab-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.inspector-tabs > .tab-content > .tab-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
 .inspector_panel_content {
   overflow: auto;
-  height: calc(-150px + 100vh);
+  height: 100%;
+  min-height: 0;
   font-size: 12pt;
+  /* Stack the info box (natural height) above the description box, which
+     fills the rest so the shader editor / descriptor reaches the panel
+     bottom instead of leaving a gap. */
+  display: flex;
+  flex-direction: column;
 }
 
 .inspect_info_error {
@@ -1995,6 +2028,13 @@ li.tree-item .expandbutton
 
 .race-row-issue .race-row-message {
   color: #e6dcc2;
+}
+
+/* Make the shader editor's CodeMirror view fill its (flex) container so there
+   is no empty gap below short shaders; the inner .cm-scroller scrolls. */
+.shader-editor-cm,
+.shader-editor-cm .cm-editor {
+  height: 100%;
 }
 
 .cm-breakpoint-marker {
