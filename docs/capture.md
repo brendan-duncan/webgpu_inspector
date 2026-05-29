@@ -112,7 +112,7 @@ Each imported capture lives in its own ID namespace, so loading multiple capture
 
 ### Capturing Outside DevTools
 
-The same JSON format can also be produced *without* the DevTools panel by loading `webgpu_inspector.js` directly via a `<script>` tag and using the page-side capture API (`initialize()` / `beginFrameCapture()` / `endFrameCapture()` / `saveCaptureData()`). Files produced that way are loadable here through **Load Capture** the same as panel-produced files. See the **Local Capture API** under [Manual Injection](../README.md#manual-injection) in the main README for the script-side workflow.
+The same JSON format can also be produced *without* the DevTools panel by loading `webgpu_inspector.js` directly via a `<script>` tag and using the page-side capture API (`initialize()` / `beginFrameCapture()` / `endFrameCapture()` / `saveCaptureData()`). Files produced that way are loadable here through **Load Capture** the same as panel-produced files. See the **[Local Capture API](manual_injection.md#local-capture-api)** for the script-side workflow.
 
 
 ## Reopening a Capture in a New Tab or Window

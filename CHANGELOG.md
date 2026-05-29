@@ -2,7 +2,7 @@
 
 ### Capture Panel
 
-* **Profile Passes**: injects timestamp queries around render and compute passes. The data is presented in the frame capture as a timeline, to help identify what percentage of the frame the different passes are taking.
+* **Profiling (Profile Passes)**: injects timestamp queries around render and compute passes. The data is presented in the frame capture as a timeline, to help identify what percentage of the frame the different passes are taking.
 
 ### Record Panel
 
@@ -11,6 +11,10 @@
 * **Load Binary**: load a saved `.wgpu` binary recording back into the panel for playback.
 * **Recording view**: redesigned into a three-column layout — preview canvas, command list (grouped by render/compute pass with pass labels and debug groups, plus a filter), and a command-details pane (method, arguments, result), reusing the Capture panel's command display. The preview can show either the selected command or the full frame, with a Frame selector for multi-frame recordings.
 * Fixed command-selection and full-frame previews not rendering, and large recordings failing to stream to the panel.
+
+### Inspect Panel
+
+* Fixed the texture viewer's texel info tooltip adding extra page scrollbars near the window edges; it now stays within the viewport, repositioning when it would run off the bottom or right edge.
 
 ## v1.1.2
 

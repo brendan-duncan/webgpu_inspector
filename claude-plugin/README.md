@@ -5,7 +5,7 @@ Claude Code. The plugin can drive Chrome itself and instrument **any page** —
 no browser extension, and no changes to the page being analyzed.
 
 It builds on the WebGPU Inspector
-[local capture API](../README.md#local-capture-api). Normal inspector usage —
+[local capture API](../docs/manual_injection.md#local-capture-api). Normal inspector usage —
 the file-download capture workflow — is unaffected.
 
 ## How it works

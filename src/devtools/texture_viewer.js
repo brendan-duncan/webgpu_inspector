@@ -187,9 +187,23 @@ export class TextureViewer extends Div {
         const x = Math.max(Math.floor(event.offsetX / zoom), 0);
         const y = Math.max(Math.floor(event.offsetY / zoom), 0);
         const pixel = texture.getPixel(x, y, layer, texture.display?.mipLevel ?? 0);
-        // TODO: if the tooltip goes outside of the window, adjust its position
-        this.panel._tooltip.style.left = `${event.pageX + 10}px`;
-        this.panel._tooltip.style.top = `${event.pageY + 10}px`;
+
+        // Position the (fixed) tooltip relative to the viewport, flipping it to the left/above the
+        // cursor when it would extend past the right/bottom edge so it stays fully on screen.
+        const tooltip = this.panel._tooltip;
+        const margin = 10;
+        const tw = tooltip.offsetWidth || 160;
+        const th = tooltip.offsetHeight || 110;
+        let left = event.clientX + margin;
+        let top = event.clientY + margin;
+        if (left + tw > window.innerWidth) {
+          left = Math.max(0, event.clientX - tw - margin);
+        }
+        if (top + th > window.innerHeight) {
+          top = Math.max(0, event.clientY - th - margin);
+        }
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
         const pixelStr = this._getPixelString(pixel);
         this.panel._tooltip.innerHTML = `X:${x} Y:${y}\n${pixelStr}`;
 
