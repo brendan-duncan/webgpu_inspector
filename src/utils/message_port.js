@@ -24,6 +24,11 @@ export class MessagePort {
     this._isConnected = false;
     this._isConnecting = false;
     this._readyAction = readyAction ?? null;
+    // Transparent large-message chunking. Chrome caps a single port message at 64MiB; recordings
+    // can produce larger ones (e.g. a big base64 buffer/texture payload). Oversized messages are
+    // split into sub-limit chunks on send and reassembled on receive, invisibly to listeners.
+    this._chunkSendId = 0;
+    this._chunkRecv = new Map();
     this.reset();
   }
 
@@ -49,9 +54,16 @@ export class MessagePort {
       });
 
       this._port.onMessage.addListener((message) => {
+        const result = self._receiveChunk(message);
+        if (result === undefined) {
+          // A partial (or un-reassemblable) chunk — nothing to dispatch yet.
+          return;
+        }
+        // null means "not a chunk, dispatch the message as-is"; otherwise it's the reassembled message.
+        const msg = result === null ? message : result;
         for (const listener of self.listeners) {
           try {
-            listener(message);
+            listener(msg);
           } catch (e) {
             console.error(`[WebGPU Inspector] Error in message listener for port ${self.name}:`, e);
           }
@@ -106,10 +118,85 @@ export class MessagePort {
     try {
       this._port.postMessage(message);
     } catch (e) {
+      // A too-large message would otherwise be requeued and retried forever (the port resets and
+      // re-flushes the queue), spamming the console. Split it into chunks instead.
+      const isSizeError = e && typeof e.message === "string" &&
+        e.message.indexOf("maximum allowed size") !== -1;
+      if (isSizeError && this._trySendChunked(message)) {
+        return;
+      }
       console.error(`[WebGPU Inspector] Failed to send message on port ${this.name}:`, e);
       this._messageQueue.push(message);
       this._isConnected = false;
       this.reset();
+    }
+  }
+
+  /**
+   * Splits an oversized message into sub-limit chunk messages and sends them. The receiving
+   * MessagePort reassembles them in _receiveChunk before dispatching to listeners.
+   * @param {Object} message The message that exceeded the port size limit.
+   * @returns {boolean} True if the message was chunked and sent; false to fall back to requeue.
+   * @private
+   */
+  _trySendChunked(message) {
+    let serialized;
+    try {
+      serialized = JSON.stringify(message);
+    } catch (e) {
+      return false;
+    }
+    const chunkSize = MessagePort.chunkSize;
+    const count = Math.ceil(serialized.length / chunkSize) || 1;
+    const id = ++this._chunkSendId;
+    try {
+      for (let index = 0; index < count; ++index) {
+        const payload = serialized.substring(index * chunkSize, (index + 1) * chunkSize);
+        const chunkMsg = { __webgpuInspectorChunk: { id, index, count, payload } };
+        // Mirror the tabId routing of postMessage so the background forwards chunks correctly.
+        if (this.tabId) {
+          chunkMsg.tabId = this.tabId;
+        }
+        this._port.postMessage(chunkMsg);
+      }
+    } catch (e) {
+      // The port likely disconnected mid-send; let the caller requeue the original message.
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Accumulates an incoming chunk and, once all chunks for its id have arrived, reassembles the
+   * original message.
+   * @param {Object} message An incoming port message.
+   * @returns {Object|null|undefined} The reassembled message, null if the message wasn't a chunk
+   *   (dispatch it as-is), or undefined if the message is an incomplete/failed chunk (dispatch nothing).
+   * @private
+   */
+  _receiveChunk(message) {
+    const ch = message && message.__webgpuInspectorChunk;
+    if (!ch) {
+      return null;
+    }
+    let buf = this._chunkRecv.get(ch.id);
+    if (!buf) {
+      buf = { count: ch.count, parts: new Array(ch.count), received: 0 };
+      this._chunkRecv.set(ch.id, buf);
+    }
+    if (buf.parts[ch.index] === undefined) {
+      buf.received++;
+    }
+    buf.parts[ch.index] = ch.payload;
+    if (buf.received < buf.count) {
+      return undefined;
+    }
+    this._chunkRecv.delete(ch.id);
+    try {
+      return JSON.parse(buf.parts.join(""));
+    } catch (e) {
+      console.error(`[WebGPU Inspector] Failed to reassemble chunked message on port ${this.name}:`, e);
+      return undefined;
     }
   }
 
@@ -139,3 +226,7 @@ export class MessagePort {
     this._sendMessage(message);
   }
 }
+
+// Max payload size for a single chunk, in characters of the serialized message. Kept well under
+// Chrome's 64MiB per-message port limit to leave headroom for the chunk wrapper and clone overhead.
+MessagePort.chunkSize = 32 * 1024 * 1024;

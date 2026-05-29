@@ -38,13 +38,33 @@ export class RecorderData {
     return this.dataReady && this._commandsReady;
   }
 
-  clear() {
+  // Reset the runtime GPU state used while replaying (object map, device, context, texture utils),
+  // without discarding the recorded commands/data. Called before each replay so commands re-create
+  // their objects from scratch. Frees the previous replay's GPU resources, but never the panel's
+  // shared device/adapter, which replays run on.
+  _resetExecutionState() {
     for (const value of this._objectMap.values()) {
-      if (value instanceof GPUDevice) {
-        value.destroy();
+      if (value === this.window.device || value === this.window.adapter) {
+        continue;
+      }
+      if (value instanceof GPUTexture || value instanceof GPUBuffer) {
+        try {
+          value.destroy();
+        } catch (e) {
+          // Ignore: the resource may already be destroyed by a replayed destroy() command.
+        }
       }
     }
     this._objectMap.clear();
+    this._context = null;
+    this._device = null;
+    this._textureUtils = null;
+  }
+
+  // Discard everything: runtime state and the recorded commands/data. Used when starting a new
+  // recording.
+  clear() {
+    this._resetExecutionState();
     this.data = [];
     this.initializeCommands = [];
     this.frames = [];
@@ -79,17 +99,10 @@ export class RecorderData {
 
   addCommand(command, commandIndex, frame, index, count) {
     try {
-      if (command.method === "requestDevice") {
-        const adapter = this.window.adapter;
-        const requiredFeatures = [...adapter.features];
-        const requiredLimits = {};
-        const exclude = new Set(["minSubgroupSize", "maxSubgroupSize"]);
-        for (const key in adapter.limits) {
-          if (!exclude.has(key)) {
-            requiredLimits[key] = adapter.limits[key];
-          }
-        }
-        command.args = [{ requiredFeatures, requiredLimits }];
+      if (command.method === "requestDevice" || command.method === "requestAdapter") {
+        // Replay reuses the panel's existing adapter/device (see _executeCommand), so the recorded
+        // args aren't needed — and parsing them isn't worth the risk of dropping the command.
+        command.args = [];
       } else {
         command.args = JSON.parse(command.args);
       }
@@ -125,11 +138,14 @@ export class RecorderData {
   }
 
   async executeCommands(canvas, frameIndex, commandIndex = -1) {
-    this.clear();
+    // Reset only the runtime GPU state, not the recorded commands/data we're about to replay.
+    this._resetExecutionState();
 
     this._canvas = canvas;
-    this._device = null;
-    this._textureUtils = null;
+    // Replay onto the panel's shared device so the canvas context, replayed resources, and the
+    // preview blit all use one device.
+    this._device = this.window.device ?? null;
+    this._textureUtils = this.window.textureUtils ?? null;
 
     let ci = 0;
     for (const command of this.initializeCommands) {
@@ -288,13 +304,36 @@ export class RecorderData {
   }
 
   async _executeCommand(command, frameIndex, commandIndex) {
+    let method = command.method;
+
+    // Reuse the panel's existing adapter/device rather than creating new ones during replay. This
+    // keeps the canvas context, replayed resources, and the preview blit all on a single device,
+    // and avoids the recorded device-setup commands leaving configure()'s device undefined.
+    if (method === "requestAdapter") {
+      if (command.result) {
+        this._objectMap.set(command.result, this.window.adapter);
+      }
+      return this.window.adapter;
+    }
+    if (method === "requestDevice") {
+      this._device = this.window.device;
+      if (command.result) {
+        this._objectMap.set(command.result, this.window.device);
+      }
+      return this.window.device;
+    }
+
     const object = this._getObject(command.object);
     if (!object) {
       return null;
     }
 
-    const method = command.method;
     if (method === "pushDebugGroup" || method === "popDebugGroup") {
+      return null;
+    }
+
+    // Never destroy the panel's shared device/adapter during replay.
+    if (method === "destroy" && (object === this.window.device || object === this.window.adapter)) {
       return null;
     }
 
