@@ -7,7 +7,7 @@ import copy from "rollup-plugin-copy";
 import fg from 'fast-glob';
 import { SourceMapConsumer, SourceNode } from 'source-map'
 
-const version = readFileSync('VERSION', 'utf-8').trim();
+const version = JSON.parse(readFileSync('package.json', 'utf-8')).version;
 
 function build(name, input, dst, file, copyFiles, watchInclude) {
   const format = "iife";
@@ -31,9 +31,21 @@ function build(name, input, dst, file, copyFiles, watchInclude) {
             return id;
           } else if (id === "webgpu_recorder_core_func") {
             return id;
+          } else if (id === "webgpu_player_source") {
+            return id;
           }
         },
         async load(id) {
+          if (id === "webgpu_player_source") {
+            // Inline the generic binary-recording interpreter as a string so the Record panel can
+            // emit a self-contained HTML playback page (binary bytes + this player) without
+            // duplicating the player logic. Strip the ES `export` keywords so the source can run in
+            // a classic <script>, defining WebGPUPlayer/parseWebGPURecording as page globals.
+            const playerPath = "node_modules/webgpu_recorder/webgpu_player.js";
+            this.addWatchFile(playerPath);
+            const code = readFileSync(playerPath, "utf-8").replace(/^export\s+/gm, "");
+            return `export default ${JSON.stringify(code)};`;
+          }
           if (id === "webgpu_inspector_core_func") {
             const corePath = path.join(dst, 'webgpu_inspector.js');
 

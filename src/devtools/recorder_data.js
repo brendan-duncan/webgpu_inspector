@@ -19,8 +19,18 @@ export class RecorderData {
   constructor(window) {
     this.window = window;
     this.data = [];
+    // Per-data-blob TypedArray type name ("Uint8Array" / "Uint32Array"), kept in parallel with
+    // `data` so a loaded recording can be re-serialized back to a faithful .wgpu / .html.
+    this.dataTypes = [];
     this.initializeCommands = [];
     this.frames = [];
+    // Canvas size and root-object variable names, recovered when a binary recording is loaded so
+    // the recording can be exported again. Defaults match the live-record object ids ("x1" is the
+    // navigator.gpu id used by webgpu_recorder; the canvas context is always "context").
+    this.canvasWidth = 0;
+    this.canvasHeight = 0;
+    this.gpuVar = "x1";
+    this.contextVar = "context";
     this._dataCount = 0;
     this._commandCount = 0;
     this.dataReady = false;
@@ -66,12 +76,43 @@ export class RecorderData {
   clear() {
     this._resetExecutionState();
     this.data = [];
+    this.dataTypes = [];
     this.initializeCommands = [];
     this.frames = [];
+    this.canvasWidth = 0;
+    this.canvasHeight = 0;
+    this.gpuVar = "x1";
+    this.contextVar = "context";
     this._dataCount = 0;
     this._commandCount = 0;
     this.dataReady = false;
     this._commandsReady = false;
+  }
+
+  // Canvas dimensions for export/preview. Prefer values recovered from a loaded binary; otherwise
+  // recover them from the recording's own __setCanvasSize command (which may sit in the init block
+  // or in a frame, depending on when configure() ran); otherwise fall back.
+  getCanvasSize() {
+    if (this.canvasWidth > 0 && this.canvasHeight > 0) {
+      return { width: this.canvasWidth, height: this.canvasHeight };
+    }
+    const fromCommands = (commands) => {
+      for (const command of commands || []) {
+        if (command && command.method === "__setCanvasSize" && Array.isArray(command.args)) {
+          const width = command.args[0] | 0;
+          const height = command.args[1] | 0;
+          if (width > 0 && height > 0) {
+            return { width, height };
+          }
+        }
+      }
+      return null;
+    };
+    let size = fromCommands(this.initializeCommands);
+    for (let f = 0; !size && f < this.frames.length; ++f) {
+      size = fromCommands(this.frames[f]);
+    }
+    return size || { width: 800, height: 600 };
   }
 
   _checkReady() {
@@ -81,6 +122,7 @@ export class RecorderData {
   }
 
   addData(data, type, index, count) {
+    this.dataTypes[index] = type || "Uint8Array";
     if (data === undefined) {
       this.data[index] = new Uint8Array(count);
       this._dataCount++;
@@ -156,10 +198,17 @@ export class RecorderData {
       const dataStart = 12 + headerLength;
       const header = JSON.parse(new TextDecoder().decode(new Uint8Array(arrayBuffer, 12, headerLength)));
 
+      // Preserve the metadata needed to export this recording again.
+      this.canvasWidth = header.canvasWidth | 0;
+      this.canvasHeight = header.canvasHeight | 0;
+      this.gpuVar = header.gpuVar || "x1";
+      this.contextVar = header.contextVar || "context";
+
       // Raw data blobs, sliced into typed arrays matching the recorded type.
       const dataTable = header.data || [];
       for (let i = 0; i < dataTable.length; ++i) {
         const d = dataTable[i];
+        this.dataTypes[i] = (d && d.type) || "Uint8Array";
         if (!d || !d.type || !d.length) {
           this.data[i] = new Uint8Array(0);
           continue;

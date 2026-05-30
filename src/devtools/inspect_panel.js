@@ -88,7 +88,7 @@ export class InspectPanel {
 
     new Span(_controlBar, { class: "control-bar-spacer" });
 
-    new Button(_controlBar, { label: "Help", class: "btn btn-secondary", callback: () => {
+    new Button(_controlBar, { label: "Help", class: "btn", callback: () => {
       window.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/inspect.md", "_blank");
     }});
 

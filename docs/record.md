@@ -59,7 +59,14 @@ Binary-only recording is not streamed to the panel; load the saved `.wgpu` file 
 - **Record**: Starts a recording with the selected options (reloads the page).
 - **Capture Frame**: (On Demand mode, after recording has started) Triggers capture of the next
   frame.
-- **Load Binary**: Opens a `.wgpu` file and plays it back in the panel.
+- **Menu** (the **&#9776;** button, left of **Record**): Save and load recordings from the panel:
+  - **Save Binary**: Saves the recording currently loaded in the panel as a `.wgpu` file.
+  - **Save HTML**: Saves the recording as a self-contained `.html` playback page.
+  - **Load Binary**: Opens a `.wgpu` file and plays it back in the panel.
+
+  **Save Binary** and **Save HTML** are enabled once a recording is loaded — whether captured live
+  or loaded from a `.wgpu` file — so a recording can be saved without relying on the **Download**
+  option, and a panel-loaded recording can be re-exported to either format.
 
 ## Downloaded Recording Files
 

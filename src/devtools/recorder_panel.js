@@ -8,6 +8,7 @@ import { Span } from "./widget/span.js";
 import { Widget } from "./widget/widget.js";
 import { Actions, PanelActions } from "../utils/actions.js";
 import { RecorderData } from "./recorder_data.js";
+import { downloadBinaryRecording, downloadHtmlRecording } from "./recorder_export.js";
 import { NumberInput } from "./widget/number_input.js";
 import { TextInput } from "./widget/text_input.js";
 import { renderCommandList } from "./command_list_view.js";
@@ -41,7 +42,58 @@ export class RecorderPanel {
 
     const recorderBar = new Div(parent, { class: "control-bar" });
 
-    this.recordButton = new Button(recorderBar, { label: "Record", class: "btn btn-success", callback: () => {
+    // Hamburger menu for Save / Load actions, mirroring the Capture panel. Sits to the left of the
+    // Record button. The Save items act on the recording currently loaded in the panel (from a live
+    // recording or a loaded binary) and stay disabled until one is ready.
+    const menuContainer = new Div(recorderBar, { class: "menu-container" });
+    const menuButton = new Widget("button", menuContainer, { class: "menu-button", title: "Menu" });
+    menuButton.element.innerHTML = "&#9776;";
+    const menuDropdown = new Div(menuContainer, { class: "menu-dropdown" });
+
+    this._saveBinaryMenuItem = new Div(menuDropdown, { class: ["menu-item", "disabled"], text: "Save Binary" });
+    this._saveBinaryMenuItem.element.addEventListener("click", () => {
+      if (this._saveBinaryMenuItem.element.classList.contains("disabled")) {
+        return;
+      }
+      menuDropdown.element.classList.remove("open");
+      try {
+        downloadBinaryRecording(self._recorderData, self.recordNameInput.value);
+      } catch (e) {
+        console.error("Failed to save binary recording:", e);
+      }
+    });
+
+    this._saveHtmlMenuItem = new Div(menuDropdown, { class: ["menu-item", "disabled"], text: "Save HTML" });
+    this._saveHtmlMenuItem.element.addEventListener("click", () => {
+      if (this._saveHtmlMenuItem.element.classList.contains("disabled")) {
+        return;
+      }
+      menuDropdown.element.classList.remove("open");
+      try {
+        downloadHtmlRecording(self._recorderData, self.recordNameInput.value);
+      } catch (e) {
+        console.error("Failed to save HTML recording:", e);
+      }
+    });
+
+    const loadMenuItem = new Div(menuDropdown, { class: "menu-item", text: "Load Binary" });
+    loadMenuItem.element.addEventListener("click", () => {
+      menuDropdown.element.classList.remove("open");
+      self._loadBinaryRecording();
+    });
+
+    menuButton.element.addEventListener("click", (e) => {
+      e.stopPropagation();
+      menuDropdown.element.classList.toggle("open");
+    });
+    // Click anywhere else closes the menu.
+    document.addEventListener("click", (e) => {
+      if (!menuContainer.element.contains(e.target)) {
+        menuDropdown.element.classList.remove("open");
+      }
+    });
+
+    this.recordButton = new Button(recorderBar, { label: "Record", class: "btn btn-success ml-sm", callback: () => {
       self._startRecording();
     }});
 
@@ -82,6 +134,8 @@ export class RecorderPanel {
     this.onDemandGroup = new Span(recorderBar);
     this._continuousCheckbox = new Checkbox(this.onDemandGroup, { label: "Continuous", tooltip: "Keep recording so multiple frames can be captured", checked: true, class: "ml-sm" });
 
+    this._downloadCheckbox = new Checkbox(recorderBar, { label: "Download", tooltip: "Automatically Download Recording", checked: true, class: "ml-sm" });
+
     // Output format: HTML (self-contained playback page), Binary (compact .wgpu), or Both.
     new Span(recorderBar, { text: "Format:", class: "text-secondary ml-sm mr-sm" });
     this.formatSelect = new Select(recorderBar, {
@@ -90,14 +144,13 @@ export class RecorderPanel {
       style: "width: 90px;"
     });
 
-    this._downloadCheckbox = new Checkbox(recorderBar, { label: "Download", tooltip: "Automatically Download Recording", checked: true, class: "ml-sm" });
-
     new Span(recorderBar, { text: "Name:", class: "text-secondary ml-sm mr-sm" });
     this.recordNameInput = new Input(recorderBar, { type: "text", value: "webgpu_record" });
 
-    // Load a previously-saved binary (.wgpu) recording for playback in the panel.
-    this.loadButton = new Button(recorderBar, { label: "Load Binary", class: "btn ml-sm", callback: () => {
-      self._loadBinaryRecording();
+    new Div(recorderBar, { class: "control-bar-spacer" });
+
+    new Button(recorderBar, { label: "Help", class: "btn", callback: () => {
+      globalThis.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/record.md", "_blank");
     }});
 
     this._updateModeUI();
@@ -218,6 +271,10 @@ export class RecorderPanel {
 
   _recordingReady() {
     this.recorderDataPanel.html = "";
+
+    // A recording is now loaded, so it can be saved.
+    this._saveBinaryMenuItem.element.classList.remove("disabled");
+    this._saveHtmlMenuItem.element.classList.remove("disabled");
 
     const self = this;
 
