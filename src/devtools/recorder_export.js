@@ -8,17 +8,90 @@
 // recording into the in-memory command/data model; these turn that model back into a file.
 
 import { encodeBase64 } from "../utils/base64.js";
+import { Dialog } from "./widget/dialog.js";
+import { Div } from "./widget/div.js";
+import { Span } from "./widget/span.js";
+import { Input } from "./widget/input.js";
+import { Button } from "./widget/button.js";
 // The generic binary-recording interpreter, inlined as source text by the rollup "stringer" plugin
 // (see rollup.config.js). Embedded verbatim into the generated HTML page.
 import playerSource from "webgpu_player_source";
 
+// A command is kept in the saved recording unless it's disabled — explicitly by the user or
+// implicitly by a dependency (see RecorderData's implicit-disabling rules).
+function _isKept(command) {
+  return !!command && !command.disabled && !command._implicit;
+}
+
+// Collect the data-blob indices a command references (so unused blobs can be dropped on save).
+// Most commands reference data via {__data: index} markers in their args; __writeData uses a raw
+// index as its first argument.
+function _collectDataIndices(command, into) {
+  if (command.method === "__writeData") {
+    const idx = Array.isArray(command.args) ? command.args[0] : undefined;
+    if (typeof idx === "number") {
+      into.add(idx);
+    }
+    return;
+  }
+  const walk = (v) => {
+    if (!v || typeof v !== "object") {
+      return;
+    }
+    if (Array.isArray(v)) {
+      for (const x of v) {
+        walk(x);
+      }
+      return;
+    }
+    if (typeof v.__data === "number") {
+      into.add(v.__data);
+      return;
+    }
+    for (const k in v) {
+      walk(v[k]);
+    }
+  };
+  walk(command.args);
+}
+
+// Clone args, rewriting data-blob indices through `remap` (old index -> new compacted index), so a
+// command still points at its data after unused blobs are removed.
+function _remapData(args, method, remap) {
+  const clone = (v) => {
+    if (Array.isArray(v)) {
+      return v.map(clone);
+    }
+    if (v && typeof v === "object") {
+      if (typeof v.__data === "number") {
+        const n = remap.get(v.__data);
+        return { ...v, __data: n === undefined ? v.__data : n };
+      }
+      const o = {};
+      for (const k in v) {
+        o[k] = clone(v[k]);
+      }
+      return o;
+    }
+    return v;
+  };
+  let out = clone(args ?? []);
+  if (method === "__writeData" && Array.isArray(out) && typeof out[0] === "number") {
+    const n = remap.get(out[0]);
+    if (n !== undefined) {
+      out = [n, ...out.slice(1)];
+    }
+  }
+  return out;
+}
+
 // Strip the in-memory-only fields (UI widgets, loader bookkeeping) and re-stringify the parsed args
-// back to the JSON-string form the binary container / player expect.
-function _serializeCommand(command) {
+// (with data indices remapped) back to the JSON-string form the binary container / player expect.
+function _serializeCommand(command, remap) {
   const record = {
     object: command.object,
     method: command.method,
-    args: JSON.stringify(command.args ?? []),
+    args: JSON.stringify(_remapData(command.args, command.method, remap)),
     async: command.async ? true : ""
   };
   if (command.result !== undefined && command.result !== null) {
@@ -27,41 +100,52 @@ function _serializeCommand(command) {
   return record;
 }
 
-function _serializeCommandList(commands) {
-  const out = [];
-  for (const command of commands || []) {
-    if (command) {
-      out.push(_serializeCommand(command));
-    }
-  }
-  return out;
-}
-
 /**
- * Serialize the recording into the binary "WGPR" container.
+ * Serialize the recording into the binary "WGPR" container. Disabled commands and any data blobs
+ * no longer referenced by a kept command are dropped, and the remaining data is renumbered.
  * @param {RecorderData} recorderData
  * @returns {ArrayBuffer}
  */
 export function buildBinaryRecording(recorderData) {
-  const init = _serializeCommandList(recorderData.initializeCommands);
-  const frames = recorderData.frames.map((f) => _serializeCommandList(f));
+  const initCommands = (recorderData.initializeCommands || []).filter(_isKept);
+  const frameCommands = recorderData.frames.map((f) => (f || []).filter(_isKept));
 
+  // Which data blobs are still referenced by a kept command — the rest are removed on save.
+  const usedData = new Set();
+  for (const command of initCommands) {
+    _collectDataIndices(command, usedData);
+  }
+  for (const frame of frameCommands) {
+    for (const command of frame) {
+      _collectDataIndices(command, usedData);
+    }
+  }
+
+  // Compact the data table to just the used blobs, building an old-index -> new-index remap.
+  const usedSorted = [...usedData]
+    .filter((i) => i >= 0 && i < recorderData.data.length)
+    .sort((a, b) => a - b);
+  const remap = new Map();
   const dataTable = [];
   const blobs = [];
   let offset = 0;
-  for (let i = 0; i < recorderData.data.length; ++i) {
-    const arr = recorderData.data[i];
+  for (const oldIndex of usedSorted) {
+    remap.set(oldIndex, dataTable.length);
+    const arr = recorderData.data[oldIndex];
     if (!arr || arr.byteLength === 0) {
       dataTable.push({ type: "", length: 0, offset: 0 });
       continue;
     }
     const bytes = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
-    const type = recorderData.dataTypes[i] || (arr instanceof Uint32Array ? "Uint32Array" : "Uint8Array");
+    const type = recorderData.dataTypes[oldIndex] || (arr instanceof Uint32Array ? "Uint32Array" : "Uint8Array");
     dataTable.push({ type, length: bytes.byteLength, offset });
     blobs.push(bytes);
     offset += bytes.byteLength;
   }
   const dataTotal = offset;
+
+  const init = initCommands.map((c) => _serializeCommand(c, remap));
+  const frames = frameCommands.map((f) => f.map((c) => _serializeCommand(c, remap)));
 
   const { width, height } = recorderData.getCanvasSize();
   const header = {
@@ -180,7 +264,9 @@ export function buildHtmlRecording(recorderData) {
   ].join("\n");
 }
 
-// Trigger a browser download of `data` (an ArrayBuffer or string) as `filename`.
+// Trigger a browser download of `data` (an ArrayBuffer or string) as `filename`. This drops the
+// file straight into the browser's Downloads folder with no prompt. Used as the fallback when the
+// File System Access API isn't available (e.g. Firefox).
 function _download(data, filename, mimeType) {
   const blob = new Blob([data], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -193,12 +279,88 @@ function _download(data, filename, mimeType) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-/** Build and download the recording as a binary .wgpu file. */
-export function downloadBinaryRecording(recorderData, name) {
-  _download(buildBinaryRecording(recorderData), `${name || "webgpu_record"}.wgpu`, "application/octet-stream");
+// Fallback "Save As" for browsers without the File System Access API (e.g. Firefox): a small modal
+// asking for the filename, pre-filled with `suggestedName`, with Save and Cancel buttons. Resolves
+// to the chosen name, or null if the user cancels. The plain download that follows still lands in
+// the browser's Downloads folder, but at least the name can be changed here first.
+function _promptForFilename(suggestedName) {
+  return new Promise((resolve) => {
+    // No close (x) button: the only ways out are Save/Cancel, so the promise always settles.
+    const dialog = new Dialog({ title: "Save As", width: 320, draggable: true, noCloseButton: true });
+
+    let settled = false;
+    const finish = (value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      dialog.close();
+      resolve(value);
+    };
+
+    const row = new Div(dialog.body, { style: "padding: 10px;" });
+    new Span(row, { text: "Filename:" });
+    const nameInput = new Input(row, { type: "text", value: suggestedName, style: "width: 100%; margin-top: 4px;" });
+
+    const buttonRow = new Div(dialog.body, { style: "padding: 0 10px 10px; margin-top: 10px;" });
+    new Button(buttonRow, { label: "Save", callback: () => finish(nameInput.value || suggestedName) });
+    new Button(buttonRow, { label: "Cancel", style: "margin-left: 15px;", callback: () => finish(null) });
+
+    // Enter saves, Escape cancels.
+    nameInput.element.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        finish(nameInput.value || suggestedName);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        finish(null);
+      }
+    });
+
+    nameInput.focus();
+    nameInput.select();
+  });
 }
 
-/** Build and download the recording as a self-contained .html playback page. */
+// Save `data` (an ArrayBuffer or string) as `filename` via a native "Save As" dialog using the
+// File System Access API, letting the user choose the folder and name. When the API is unavailable
+// (Firefox) or unusable in this context, fall back to prompting for a name with a modal and then a
+// plain download. `accept` describes the file type for the picker, e.g.
+// { "application/octet-stream": [".wgpu"] }.
+async function _save(data, filename, mimeType, accept) {
+  if (typeof globalThis.showSaveFilePicker === "function") {
+    try {
+      const handle = await globalThis.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: filename, accept }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(new Blob([data], { type: mimeType }));
+      await writable.close();
+      return;
+    } catch (e) {
+      // The user cancelling the dialog is not an error; just stop. Anything else (e.g. the API
+      // being blocked in this context) falls through to the name-prompt fallback below.
+      if (e && e.name === "AbortError") {
+        return;
+      }
+    }
+  }
+  const chosen = await _promptForFilename(filename);
+  if (chosen === null) {
+    return;
+  }
+  _download(data, chosen, mimeType);
+}
+
+/** Build the recording and save it as a binary .wgpu file via a "Save As" dialog. */
+export function downloadBinaryRecording(recorderData, name) {
+  return _save(buildBinaryRecording(recorderData), `${name || "webgpu_record"}.wgpu`,
+    "application/octet-stream", { "application/octet-stream": [".wgpu"] });
+}
+
+/** Build the recording and save it as a self-contained .html playback page via a "Save As" dialog. */
 export function downloadHtmlRecording(recorderData, name) {
-  _download(buildHtmlRecording(recorderData), `${name || "webgpu_record"}.html`, "text/html");
+  return _save(buildHtmlRecording(recorderData), `${name || "webgpu_record"}.html`,
+    "text/html", { "text/html": [".html"] });
 }

@@ -5,7 +5,9 @@
 
 import { collapsible } from "./widget/collapsible.js";
 import { Div } from "./widget/div.js";
+import { Span } from "./widget/span.js";
 import { Widget } from "./widget/widget.js";
+import { Input } from "./widget/input.js";
 
 // Argument name labels per method, used to annotate the formatted Arguments list.
 // Moved verbatim from CapturePanel._commandArgs.
@@ -129,6 +131,111 @@ export function renderArgumentsSection(commandInfo, args, method, getObject) {
     }
   } else {
     new Widget("pre", argsGroup.body, { text: JSON.stringify(newArgs, undefined, 4), style: "font-size: 10pt;" });
+  }
+}
+
+/**
+ * Render an editable field for a single top-level argument and commit changes via `commit`.
+ * Scalars (number/string/boolean) edit inline; objects/arrays edit as a small JSON box (so object
+ * references like {__id} and data markers like {__data} round-trip). `commit(newValue)` is only
+ * called when the value actually changes.
+ */
+function _renderEditableArg(parent, label, value, commit) {
+  const row = new Div(parent, { class: "recorder_arg_row" });
+  new Span(row, { class: "recorder_arg_label", text: `${label}:` });
+  const type = typeof value;
+
+  if (type === "boolean") {
+    const input = new Input(row, { type: "checkbox", class: "recorder_arg_checkbox" });
+    input.checked = value;
+    input.element.addEventListener("change", () => {
+      if (input.checked !== value) {
+        commit(input.checked);
+      }
+    });
+    return;
+  }
+
+  if (type === "number" || type === "string") {
+    const input = new Input(row, { type: "text", class: "recorder_arg_input" });
+    input.value = String(value);
+    const commitValue = () => {
+      let v = input.value;
+      if (type === "number") {
+        const n = Number(v);
+        if (v.trim() === "" || Number.isNaN(n)) {
+          // Reject a non-numeric edit and restore the previous value.
+          input.value = String(value);
+          input.element.classList.remove("recorder_arg_error");
+          return;
+        }
+        v = n;
+      }
+      input.element.classList.remove("recorder_arg_error");
+      if (v !== value) {
+        commit(v);
+      }
+    };
+    input.element.addEventListener("blur", commitValue);
+    input.element.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        input.element.blur();
+      }
+    });
+    return;
+  }
+
+  // Objects, arrays, null: edit as JSON.
+  const textarea = new Widget("textarea", row, { class: "recorder_arg_json" });
+  const original = JSON.stringify(value, undefined, 2);
+  textarea.element.value = original;
+  textarea.element.spellcheck = false;
+  textarea.element.addEventListener("blur", () => {
+    const text = textarea.element.value;
+    if (text === original) {
+      return;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      textarea.element.classList.add("recorder_arg_error");
+      return;
+    }
+    textarea.element.classList.remove("recorder_arg_error");
+    commit(parsed);
+  });
+}
+
+/**
+ * Render an editable "Arguments" section for a command (Recorder panel). Each top-level argument
+ * gets an inline editor; committing a change calls `onEdit(argIndex, newValue)`. Raw argument
+ * values are shown (object/data references preserved) so edits round-trip back into the recording.
+ * @param {Widget} commandInfo - Parent widget to append into.
+ * @param {Object} command - The command record (uses command.method and command.args).
+ * @param {function(argIndex, newValue):void} onEdit - Commit handler for a changed argument.
+ */
+export function renderEditableArgumentsSection(commandInfo, command, onEdit) {
+  const argsGroup = new collapsible(commandInfo, { label: "Arguments" });
+  const method = command.method;
+  const rawArgs = command.args;
+  const names = commandArgs[method];
+
+  if (!Array.isArray(rawArgs)) {
+    // Non-array args are rare; show them read-only rather than risk a lossy edit.
+    new Widget("pre", argsGroup.body, { text: JSON.stringify(rawArgs, undefined, 4), style: "font-size: 10pt;" });
+    return;
+  }
+
+  if (rawArgs.length === 0) {
+    new Div(argsGroup.body, { text: "(none)", style: "margin-left: 10px; font-size: 10pt; opacity: 0.6;" });
+    return;
+  }
+
+  for (let i = 0; i < rawArgs.length; ++i) {
+    const label = (names && names[i] !== undefined) ? names[i] : `[${i}]`;
+    _renderEditableArg(argsGroup.body, label, rawArgs[i], (newValue) => onEdit(i, newValue));
   }
 }
 

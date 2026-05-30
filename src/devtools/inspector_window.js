@@ -45,15 +45,15 @@ export class InspectorWindow extends Window {
     this._tabs = new TabWidget(this);
 
     const inspectorPanel = new Div(null, { class: "inspector_panel" });
-    this._tabs.addTab("Inspect", inspectorPanel);
-    this._inspectPanel = new InspectPanel(this, inspectorPanel);   
+    this._tabs.addTab("🔍 Inspect", inspectorPanel);
+    this._inspectPanel = new InspectPanel(this, inspectorPanel);
 
     const capturePanel = new Div(null, { class: "capture_panel" });
-    this._tabs.addTab("Capture", capturePanel);
+    this._tabs.addTab("🖼️ Capture", capturePanel);
     this._capturePanel = new CapturePanel(this, capturePanel);
 
     const recorderPanel = new Div(null, { class: "recorder_panel" });
-    this._tabs.addTab("Record", recorderPanel);
+    this._tabs.addTab("🔵 Record", recorderPanel);
     this._recorderPanel = new RecorderPanel(this, recorderPanel);
 
     const version = "__buildVersion";

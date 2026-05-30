@@ -26,7 +26,48 @@ const _debugGroupColors = [
  * @property {function(kind, passIndex, command, baseText):string} [decoratePassHeaderText] - Append
  *           label/duration to a pass header. kind is "render" | "compute" | "bundle".
  * @property {boolean} [autoSelectFirst] - Click the first rendered command after building.
+ * @property {boolean} [multiSelect] - When true, onSelectCommand receives the click event and the
+ *           adapter owns selection highlighting (the built-in single-highlight is skipped).
+ * @property {function(command):boolean} [getDisabledState] - When provided, each row renders an
+ *           enable/disable checkbox reflecting !disabled, and disabled rows get a dimmed style.
+ * @property {function(command, commandIndex, enabled):void} [onToggleDisabled] - Checkbox handler.
+ * @property {function(command):boolean} [isToggleLocked] - When true, the row's checkbox is shown
+ *           disabled (the command can't be enabled/disabled).
+ * @property {function(command, commandIndex, widget, event):void} [onCommandContextMenu] - Row
+ *           right-click handler.
  */
+
+/**
+ * Create an enable/disable checkbox for a command and register it on the command so the panel can
+ * keep all of a command's checkboxes (its row and, for a pass, its group header) in sync.
+ * @param {CommandListAdapter} adapter
+ * @param {Object} command
+ * @param {number} commandIndex
+ * @param {Widget} parentWidget - Widget to append the checkbox into.
+ * @returns {HTMLInputElement}
+ */
+function _createToggleCheckbox(adapter, command, commandIndex, parentWidget) {
+  const toggle = new Span(parentWidget, { class: "capture_command_toggle" });
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = !adapter.getDisabledState(command);
+  // Protected commands (device/queue setup) can't be disabled — lock the checkbox.
+  const locked = adapter.isToggleLocked && adapter.isToggleLocked(command);
+  checkbox.disabled = !!locked;
+  checkbox.title = locked ? "This command can't be disabled" : "Enable/disable this command";
+  // Don't let the checkbox's own click bubble to the row-select / header-collapse handlers.
+  checkbox.addEventListener("click", (e) => { e.stopPropagation(); });
+  checkbox.addEventListener("change", (e) => {
+    e.stopPropagation();
+    adapter.onToggleDisabled(command, commandIndex, checkbox.checked);
+  });
+  toggle.element.appendChild(checkbox);
+  if (!command._toggleCheckboxes) {
+    command._toggleCheckboxes = [];
+  }
+  command._toggleCheckboxes.push(checkbox);
+  return checkbox;
+}
 
 /**
  * Render a pass-grouped command list into `parent`.
@@ -69,6 +110,15 @@ export function renderCommandList(parent, commands, adapter, selectionState) {
     }
 
     command.widget = cmd;
+
+    // Optional per-command enable/disable checkbox (Recorder panel). Absent for the Capture panel,
+    // which doesn't provide getDisabledState, so its rows are unchanged.
+    if (adapter.getDisabledState) {
+      _createToggleCheckbox(adapter, command, commandIndex, cmd);
+      if (adapter.getDisabledState(command)) {
+        cmd.classList.add("capture_command_disabled");
+      }
+    }
 
     let expandButton = null;
     if (supportsRenderBundles && method === "executeBundles") {
@@ -231,7 +281,13 @@ export function renderCommandList(parent, commands, adapter, selectionState) {
       new Span(cmd, { class: "capture_method_args", text: `device:${getName(args[0]?.device?.__id, "GPUDevice")} format:${args[0]?.format} usage:${args[0]?.usage}` });
     }
 
-    cmd.element.onclick = () => {
+    cmd.element.onclick = (e) => {
+      // Multi-select adapters (Recorder) manage selection highlighting themselves, including
+      // ctrl/shift modifiers, so the built-in single-highlight is bypassed.
+      if (adapter.multiSelect) {
+        adapter.onSelectCommand(command, commandIndex, cmd, e);
+        return;
+      }
       if (selectionState.lastSelectedCommand !== cmd) {
         if (selectionState.lastSelectedCommand) {
           selectionState.lastSelectedCommand.classList.remove("capture_command_selected");
@@ -241,6 +297,13 @@ export function renderCommandList(parent, commands, adapter, selectionState) {
       }
       adapter.onSelectCommand(command, commandIndex, cmd);
     };
+
+    if (adapter.onCommandContextMenu) {
+      cmd.element.oncontextmenu = (e) => {
+        e.preventDefault();
+        adapter.onCommandContextMenu(command, commandIndex, cmd, e);
+      };
+    }
 
     return cmd;
   }
@@ -333,6 +396,10 @@ export function renderCommandList(parent, commands, adapter, selectionState) {
       currentBlock = new Div(debugGroup, { class: "capture_renderpass" });
 
       const header = new Div(currentBlock, { id: `RenderPass_${passIndex}`, class: "capture_renderpass_header" });
+      // Pass-level enable/disable checkbox reflecting the beginRenderPass command (Recorder panel).
+      if (adapter.getDisabledState) {
+        _createToggleCheckbox(adapter, command, commandIndex, header);
+      }
       const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
       const headerText = decoratePassHeaderText("render", passIndex, command, `Render Pass ${passIndex}`);
       command.header = new Span(header, { text: headerText });
@@ -361,6 +428,10 @@ export function renderCommandList(parent, commands, adapter, selectionState) {
       }
       currentBlock = new Div(debugGroup, { class: "capture_computepass" });
       const header = new Div(currentBlock, { id: `ComputePass_${passIndex}`, class: "capture_computepass_header" });
+      // Pass-level enable/disable checkbox reflecting the beginComputePass command (Recorder panel).
+      if (adapter.getDisabledState) {
+        _createToggleCheckbox(adapter, command, commandIndex, header);
+      }
       const headerIcon = new Span(header, { text: `-`, style: "margin-right: 10px; font-size: 12pt;"});
       const computeHeaderText = decoratePassHeaderText("compute", passIndex, command, `Compute Pass ${passIndex}`);
       command.header = new Span(header, { text: computeHeaderText });

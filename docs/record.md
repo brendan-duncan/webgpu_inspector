@@ -85,8 +85,8 @@ three columns:
 - **Preview canvas** (left): The rendered result of the current preview.
 - **Command list** (middle): The recorded commands, grouped by render/compute pass with pass labels
   and debug groups, with a **Filter** box to narrow the list.
-- **Command details** (right): For the selected command, its method, a lightweight summary, the
-  formatted arguments, and result.
+- **Command details** (right): For the selected command, its method, a lightweight summary, its
+  editable arguments, and result.
 
 A **Frame** input (defaults to the last frame) and a **Preview** mode select control what the canvas
 shows:
@@ -97,3 +97,52 @@ shows:
   selected, the frame chosen in the **Frame** input.
 
 For multi-frame recordings, each recorded frame appears in the command list and can be previewed.
+
+## Editing a Recording
+
+A loaded recording can be edited in the panel before saving. Edits affect the preview immediately
+and are written to the file when you **Save Binary** / **Save HTML** from the menu.
+
+- **Disable / enable commands**: Hovering a command row reveals a checkbox. Unchecking it disables
+  the command — it is dimmed, skipped in the preview, and removed from the saved recording.
+  Re-checking re-enables it. Foundational commands (`requestAdapter`, `requestDevice`, `getQueue`,
+  `configure`) can't be disabled.
+- **Disable / enable a whole pass**: Each render/compute pass group header has its own checkbox
+  (revealed on hover) that reflects the pass's `beginRenderPass` / `beginComputePass` command.
+  Unchecking it disables the entire pass — its begin, contents, and `end` — even while the group is
+  collapsed.
+- **Implicit disabling**: Disabling a command also disables everything that depends on it, shown in
+  a lighter italic style with an indeterminate (`–`) checkbox:
+  - Disabling a command that creates an object (e.g. `createRenderPipeline`, `createBuffer`,
+    `createView`) disables every command that uses that object — and this cascades.
+  - Disabling either half of a begin/end pair (render/compute pass, debug group, error scope) also
+    disables its partner and everything inside the block.
+  - Within a pass, disabling a state command (`setPipeline`, `setBindGroup`, `setVertexBuffer`,
+    `setIndexBuffer`) disables the draws that rely on that state; disabling a `setPipeline` disables
+    its whole group of bindings and draws.
+  - When a resource (buffer/texture) is no longer consumed by any enabled command — for example its
+    bind group's `setBindGroup` was disabled — the commands that only create or populate it
+    (`createBuffer`, `writeBuffer`, `createTexture`, `writeTexture`, …) are disabled too, cascading
+    upstream through bind groups, pipelines, and shader modules.
+- **Bulk disable / enable**: Click to select a command, `Ctrl`/`Cmd`-click to add or remove
+  individual commands, and `Shift`-click to select a range (ranges may span frames). Right-click the
+  selection for **Disable** / **Enable**, or toggle any selected row's checkbox to apply to the
+  whole selection.
+- **Hide Disabled**: A toolbar toggle that hides disabled commands from the list (they remain in the
+  recording until saved).
+- **Edit arguments**: In the command details pane, each argument is editable. Numbers, strings, and
+  booleans edit inline; object/array arguments edit as JSON (object references like `{"__id": ...}`
+  are preserved). Changes commit on Enter or when the field loses focus.
+- **Undo / Redo / Revert**: The toolbar provides **Undo** and **Redo** for edits, and **Revert** to
+  restore the recording to its as-loaded state (revert is itself undoable). A **● Modified**
+  indicator appears whenever the recording differs from the loaded baseline.
+
+Saving a recording with disabled commands writes only the enabled commands, and any data
+(buffer/texture contents) no longer referenced by an enabled command is dropped from the file, so
+the saved recording stays compact.
+
+Implicit disabling keeps most edits consistent — disabling a `beginRenderPass` also disables its
+`end` and contents, and disabling a resource's creator disables everything that used it. Edits that
+the dependency rules can't account for (for example changing an argument to reference an object that
+is no longer created) can still produce a recording whose preview logs errors. Use **Undo** or
+re-enable the command to recover.

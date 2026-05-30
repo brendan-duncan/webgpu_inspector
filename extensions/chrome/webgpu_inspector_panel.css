@@ -2301,6 +2301,115 @@ li.tree-item .expandbutton
   color: #fff;
 }
 
+/* Recorder: the command list doesn't allow text selection, so shift-click range selection of
+   commands doesn't also select the row text. */
+.recorder_command_list {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Recorder: shown when a recording has no captured frame (only initialize commands). */
+.recorder_empty_note {
+  margin: 16px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-elevated);
+  color: var(--fg-secondary, #bbb);
+  font-size: 10pt;
+  line-height: 1.5;
+}
+
+.recorder_empty_note code {
+  font-family: monospace;
+  color: var(--fg-primary, #eee);
+}
+
+/* Recorder: per-command enable/disable checkbox and disabled-row styling. */
+.capture_command_toggle {
+  margin-right: 6px;
+  /* Hidden until the row is hovered, or the command is disabled (so its off-state stays visible). */
+  visibility: hidden;
+}
+
+.capture_command:hover .capture_command_toggle,
+.capture_command_disabled .capture_command_toggle,
+.capture_command_implicit_disabled .capture_command_toggle {
+  visibility: visible;
+}
+
+/* The pass group header's enable/disable checkbox is revealed on hover, like the command rows. */
+.capture_renderpass_header:hover .capture_command_toggle,
+.capture_computepass_header:hover .capture_command_toggle {
+  visibility: visible;
+}
+
+.capture_command_toggle input {
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.capture_command_disabled .capture_methodName,
+.capture_command_disabled .capture_method_args,
+.capture_command_disabled .capture_callnum {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+/* Implicitly disabled (off because a command it depends on is disabled): dimmed, but not struck. */
+.capture_command_implicit_disabled .capture_methodName,
+.capture_command_implicit_disabled .capture_method_args,
+.capture_command_implicit_disabled .capture_callnum {
+  opacity: 0.4;
+  font-style: italic;
+}
+
+/* Recorder: "modified" indicator in the recording-view toolbar. */
+.recorder_modified_indicator {
+  color: var(--accent-warning, #e0a020);
+  font-weight: bold;
+  align-self: center;
+}
+
+/* Recorder: editable command arguments in the inspector. */
+.recorder_arg_row {
+  display: flex;
+  align-items: flex-start;
+  margin: 4px 10px;
+  font-size: 10pt;
+}
+
+.recorder_arg_label {
+  flex: 0 0 auto;
+  margin-right: 8px;
+  line-height: 22px;
+  color: var(--fg-secondary, #bbb);
+}
+
+.recorder_arg_input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.recorder_arg_checkbox {
+  align-self: center;
+}
+
+.recorder_arg_json {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Descriptors (createTexture/createRenderPipeline/etc.) are large objects, so give the editor a
+     usable default height. */
+  min-height: 160px;
+  font-family: monospace;
+  font-size: 10pt;
+  resize: vertical;
+}
+
+.recorder_arg_error {
+  outline: 1px solid var(--accent-error, #e05050);
+}
+
 .capture_pass_texture {
   margin-top: 10px;
   border: 1px solid #666;

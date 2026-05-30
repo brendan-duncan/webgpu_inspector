@@ -37,6 +37,14 @@ export class RecorderData {
     this._commandsReady = false;
     this.onReady = new Signal();
 
+    // Edit model: commands can be disabled (excluded from preview/export) and arguments edited,
+    // with undo/redo and a "modified vs. loaded baseline" indicator. onEditChanged fires after any
+    // edit, undo, redo, or revert so the panel can refresh the list, preview, and toolbar state.
+    this.onEditChanged = new Signal();
+    this._history = [];      // Array<{ redo: fn, undo: fn }>
+    this._historyIndex = -1; // index of the last-applied edit; -1 means "no edits applied".
+    this._touched = new Set(); // commands ever targeted by an edit, for cheap modified detection.
+
     this._objectMap = new Map();
     this._canvas = null;
     this._context = null;
@@ -87,6 +95,552 @@ export class RecorderData {
     this._commandCount = 0;
     this.dataReady = false;
     this._commandsReady = false;
+    this._history = [];
+    this._historyIndex = -1;
+    this._touched = new Set();
+  }
+
+  // Invoke callback for every (non-hole) command, in stable order: initialize commands first, then
+  // each frame's commands in order. Used by the edit model and exporter.
+  forEachCommand(callback) {
+    for (const command of this.initializeCommands) {
+      if (command) {
+        callback(command);
+      }
+    }
+    for (const frame of this.frames) {
+      if (!frame) {
+        continue;
+      }
+      for (const command of frame) {
+        if (command) {
+          callback(command);
+        }
+      }
+    }
+  }
+
+  // Snapshot the current command state as the "unmodified" baseline and clear the undo history.
+  // Called once a recording has finished loading (live or from a binary), so edits are measured
+  // and reverted against the as-loaded recording. Args are never mutated in place (edits replace
+  // the args reference), so a reference compare is enough to detect an argument change.
+  resetEditHistory() {
+    this._history = [];
+    this._historyIndex = -1;
+    this._touched = new Set();
+    this.forEachCommand((command) => {
+      command._baselineDisabled = !!command.disabled;
+      command._baselineArgs = command.args;
+    });
+    this._recomputeImplicitDisabled();
+    // No signal here: the panel rebuilds its view and refreshes the toolbar explicitly after this.
+  }
+
+  // Methods that must never be disabled (foundational setup): the recording can't replay without
+  // them, so the panel locks their checkboxes and they're never implicitly disabled.
+  static _protectedMethods = new Set(["requestAdapter", "requestDevice", "__getQueue", "configure"]);
+
+  // Resource-definition commands eligible for reverse-liveness disabling: if the resource they
+  // create/populate is no longer consumed by any enabled command, they're implicitly disabled.
+  // (Structural commands with results — encoders, passes, command buffers — are intentionally
+  // excluded; they're governed by the begin/end and explicit rules instead.)
+  static _resourceDefMethods = new Set([
+    "createBuffer", "createTexture", "createView", "createSampler",
+    "createBindGroup", "createBindGroupLayout", "createPipelineLayout",
+    "createShaderModule", "createRenderPipeline", "createComputePipeline",
+    "createRenderPipelineAsync", "createComputePipelineAsync", "createQuerySet",
+    "writeBuffer", "writeTexture", "__writeTexture",
+    "copyBufferToBuffer", "copyBufferToTexture", "copyTextureToBuffer", "copyTextureToTexture"
+  ]);
+
+  isProtectedCommand(command) {
+    return !!command && RecorderData._protectedMethods.has(command.method);
+  }
+
+  // Whether a command is excluded from playback/export: explicitly disabled by the user, or
+  // implicitly disabled because something it depends on is disabled.
+  isEffectivelyDisabled(command) {
+    return !!command && (!!command.disabled || !!command._implicit);
+  }
+
+  // True when any command differs from the loaded baseline (disabled state or arguments). Only
+  // ever-touched commands can differ, so this stays cheap regardless of recording size.
+  get modified() {
+    for (const command of this._touched) {
+      if (!!command.disabled !== command._baselineDisabled || command.args !== command._baselineArgs) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  get canUndo() {
+    return this._historyIndex >= 0;
+  }
+
+  get canRedo() {
+    return this._historyIndex < this._history.length - 1;
+  }
+
+  // Apply an edit (its redo() performs the mutation), truncating any redo tail, and record it for
+  // undo/redo.
+  _pushEdit(op) {
+    op.redo();
+    this._history.length = this._historyIndex + 1;
+    this._history.push(op);
+    this._historyIndex = this._history.length - 1;
+    this._recomputeImplicitDisabled();
+    this.onEditChanged.emit();
+  }
+
+  undo() {
+    if (!this.canUndo) {
+      return;
+    }
+    this._history[this._historyIndex].undo();
+    this._historyIndex--;
+    this._recomputeImplicitDisabled();
+    this.onEditChanged.emit();
+  }
+
+  redo() {
+    if (!this.canRedo) {
+      return;
+    }
+    this._historyIndex++;
+    this._history[this._historyIndex].redo();
+    this._recomputeImplicitDisabled();
+    this.onEditChanged.emit();
+  }
+
+  // Enable/disable a set of commands as a single undoable edit. No-op if none change state.
+  setCommandsDisabled(commands, disabled) {
+    disabled = !!disabled;
+    const targets = [];
+    for (const command of commands) {
+      // Protected commands can never be disabled.
+      if (command && !this.isProtectedCommand(command) && !!command.disabled !== disabled) {
+        targets.push(command);
+      }
+    }
+    if (!targets.length) {
+      return;
+    }
+    for (const command of targets) {
+      this._touched.add(command);
+    }
+    this._pushEdit({
+      redo: () => { for (const command of targets) { command.disabled = disabled; } },
+      undo: () => { for (const command of targets) { command.disabled = !disabled; } }
+    });
+  }
+
+  // Replace a command's arguments as a single undoable edit. The caller passes a fresh args value;
+  // the previous reference is retained for undo.
+  setCommandArgs(command, newArgs) {
+    if (!command) {
+      return;
+    }
+    const before = command.args;
+    this._touched.add(command);
+    this._pushEdit({
+      redo: () => { command.args = newArgs; },
+      undo: () => { command.args = before; }
+    });
+  }
+
+  // Restore every command to the loaded baseline as a single undoable edit.
+  revert() {
+    const changes = [];
+    for (const command of this._touched) {
+      if (!!command.disabled !== command._baselineDisabled || command.args !== command._baselineArgs) {
+        changes.push({
+          command,
+          beforeDisabled: command.disabled,
+          beforeArgs: command.args,
+          afterDisabled: command._baselineDisabled,
+          afterArgs: command._baselineArgs
+        });
+      }
+    }
+    if (!changes.length) {
+      return;
+    }
+    this._pushEdit({
+      redo: () => {
+        for (const c of changes) {
+          c.command.disabled = c.afterDisabled;
+          c.command.args = c.afterArgs;
+        }
+      },
+      undo: () => {
+        for (const c of changes) {
+          c.command.disabled = c.beforeDisabled;
+          c.command.args = c.beforeArgs;
+        }
+      }
+    });
+  }
+
+  // -------- Implicit disabling ----------------------------------------------------------------
+  //
+  // Disabling a command can imply that other commands must also be skipped (and dropped on save):
+  //   - Object liveness: if the command that creates an object is disabled, every command that uses
+  //     that object is disabled too — and this cascades (a disabled createView kills its view's uses).
+  //   - Block containment: disabling either half of a begin/end pair (render/compute pass, debug
+  //     group, error scope, render-bundle encoder) disables its partner and everything inside it.
+  //   - Draw-state flow: within a pass, disabling a state command (setPipeline / setBindGroup /
+  //     setVertexBuffer / setIndexBuffer) disables the draws that rely on that state; disabling a
+  //     setPipeline disables its whole group of bindings + draws.
+  // These derived flags live on command._implicit; the explicit user flag is command.disabled.
+
+  // The object ids a command references: its target object plus any {__id} markers in its arguments.
+  _commandRefs(command) {
+    const refs = [];
+    if (command.object !== undefined && command.object !== null) {
+      refs.push(command.object);
+    }
+    const walk = (v) => {
+      if (!v || typeof v !== "object") {
+        return;
+      }
+      if (Array.isArray(v)) {
+        for (const x of v) {
+          walk(x);
+        }
+        return;
+      }
+      if (v.__id !== undefined && v.__id !== null) {
+        refs.push(v.__id);
+        return;
+      }
+      for (const k in v) {
+        walk(v[k]);
+      }
+    };
+    walk(command.args);
+    return refs;
+  }
+
+  // The object ids a command defines or populates (rather than consumes): its created result plus,
+  // for writes/copies, the destination resource. Used by reverse-liveness to tell a resource's
+  // producers apart from its consumers.
+  _commandWrites(command) {
+    const writes = new Set();
+    if (command.result !== undefined && command.result !== null) {
+      writes.add(command.result);
+    }
+    const args = command.args;
+    if (!Array.isArray(args)) {
+      return writes;
+    }
+    const idOf = (v) => (v && v.__id !== undefined && v.__id !== null) ? v.__id : undefined;
+    switch (command.method) {
+      case "writeBuffer": { const id = idOf(args[0]); if (id !== undefined) { writes.add(id); } break; }
+      case "writeTexture": case "__writeTexture": { const id = args[0]?.texture?.__id; if (id != null) { writes.add(id); } break; }
+      case "copyBufferToBuffer": { const id = idOf(args[2]); if (id !== undefined) { writes.add(id); } break; }
+      case "copyBufferToTexture": { const id = args[1]?.texture?.__id; if (id != null) { writes.add(id); } break; }
+      case "copyTextureToBuffer": { const id = args[1]?.buffer?.__id; if (id != null) { writes.add(id); } break; }
+      case "copyTextureToTexture": { const id = args[1]?.texture?.__id; if (id != null) { writes.add(id); } break; }
+      default: break;
+    }
+    return writes;
+  }
+
+  // Recompute the static dependency structure (object creators, begin/end blocks, draw-state
+  // groups) from the current command stream. Cheap and only run on user edits.
+  _buildDependencyStructure() {
+    const creators = new Map();
+    this.forEachCommand((command) => {
+      command._refs = this._commandRefs(command);
+      command._writes = this._commandWrites(command);
+      if (command.result !== undefined && command.result !== null) {
+        creators.set(command.result, command);
+      }
+    });
+    this._creators = creators;
+
+    this._blocks = [];
+    this._detectBlocksAndGroups(this.initializeCommands);
+    for (const frame of this.frames) {
+      if (frame) {
+        this._detectBlocksAndGroups(frame);
+      }
+    }
+  }
+
+  // Pair begin/end blocks and build draw-state groups within one command list (a frame or the
+  // initialize block). Populates this._blocks and per-command _groupMembers / _stateDeps.
+  _detectBlocksAndGroups(list) {
+    const isDraw = (m) => m === "draw" || m === "drawIndexed" || m === "drawIndirect" ||
+      m === "drawIndexedIndirect" || m === "dispatchWorkgroups" || m === "dispatchWorkgroupsIndirect";
+
+    const stack = []; // open blocks, innermost last
+    const addToOpen = (command) => {
+      for (const block of stack) {
+        block.members.push(command);
+      }
+    };
+    const closeBlock = (predicate) => {
+      for (let i = stack.length - 1; i >= 0; --i) {
+        if (predicate(stack[i])) {
+          const block = stack[i];
+          stack.splice(i, 1);
+          return block;
+        }
+      }
+      return null;
+    };
+
+    // Draw-state tracking, reset at each pass boundary.
+    let inPass = false;
+    let currentPipeline = null;
+    const activeBindGroups = new Map();
+    const activeVertex = new Map();
+    let activeIndex = null;
+    const resetState = () => {
+      currentPipeline = null;
+      activeBindGroups.clear();
+      activeVertex.clear();
+      activeIndex = null;
+    };
+
+    for (const command of list) {
+      if (!command) {
+        continue;
+      }
+      const m = command.method;
+      command._groupMembers = undefined;
+      command._stateDeps = undefined;
+
+      if (m === "beginRenderPass" || m === "beginComputePass") {
+        addToOpen(command);
+        stack.push({ type: "pass", begin: command, end: null, members: [], objectId: command.result });
+        inPass = true;
+        resetState();
+      } else if (m === "createRenderBundleEncoder") {
+        addToOpen(command);
+        stack.push({ type: "bundle", begin: command, end: null, members: [], objectId: command.result });
+      } else if (m === "pushDebugGroup") {
+        addToOpen(command);
+        stack.push({ type: "debug", begin: command, end: null, members: [] });
+      } else if (m === "pushErrorScope") {
+        addToOpen(command);
+        stack.push({ type: "error", begin: command, end: null, members: [] });
+      } else if (m === "end") {
+        const block = closeBlock((b) => b.type === "pass" && b.objectId === command.object);
+        if (block) {
+          block.end = command;
+          this._blocks.push(block);
+        }
+        addToOpen(command);
+        inPass = false;
+        resetState();
+      } else if (m === "finish") {
+        const block = closeBlock((b) => b.type === "bundle" && b.objectId === command.object);
+        if (block) {
+          block.end = command;
+          this._blocks.push(block);
+        }
+        addToOpen(command);
+      } else if (m === "popDebugGroup") {
+        const block = closeBlock((b) => b.type === "debug");
+        if (block) {
+          block.end = command;
+          this._blocks.push(block);
+        }
+        addToOpen(command);
+      } else if (m === "popErrorScope") {
+        const block = closeBlock((b) => b.type === "error");
+        if (block) {
+          block.end = command;
+          this._blocks.push(block);
+        }
+        addToOpen(command);
+      } else {
+        addToOpen(command);
+        // Draw-state flow within a pass.
+        if (inPass) {
+          if (m === "setPipeline") {
+            currentPipeline = command;
+            command._groupMembers = [];
+          } else if (m === "setBindGroup") {
+            activeBindGroups.set(command.args?.[0], command);
+            if (currentPipeline) {
+              currentPipeline._groupMembers.push(command);
+            }
+          } else if (m === "setVertexBuffer") {
+            activeVertex.set(command.args?.[0], command);
+            if (currentPipeline) {
+              currentPipeline._groupMembers.push(command);
+            }
+          } else if (m === "setIndexBuffer") {
+            activeIndex = command;
+            if (currentPipeline) {
+              currentPipeline._groupMembers.push(command);
+            }
+          } else if (isDraw(m)) {
+            const deps = [];
+            if (currentPipeline) {
+              deps.push(currentPipeline);
+              currentPipeline._groupMembers.push(command);
+            }
+            for (const c of activeBindGroups.values()) {
+              deps.push(c);
+            }
+            for (const c of activeVertex.values()) {
+              deps.push(c);
+            }
+            if (activeIndex) {
+              deps.push(activeIndex);
+            }
+            command._stateDeps = deps;
+          }
+        }
+      }
+    }
+  }
+
+  // Recompute command._implicit / command._effectiveDisabled from the explicit disabled flags,
+  // iterating the dependency rules to a fixpoint (the marked set only grows, so it converges).
+  _recomputeImplicitDisabled() {
+    this._buildDependencyStructure();
+
+    this.forEachCommand((command) => { command._implicit = false; });
+
+    const eff = (command) => command.disabled || command._implicit;
+    const mark = (command) => {
+      if (command && !command._implicit && !command.disabled && !this.isProtectedCommand(command)) {
+        command._implicit = true;
+        return true;
+      }
+      return false;
+    };
+
+    let changed = true;
+    let guard = 0;
+    while (changed && guard++ < 1000) {
+      changed = false;
+
+      // A) Object liveness: a command that uses an object created by a disabled command is disabled.
+      this.forEachCommand((command) => {
+        if (eff(command)) {
+          return;
+        }
+        for (const id of command._refs) {
+          const creator = this._creators.get(id);
+          if (creator && creator !== command && eff(creator)) {
+            if (mark(command)) {
+              changed = true;
+            }
+            break;
+          }
+        }
+      });
+
+      // B) Block containment: disabling either half of a begin/end pair disables its partner and
+      // every command inside the block.
+      for (const block of this._blocks) {
+        if (eff(block.begin) || (block.end && eff(block.end))) {
+          if (mark(block.begin)) { changed = true; }
+          if (block.end && mark(block.end)) { changed = true; }
+          for (const member of block.members) {
+            if (mark(member)) { changed = true; }
+          }
+        }
+      }
+
+      // C) Draw-state flow: a disabled setPipeline disables its group; a draw is disabled if any
+      // state command it depends on is disabled.
+      this.forEachCommand((command) => {
+        if (command._groupMembers && eff(command)) {
+          for (const member of command._groupMembers) {
+            if (mark(member)) { changed = true; }
+          }
+        }
+        if (command._stateDeps && !eff(command)) {
+          for (const dep of command._stateDeps) {
+            if (eff(dep)) {
+              if (mark(command)) { changed = true; }
+              break;
+            }
+          }
+        }
+      });
+
+      // D) Reverse liveness: a resource (buffer/texture/etc.) that no enabled command consumes is
+      // dead, so the commands that only create or populate it (createBuffer/writeBuffer/...) are
+      // disabled. This cascades upstream — e.g. disabling a setBindGroup can leave a bind group,
+      // and in turn its buffers, with no live consumer.
+      const live = this._computeLiveObjects(eff);
+      this.forEachCommand((command) => {
+        if (eff(command) || this.isProtectedCommand(command)) {
+          return;
+        }
+        if (!RecorderData._resourceDefMethods.has(command.method)) {
+          return;
+        }
+        const writes = command._writes;
+        if (!writes || writes.size === 0) {
+          return;
+        }
+        let anyLive = false;
+        for (const id of writes) {
+          if (live.has(id)) {
+            anyLive = true;
+            break;
+          }
+        }
+        if (!anyLive && mark(command)) {
+          changed = true;
+        }
+      });
+    }
+
+    this.forEachCommand((command) => { command._effectiveDisabled = command.disabled || command._implicit; });
+  }
+
+  // Compute the set of object ids that are still consumed by an enabled command, by forward
+  // reachability from "terminal" commands (draws, dispatches, submit, end, state-setters, ...).
+  // A command "keeps" the objects it consumes alive when it is enabled and either has no produced
+  // result, or its produced/written object is itself live (i.e. consumed downstream).
+  _computeLiveObjects(eff) {
+    const live = new Set();
+    let changed = true;
+    let guard = 0;
+    while (changed && guard++ < 1000) {
+      changed = false;
+      this.forEachCommand((command) => {
+        if (eff(command)) {
+          return;
+        }
+        const writes = command._writes;
+        let kept;
+        if (writes && writes.size > 0) {
+          // Producer/writer: only relevant if what it produces is live.
+          kept = false;
+          for (const id of writes) {
+            if (live.has(id)) { kept = true; break; }
+          }
+        } else {
+          // Terminal consumer (draw / dispatch / submit / end / setBindGroup / ...).
+          kept = true;
+        }
+        if (!kept) {
+          return;
+        }
+        for (const id of command._refs) {
+          if (writes && writes.has(id)) {
+            continue; // defined here, not consumed
+          }
+          if (!live.has(id)) {
+            live.add(id);
+            changed = true;
+          }
+        }
+      });
+    }
+    return live;
   }
 
   // Canvas dimensions for export/preview. Prefer values recovered from a loaded binary; otherwise
@@ -264,6 +818,11 @@ export class RecorderData {
 
     let ci = 0;
     for (const command of this.initializeCommands) {
+      // Disabled commands (explicit or implicit) are excluded from playback and the saved recording.
+      if (command && command._effectiveDisabled) {
+        ci++;
+        continue;
+      }
       await this._executeCommand(command, -1, ci);
       ci++;
     }
@@ -285,6 +844,11 @@ export class RecorderData {
       ci = 0;
       const hasFrameCommandIndex = hasCommandIndex && fi === frameIndex;
       for (const command of frame) {
+        // Disabled commands (explicit or implicit) are excluded from playback and the saved recording.
+        if (command && command._effectiveDisabled) {
+          ci++;
+          continue;
+        }
         if (hasFrameCommandIndex && ci > commandIndex) {
           if (passes.size > 0 && command.method === "end") {
             // _executeCommand returns the method's result (end() returns undefined), so resolve
