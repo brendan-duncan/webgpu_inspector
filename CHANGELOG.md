@@ -1,3 +1,23 @@
+## v1.3.0
+
+### Record Panel
+
+* **Save / Load menu**: a hamburger menu next to **Record** with **Save Binary** (`.wgpu`), **Save HTML** (a self-contained playback page), and **Load Binary**. A recording loaded in the panel — captured live or opened from a `.wgpu` — can be re-saved to either format, using a native "Save As" dialog where supported.
+* **Edit recordings before saving**:
+  * **Disable / enable commands**: a per-command checkbox (revealed on hover), plus a checkbox on each render/compute pass group header that toggles the whole pass. Disabled commands are dimmed, skipped in the preview, and dropped from the saved recording.
+  * **Multi-select**: click, `Ctrl`/`Cmd`-click, and `Shift`-click to select commands (ranges may span frames), then right-click for bulk **Disable** / **Enable**.
+  * **Hide Disabled** toggle to collapse disabled commands out of the list.
+  * **Edit arguments**: each command argument is editable in the details pane — scalars inline, objects/arrays as JSON.
+  * **Undo / Redo / Revert** with a **● Modified** indicator.
+* **Implicit disabling**: disabling a command also disables what depends on it — every use of a disabled resource (cascading), both halves of a begin/end pass/debug-group/error-scope, and the draws that rely on disabled draw state. Conversely, a resource, draw-state command, or `createBuffer`/`writeBuffer`/`createTexture` left unused by any enabled command is disabled too. Foundational commands (`requestAdapter`, `requestDevice`, `getQueue`, `configure`) can't be disabled.
+* **Compact saves**: disabled commands, and any buffer/texture data no longer referenced by an enabled command, are removed from the saved recording.
+* The default record format is now **Binary** (`.wgpu`).
+* Pass collapsible group headers now include the pass label when one is set.
+* **Help** button linking to the Record documentation.
+* The default preview mode is now **Full Frame**, and the Frame selector no longer stretches across the toolbar.
+* Fixed an extra empty frame appearing for single-frame captures, and added a clear message when a captured frame contains no WebGPU commands.
+* Fixed a crash (`Cannot read properties of null`) when capturing frames in **On Demand** / Continuous mode.
+
 ## v1.2.0
 
 ### Capture Panel
