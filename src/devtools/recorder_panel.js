@@ -142,7 +142,7 @@ export class RecorderPanel {
     new Span(recorderBar, { text: "Format:", class: "text-secondary ml-sm mr-sm" });
     this.formatSelect = new Select(recorderBar, {
       options: ["HTML", "Binary", "Both"],
-      index: 0,
+      index: 1,
       style: "width: 90px;"
     });
 
