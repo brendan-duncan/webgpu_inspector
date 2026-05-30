@@ -412,6 +412,7 @@ export class RecorderData {
       const m = command.method;
       command._groupMembers = undefined;
       command._stateDeps = undefined;
+      command._consumerDraws = undefined;
 
       if (m === "beginRenderPass" || m === "beginComputePass") {
         addToOpen(command);
@@ -461,21 +462,27 @@ export class RecorderData {
         addToOpen(command);
         // Draw-state flow within a pass.
         if (inPass) {
+          // State commands track the draws that consume them (_consumerDraws), so a state command
+          // used only by now-disabled draws can itself be disabled (see rule C in the fixpoint).
           if (m === "setPipeline") {
             currentPipeline = command;
             command._groupMembers = [];
+            command._consumerDraws = [];
           } else if (m === "setBindGroup") {
             activeBindGroups.set(command.args?.[0], command);
+            command._consumerDraws = [];
             if (currentPipeline) {
               currentPipeline._groupMembers.push(command);
             }
           } else if (m === "setVertexBuffer") {
             activeVertex.set(command.args?.[0], command);
+            command._consumerDraws = [];
             if (currentPipeline) {
               currentPipeline._groupMembers.push(command);
             }
           } else if (m === "setIndexBuffer") {
             activeIndex = command;
+            command._consumerDraws = [];
             if (currentPipeline) {
               currentPipeline._groupMembers.push(command);
             }
@@ -495,6 +502,12 @@ export class RecorderData {
               deps.push(activeIndex);
             }
             command._stateDeps = deps;
+            // Record this draw as a consumer of each state command it depends on.
+            for (const dep of deps) {
+              if (dep._consumerDraws) {
+                dep._consumerDraws.push(command);
+              }
+            }
           }
         }
       }
@@ -564,6 +577,20 @@ export class RecorderData {
               if (mark(command)) { changed = true; }
               break;
             }
+          }
+        }
+        // A state command (setPipeline/setBindGroup/setVertex|IndexBuffer) whose every consuming
+        // draw is disabled is itself disabled — unless a still-enabled draw also uses it.
+        if (command._consumerDraws && command._consumerDraws.length > 0 && !eff(command)) {
+          let allDisabled = true;
+          for (const draw of command._consumerDraws) {
+            if (!eff(draw)) {
+              allDisabled = false;
+              break;
+            }
+          }
+          if (allDisabled && mark(command)) {
+            changed = true;
           }
         }
       });
