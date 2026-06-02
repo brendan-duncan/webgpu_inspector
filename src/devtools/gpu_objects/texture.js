@@ -35,7 +35,10 @@ export class Texture extends GPUObject {
         const lr = [];
         const numLayers = this.depthOrArrayLayers;
         const width = this.width;
-          const height = this.height;
+        const height = this.height;
+        const useGlobalRange = this.usesGlobalLayerRange;
+        let globalMin = null;
+        let globalMax = null;
         for (let layer = 0; layer < numLayers; ++layer) {
           let min = null;
           let max = null;
@@ -50,7 +53,21 @@ export class Texture extends GPUObject {
               }
             }
           }
+          if (useGlobalRange) {
+            if (globalMin === null || min < globalMin) {
+              globalMin = min;
+            }
+            if (globalMax === null || max > globalMax) {
+              globalMax = max;
+            }
+          }
           lr.push({ min, max });
+        }
+        if (useGlobalRange) {
+          for (const ranges of lr) {
+            ranges.min = globalMin;
+            ranges.max = globalMax;
+          }
         }
         this._layerRanges = lr;
       }
@@ -221,7 +238,8 @@ export class Texture extends GPUObject {
           const value = pixelValue(imageData, offset, "32sint", 1);
           return { r: value[0] };
         }
-        case "depth16unorm": // depth formats get conerted to r32float
+        case "stencil8":
+        case "depth16unorm": // depth and stencil formats get converted to r32float
         case "depth24plus":
         case "depth24plus-stencil8":
         case "depth32float":
@@ -363,6 +381,12 @@ export class Texture extends GPUObject {
       return false;
     }
     return formatInfo.isDepthStencil;
+  }
+
+  get usesGlobalLayerRange() {
+    return this.isDepthStencil &&
+        this.descriptor?.textureBindingViewDimension === "cube" &&
+        this.depthOrArrayLayers === 6;
   }
 
   getGpuSize() {
