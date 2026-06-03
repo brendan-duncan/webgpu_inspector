@@ -24,8 +24,8 @@ import { getFormatFromReflection } from "../utils/reflection_format.js";
 import { ResourceType, WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
 import { CaptureData } from "./capture_data.js";
 import { ShaderDebugger } from "./shader_debugger.js";
-import { buildCaptureJson, downloadCaptureJson } from "./capture_export.js";
-import { importCaptureJson } from "./capture_import.js";
+import { captureToText, downloadCaptureJson } from "./capture_export.js";
+import { importCaptureJson, parseCaptureText } from "./capture_import.js";
 import { putCaptureHandoff } from "../utils/capture_handoff.js";
 import { getInspectWorkers } from "../utils/inspector_settings.js";
 import { commandArgs, processCommandArgs, renderArgumentsSection, renderCommandSummary } from "./command_args_view.js";
@@ -124,17 +124,15 @@ export class CapturePanel {
       if (!state) {
         return;
       }
-      try {
-        downloadCaptureJson(
+      Promise.resolve()
+        .then(() => downloadCaptureJson(
           state.frame,
           state.commands,
           self.database,
           state.statistics,
           "__buildVersion"
-        );
-      } catch (e) {
-        console.error("Failed to save capture JSON:", e);
-      }
+        ))
+        .catch((e) => console.error("Failed to save capture JSON:", e));
     });
 
     const loadMenuItem = new Div(menuDropdown, { class: "menu-item", text: "Load Capture" });
@@ -179,7 +177,11 @@ export class CapturePanel {
         this._captureData.onUpdateCaptureStatus.addListener(self._updateCaptureStatus, self);
 
         const frame = self.captureMode === 0 ? -1 : self.captureSpecificFrame;
-        const maxBufferSize = self.useMaxBufferSize ? self.maxBufferSize : -1;
+        // The UI works in MB; the capture protocol is in bytes.
+        const maxBufferSize = self.useMaxBufferSize ? Math.max(1, Math.round(self.maxBufferSizeMB * 1024 * 1024)) : -1;
+        // -1 keeps the full-resolution texture pixels the texture viewer needs;
+        // enabling the cap skips textures larger than it to shrink the capture.
+        const maxTextureSize = self.useMaxTextureSize ? Math.max(1, Math.round(self.maxTextureSizeMB * 1024 * 1024)) : -1;
 
         // Send the capture request to the backend with the specified frame count and buffer size.
         // A specific-frame capture (frame >= 0) reloads the page to initialize
@@ -189,6 +191,7 @@ export class CapturePanel {
           action: PanelActions.Capture,
           captureFrameCount: this.captureFrameCount,
           maxBufferSize,
+          maxTextureSize,
           frame,
           captureStacktraces: self.captureStacktraces,
           captureTimestamps: self.captureTimestamps,
@@ -242,13 +245,13 @@ export class CapturePanel {
       self.captureFrameCount = Math.max(value, 1);
     } });
 
-    this.maxBufferSize = 1 * (1024 * 1024);
+    this.maxBufferSizeMB = 1;
     this.useMaxBufferSize = false;
     const useMaxBufferSizeBtn = new Checkbox(_controlBar, { value: this.useMaxBufferSize, title: "Use Max Buffer Size",
-      label: "Max Buffer Size (Bytes):", class: "ml-sm" });
-    const maxBufferSizeInput = new NumberInput(_controlBar, { value: this.maxBufferSize, min: 1, step: 1, precision: 0,
-        class: "mr-sm", style: "width: 100px; flex: 0 0 auto;", onChange: (value) => {
-      self.maxBufferSize = Math.max(value, 1);
+      label: "Max Buffer Size (MB):", class: "ml-sm" });
+    const maxBufferSizeInput = new NumberInput(_controlBar, { value: this.maxBufferSizeMB, min: 0, step: 1, precision: 0,
+        class: "mr-sm", style: "width: 60px; flex: 0 0 auto;", onChange: (value) => {
+      self.maxBufferSizeMB = Math.max(value, 0);
     } });
 
 
@@ -256,6 +259,25 @@ export class CapturePanel {
     useMaxBufferSizeBtn.input.onChange.addListener((value) => {
       this.useMaxBufferSize = value;
       maxBufferSizeInput.disabled = !value;
+    });
+
+    // Texture pixel data dominates the size of a capture (full-res render
+    // targets). Off by default so the texture viewer has full data; enable to
+    // skip textures larger than the limit and keep captures small.
+    this.maxTextureSizeMB = 16;
+    this.useMaxTextureSize = false;
+    const useMaxTextureSizeBtn = new Checkbox(_controlBar, { value: this.useMaxTextureSize,
+      title: "Skip capturing textures larger than this size",
+      label: "Max Texture Size (MB):", class: "ml-sm" });
+    const maxTextureSizeInput = new NumberInput(_controlBar, { value: this.maxTextureSizeMB, min: 0, step: 1, precision: 0,
+        class: "mr-sm", style: "width: 60px; flex: 0 0 auto;", onChange: (value) => {
+      self.maxTextureSizeMB = Math.max(value, 0);
+    } });
+
+    maxTextureSizeInput.disabled = !this.useMaxTextureSize;
+    useMaxTextureSizeBtn.input.onChange.addListener((value) => {
+      this.useMaxTextureSize = value;
+      maxTextureSizeInput.disabled = !value;
     });
 
     // Stacktraces per recorded command are useful but can dominate the payload size
@@ -771,14 +793,13 @@ export class CapturePanel {
    * "Save Capture" would write to disk.
    */
   _captureStateToJson(state) {
-    const data = buildCaptureJson(
+    return captureToText(
       state.frame,
       state.commands,
       this.database,
       state.statistics,
       "__buildVersion"
     );
-    return JSON.stringify(data);
   }
 
   /**
@@ -920,8 +941,9 @@ export class CapturePanel {
    */
   _importCaptureJson(text, filename) {
     let data;
+    let payloads;
     try {
-      data = JSON.parse(text);
+      ({ data, payloads } = parseCaptureText(text));
     } catch (e) {
       console.error("Capture JSON parse error:", e);
       return;
@@ -930,7 +952,7 @@ export class CapturePanel {
     try {
       const offset = this._nextImportIdOffset;
       this._nextImportIdOffset += 1_000_000_000;
-      imported = importCaptureJson(data, this.database, offset);
+      imported = importCaptureJson(data, this.database, offset, payloads);
     } catch (e) {
       console.error("Failed to load capture JSON:", e);
       return;

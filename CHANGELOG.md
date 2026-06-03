@@ -1,3 +1,41 @@
+## v1.4.0
+
+### Claude Code plugin / live capture
+
+* **Captures no longer fail on size.** Large frames used to throw `Invalid string length` (V8's
+  ~512MB string cap) and persist nothing. Captures are now streamed as NDJSON — small metadata plus
+  out-of-band payload byte blobs — so no single huge string is ever built on the page, in the bridge,
+  or on disk. Capture files are loadable in DevTools and via `load_capture_file`; older
+  single-object `.json` captures still load.
+* **The buffer size cap applies to every buffer.** `maxBufferSize` (default 64KB) now truncates
+  vertex/index/storage/uniform/indirect buffer payloads consistently — previously only bind-group
+  buffers were capped, so mesh-heavy frames still overflowed. Truncated payloads record their true
+  length. The live bridge now honors `maxBufferSize` (it was previously ignored).
+* **Texture size cap.** Captured textures larger than `maxTextureSize` (default 16MB) are skipped
+  (descriptor still recorded) on the programmatic/bridge capture path, so a frame with full-res
+  render targets stays light. DevTools-panel captures keep full-resolution textures by default for
+  the texture viewer. Set `-1` to capture all texture data.
+* **DevTools "Save Capture" no longer crashes on large frames.** A texture-heavy capture (hundreds
+  of MB) used to crash the panel renderer while building the download. Save now streams NDJSON
+  straight to disk via the File System Access API when available, and otherwise falls back to a
+  memory-budgeted download (oversized payloads omitted, and reported) so the panel can't run out of
+  memory.
+* The bridge's single-upload limit was raised (default 2GB, configurable via
+  `WEBGPU_INSPECTOR_MAX_UPLOAD_MB`) so texture-heavy captures aren't rejected; the capture is
+  streamed to disk as it's received.
+* **Scoped capture.** `capture_frames` gains `passLabel` (regex) and `passType` (`render`/`compute`)
+  to capture heavy payloads only for matching passes, shrinking captures of large frames. `get_commands`
+  gains a matching `passLabel` read-time filter.
+* **New debugging tools:**
+  * `get_draw_state` — resolves the full pipeline / bind groups / vertex+index bindings / draw params
+    for a draw command, with the vertex layout and the command that captured each vertex buffer.
+  * `decode_vertex_buffer` — decodes a captured vertex buffer's first N vertices into per-attribute
+    numbers (all `GPUVertexFormat`s), so you can read e.g. `@location(2) (uv) = (0, 0)` directly.
+  * `diff_draws` — structural diff of two draws' resolved state.
+  * `read_buffer` — reads a live GPU buffer's current contents without taking a full capture.
+* **MCP result hygiene.** Tool results are size-clamped (long strings/arrays truncated with a marker),
+  `get_shader` truncates very large WGSL, and `get_capture_summary` can omit heavier fields.
+
 ## v1.3.0
 
 ### Record Panel

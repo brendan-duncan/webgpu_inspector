@@ -5,6 +5,9 @@
   "type": "module",
   "description": "Bridge + MCP server for the WebGPU Inspector Claude Code plugin.",
   "main": "index.js",
+  "scripts": {
+    "test": "node test/run.js"
+  },
   "engines": {
     "node": ">=18"
   },

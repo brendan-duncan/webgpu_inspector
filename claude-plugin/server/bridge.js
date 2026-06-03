@@ -13,7 +13,22 @@ import { randomUUID } from "node:crypto";
 
 import { WebSocketServer } from "ws";
 
-const MAX_UPLOAD_BYTES = 256 * 1024 * 1024;
+// Upper bound on a single capture upload. Texture-heavy frames (full-res render
+// targets, base64-inflated) can run to hundreds of MB, so this is generous; the
+// store streams the body to disk as it parses. Override with the
+// WEBGPU_INSPECTOR_MAX_UPLOAD_MB env var or the maxUploadBytes option.
+const DEFAULT_MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+
+function _resolveMaxUpload(option) {
+  if (typeof option === "number" && option > 0) {
+    return option;
+  }
+  const envMb = Number(process.env.WEBGPU_INSPECTOR_MAX_UPLOAD_MB);
+  if (Number.isFinite(envMb) && envMb > 0) {
+    return Math.floor(envMb * 1024 * 1024);
+  }
+  return DEFAULT_MAX_UPLOAD_BYTES;
+}
 
 export class Bridge {
   constructor(options) {
@@ -23,6 +38,7 @@ export class Bridge {
     this._token = options.token || null;
     this._store = options.store;
     this._log = options.log || (() => {});
+    this._maxUploadBytes = _resolveMaxUpload(options.maxUploadBytes);
 
     this._pages = new Map();   // pageId -> page record
     this._pending = new Map(); // requestId -> { resolve, reject, timer, pageId }
@@ -137,6 +153,19 @@ export class Bridge {
       case "captureError":
         this._rejectPending(msg.requestId, new Error(msg.message || "Capture failed on the page."));
         break;
+      case "readResult":
+        if (msg.error) {
+          this._rejectPending(msg.requestId, new Error(msg.error));
+        } else {
+          this._resolvePending(msg.requestId, {
+            bufferId: msg.bufferId,
+            offset: msg.offset || 0,
+            byteLength: msg.byteLength || 0,
+            base64: msg.base64 || "",
+            truncated: msg.truncated || null
+          });
+        }
+        break;
       default:
         break;
     }
@@ -216,13 +245,76 @@ export class Bridge {
       this._pending.set(requestId, { resolve, reject, timer, pageId: page.pageId });
 
       const message = { type: "capture", requestId, frames };
-      if (opts.maxBufferSize) {
+      if (typeof opts.maxBufferSize === "number") {
         message.maxBufferSize = opts.maxBufferSize;
+      }
+      if (typeof opts.maxTextureSize === "number") {
+        message.maxTextureSize = opts.maxTextureSize;
+      }
+      if (opts.passLabel) {
+        message.passLabel = opts.passLabel;
+      }
+      if (opts.passType) {
+        message.passType = opts.passType;
       }
       try {
         page.ws.send(JSON.stringify(message));
       } catch (e) {
         this._rejectPending(requestId, new Error(`Failed to send capture request: ${e.message}`));
+      }
+    });
+  }
+
+  // Ask a page to read back a live GPU buffer's current contents. Resolves with
+  // { bufferId, offset, byteLength, base64, truncated } once the page replies.
+  requestRead(opts) {
+    opts = opts || {};
+    return new Promise((resolve, reject) => {
+      if (!this._listening) {
+        reject(new Error("Bridge is not listening, so live buffer reads are unavailable."));
+        return;
+      }
+      const pages = [...this._pages.values()];
+      if (pages.length === 0) {
+        reject(new Error("No instrumented pages connected."));
+        return;
+      }
+      let page;
+      if (opts.pageId) {
+        page = this._pages.get(opts.pageId);
+        if (!page) {
+          reject(new Error(`No connected page with id "${opts.pageId}".`));
+          return;
+        }
+      } else if (pages.length === 1) {
+        page = pages[0];
+      } else {
+        reject(new Error(`${pages.length} pages connected (${pages.map((p) => p.pageId).join(", ")}). Pass pageId to choose one.`));
+        return;
+      }
+      if (typeof opts.bufferId !== "number") {
+        reject(new Error("bufferId is required."));
+        return;
+      }
+
+      const requestId = randomUUID();
+      const timeoutMs = opts.timeoutMs || 15000;
+      const timer = setTimeout(() => {
+        this._rejectPending(requestId, new Error(`Buffer read timed out after ${timeoutMs}ms.`));
+      }, timeoutMs);
+      this._pending.set(requestId, { resolve, reject, timer, pageId: page.pageId });
+
+      const message = { type: "readBuffer", requestId, bufferId: opts.bufferId };
+      if (typeof opts.offset === "number") {
+        message.offset = opts.offset;
+      }
+      if (typeof opts.size === "number") {
+        message.size = opts.size;
+      }
+      try {
+        page.ws.send(JSON.stringify(message));
+      } catch (e) {
+        this._rejectPending(requestId, new Error(`Failed to send buffer read request: ${e.message}`));
       }
     });
   }
@@ -289,16 +381,47 @@ export class Bridge {
       return;
     }
     const requestId = decodeURIComponent(url.pathname.slice("/capture/".length));
-    const chunks = [];
+
+    // The body is NDJSON: the first line is the capture metadata, each
+    // subsequent line is one out-of-band payload ({__payloadId, __typedArray,
+    // base64}). We parse it line by line at the byte level (splitting on \n)
+    // and never concatenate the whole body into one giant string — that is what
+    // made large captures fail. A legacy page that uploaded a single compact
+    // JSON object (schema 1.0, base64 inlined) arrives as one line and still
+    // parses fine.
+    let leftover = Buffer.alloc(0);
     let size = 0;
     let aborted = false;
+    let parseError = null;
+    let metadata = null;
+    const payloads = new Map(); // payloadId -> { typedArray, base64 }
+
+    const handleLine = (buf) => {
+      // Skip blank lines (e.g. trailing newline).
+      if (buf.length === 0) {
+        return;
+      }
+      let obj;
+      try {
+        obj = JSON.parse(buf.toString("utf8"));
+      } catch (e) {
+        parseError = parseError || e;
+        return;
+      }
+      if (metadata === null) {
+        metadata = obj;
+      } else if (obj && typeof obj.__payloadId === "number") {
+        payloads.set(obj.__payloadId, { typedArray: obj.__typedArray, base64: obj.base64 });
+      }
+      // Any other line shape is ignored defensively.
+    };
 
     req.on("data", (chunk) => {
       if (aborted) {
         return;
       }
       size += chunk.length;
-      if (size > MAX_UPLOAD_BYTES) {
+      if (size > this._maxUploadBytes) {
         aborted = true;
         res.writeHead(413, cors);
         res.end();
@@ -306,26 +429,33 @@ export class Bridge {
         this._rejectPending(requestId, new Error("Uploaded capture exceeded the size limit."));
         return;
       }
-      chunks.push(chunk);
+      let data = leftover.length ? Buffer.concat([leftover, chunk]) : chunk;
+      let start = 0;
+      let nl;
+      while ((nl = data.indexOf(0x0a, start)) !== -1) {
+        handleLine(data.subarray(start, nl));
+        start = nl + 1;
+      }
+      leftover = data.subarray(start);
     });
 
     req.on("end", async () => {
       if (aborted) {
         return;
       }
-      let json;
-      try {
-        json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-      } catch (e) {
+      handleLine(leftover);
+      if (metadata === null || parseError) {
         res.writeHead(400, { ...cors, "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid JSON" }));
-        this._rejectPending(requestId, new Error("Uploaded capture was not valid JSON."));
+        res.end(JSON.stringify({ error: "invalid capture stream" }));
+        this._rejectPending(requestId, new Error(
+          parseError ? `Uploaded capture had an invalid line: ${parseError.message}`
+            : "Uploaded capture was empty."));
         return;
       }
       const pending = this._pending.get(requestId);
       const page = pending ? this._pages.get(pending.pageId) : null;
       try {
-        const meta = await this._store.addLive(json, { pageName: page ? page.name : "" });
+        const meta = await this._store.addLive({ metadata, payloads }, { pageName: page ? page.name : "" });
         res.writeHead(200, { ...cors, "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: true, captureId: meta.id }));
         this._resolvePending(requestId, meta);

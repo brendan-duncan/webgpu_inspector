@@ -33,11 +33,26 @@ explains how to read one and what to flag.
 Always start with `get_capture_summary` — it carries object/command counts,
 derived stats, and a heuristic `issues` list. Then drill in:
 
-- `get_commands` with a `method` filter or an `offset`/`limit` window — never
-  fetch the whole list at once for a large capture.
+- `get_commands` with a `method` filter, a `passLabel` regex, or an
+  `offset`/`limit` window — never fetch the whole list at once for a large capture.
 - `get_object` for a pipeline, bind group, or texture descriptor.
 - `get_shader` for a ShaderModule's WGSL.
 - `get_validation_errors` for correctness problems.
+
+To debug a specific draw (e.g. "this draw read a vertex attribute as 0"):
+
+- `get_draw_state(commandIndex)` resolves the bound pipeline (+ vertex layout),
+  bind groups, vertex/index buffers, and draw params for a draw command. Each
+  vertex buffer reports a `bufferDataCommandIndex`.
+- `decode_vertex_buffer(commandIndex)` — pass a vertex buffer's
+  `bufferDataCommandIndex` to decode its first N vertices into per-attribute
+  numbers (the layout is taken from the pipeline automatically).
+- `diff_draws(cmdA, cmdB)` compares a working vs. a broken draw's resolved state.
+
+For very large frames, capture only what you need: `capture_frames` accepts
+`passLabel` / `passType` (capture heavy payloads for matching passes only) and
+`maxBufferSize` (per-buffer byte cap; truncated buffers are marked). To inspect a
+live buffer without a full capture, use `read_buffer`.
 
 Cite `index` (command) and `id` (object) values in findings so the user can
 locate them in the WebGPU Inspector DevTools Capture panel.

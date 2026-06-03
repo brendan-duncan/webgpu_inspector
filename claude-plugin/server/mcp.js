@@ -14,8 +14,82 @@ import {
   summarize,
   listCommands,
   getObject,
-  getShader
+  getShader,
+  getDrawState,
+  decodeVertexBuffer,
+  diffDraws
 } from "./analysis.js";
+
+// Largest WGSL source returned by get_shader before truncation.
+const MAX_SHADER_CHARS = 60000;
+// Soft caps for clampResult, so no tool result blows out the model's context.
+const MAX_STRING_CHARS = 20000;
+const MAX_ARRAY_ITEMS = 1000;
+
+// Defensively bound a tool result before it's serialized: long strings and big
+// arrays are truncated with a clear marker rather than returned in full. This
+// is a backstop — individual tools already paginate/slice — so a surprising
+// large field degrades instead of flooding the context.
+function clampResult(value, depth) {
+  depth = depth || 0;
+  if (typeof value === "string") {
+    if (value.length > MAX_STRING_CHARS) {
+      return value.slice(0, MAX_STRING_CHARS) + `...[truncated, ${value.length - MAX_STRING_CHARS} more chars]`;
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const out = value.slice(0, MAX_ARRAY_ITEMS).map((v) => clampResult(v, depth + 1));
+    if (value.length > MAX_ARRAY_ITEMS) {
+      out.push(`...[truncated, ${value.length - MAX_ARRAY_ITEMS} more items]`);
+    }
+    return out;
+  }
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const k of Object.keys(value)) {
+      out[k] = clampResult(value[k], depth + 1);
+    }
+    return out;
+  }
+  return value;
+}
+
+// Turn a live buffer readback ({ base64, byteLength, ... }) into typed numbers.
+function decodeReadback(result, type) {
+  if (!result || typeof result.base64 !== "string") {
+    return result || { error: "No data returned." };
+  }
+  const bytes = Buffer.from(result.base64, "base64");
+  const out = {
+    bufferId: result.bufferId,
+    offset: result.offset || 0,
+    byteLength: bytes.length,
+    type
+  };
+  if (result.truncated) {
+    out.truncated = result.truncated;
+  }
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const values = [];
+  if (type === "hex") {
+    out.hex = bytes.toString("hex");
+    return out;
+  }
+  const sizes = { uint8: 1, uint16: 2, uint32: 4, int32: 4, float32: 4 };
+  const step = sizes[type] || 4;
+  for (let i = 0; i + step <= bytes.length; i += step) {
+    switch (type) {
+      case "uint8": values.push(dv.getUint8(i)); break;
+      case "uint16": values.push(dv.getUint16(i, true)); break;
+      case "uint32": values.push(dv.getUint32(i, true)); break;
+      case "int32": values.push(dv.getInt32(i, true)); break;
+      default: values.push(dv.getFloat32(i, true)); break;
+    }
+  }
+  out.values = values;
+  return out;
+}
 
 export function createMcpServer(deps) {
   const store = deps.store;
@@ -116,7 +190,26 @@ export function createMcpServer(deps) {
           },
           maxBufferSize: {
             type: "integer",
-            description: "Optional cap, in bytes, on captured uniform/storage buffer data."
+            description: "Optional cap, in bytes, applied to EVERY captured buffer payload " +
+              "(vertex/index/storage/uniform/indirect). Buffers larger than this are truncated " +
+              "to the first N bytes (recorded as truncated). Default 64KB. Use -1 to disable."
+          },
+          maxTextureSize: {
+            type: "integer",
+            description: "Optional cap, in bytes, on each captured texture's pixel data. Textures " +
+              "larger than this are skipped (descriptor still recorded), keeping captures light. " +
+              "Default 16MB. Use -1 to capture all texture data."
+          },
+          passLabel: {
+            type: "string",
+            description: "Optional: only capture heavy payloads (buffers/textures) for render/" +
+              "compute passes whose label matches this regular expression. Greatly shrinks " +
+              "captures of large frames by skipping unrelated passes (shadows, IBL, post)."
+          },
+          passType: {
+            type: "string",
+            enum: ["render", "compute"],
+            description: "Optional: only capture heavy payloads for passes of this type."
           }
         }
       }
@@ -147,7 +240,9 @@ export function createMcpServer(deps) {
       inputSchema: {
         type: "object",
         properties: {
-          captureId: { type: "string", description: "Capture id (default: most recent)." }
+          captureId: { type: "string", description: "Capture id (default: most recent)." },
+          includeMethodCounts: { type: "boolean", description: "Include the per-method command counts map (default true)." },
+          includeIssues: { type: "boolean", description: "Include heuristic performance/correctness issues (default true)." }
         }
       }
     },
@@ -161,7 +256,8 @@ export function createMcpServer(deps) {
           captureId: { type: "string", description: "Capture id (default: most recent)." },
           offset: { type: "integer", description: "Start index into the (filtered) list.", minimum: 0 },
           limit: { type: "integer", description: "Max entries to return (default 50, max 500).", minimum: 1 },
-          method: { type: "string", description: "Optional: only commands with this method name." }
+          method: { type: "string", description: "Optional: only commands with this method name." },
+          passLabel: { type: "string", description: "Optional regex: only commands inside a render/compute pass whose label matches." }
         }
       }
     },
@@ -198,6 +294,80 @@ export function createMcpServer(deps) {
         properties: {
           captureId: { type: "string", description: "Capture id (default: most recent)." }
         }
+      }
+    },
+    {
+      name: "get_draw_state",
+      description: "Resolve the full GPU state for a draw/dispatch command: the bound pipeline " +
+        "(and its vertex layout), bind groups per slot (with resource ids), vertex buffers per " +
+        "slot (each with the command index that captured its bytes), the index buffer, and draw " +
+        "params. Use this to diagnose what a specific draw actually read.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          captureId: { type: "string", description: "Capture id (default: most recent)." },
+          commandIndex: { type: "integer", description: "Index of a draw*/dispatch* command (see get_commands).", minimum: 0 }
+        },
+        required: ["commandIndex"]
+      }
+    },
+    {
+      name: "decode_vertex_buffer",
+      description: "Decode the first N vertices of a captured vertex buffer into per-attribute " +
+        "numbers, so you can read e.g. 'attribute @location(2) (uv) = (0,0)' directly. Pass the " +
+        "bufferDataCommandIndex from get_draw_state (a setVertexBuffer command); the vertex layout " +
+        "is taken from the draw's pipeline automatically (or pass `layout`/`pipelineId`).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          captureId: { type: "string", description: "Capture id (default: most recent)." },
+          commandIndex: { type: "integer", description: "Index of the setVertexBuffer command (vertexBuffers[].bufferDataCommandIndex from get_draw_state).", minimum: 0 },
+          firstN: { type: "integer", description: "Number of vertices to decode (default 8).", minimum: 1 },
+          baseVertex: { type: "integer", description: "First vertex to decode from (default 0)." },
+          pipelineId: { type: "integer", description: "Optional: pipeline object id to derive the layout from." },
+          layout: {
+            type: "object",
+            description: "Optional explicit GPUVertexBufferLayout { arrayStride, attributes:[{shaderLocation, format, offset}] }."
+          }
+        },
+        required: ["commandIndex"]
+      }
+    },
+    {
+      name: "diff_draws",
+      description: "Structurally diff the resolved state (pipeline, bind groups, vertex/index " +
+        "bindings, draw params) of two draw commands — useful when a working draw and a broken " +
+        "draw share a pipeline and the difference must be in bound resources.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          captureId: { type: "string", description: "Capture id (default: most recent)." },
+          cmdA: { type: "integer", description: "Command index of the first draw.", minimum: 0 },
+          cmdB: { type: "integer", description: "Command index of the second draw.", minimum: 0 }
+        },
+        required: ["cmdA", "cmdB"]
+      }
+    },
+    {
+      name: "read_buffer",
+      description: "Read the current contents of a live GPU buffer on a connected page, without " +
+        "taking a full capture. The inspector copies the buffer to a readback buffer, maps it, and " +
+        "returns the bytes decoded as the requested type. The source buffer must have been created " +
+        "with COPY_SRC usage (buffers created while a capture is armed are given COPY_SRC).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          pageId: { type: "string", description: "Page to read from. Optional when exactly one page is connected." },
+          bufferId: { type: "integer", description: "Numeric id of the GPU Buffer object to read." },
+          offset: { type: "integer", description: "Byte offset to start reading at (default 0).", minimum: 0 },
+          size: { type: "integer", description: "Number of bytes to read (default: to end of buffer, capped).", minimum: 1 },
+          type: {
+            type: "string",
+            enum: ["uint8", "uint16", "uint32", "int32", "float32", "hex"],
+            description: "How to decode the returned bytes (default float32)."
+          }
+        },
+        required: ["bufferId"]
       }
     }
   ];
@@ -259,7 +429,10 @@ export function createMcpServer(deps) {
       const meta = await bridge.requestCapture({
         pageId: args.pageId,
         frames: args.frames,
-        maxBufferSize: args.maxBufferSize
+        maxBufferSize: args.maxBufferSize,
+        maxTextureSize: args.maxTextureSize,
+        passLabel: args.passLabel,
+        passType: args.passType
       });
       const json = store.getJson(meta.id);
       return { captureId: meta.id, summary: summarize(json) };
@@ -278,7 +451,13 @@ export function createMcpServer(deps) {
 
     get_capture_summary: async (args) => {
       const { id, json } = resolveCapture(args);
-      return { captureId: id, summary: summarize(json) };
+      return {
+        captureId: id,
+        summary: summarize(json, {
+          includeMethodCounts: args.includeMethodCounts,
+          includeIssues: args.includeIssues
+        })
+      };
     },
 
     get_commands: async (args) => {
@@ -288,9 +467,43 @@ export function createMcpServer(deps) {
         ...listCommands(json, {
           offset: args.offset,
           limit: args.limit,
-          method: args.method
+          method: args.method,
+          passLabel: args.passLabel
         })
       };
+    },
+
+    get_draw_state: async (args) => {
+      const { id, json } = resolveCapture(args);
+      return { captureId: id, drawState: getDrawState(json, args.commandIndex | 0) };
+    },
+
+    decode_vertex_buffer: async (args) => {
+      const { id, json } = resolveCapture(args);
+      const resolver = (payloadId) => store.getPayload(id, payloadId);
+      const decoded = decodeVertexBuffer(json, {
+        commandIndex: args.commandIndex | 0,
+        firstN: args.firstN,
+        baseVertex: args.baseVertex,
+        pipelineId: args.pipelineId,
+        layout: args.layout
+      }, resolver);
+      return { captureId: id, ...decoded };
+    },
+
+    diff_draws: async (args) => {
+      const { id, json } = resolveCapture(args);
+      return { captureId: id, ...diffDraws(json, args.cmdA | 0, args.cmdB | 0) };
+    },
+
+    read_buffer: async (args) => {
+      const result = await bridge.requestRead({
+        pageId: args.pageId,
+        bufferId: args.bufferId,
+        offset: args.offset,
+        size: args.size
+      });
+      return decodeReadback(result, args.type || "float32");
     },
 
     get_object: async (args) => {
@@ -304,7 +517,12 @@ export function createMcpServer(deps) {
 
     get_shader: async (args) => {
       const { id, json } = resolveCapture(args);
-      return { captureId: id, ...getShader(json, args.objectId) };
+      const shader = getShader(json, args.objectId);
+      if (typeof shader.code === "string" && shader.code.length > MAX_SHADER_CHARS) {
+        shader.codeTruncated = { totalChars: shader.code.length, returnedChars: MAX_SHADER_CHARS };
+        shader.code = shader.code.slice(0, MAX_SHADER_CHARS) + `\n...[truncated, ${shader.code.length - MAX_SHADER_CHARS} more chars]`;
+      }
+      return { captureId: id, ...shader };
     },
 
     get_validation_errors: async (args) => {
@@ -330,9 +548,10 @@ export function createMcpServer(deps) {
     }
     try {
       const result = await handler(args);
-      const text = typeof result === "string"
-        ? result
-        : JSON.stringify(result, null, 2);
+      const clamped = typeof result === "string" ? result : clampResult(result);
+      const text = typeof clamped === "string"
+        ? clamped
+        : JSON.stringify(clamped, null, 2);
       return { content: [{ type: "text", text }] };
     } catch (e) {
       return {

@@ -75,9 +75,20 @@ webgpuInspector.endFrameCapture();
 await webgpuInspector.saveCaptureData("my_capture.json");
 ```
 
-`saveCaptureData()` returns a `Promise` that resolves with the JSON object once the download is
-initiated. The returned object is the parsed JSON, so callers that want to handle the bytes
-themselves (e.g. send to a server) can stringify it instead of relying on the download.
+`saveCaptureData()` returns a `Promise` that resolves once the download is initiated. To avoid ever
+building one giant string (large captures used to overflow V8's ~512MB string limit), the capture is
+split into small metadata plus out-of-band payload byte blobs, and the resolved value is
+`{ metadata, payloads }`:
+
+- `metadata` — the capture object (objects, command list, validation errors). Buffer/texture bytes
+  appear as lightweight `{ __payloadId, __typedArray, __length, __byteLength }` references instead of
+  inline base64.
+- `payloads` — an array of `{ id, typedArray, bytes }` (the actual `Uint8Array` byte blobs).
+
+The downloaded file is **NDJSON**: the metadata on the first line, then one payload per line. It is
+loadable via DevTools "Load Capture" and the plugin's `load_capture_file` tool, which also still
+accept the older single-object `.json` captures. To serialize it yourself, use
+`captureStreamToLines({ metadata, payloads })` from `src/utils/local_capture.js`.
 
 After `saveCaptureData()` resolves, captured commands are cleared. You can call `beginFrameCapture()`
 / `endFrameCapture()` again to record more frames and `saveCaptureData()` again to produce another
@@ -161,11 +172,25 @@ capture calls will type-check:
 
 ```ts
 // webgpu_inspector.d.ts
+interface CaptureStream {
+  metadata: Record<string, unknown>;
+  payloads: Array<{ id: number; typedArray: string; bytes: Uint8Array }>;
+}
+
 interface WebGPUInspector {
   initialize(): void;
-  beginFrameCapture(): void;
+  beginFrameCapture(options?: {
+    maxBufferSize?: number;
+    maxTextureSize?: number;
+    passLabel?: string | RegExp;
+    passType?: "render" | "compute";
+  }): void;
   endFrameCapture(): void;
-  saveCaptureData(filename?: string): Promise<Record<string, unknown>>;
+  saveCaptureData(filename?: string, options?: { download?: boolean }): Promise<CaptureStream>;
+  readBuffer(bufferId: number, offset?: number, size?: number): Promise<{
+    offset: number; byteLength: number; base64: string;
+    truncated?: { byteLength: number; capturedBytes: number } | null;
+  }>;
 }
 
 declare global {

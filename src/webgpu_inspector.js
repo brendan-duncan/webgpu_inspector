@@ -5,7 +5,7 @@ import { TextureUtils } from "./utils/texture_utils.js";
 import { Actions, PanelActions } from "./utils/actions.js";
 import { RollingAverage } from "./utils/rolling_average.js";
 import { alignTo } from "./utils/align.js";
-import { LocalCaptureStore } from "./utils/local_capture.js";
+import { LocalCaptureStore, captureStreamToBlob } from "./utils/local_capture.js";
 import { BridgeClient } from "./utils/bridge_client.js";
 
 export let webgpuInspector = null;
@@ -26,9 +26,39 @@ export let webgpuInspector = null;
   // How much data should we send to the panel via message as a chunk.
   // Messages can't send that much data.
   const maxDataChunkSize = (1024 * 1024); // 1MB
-  const maxBufferCaptureSize = (1024 * 1024) / 4; // 256KB
+  const maxBufferCaptureSize = 64 * 1024; // 64KB — light by default; raise via capture options.
+  // Default cap on captured texture pixel data, per texture (bytes). Full-res
+  // render targets are large, so the programmatic/bridge capture path skips
+  // textures above this by default to stay light; raise or set -1 to disable.
+  const maxTextureCaptureSize = 16 * 1024 * 1024; // 16MB
   const maxColorAttachments = 10;
   const captureFrameCount = 1;
+
+  // Build a scoped-capture filter from capture options. Returns null when no
+  // scoping is requested (capture everything). `passLabel` may be a string
+  // (treated as a RegExp source) or a RegExp; `passType` is "render"/"compute".
+  function _buildCaptureScope(options) {
+    if (!options || (!options.passLabel && !options.passType)) {
+      return null;
+    }
+    let passLabelRegex = null;
+    if (options.passLabel) {
+      try {
+        passLabelRegex = options.passLabel instanceof RegExp
+          ? options.passLabel
+          : new RegExp(options.passLabel);
+      } catch (e) {
+        passLabelRegex = null;
+      }
+    }
+    const passType = (options.passType === "render" || options.passType === "compute")
+      ? options.passType
+      : null;
+    if (!passLabelRegex && !passType) {
+      return null;
+    }
+    return { passLabelRegex, passType };
+  }
 
   class WebGPUInspector {
     constructor() {
@@ -54,6 +84,13 @@ export let webgpuInspector = null;
       this._toDestroy = []; // Defer deleting temp objects until after finish
       this._objectReplacementMap = new Map(); // Map objects to their replacements <id:string, {id:string, object:WeakRef, replacement:Object}>
       this._captureBuffersCount = 0;
+      // Per-capture buffer payload cap (bytes). Set in beginFrameCapture; -1 = uncapped.
+      this._captureMaxBufferSize = maxBufferCaptureSize;
+      // Per-capture texture pixel-data cap (bytes). -1 = uncapped (the default for
+      // devtools-panel captures; the programmatic/bridge path caps by default).
+      this._captureMaxTextureSize = -1;
+      // Optional scoped-capture filter ({ passLabelRegex, passType }); null = capture everything.
+      this._captureScope = null;
       this._captureTempBuffers = [];
       this._mappedTextureBufferCount = 0;
       this._mappedBufferCount = 0;
@@ -538,15 +575,33 @@ export let webgpuInspector = null;
     // Begin recording GPU commands for one frame. Pairs with
     // `endFrameCapture()`. Each pair captures one frame; multiple pairs
     // accumulate multiple frames into the same export.
-    beginFrameCapture() {
+    // `options` (all optional):
+    //   maxBufferSize - cap, in bytes, on every captured buffer payload
+    //                   (vertex/index/storage/uniform/indirect). Use -1 to
+    //                   disable the cap. Defaults to `maxBufferCaptureSize`.
+    //   maxTextureSize- cap, in bytes, on each captured texture's pixel data;
+    //                   larger textures are skipped (no pixels). Use -1 to
+    //                   disable. Defaults to `maxTextureCaptureSize`.
+    //   passLabel     - only capture heavy payloads for render/compute passes
+    //                   whose label matches this string or RegExp.
+    //   passType      - "render" | "compute": only capture payloads for passes
+    //                   of this type.
+    beginFrameCapture(options) {
       if (!this._localCapture) {
         throw new Error("WebGPU Inspector: call initialize() before beginFrameCapture()");
       }
       if (this._localCaptureActive) {
         return;
       }
+      options = options || {};
       this._localCaptureActive = true;
-      this._captureMaxBufferSize = maxBufferCaptureSize;
+      this._captureMaxBufferSize = (typeof options.maxBufferSize === "number")
+        ? options.maxBufferSize
+        : maxBufferCaptureSize;
+      this._captureMaxTextureSize = (typeof options.maxTextureSize === "number")
+        ? options.maxTextureSize
+        : maxTextureCaptureSize;
+      this._captureScope = _buildCaptureScope(options);
       this._captureFrameRequest = true;
     }
 
@@ -567,6 +622,7 @@ export let webgpuInspector = null;
       }
       this._captureFrameRequest = false;
       this._localCaptureActive = false;
+      this._captureScope = null;
       this._flushLocalCapturedCommands();
     }
 
@@ -651,7 +707,9 @@ export let webgpuInspector = null;
 
       await this._waitForCapturedReadbacks();
 
-      const data = this._localCapture.buildCaptureJson("__buildVersion");
+      // Split metadata from payload bytes so the capture is never built as one
+      // giant JSON string. Returns `{ metadata, payloads }`.
+      const stream = this._localCapture.buildCaptureStream("__buildVersion");
 
       // Subsequent begin/end pairs start a fresh frame list. Object records
       // stay so anything created before this save (and still referenced by
@@ -660,21 +718,24 @@ export let webgpuInspector = null;
       this._frameRenderPassCount = 0;
       this._localCapture.resetCaptures();
 
-      const frame = data.frame ?? 0;
+      const frame = stream.metadata.frame ?? 0;
       const name = filename || `webgpu_capture_frame_${frame}.json`;
       if (!options || options.download !== false) {
-        this._downloadCaptureJson(data, name);
+        this._downloadCaptureStream(stream, name);
       }
 
-      return data;
+      return stream;
     }
 
-    _downloadCaptureJson(data, filename) {
+    // Download a capture as NDJSON (metadata line + one line per payload), built
+    // as a Blob from an array of bounded strings — no single >512MB allocation.
+    // The file is loadable via DevTools "Load Capture" / load_capture_file, which
+    // accept both this format and legacy single-object 1.0 captures.
+    _downloadCaptureStream(stream, filename) {
       if (!_document) {
         return;
       }
-      const text = JSON.stringify(data, null, 2);
-      const blob = new Blob([text], { type: "application/json" });
+      const { blob } = captureStreamToBlob(stream, "application/json");
       const url = URL.createObjectURL(blob);
       const a = _document.createElement("a");
       a.href = url;
@@ -683,6 +744,79 @@ export let webgpuInspector = null;
       a.click();
       _document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+
+    // Read a live GPU buffer's current contents without taking a full capture.
+    // Copies the buffer to a MAP_READ readback buffer, maps it, and returns the
+    // bytes as base64. The source buffer must have COPY_SRC usage (buffers
+    // created while a capture is armed get COPY_SRC automatically). Returns
+    // { offset, byteLength, base64, truncated }.
+    async readBuffer(bufferId, offset, size) {
+      const buffer = this._trackedObjects.get(bufferId)?.deref();
+      if (!buffer) {
+        throw new Error(`No live GPU buffer with id ${bufferId}.`);
+      }
+      if (buffer.__destroyed) {
+        throw new Error(`Buffer ${bufferId} has been destroyed.`);
+      }
+      const device = buffer.__device;
+      if (!device) {
+        throw new Error(`Buffer ${bufferId} has no associated device.`);
+      }
+      if (!(buffer.usage & GPUBufferUsage.COPY_SRC)) {
+        throw new Error(`Buffer ${bufferId} lacks COPY_SRC usage and can't be read back. ` +
+          "Buffers created while a capture is armed are given COPY_SRC automatically.");
+      }
+
+      const bufferSize = buffer.size;
+      offset = Math.max(0, offset | 0);
+      if (offset >= bufferSize) {
+        throw new Error(`offset ${offset} is past the buffer size ${bufferSize}.`);
+      }
+      const maxRead = 16 * 1024 * 1024;
+      let requested = (typeof size === "number" && size > 0) ? size : (bufferSize - offset);
+      requested = Math.min(requested, bufferSize - offset);
+      let truncated = null;
+      if (requested > maxRead) {
+        truncated = { byteLength: requested, capturedBytes: maxRead };
+        requested = maxRead;
+      }
+
+      // copyBufferToBuffer requires 4-byte-aligned source offset and size, so
+      // copy from an aligned offset and slice the requested window back out.
+      const alignedOffset = offset & ~3;
+      const pad = offset - alignedOffset;
+      const avail = bufferSize - alignedOffset;
+      let copySize = (requested + pad + 3) & ~3;
+      if (copySize > avail) {
+        copySize = avail & ~3;
+      }
+      const outSize = Math.max(0, Math.min(requested, copySize - pad));
+
+      this.disableRecording();
+      let readbackBuffer = null;
+      try {
+        readbackBuffer = device.createBuffer({
+          size: Math.max(4, copySize),
+          usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+          label: "READ BUFFER"
+        });
+        const encoder = device.createCommandEncoder();
+        encoder.copyBufferToBuffer(buffer, alignedOffset, readbackBuffer, 0, copySize);
+        device.queue.submit([encoder.finish()]);
+        await readbackBuffer.mapAsync(GPUMapMode.READ);
+        const mapped = new Uint8Array(readbackBuffer.getMappedRange());
+        const bytes = mapped.slice(pad, pad + outSize);
+        readbackBuffer.unmap();
+        readbackBuffer.destroy();
+        readbackBuffer = null;
+        return { offset, byteLength: outSize, base64: encodeBase64(bytes), truncated };
+      } finally {
+        if (readbackBuffer) {
+          try { readbackBuffer.destroy(); } catch (e) { /* ignore */ }
+        }
+        this.enableRecording();
+      }
     }
 
     // Send a message to the devtools panel.
@@ -1603,6 +1737,11 @@ export let webgpuInspector = null;
     _initCaptureData() {
       if (this._captureData.frame < 0 || this._gpuFrameIndex >= this._captureData.frame) {
         this._captureMaxBufferSize = this._captureData.maxBufferSize || maxBufferCaptureSize;
+        // Devtools-panel captures keep full-resolution textures by default (the
+        // texture viewer needs them); only cap if the panel explicitly asks.
+        this._captureMaxTextureSize = (typeof this._captureData.maxTextureSize === "number")
+          ? this._captureData.maxTextureSize
+          : -1;
         this._captureFrameCount = this._captureData.captureFrameCount || captureFrameCount;
         this._captureFrameRequest = true;
         // Stacktraces during frame capture are opt-in: they're cheap individually but
@@ -2026,20 +2165,13 @@ export let webgpuInspector = null;
           let dynIdx = 0;
           for (let i = 0; i < bufferEntries.length; i++) {
             const be = bufferEntries[i];
-            const size = be.size;
-            if (this._captureMaxBufferSize >= 0 && size > this._captureMaxBufferSize) {
-              if (be.hasDynamicOffset && mappedDynamicOffsets) dynIdx++;
-              continue;
-            }
+            // Always consume the dynamic offset for this entry, even if the cap
+            // or scope filter drops the capture, so later entries stay aligned.
             let offset = be.baseOffset;
             if (be.hasDynamicOffset && mappedDynamicOffsets) {
               offset = mappedDynamicOffsets[dynIdx++];
             }
-            if (!object.__captureBuffers) {
-              object.__captureBuffers = [];
-            }
-            object.__captureBuffers.push({ commandId, entryIndex: be.entryIndex, buffer: be.buffer, offset, size });
-            this._captureBuffersCount++;
+            this._queueCaptureBuffer(object, commandId, be.entryIndex, be.buffer, offset, be.size);
           }
 
           const textureViewEntries = plan.textureViewEntries;
@@ -2100,11 +2232,7 @@ export let webgpuInspector = null;
         const buffer = args[1];
         const offset = args[2] ?? 0;
         const size = args[3] ?? (buffer.size - offset);
-        if (!object.__captureBuffers) {
-          object.__captureBuffers = [];
-        }
-        object.__captureBuffers.push({ commandId, entryIndex: slot, buffer, offset, size });
-        this._captureBuffersCount++;
+        this._queueCaptureBuffer(object, commandId, slot, buffer, offset, size);
         this._updateStatusMessage();
       }
 
@@ -2112,23 +2240,15 @@ export let webgpuInspector = null;
         object.__indexBuffer = args;
         const buffer = args[0];
         const size = buffer.size;
-        if (!object.__captureBuffers) {
-          object.__captureBuffers = [];
-        }
-        object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset: 0, size });
-        this._captureBuffersCount++;
+        this._queueCaptureBuffer(object, commandId, 0, buffer, 0, size);
         this._updateStatusMessage();
       }
 
       if (method === "drawIndirect" || method === "drawIndexedIndirect" || method === "dispatchWorkgroupsIndirect") {
         const buffer = args[0];
-       const offset = 0;
+        const offset = 0;
         const size = buffer.size;
-        if (!object.__captureBuffers) {
-          object.__captureBuffers = [];
-        }
-        object.__captureBuffers.push({ commandId, entryIndex: 0, buffer, offset, size });
-        this._captureBuffersCount++;
+        this._queueCaptureBuffer(object, commandId, 0, buffer, offset, size);
         this._updateStatusMessage();
       }
 
@@ -2144,6 +2264,8 @@ export let webgpuInspector = null;
           }
         }
         result.__descriptor = args[0];
+        result.__passType = "render";
+        result.__passLabel = args[0]?.label || "";
         if (args[0]?.depthStencilAttachment) {
           if (!result.__captureRenderPassTextures) {
             result.__captureRenderPassTextures = new Set();
@@ -2156,17 +2278,22 @@ export let webgpuInspector = null;
         result.__commandEncoder = object;
       } else if (method === "beginComputePass") {
         result.__commandEncoder = object;
+        result.__passType = "compute";
+        result.__passLabel = args[0]?.label || "";
         this._inComputePass = true;
       } else if (method === "end") {
         this._inComputePass = false;
         const commandEncoder = object.__commandEncoder;
+        // Scoped capture: when a pass is filtered out, skip its heavy texture
+        // payloads too. Buffer payloads were already gated at queue time.
+        const captureThisPass = this._matchesCaptureScope(object);
         if (object.__captureBuffers?.length > 0) {
           this._recordCaptureBuffers(commandEncoder, object.__captureBuffers);
           object.__captureBuffers = [];
           this._updateStatusMessage();
         }
 
-        if (object.__captureRenderPassTextures?.size > 0) {
+        if (captureThisPass && object.__captureRenderPassTextures?.size > 0) {
           let passId = this._frameRenderPassCount * maxColorAttachments;
           for (const captureTextureView of object.__captureRenderPassTextures) {
             const texture = captureTextureView.__texture;
@@ -2177,7 +2304,7 @@ export let webgpuInspector = null;
           object.__captureRenderPassTextures.clear();
         }
 
-        if (object.__captureTextureViews?.size > 0) {
+        if (captureThisPass && object.__captureTextureViews?.size > 0) {
           for (const captureTextureView of object.__captureTextureViews) {
             const texture = captureTextureView.__texture;
             if (texture) {
@@ -2311,7 +2438,10 @@ export let webgpuInspector = null;
     // Send buffer data associated with a command to the inspector server.
     // The data is sent in chunks since the message pipe can't handle very
     // much data at a time.
-    _sendBufferData(commandId, entryIndex, data) {
+    // `originalSize` (optional, > 0 only when the buffer was truncated to the
+    // capture cap) is the buffer's true byte length, recorded so the export can
+    // mark the payload truncated.
+    _sendBufferData(commandId, entryIndex, data, originalSize) {
       const size = data.length;
       const numChunks = Math.ceil(size / maxDataChunkSize);
 
@@ -2328,6 +2458,7 @@ export let webgpuInspector = null;
           entryIndex,
           offset,
           size,
+          originalSize: originalSize || 0,
           index: i,
           count: numChunks,
           chunk: encodeBase64(chunk)
@@ -2387,7 +2518,7 @@ export let webgpuInspector = null;
           tempBuffer.destroy();
           for (let i = 0; i < ranges.length; i++) {
             const r = ranges[i];
-            self._sendBufferData(r.commandId, r.entryIndex, owned.subarray(r.offset, r.offset + r.size));
+            self._sendBufferData(r.commandId, r.entryIndex, owned.subarray(r.offset, r.offset + r.size), r.originalSize);
           }
           self.enableRecording();
           self._pendingMapFinished();
@@ -2461,6 +2592,50 @@ export let webgpuInspector = null;
       return plan;
     }
 
+    // Whether the active pass matches the scoped-capture filter. `passObject` is
+    // the render/compute pass encoder carrying __passLabel/__passType (set in
+    // beginRenderPass/beginComputePass). With no scope set, everything matches.
+    _matchesCaptureScope(passObject) {
+      const scope = this._captureScope;
+      if (!scope) {
+        return true;
+      }
+      if (scope.passType && passObject?.__passType && scope.passType !== passObject.__passType) {
+        return false;
+      }
+      if (scope.passLabelRegex && !scope.passLabelRegex.test(passObject?.__passLabel || "")) {
+        return false;
+      }
+      return true;
+    }
+
+    // Single choke point for queuing a buffer slice for capture. Applies the
+    // per-capture size cap (truncating to the first `_captureMaxBufferSize`
+    // bytes rather than dropping the buffer, so early vertices/indices are still
+    // decodable) and the scoped-capture filter. When truncated, the original
+    // size is recorded so the export can mark the payload. `passObject` is the
+    // encoder the capture is attached to (also used for scope matching).
+    _queueCaptureBuffer(passObject, commandId, entryIndex, buffer, offset, size) {
+      if (!this._matchesCaptureScope(passObject)) {
+        return;
+      }
+      let capturedSize = size;
+      let originalSize = 0;
+      const cap = this._captureMaxBufferSize;
+      if (cap >= 0 && size > cap) {
+        originalSize = size;
+        capturedSize = cap;
+      }
+      if (capturedSize <= 0) {
+        return;
+      }
+      if (!passObject.__captureBuffers) {
+        passObject.__captureBuffers = [];
+      }
+      passObject.__captureBuffers.push({ commandId, entryIndex, buffer, offset, size: capturedSize, originalSize });
+      this._captureBuffersCount++;
+    }
+
     // Buffers associated with a command are recorded and then sent to the inspector server.
     // The data is copied to one or more pool buffers so that the original buffers can continue
     // to be used by the page, and so a render/compute pass only triggers one mapAsync per pool
@@ -2485,6 +2660,7 @@ export let webgpuInspector = null;
           buffer: info.buffer,
           srcOffset: info.offset,
           size: info.size,
+          originalSize: info.originalSize || 0,
           alignedSize: (info.size + 3) & ~3,
         });
       }
@@ -2537,7 +2713,7 @@ export let webgpuInspector = null;
             } catch (e) {
               console.log(e);
             }
-            ranges[i - poolStart] = { commandId: p.commandId, entryIndex: p.entryIndex, offset: cur, size: p.size };
+            ranges[i - poolStart] = { commandId: p.commandId, entryIndex: p.entryIndex, offset: cur, size: p.size, originalSize: p.originalSize };
             cur += p.alignedSize;
           }
 
@@ -2638,6 +2814,12 @@ export let webgpuInspector = null;
       const rowsPerImage = height;
       let bufferSize = bytesPerRow * rowsPerImage * depthOrArrayLayers;
       if (!bufferSize || width < formatInfo.blockWidth || height < formatInfo.blockHeight) {
+        return;
+      }
+      // Texture size cap: skip capturing pixels for textures larger than the cap
+      // to keep captures light (the texture's descriptor is still recorded). The
+      // devtools-panel path leaves this uncapped so the texture viewer works.
+      if (this._captureMaxTextureSize >= 0 && bufferSize > this._captureMaxTextureSize) {
         return;
       }
       const copySize = { width, height, depthOrArrayLayers };

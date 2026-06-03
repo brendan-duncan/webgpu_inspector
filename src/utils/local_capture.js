@@ -7,17 +7,48 @@
 // - `processMessage(msg)` consumes the same messages `_postMessage` posts to
 //   devtools (object lifecycle, captured command batches, texture/buffer
 //   readback chunks). The page-side inspector hands them in directly.
-// - `buildCaptureJson()` produces the export payload that mirrors
-//   `src/devtools/capture_export.js#buildCaptureJson` — they must agree on
-//   schema so files round-trip.
+// - `buildCaptureStream()` produces the export payload (metadata + out-of-band
+//   payloads) that mirrors `src/devtools/capture_export.js#buildCaptureStream` —
+//   they must agree on schema so files round-trip.
 
 import { Actions } from "./actions.js";
 import { encodeBase64, decodeBase64 } from "./base64.js";
 import { TextureFormatInfo } from "./texture_format_info.js";
 
-const SCHEMA_VERSION = "1.0";
+// 1.1 splits payload bytes (buffer/texture data) out of the metadata into a
+// side list referenced by `{__payloadId}`, so the capture can be streamed as
+// NDJSON and never built as one >512MB string. Loaders still accept 1.0 files,
+// which inlined the bytes as `__base64`.
+const SCHEMA_VERSION = "1.1";
 
 const _hasOwn = Object.prototype.hasOwnProperty;
+
+// Collects payload byte blobs during serialization and hands back lightweight
+// references to embed in the metadata. Each blob gets a sequential id; the
+// bytes are streamed out-of-band (see BridgeClient / saveCaptureData).
+class PayloadCollector {
+  constructor() {
+    this.payloads = []; // [{ id, typedArray, bytes: Uint8Array }]
+  }
+
+  // `length` is the element count of the original view; `bytes` is the captured
+  // byte slice; `originalByteLength` (optional) is the true length when the
+  // capture cap truncated the data. Returns the metadata reference.
+  add(typedArray, length, bytes, originalByteLength) {
+    const id = this.payloads.length;
+    this.payloads.push({ id, typedArray, bytes });
+    const ref = {
+      __payloadId: id,
+      __typedArray: typedArray,
+      __length: length,
+      __byteLength: bytes.length
+    };
+    if (originalByteLength && originalByteLength > bytes.length) {
+      ref.__truncated = { byteLength: originalByteLength, capturedBytes: bytes.length };
+    }
+    return ref;
+  }
+}
 
 export class LocalCaptureStore {
   constructor() {
@@ -243,6 +274,14 @@ export class LocalCaptureStore {
     if (!cmd.isBufferDataLoaded) {
       cmd.isBufferDataLoaded = [];
     }
+    // > 0 only when the capture cap truncated this buffer; remember the true
+    // length so the serialized command can mark the payload truncated.
+    if (message.originalSize > 0) {
+      if (!cmd.bufferOriginalSize) {
+        cmd.bufferOriginalSize = [];
+      }
+      cmd.bufferOriginalSize[entryIndex] = message.originalSize;
+    }
     if (!cmd.bufferData[entryIndex] || cmd.bufferData[entryIndex].length !== message.size) {
       cmd.bufferData[entryIndex] = new Uint8Array(message.size);
       cmd._loadedChunks[entryIndex] = new Array(message.count);
@@ -337,19 +376,24 @@ export class LocalCaptureStore {
 
   // --- Serialization (mirrors src/devtools/capture_export.js) ---
 
-  buildCaptureJson(toolVersion) {
+  // Build the capture as split metadata + out-of-band payloads. Returns
+  // `{ metadata, payloads }`; the caller streams them (NDJSON: metadata first,
+  // then one line per payload) so no single huge string is ever allocated.
+  buildCaptureStream(toolVersion) {
+    const collector = new PayloadCollector();
+
     const objects = {};
     this._objects.forEach((rec, id) => {
-      objects[String(id)] = this._serializeObject(rec);
+      objects[String(id)] = this._serializeObject(rec, collector);
     });
 
     const cmdRecords = new Array(this._commands.length);
     for (let i = 0; i < this._commands.length; ++i) {
       const c = this._commands[i];
-      cmdRecords[i] = c ? this._serializeCommand(c, i) : null;
+      cmdRecords[i] = c ? this._serializeCommand(c, i, collector) : null;
     }
 
-    return {
+    const metadata = {
       schemaVersion: SCHEMA_VERSION,
       tool: "webgpu_inspector",
       toolVersion: toolVersion || "",
@@ -358,8 +402,11 @@ export class LocalCaptureStore {
       statistics: {},
       validationErrors: this._validationErrors.slice(),
       objects,
-      commands: cmdRecords
+      commands: cmdRecords,
+      payloadCount: collector.payloads.length
     };
+
+    return { metadata, payloads: collector.payloads };
   }
 
   _objectRef(id) {
@@ -374,7 +421,7 @@ export class LocalCaptureStore {
     return ref;
   }
 
-  _cloneValue(value) {
+  _cloneValue(value, collector) {
     if (value === null || value === undefined) {
       return value ?? null;
     }
@@ -392,23 +439,15 @@ export class LocalCaptureStore {
       const bytes = value instanceof Uint8Array
         ? value
         : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-      return {
-        __typedArray: value.constructor.name,
-        __length: value.length,
-        __base64: encodeBase64(bytes)
-      };
+      return collector.add(value.constructor.name, value.length, bytes);
     }
     if (value instanceof ArrayBuffer) {
-      return {
-        __typedArray: "ArrayBuffer",
-        __length: value.byteLength,
-        __base64: encodeBase64(new Uint8Array(value))
-      };
+      return collector.add("ArrayBuffer", value.byteLength, new Uint8Array(value));
     }
     if (Array.isArray(value)) {
       const out = new Array(value.length);
       for (let i = 0; i < value.length; ++i) {
-        out[i] = this._cloneValue(value[i]);
+        out[i] = this._cloneValue(value[i], collector);
       }
       return out;
     }
@@ -423,19 +462,19 @@ export class LocalCaptureStore {
         if (!_hasOwn.call(value, k)) {
           continue;
         }
-        out[k] = this._cloneValue(value[k]);
+        out[k] = this._cloneValue(value[k], collector);
       }
       return out;
     }
     return null;
   }
 
-  _serializeObject(rec) {
+  _serializeObject(rec, collector) {
     const out = {
       id: rec.id,
       type: rec.type,
       label: rec.label || undefined,
-      descriptor: rec.descriptor ? this._cloneValue(rec.descriptor) : null
+      descriptor: rec.descriptor ? this._cloneValue(rec.descriptor, collector) : null
     };
     if (rec.stacktrace) {
       out.stacktrace = rec.stacktrace;
@@ -470,7 +509,7 @@ export class LocalCaptureStore {
         mipData.push({
           mipLevel: level,
           byteLength: bytes.length,
-          base64: encodeBase64(bytes)
+          ...collector.add("Uint8Array", bytes.length, bytes)
         });
       }
       if (mipData.length) {
@@ -489,19 +528,19 @@ export class LocalCaptureStore {
     return out;
   }
 
-  _serializeCommand(command, index) {
+  _serializeCommand(command, index, collector) {
     const record = {
       index,
       method: command.method
     };
     if (command.object !== undefined) {
-      record.object = this._cloneValue(command.object);
+      record.object = this._cloneValue(command.object, collector);
     }
     if (command.args !== undefined) {
-      record.args = this._cloneValue(command.args);
+      record.args = this._cloneValue(command.args, collector);
     }
     if (command.result !== undefined) {
-      record.result = this._cloneValue(command.result);
+      record.result = this._cloneValue(command.result, collector);
     }
     if (command.stacktrace) {
       record.stacktrace = command.stacktrace;
@@ -521,10 +560,11 @@ export class LocalCaptureStore {
         if (!bytes) {
           continue;
         }
+        const originalSize = command.bufferOriginalSize ? command.bufferOriginalSize[i] : 0;
         entries.push({
           entryIndex: i,
-          byteLength: bytes.length,
-          base64: encodeBase64(bytes)
+          byteLength: originalSize || bytes.length,
+          ...collector.add("Uint8Array", bytes.length, bytes, originalSize)
         });
       }
       if (entries.length) {
@@ -540,16 +580,79 @@ export class LocalCaptureStore {
       }
       if (k === "method" || k === "object" || k === "args" || k === "result" ||
           k === "stacktrace" || k === "duration" || k === "startTime" ||
-          k === "endTime" || k === "bufferData" || k === "isBufferDataLoaded") {
+          k === "endTime" || k === "bufferData" || k === "isBufferDataLoaded" ||
+          k === "bufferOriginalSize") {
         continue;
       }
       if (k.startsWith("_")) {
         continue;
       }
-      record[k] = this._cloneValue(command[k]);
+      record[k] = this._cloneValue(command[k], collector);
     }
     return record;
   }
+}
+
+// Lazily yield a capture stream (`{ metadata, payloads }` from buildCaptureStream)
+// as NDJSON lines, each terminated by "\n": the metadata object first, then one
+// payload object per line (`{ __payloadId, __typedArray, base64 }`). Yielding one
+// line at a time matters for large captures: each (potentially multi-MB) base64
+// string can be released before the next is built, instead of holding them all.
+export function* captureStreamLines(stream) {
+  yield JSON.stringify(stream.metadata) + "\n";
+  for (const p of stream.payloads) {
+    yield JSON.stringify({
+      __payloadId: p.id,
+      __typedArray: p.typedArray,
+      base64: encodeBase64(p.bytes)
+    }) + "\n";
+  }
+}
+
+// All NDJSON lines as an array of individually-bounded strings — no single giant
+// string (the V8 ~512MB limit is what made large captures fail). Prefer
+// captureStreamToBlob for downloads/uploads: holding every base64 line at once,
+// as this does, can still exhaust memory on a texture-heavy capture.
+export function captureStreamToLines(stream) {
+  return [...captureStreamLines(stream)];
+}
+
+// Build a Blob of the NDJSON without ever holding more than one payload's base64
+// string in the JS heap at a time: each line is wrapped in its own Blob (which
+// the browser can back by disk), so the large intermediate strings are freed as
+// we go.
+//
+// `maxPayloadBytes` (optional) caps the total raw payload bytes included. Once
+// the budget is exhausted, further payload lines are skipped — the metadata
+// still references them, and loaders treat a missing payload as omitted. This is
+// the safety valve for memory-constrained contexts (e.g. the DevTools panel
+// renderer) where assembling the full base64 of a multi-hundred-MB capture would
+// crash. Returns `{ blob, omittedPayloads, includedPayloads }`.
+export function captureStreamToBlob(stream, type, maxPayloadBytes) {
+  const parts = [JSON.stringify(stream.metadata) + "\n"];
+  let used = 0;
+  let omitted = 0;
+  let included = 0;
+  for (const p of stream.payloads) {
+    const len = p.bytes ? p.bytes.length : 0;
+    if (maxPayloadBytes != null && used + len > maxPayloadBytes) {
+      omitted++;
+      continue;
+    }
+    used += len;
+    included++;
+    const line = JSON.stringify({
+      __payloadId: p.id,
+      __typedArray: p.typedArray,
+      base64: encodeBase64(p.bytes)
+    }) + "\n";
+    parts.push(new Blob([line]));
+  }
+  return {
+    blob: new Blob(parts, { type: type || "application/json" }),
+    omittedPayloads: omitted,
+    includedPayloads: included
+  };
 }
 
 function _textureDims(descriptor) {

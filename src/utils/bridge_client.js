@@ -16,6 +16,8 @@
 // to over MCP. This file only knows how to talk to that bridge; it has no
 // dependency on the plugin itself.
 
+import { captureStreamToBlob } from "./local_capture.js";
+
 const DEFAULT_URL = "ws://localhost:9690/page";
 
 // If a capture is requested but the page does not produce a new animation
@@ -44,6 +46,9 @@ export class BridgeClient {
     this._activeRequestId = null;
     this._framesRemaining = 0;
     this._fallbackTimer = null;
+    // Per-request capture options (maxBufferSize / passLabel / passType),
+    // forwarded into beginFrameCapture so scoped/size-capped captures work.
+    this._captureOptions = null;
 
     this._installRafHook();
   }
@@ -138,11 +143,40 @@ export class BridgeClient {
       case "capture":
         this._startCapture(msg);
         break;
+      case "readBuffer":
+        this._handleReadBuffer(msg);
+        break;
       case "ping":
         this._send({ type: "pong" });
         break;
       default:
         break;
+    }
+  }
+
+  // --- Live buffer readback -------------------------------------------------
+
+  // Read a live GPU buffer's current contents and send the bytes back over the
+  // WebSocket. Delegates the actual GPU work to the inspector, which knows how
+  // to allocate a readback buffer and map it.
+  async _handleReadBuffer(msg) {
+    try {
+      const result = await this._inspector.readBuffer(msg.bufferId, msg.offset, msg.size);
+      this._send({
+        type: "readResult",
+        requestId: msg.requestId,
+        bufferId: msg.bufferId,
+        offset: result.offset || 0,
+        byteLength: result.byteLength || 0,
+        base64: result.base64 || "",
+        truncated: result.truncated || null
+      });
+    } catch (e) {
+      this._send({
+        type: "readResult",
+        requestId: msg.requestId,
+        error: (e && e.message) ? e.message : String(e)
+      });
     }
   }
 
@@ -160,7 +194,7 @@ export class BridgeClient {
     self.requestAnimationFrame = function (callback) {
       return origRaf(function (time) {
         if (client._framesRemaining > 0) {
-          client._inspector.beginFrameCapture();
+          client._inspector.beginFrameCapture(client._captureOptions);
           try {
             callback(time);
           } finally {
@@ -186,6 +220,12 @@ export class BridgeClient {
     this._capturing = true;
     this._activeRequestId = msg.requestId;
     this._framesRemaining = Math.max(1, (msg.frames | 0) || 1);
+    this._captureOptions = {
+      maxBufferSize: (typeof msg.maxBufferSize === "number") ? msg.maxBufferSize : undefined,
+      maxTextureSize: (typeof msg.maxTextureSize === "number") ? msg.maxTextureSize : undefined,
+      passLabel: msg.passLabel,
+      passType: msg.passType
+    };
 
     this._send({
       type: "captureStarted",
@@ -226,7 +266,7 @@ export class BridgeClient {
     if (!this._capturing || this._framesRemaining <= 0) {
       return;
     }
-    this._inspector.beginFrameCapture();
+    this._inspector.beginFrameCapture(this._captureOptions);
     this._inspector.endFrameCapture();
     this._framesRemaining = 0;
     this._finishCapture();
@@ -235,14 +275,18 @@ export class BridgeClient {
   async _finishCapture() {
     const requestId = this._activeRequestId;
     try {
-      const data = await this._inspector.saveCaptureData(undefined, { download: false });
-      await this._upload(requestId, data);
+      // `saveCaptureData` returns `{ metadata, payloads }`: metadata is small,
+      // payload bytes are streamed out-of-band so nothing is ever stringified
+      // as one giant blob.
+      const stream = await this._inspector.saveCaptureData(undefined, { download: false });
+      const metadata = stream.metadata;
+      await this._upload(requestId, stream);
       this._send({
         type: "captureComplete",
         requestId,
-        frame: data && data.frame,
-        commands: data && data.commands ? data.commands.length : 0,
-        objects: data && data.objects ? Object.keys(data.objects).length : 0
+        frame: metadata && metadata.frame,
+        commands: metadata && metadata.commands ? metadata.commands.length : 0,
+        objects: metadata && metadata.objects ? Object.keys(metadata.objects).length : 0
       });
     } catch (e) {
       this._send({
@@ -256,17 +300,22 @@ export class BridgeClient {
     }
   }
 
-  async _upload(requestId, data) {
+  async _upload(requestId, stream) {
     let url = `${this._httpBase}/capture/${encodeURIComponent(requestId)}`;
     if (this._token) {
       url += `?token=${encodeURIComponent(this._token)}`;
     }
+    // Build the body as NDJSON: a Blob over an array of individually-bounded
+    // strings (metadata line + one line per payload). This never allocates a
+    // single >512MB string the way `JSON.stringify(wholeCapture)` did, which is
+    // what made large captures fail with "Invalid string length".
     // text/plain keeps this a CORS "simple request" (no preflight); the bridge
-    // parses the body as JSON regardless of the declared content type.
+    // stream-parses the body line by line regardless of the declared type.
+    const { blob: body } = captureStreamToBlob(stream, "text/plain");
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(data)
+      body
     });
     if (!response.ok) {
       throw new Error(`Capture upload failed: HTTP ${response.status}`);
