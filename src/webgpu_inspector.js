@@ -2610,6 +2610,10 @@ export let webgpuInspector = null;
         copyMipLevel = 0;
         this._toDestroy.push(texture); // Destroy the temp texture at the end of the frame
       } else if (formatInfo.isDepthStencil && formatInfo.hasStencil) {
+        // Capture the stencil aspect as stencil8. The format string must also be
+        // updated so the mapped-buffer handler knows to convert the stencil bytes
+        // to float data (see _stencilBufferToFloatData).
+        format = "stencil8";
         formatInfo = TextureFormatInfo["stencil8"];
       } else if (texture.sampleCount > 1) {
         this.disableRecording();

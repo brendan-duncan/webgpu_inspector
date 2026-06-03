@@ -1,0 +1,18 @@
+# Normalize all text files to LF line endings, both in the repository and in
+# working trees, on every platform. This prevents CRLF/LF churn between
+# contributors on different operating systems.
+* text=auto eol=lf
+
+# Treat known binary assets as binary so they are never line-ending normalized.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.zip binary
+*.gz  binary
