@@ -103,15 +103,13 @@ export let webgpuInspector = null;
 
       const self = this;
 
-      if (_document?.body) {
-        // If the document body is available, create the status elements now,
-        // which overlays information about the inspector.
-        this.createStatusElements();
-      } else if (_document) {
+      this._statusElementsCreated = false;
+
+      if (_document) {
+        this.scheduleStatusElements();
+
         // If there is a document but no body yet, wait for the DOMContentLoaded event.
         _document.addEventListener("DOMContentLoaded", () => {
-          self.createStatusElements();
-
           const iframes = _document.getElementsByTagName("iframe");
           if (iframes.length > 0) {
             for (const iframe of iframes) {
@@ -429,11 +427,34 @@ export let webgpuInspector = null;
       }
     }
 
+    scheduleStatusElements() {
+      if (this._statusElementsCreated || !_document) {
+        return;
+      }
+
+      const create = () => {
+        _window.requestAnimationFrame(() => {
+          _window.requestAnimationFrame(() => this.createStatusElements());
+        });
+      };
+
+      if (_document.readyState === "complete") {
+        _window.setTimeout(create, 0);
+      } else {
+        _window.addEventListener("load", create, { once: true });
+      }
+    }
+
     // Create an on-screen status display on the page being inspected.
     createStatusElements() {
+      if (this._statusElementsCreated || !_document?.body) {
+        return;
+      }
+      this._statusElementsCreated = true;
+
       const statusContainer = _document.createElement("div");
       statusContainer.style = "position: absolute; top: 0px; left: 0px; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt;";
-      _document.body.insertBefore(statusContainer, _document.body.firstChild);
+      _document.body.appendChild(statusContainer);
 
       this._inspectingStatus = _document.createElement("div");
       this._inspectingStatus.title = "WebGPU Inspector Running";
@@ -1493,6 +1514,27 @@ export let webgpuInspector = null;
         const ref = this._trackedObjects.get(textureId);
         const texture = ref?.deref();
         if (texture instanceof GPUTexture) {
+          if (texture.__device) {
+            this._captureTextureBuffer(texture.__device, null, texture, undefined, mipLevel);
+            const captureTextures = [...this._captureTexturedBuffers];
+            this._captureTexturedBuffers.length = 0;
+            const toDestroy = [...this._toDestroy];
+            this._toDestroy.length = 0;
+
+            if (captureTextures.length) {
+              this._pendingMapCount += captureTextures.length;
+              const self = this;
+              texture.__device.queue.onSubmittedWorkDone().then(() => {
+                self.disableRecording();
+                self._sendCaptureTextureBuffers(captureTextures);
+                for (const obj of toDestroy) {
+                  obj.destroy();
+                }
+                self.enableRecording();
+              });
+              return;
+            }
+          }
           this._captureTextureRequest.set(textureId, { texture, mipLevel });
         }
       }
@@ -2186,7 +2228,7 @@ export let webgpuInspector = null;
         textures });
 
       for (const textureBuffer of buffers) {
-        const { id, tempBuffer, passId, mipLevel } = textureBuffer;
+        const { id, tempBuffer, passId, mipLevel, format, width, height, depthOrArrayLayers } = textureBuffer;
 
         this._mappedTextureBufferCount++;
         const self = this;
@@ -2194,8 +2236,13 @@ export let webgpuInspector = null;
           self._mappedTextureBufferCount--;
           self._updateStatusMessage();
           self.disableRecording();
+          const range = tempBuffer.getMappedRange();
+          let data = new Uint8Array(range);
+          if (format === "stencil8") {
+            data = self._stencilBufferToFloatData(data, width, height, depthOrArrayLayers);
+          }
           // Own the data so we can destroy the temp buffer before encoding chunks.
-          const owned = new Uint8Array(tempBuffer.getMappedRange()).slice();
+          const owned = new Uint8Array(data).slice();
           tempBuffer.destroy();
           self._sendTextureData(id, passId, owned, mipLevel);
           self.enableRecording();
@@ -2205,6 +2252,28 @@ export let webgpuInspector = null;
         });
       }
       this._updateStatusMessage();
+    }
+
+    _stencilBufferToFloatData(data, width, height, depthOrArrayLayers) {
+      const srcBytesPerRow = (width + 255) & ~0xff;
+      const dstBytesPerRow = ((width * 4) + 255) & ~0xff;
+      const dst = new Uint8Array(dstBytesPerRow * height * depthOrArrayLayers);
+      const dstFloats = new Float32Array(dst.buffer);
+      const dstStride = dstBytesPerRow / 4;
+
+      for (let layer = 0; layer < depthOrArrayLayers; ++layer) {
+        const srcLayerOffset = layer * srcBytesPerRow * height;
+        const dstLayerOffset = layer * dstStride * height;
+        for (let y = 0; y < height; ++y) {
+          const srcRowOffset = srcLayerOffset + y * srcBytesPerRow;
+          const dstRowOffset = dstLayerOffset + y * dstStride;
+          for (let x = 0; x < width; ++x) {
+            dstFloats[dstRowOffset + x] = data[srcRowOffset + x];
+          }
+        }
+      }
+
+      return dst;
     }
 
     _sendTextureData(id, passId, data, mipLevel) {
@@ -2510,6 +2579,7 @@ export let webgpuInspector = null;
       const id = texture.__id;
       let format = texture.format;
       let formatInfo = format ? TextureFormatInfo[format] : undefined;
+      let copyMipLevel = mipLevel;
       if (!formatInfo) { // GPUExternalTexture?
         return;
       }
@@ -2520,19 +2590,14 @@ export let webgpuInspector = null;
         }
       }
 
-      if (formatInfo.isDepthStencil) {
-        if (this._isCompatibilityMode(device)) {
-          // Can't capture depth textures in compatibility mode
-          // because textureLoad can't read from depth textures.
-          return;
-        }
+      if (formatInfo.isDepthStencil && formatInfo.hasDepth) {
         this.disableRecording();
         try {
           const textureUtils = this._getTextureUtils(device);
           // depth24plus texture's can't be copied to a buffer,
           // https://github.com/gpuweb/gpuweb/issues/652,
           // convert it to a float texture.
-          texture = textureUtils.copyDepthTexture(texture, "r32float", commandEncoder);
+          texture = textureUtils.copyDepthTexture(texture, "r32float", commandEncoder, mipLevel);
         } catch (e) {
           this.enableRecording();
           console.log(e);
@@ -2542,7 +2607,10 @@ export let webgpuInspector = null;
         format = texture.format;
         formatInfo = format ? TextureFormatInfo[format] : undefined;
         texture.__id = id;
+        copyMipLevel = 0;
         this._toDestroy.push(texture); // Destroy the temp texture at the end of the frame
+      } else if (formatInfo.isDepthStencil && formatInfo.hasStencil) {
+        formatInfo = TextureFormatInfo["stencil8"];
       } else if (texture.sampleCount > 1) {
         this.disableRecording();
         try {
@@ -2558,8 +2626,8 @@ export let webgpuInspector = null;
         this.enableRecording();
       }
 
-      const width = (texture.width >> mipLevel) || 1;
-      const height = (texture.height >> mipLevel) || 1;
+      const width = (texture.width >> copyMipLevel) || 1;
+      const height = (texture.height >> copyMipLevel) || 1;
       const depthOrArrayLayers = texture.depthOrArrayLayers || 1;
       const texelByteSize = formatInfo.bytesPerBlock;
       const bytesPerRow = (width * texelByteSize + 255) & ~0xff;
@@ -2595,10 +2663,10 @@ export let webgpuInspector = null;
           usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
         });
 
-        const aspect = "all";
+        const aspect = formatInfo.hasStencil ? "stencil-only" : "all";
 
         commandEncoder.copyTextureToBuffer(
-          { texture, aspect, mipLevel },
+          { texture, aspect, mipLevel: copyMipLevel },
           { buffer: tempBuffer, bytesPerRow, rowsPerImage: copySize.height },
           copySize
         );

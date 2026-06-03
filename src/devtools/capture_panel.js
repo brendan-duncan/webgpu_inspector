@@ -1032,7 +1032,7 @@ export class CapturePanel {
       const layerView = gpuTexture.object.createView({
         dimension: "2d",
         baseArrayLayer: layer,
-        layerArrayCount: 1
+        arrayLayerCount: 1
       });
 
       let display = null;

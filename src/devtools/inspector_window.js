@@ -200,6 +200,7 @@ export class InspectorWindow extends Window {
     if (object.isImageDataLoaded[mipLevel]) {
       object.loadedImageDataChunks[mipLevel].length = 0;
       object.imageDataPending[mipLevel] = false;
+      object._layerRanges = null;
       this._createTexture(object, passId, mipLevel);
     }
   }

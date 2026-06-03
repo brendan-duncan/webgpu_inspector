@@ -3,3 +3,4 @@ package-lock.json
 extensions/*.map
 extensions/**/*.map
 .vscode
+/bun.lock

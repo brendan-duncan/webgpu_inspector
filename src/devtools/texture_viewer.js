@@ -143,12 +143,14 @@ export class TextureViewer extends Div {
     this.layerTitles[layer] = new Span(layerInfo);
     this._updateLayerTitle(texture, layer);
 
-    const canvas = new Widget("canvas", container, { style: "box-shadow: 5px 5px 5px rgba(0,0,0,0.5); image-rendering: -moz-crisp-edges; image-rendering: -webkit-crisp-edges; image-rendering: pixelated;" });
+    const canvasContainer = new Div(container, { style: "position: relative; display: inline-block; line-height: 0;" });
+    const canvas = new Widget("canvas", canvasContainer, { style: "display: block; box-shadow: 5px 5px 5px rgba(0,0,0,0.5); image-rendering: -moz-crisp-edges; image-rendering: -webkit-crisp-edges; image-rendering: pixelated;" });
     const zoom = Math.max(texture.display.zoom, 1) / 100;
     canvas.style.width = `${width * zoom}px`;
     canvas.style.height = `${height * zoom}px`;
 
     this._setupCanvasEvents(canvas, texture, layer, displayChanged, zoomControl);
+    this._createCopyButton(canvasContainer, canvas);
 
     canvas.element.width = width;
     canvas.element.height = height;
@@ -156,6 +158,58 @@ export class TextureViewer extends Div {
     this._renderTexture(canvas, texture, layer, false);
 
     this._setupDisplayChangeListener(displayChanged, canvas, texture, layer);
+  }
+
+  _createCopyButton(parent, canvas) {
+    const button = new Widget("button", parent, {
+      title: "Copy image as PNG",
+      style: "position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; padding: 3px; border: 1px solid rgba(255,255,255,0.4); border-radius: 3px; background: rgba(20,20,20,0.72); color: #fff; cursor: pointer; line-height: 0; z-index: 1;"
+    });
+    button.element.type = "button";
+    button.element.innerHTML = `
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+        <rect x="9" y="9" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"></rect>
+        <path d="M5 15V6.5C5 5.7 5.7 5 6.5 5H15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+      </svg>`;
+    button.element.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await this._copyCanvasToClipboard(canvas.element, button.element);
+    });
+  }
+
+  async _copyCanvasToClipboard(canvas, button) {
+    try {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+        throw new Error("PNG clipboard copy is not available in this browser.");
+      }
+
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error("Failed to encode texture preview as PNG."));
+          }
+        }, "image/png");
+      });
+
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": blob })
+      ]);
+      this._setCopyButtonStatus(button, "Copied");
+    } catch (error) {
+      console.error(error);
+      this._setCopyButtonStatus(button, "Copy failed");
+    }
+  }
+
+  _setCopyButtonStatus(button, message) {
+    const previousTitle = button.title;
+    button.title = message;
+    window.setTimeout(() => {
+      button.title = previousTitle || "Copy image as PNG";
+    }, 1500);
   }
 
   _setupCanvasEvents(canvas, texture, layer, displayChanged, zoomControl) {
@@ -252,7 +306,7 @@ export class TextureViewer extends Div {
       aspect: "all",
       dimension: texture.descriptor.dimension ?? "2d",
       baseArrayLayer: texture.descriptor.dimension == "3d" ? 0 : layer,
-      layerArrayCount: 1,
+      arrayLayerCount: 1,
       baseMipLevel: mipLevel,
       mipLevelCount: 1
     };
@@ -270,6 +324,9 @@ export class TextureViewer extends Div {
     this.panel.textureUtils.blitTexture(srcView, texture.format, 1, canvasTexture.createView(), format,
         texture.display, texture.descriptor.dimension, (layer / texture.depthOrArrayLayers) + hl,
         skipMinMax ? null : (minRange, maxRange) => {
+          if (texture.usesGlobalLayerRange) {
+            return;
+          }
           texture._layerRanges = texture._layerRanges || [];
           texture._layerRanges[layer] = { min: minRange, max: maxRange };
           if (layerTitle) {
