@@ -1,3 +1,10 @@
-server/node_modules/
-server/package-lock.json
 captures/
+
+# Vendored dependencies: the bridge server's node_modules are committed so the
+# plugin installs with no `npm install` step. The repo-root .gitignore ignores
+# every `node_modules` at any depth, so re-include this tree explicitly. The
+# directory itself must be un-ignored before its contents, and the `**` rule
+# also covers nested package node_modules (e.g. type-is/node_modules).
+!server/node_modules
+!server/node_modules/**
+!server/package-lock.json

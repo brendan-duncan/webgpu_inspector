@@ -33,52 +33,67 @@ Capture** in the DevTools Capture panel, so captures also open there with
 
 ## Install
 
-1. Install the bridge server's dependencies:
+The plugin is published through this repository, which doubles as a Claude Code
+plugin marketplace ([../.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json)).
+The bridge server's dependencies are vendored, so there is **no `npm install`
+step** — install and go.
 
-   ```sh
-   cd claude-plugin/server
-   npm install
-   ```
+**Install with the `claude` CLI (recommended — works everywhere).** It writes
+the shared settings that both the terminal CLI and the VS Code / JetBrains
+extensions read. From any terminal:
 
-2. Add the plugin to Claude Code. This `claude-plugin/` directory is a
-   self-contained local plugin marketplace
-   ([.claude-plugin/marketplace.json](.claude-plugin/marketplace.json)), so it
-   installs straight from your checkout — no remote marketplace required.
+```sh
+claude plugin marketplace add brendan-duncan/webgpu_inspector
+claude plugin install webgpu-inspector@webgpu-inspector-plugins
+```
 
-   **Install with the `claude` CLI (recommended — works everywhere).** It
-   writes the shared settings that both the terminal CLI and the VS Code /
-   JetBrains extensions read. From any terminal:
+`webgpu-inspector` is the plugin name; `webgpu-inspector-plugins` is the
+marketplace name. The first argument to `marketplace add` is the GitHub
+`owner/repo` (Claude Code reads `.claude-plugin/marketplace.json` from the repo
+root); a full git URL or a local checkout path works too. Add `--scope project`
+to install into the repo's `.claude/settings.json`, or `--scope local` for the
+gitignored `.claude/settings.local.json`.
 
-   ```sh
-   claude plugin marketplace add /path/to/webgpu_inspector/claude-plugin
-   claude plugin install webgpu-inspector@webgpu-inspector-plugins
-   ```
+**Or from inside Claude Code:**
+- Terminal CLI: run `/plugin marketplace add brendan-duncan/webgpu_inspector`,
+  then `/plugin install webgpu-inspector@webgpu-inspector-plugins`.
+- VS Code / JetBrains extension: `/plugin` is not available there — type
+  `/plugins` (plural) to open the Manage Plugins dialog, add
+  `brendan-duncan/webgpu_inspector` as a marketplace, and install
+  `webgpu-inspector`.
 
-   `webgpu-inspector` is the plugin name; `webgpu-inspector-plugins` is the
-   marketplace name. The marketplace argument is an absolute path (or a path
-   relative to your terminal's working directory) to this `claude-plugin/`
-   directory. Add `--scope project` to install into the repo's
-   `.claude/settings.json`, or `--scope local` for the gitignored
-   `.claude/settings.local.json`.
+Claude Code starts the bundled MCP server automatically from
+[.mcp.json](.mcp.json) once the plugin is enabled. Run `/reload-plugins` after
+editing the plugin to pick up changes without restarting.
 
-   **Or from inside Claude Code:**
-   - Terminal CLI: run `/plugin marketplace add <path>`, then
-     `/plugin install webgpu-inspector@webgpu-inspector-plugins`.
-   - VS Code / JetBrains extension: `/plugin` is not available there — type
-     `/plugins` (plural) to open the Manage Plugins dialog, add this
-     `claude-plugin/` directory as a marketplace, and install
-     `webgpu-inspector`.
-
-   Claude Code starts the bundled MCP server automatically from
-   [.mcp.json](.mcp.json) once the plugin is enabled. Run `/reload-plugins`
-   after editing the plugin to pick up changes without restarting.
-
-   To load the plugin for a single session without installing it (handy while
-   developing), launch the terminal CLI with
-   `claude --plugin-dir /path/to/webgpu_inspector/claude-plugin`. This flag is
-   terminal-CLI only — the editor extensions do not support it.
+To load the plugin for a single session without installing it (handy while
+developing), launch the terminal CLI with
+`claude --plugin-dir /path/to/webgpu_inspector/claude-plugin`. This flag is
+terminal-CLI only — the editor extensions do not support it.
 
 Requires Node.js 18+ and a local Chrome or Edge install.
+
+## Update
+
+Updates are **not** automatic by default. When a new version is released, pull
+it in two steps — refresh the marketplace catalog, then update the plugin:
+
+```sh
+claude plugin marketplace update webgpu-inspector-plugins
+claude plugin update webgpu-inspector@webgpu-inspector-plugins
+```
+
+`claude plugin update` on its own updates every installed plugin. The same
+commands work as `/plugin marketplace update …` and `/plugin update …` inside
+the terminal CLI; in the VS Code / JetBrains extension, use the `/plugins`
+dialog. After an update, run `/reload-plugins` (or restart) to load it.
+
+**Prefer automatic updates?** Open `/plugin` (terminal CLI) or `/plugins`
+(extension), go to the **Marketplaces** tab, select `webgpu-inspector-plugins`,
+and enable **auto-update**. Claude Code then refreshes the catalog and updates
+the plugin at startup, prompting you to `/reload-plugins`.
+
+You can check your installed version anytime with `claude plugin list`.
 
 ## Use it
 
@@ -146,16 +161,47 @@ The MCP server reads these environment variables (set them in [.mcp.json](.mcp.j
 
 ## Layout
 
+The marketplace catalog lives at the repo root in
+[../.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json); this
+directory is the plugin itself:
+
 ```
 claude-plugin/
   .claude-plugin/plugin.json       plugin manifest
-  .claude-plugin/marketplace.json  local marketplace entry (for install)
   .mcp.json                        registers the bundled MCP server
   commands/                        /webgpu-inspector:capture, :analyze
   skills/                          webgpu-capture-analysis
   server/                          bridge + MCP + CDP controller (Node)
   page/                            manual-instrumentation example
 ```
+
+## Releasing a new version (maintainers)
+
+Users only receive an update when the plugin's `version` changes, so a release
+is: **bump the version, then push.** Claude Code treats `version` as an opaque
+string — it doesn't have to be semver, it just has to differ from the published
+one for clients to see a new version.
+
+1. **Bump the version** in [.claude-plugin/plugin.json](.claude-plugin/plugin.json)
+   — e.g. `"version": "0.1.0"` → `"0.2.0"`. This is the single source of truth;
+   without bumping it, users who already installed keep their cached copy even
+   after you push.
+2. **Re-vendor dependencies if they changed.** If you touched
+   `server/package.json`, run `npm install` in `server/`, then confirm the new
+   files are staged (`git status` — the vendored tree is committed, see
+   [Layout](#layout)). Skip this if only plugin/command/skill/server source
+   changed.
+3. **Update the [CHANGELOG](../CHANGELOG.md)** with what changed.
+4. **Commit and push to the default branch** (`main`). The marketplace `source`
+   is a path in this same repo, so `claude plugin marketplace update` does a
+   `git pull` of `main` and re-resolves the plugin from there — no separate
+   marketplace repo or release artifact to publish.
+5. **(Optional) tag the release**: `git tag plugin-v0.2.0 && git push --tags`.
+
+Existing users then pick it up with the commands in [Update](#update) (or
+automatically if they enabled auto-update). New users always get the latest on
+install. Verify locally before pushing with
+`claude --plugin-dir /path/to/webgpu_inspector/claude-plugin`.
 
 ## Limitations (v1)
 

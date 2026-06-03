@@ -15,6 +15,8 @@
     * [Firefox](#firefox-nightly)
     * [Safari](#safari-technology-preview)
 * [Claude Code Integration](#claude-code-integration)
+  * [Install the Plugin](#install-the-plugin)
+  * [Update the Plugin](#update-the-plugin)
 * [Development](#development)
 * [External Dependencies](#external-dependencies)
 
@@ -153,7 +155,42 @@ builds on the [Local Capture API](docs/manual_injection.md#local-capture-api) an
 capture JSON the DevTools Capture panel reads.
 
 The plugin lives in [claude-plugin/](claude-plugin/) — see
-[claude-plugin/README.md](claude-plugin/README.md) for installation and usage.
+[claude-plugin/README.md](claude-plugin/README.md) for full usage, the MCP tool
+list, and configuration. It installs straight from this repository, which
+doubles as a Claude Code plugin marketplace; the bridge server's dependencies
+are vendored, so there is no `npm install` step. Requires Node.js 18+ and a
+local Chrome or Edge install.
+
+### Install the Plugin
+
+From any terminal, add this repo as a marketplace and install the plugin:
+
+```sh
+claude plugin marketplace add brendan-duncan/webgpu_inspector
+claude plugin install webgpu-inspector@webgpu-inspector-plugins
+```
+
+`webgpu-inspector` is the plugin name; `webgpu-inspector-plugins` is the
+marketplace name. The same steps work from inside Claude Code with
+`/plugin marketplace add brendan-duncan/webgpu_inspector` then
+`/plugin install webgpu-inspector@webgpu-inspector-plugins` (terminal CLI), or
+the `/plugins` dialog in the VS Code / JetBrains extension. Claude Code starts
+the bundled MCP server automatically once the plugin is enabled.
+
+### Update the Plugin
+
+Updates are **not** automatic by default. When a new version is released, pull
+it in two steps — refresh the marketplace catalog, then update the plugin:
+
+```sh
+claude plugin marketplace update webgpu-inspector-plugins
+claude plugin update webgpu-inspector@webgpu-inspector-plugins
+```
+
+Then run `/reload-plugins` (or restart) to load it. To get updates
+automatically, open `/plugin` (terminal CLI) or `/plugins` (extension), go to
+the **Marketplaces** tab, select `webgpu-inspector-plugins`, and enable
+**auto-update**. Check your installed version with `claude plugin list`.
 
 ## Development
 
