@@ -2045,6 +2045,35 @@ export let webgpuInspector = null;
           const infoStr = JSON.stringify(info);
           this._sendAddObjectMessage(id, parent, "Texture", infoStr, stacktrace);
         }
+      } else if (method === "configure" && object instanceof GPUCanvasContext) {
+        // Capture the WebGPU canvas context configuration so it can be inspected
+        // in the devtools panel. There may be more than one canvas, and configure
+        // can be called more than once on a context (e.g. on resize); the devtools
+        // side updates the existing entry rather than duplicating it.
+        if (object.__id === undefined) {
+          this._wrapObject(object);
+          this._trackObject(object.__id, object);
+        }
+        const id = object.__id;
+        const descriptor = this._duplicateObject(args[0], true) ?? {};
+        const canvas = object.canvas;
+        if (canvas) {
+          // Include the canvas element id, if one was set, to help identify which
+          // canvas this context belongs to in the inspector panel.
+          if (canvas.id) {
+            descriptor.canvasId = canvas.id;
+          }
+          descriptor.width = canvas.width;
+          descriptor.height = canvas.height;
+        }
+        let descriptorStr = null;
+        try {
+          descriptorStr = JSON.stringify(descriptor);
+        } catch (e) {
+          console.log(e.message);
+        }
+        // Parent the configuration to the device it was configured with.
+        this._sendAddObjectMessage(id, args[0]?.device?.__id ?? 0, "CanvasContext", descriptorStr, stacktrace);
       } else if (method === "createView") {
         const id = result.__id;
         result.__texture = object;

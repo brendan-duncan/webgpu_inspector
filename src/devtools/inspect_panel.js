@@ -10,6 +10,7 @@ import { Select } from "./widget/select.js";
 import {
   Adapter,
   Device,
+  CanvasContext,
   Buffer,
   Sampler,
   Texture,
@@ -279,6 +280,7 @@ export class InspectPanel {
 
     this.uiAdapters = this._createObjectListUI(objectsPanel, "Adapters");
     this.uiDevices = this._createObjectListUI(objectsPanel, "Devices");
+    this.uiCanvases = this._createObjectListUI(objectsPanel, "Canvases");
     this.uiRenderPipelines = this._createObjectListUI(objectsPanel, "Render Pipelines");
     this.uiComputePipelines = this._createObjectListUI(objectsPanel, "Compute Pipelines");
     this.uiShaderModules = this._createObjectListUI(objectsPanel, "Shader Modules");
@@ -295,7 +297,7 @@ export class InspectPanel {
     this.uiValidationErrors = this._createObjectListUI(objectsPanel, "Validation Errors");
 
     this._objectListUIs = [
-      this.uiAdapters, this.uiDevices, this.uiRenderPipelines, this.uiComputePipelines,
+      this.uiAdapters, this.uiDevices, this.uiCanvases, this.uiRenderPipelines, this.uiComputePipelines,
       this.uiShaderModules, this.uiBuffers, this.uiTextures, this.uiTextureViews,
       this.uiSamplers, this.uiBindGroups, this.uiBindGroupLayouts, this.uiPipelineLayouts,
       this.uiRenderBundles, this.uiPendingAsyncRenderPipelines,
@@ -416,6 +418,8 @@ export class InspectPanel {
       this._setListLabel(this.uiAdapters, "Adapters", this.database.adapters.size);
     } else if (object instanceof Device) {
       this._setListLabel(this.uiDevices, "Devices", this.database.devices.size);
+    } else if (object instanceof CanvasContext) {
+      this._setListLabel(this.uiCanvases, "Canvases", this.database.canvasContexts.size);
     } else if (object instanceof Buffer) {
       this._setListLabel(this.uiBuffers, "Buffers", this.database.buffers.size);
     } else if (object instanceof Sampler) {
@@ -464,6 +468,8 @@ export class InspectPanel {
       this._addObjectToUI(object, this.uiAdapters);
     } else if (object instanceof Device) {
       this._addObjectToUI(object, this.uiDevices);
+    } else if (object instanceof CanvasContext) {
+      this._addObjectToUI(object, this.uiCanvases);
     } else if (object instanceof Buffer) {
       this._addObjectToUI(object, this.uiBuffers);
     } else if (object instanceof Sampler) {
@@ -540,6 +546,16 @@ export class InspectPanel {
           name = texture.name;
         }
         type += ` Texture:${texture.idName} ${texture.descriptor.format} ${texture.resolutionString}`;
+      }
+    } else if (object instanceof CanvasContext) {
+      const d = object.descriptor;
+      if (d) {
+        if (d.format) {
+          type += ` ${d.format}`;
+        }
+        if (d.width && d.height) {
+          type += ` ${d.width}x${d.height}`;
+        }
       }
     } else if (object instanceof Buffer) {
       type += ` size:${object.descriptor?.size ?? "?"}`;
@@ -986,6 +1002,7 @@ export class InspectPanel {
     const buckets = [
       { ui: this.uiAdapters, map: this.database.adapters },
       { ui: this.uiDevices, map: this.database.devices },
+      { ui: this.uiCanvases, map: this.database.canvasContexts },
       { ui: this.uiRenderPipelines, map: this.database.renderPipelines },
       { ui: this.uiComputePipelines, map: this.database.computePipelines },
       { ui: this.uiShaderModules, map: this.database.shaderModules },
@@ -1366,6 +1383,8 @@ export class InspectPanel {
       } else if (object instanceof Texture && key == "usage") {
         let usage = getFlagString(value, GPUTextureUsage);
         info[key] = usage || "NONE";
+      } else if (object instanceof CanvasContext && key == "usage") {
+        info[key] = getFlagString(value, GPUTextureUsage) || "NONE";
       } else if (value instanceof Array) {
         info[key] = this._getDescriptorArray(object, value);
       } else if (value instanceof Object) {

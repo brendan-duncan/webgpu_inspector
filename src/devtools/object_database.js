@@ -11,6 +11,7 @@ export class ObjectDatabase {
     this.allObjects = new Map();
     this.adapters = new Map();
     this.devices = new Map();
+    this.canvasContexts = new Map();
     this.samplers = new Map();
     this.textures = new Map();
     this.textureViews = new Map();
@@ -100,6 +101,19 @@ export class ObjectDatabase {
             }
             case "Device": {
               const obj = new GPU.Device(id, descriptor, stacktrace);
+              self._addObject(obj, parent, pending);
+              break;
+            }
+            case "CanvasContext": {
+              // configure() can be called more than once on a context (e.g. on
+              // resize). Update the existing entry's descriptor rather than
+              // creating a duplicate.
+              const prevContext = self.canvasContexts.get(id);
+              if (prevContext) {
+                prevContext.descriptor = descriptor;
+                return;
+              }
+              const obj = new GPU.CanvasContext(id, descriptor, stacktrace);
               self._addObject(obj, parent, pending);
               break;
             }
@@ -237,6 +251,7 @@ export class ObjectDatabase {
     this.allObjects = new Map();
     this.adapters = new Map();
     this.devices = new Map();
+    this.canvasContexts = new Map();
     this.samplers = new Map();
     this.textures = new Map();
     this.textureViews = new Map();
@@ -346,6 +361,8 @@ export class ObjectDatabase {
       this.adapters.set(id, object);
     } else if (object instanceof GPU.Device) {
       this.devices.set(id, object);
+    } else if (object instanceof GPU.CanvasContext) {
+      this.canvasContexts.set(id, object);
     } else if (object instanceof GPU.Sampler) {
       this.samplers.set(id, object);
     } else if (object instanceof GPU.Texture) {
@@ -450,6 +467,8 @@ export class ObjectDatabase {
       this.adapters.delete(id, object);
     } else if (object instanceof GPU.Device) {
       this.devices.delete(id, object);
+    } else if (object instanceof GPU.CanvasContext) {
+      this.canvasContexts.delete(id, object);
     } else if (object instanceof GPU.Sampler) {
       this.samplers.delete(id, object);
     } else if (object instanceof GPU.Texture) {

@@ -3,6 +3,7 @@ export { BindGroupLayout } from "./bind_group_layout.js";
 export { BindGroup } from "./bind_group.js";
 export { Buffer } from "./buffer.js";
 export { ComputePipeline } from "./compute_pipeline.js";
+export { CanvasContext } from "./canvas_context.js";
 export { Device } from "./device.js";
 export { GPUObject } from "./gpu_object.js";
 export { PipelineLayout } from "./pipeline_layout.js";
