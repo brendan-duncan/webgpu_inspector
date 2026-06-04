@@ -121,10 +121,23 @@ automatically, open `/plugin` (terminal CLI) or `/plugins` (extension), go to
 the **Marketplaces** tab, select `webgpu-inspector-plugins`, and enable
 **auto-update**. Check your installed version with `claude plugin list`.
 
-**Prefer automatic updates?** Open `/plugin` (terminal CLI) or `/plugins`
-(extension), go to the **Marketplaces** tab, select `webgpu-inspector-plugins`,
-and enable **auto-update**. Claude Code then refreshes the catalog and updates
-the plugin at startup, prompting you to `/reload-plugins`.
+#### Automatic Updates
+
+Auto-updating has to be enabled manually for plugins installed this way.
+Edit **~/.claud/settings.json**
+Look for **"webgpu-inspector-plugins"**
+add **"autoUpdates": true**
+after the "source" block,
+
+```json
+"webgpu-inspector-plugins": {
+  "source": {
+    "source": "github",
+    "repo": "brendan-duncan/webgpu_inspector"
+  },
+  "autoUpdate": true
+}
+```
 
 You can check your installed version anytime with `claude plugin list`.
 

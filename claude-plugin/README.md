@@ -88,10 +88,38 @@ commands work as `/plugin marketplace update …` and `/plugin update …` insid
 the terminal CLI; in the VS Code / JetBrains extension, use the `/plugins`
 dialog. After an update, run `/reload-plugins` (or restart) to load it.
 
-**Prefer automatic updates?** Open `/plugin` (terminal CLI) or `/plugins`
-(extension), go to the **Marketplaces** tab, select `webgpu-inspector-plugins`,
-and enable **auto-update**. Claude Code then refreshes the catalog and updates
-the plugin at startup, prompting you to `/reload-plugins`.
+### Update the Plugin
+
+Updates are **not** automatic by default. When a new version is released, pull
+it in two steps — refresh the marketplace catalog, then update the plugin:
+
+```sh
+claude plugin marketplace update webgpu-inspector-plugins
+claude plugin update webgpu-inspector@webgpu-inspector-plugins
+```
+
+Then run `/reload-plugins` (or restart) to load it. To get updates
+automatically, open `/plugin` (terminal CLI) or `/plugins` (extension), go to
+the **Marketplaces** tab, select `webgpu-inspector-plugins`, and enable
+**auto-update**. Check your installed version with `claude plugin list`.
+
+#### Automatic Updates
+
+Auto-updating has to be enabled manually for plugins installed this way.
+Edit **~/.claud/settings.json**
+Look for **"webgpu-inspector-plugins"**
+add **"autoUpdates": true**
+after the "source" block,
+
+```json
+"webgpu-inspector-plugins": {
+  "source": {
+    "source": "github",
+    "repo": "brendan-duncan/webgpu_inspector"
+  },
+  "autoUpdate": true
+}
+```
 
 You can check your installed version anytime with `claude plugin list`.
 
