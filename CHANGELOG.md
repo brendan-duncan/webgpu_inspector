@@ -1,5 +1,9 @@
 ## v1.4.0
 
+### Inspector
+
+* Added canvas context configuration data to the inspectable objects.
+
 ### Claude Code plugin / live capture
 
 * **Captures no longer fail on size.** Large frames used to throw `Invalid string length` (V8's
