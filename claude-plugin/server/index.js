@@ -48,9 +48,23 @@ async function main() {
     log
   });
 
+  let shuttingDown = false;
   const shutdown = async () => {
+    // A second signal (e.g. SIGINT then SIGTERM) must not start a second
+    // teardown — that races the port close and can re-throw.
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
     try {
       await browser.dispose();
+    } catch (e) {
+      /* ignore */
+    }
+    try {
+      // Release port 9690 before exit so the next launch can bind it. Leaking
+      // the port here is what strands an orphaned process that breaks restarts.
+      await bridge.stop();
     } catch (e) {
       /* ignore */
     }
@@ -58,6 +72,10 @@ async function main() {
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+  // On Windows, Claude Code typically closes the child's stdin rather than
+  // sending a POSIX signal. Treat that as a shutdown request so the port is
+  // released instead of being orphaned.
+  process.stdin.on("close", shutdown);
 
   const server = createMcpServer({ store, bridge, browser, version: VERSION });
   const transport = new StdioServerTransport();

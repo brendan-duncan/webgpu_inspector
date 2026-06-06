@@ -1,3 +1,19 @@
+## v1.4.1
+
+### Claude Code plugin / live capture
+
+* **A busy bridge port no longer crashes the server.** A stale, duplicate, or otherwise lingering
+  process holding port 9690 used to take down the whole MCP server on startup: the `ws` library
+  re-emits the HTTP server's `EADDRINUSE` on the `WebSocketServer`, which had no `error` handler, so
+  the "port busy is non-fatal" path was silently defeated and the process threw on an unhandled
+  `error` event. The bridge now handles that event, so a busy port only disables live capture —
+  file-based MCP tools keep working.
+* **Clean shutdown releases the port.** The shutdown handler now closes the bridge (WebSocket + HTTP
+  servers, including lingering keep-alive sockets) before exiting, instead of leaking the port. This
+  is what was stranding an orphaned process that squatted on 9690 and broke the next launch's bind.
+  Shutdown is now idempotent, and closing stdin (how the plugin host stops the child on Windows) also
+  triggers it.
+
 ## v1.4.0
 
 ### Inspector

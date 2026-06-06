@@ -58,6 +58,15 @@ export class Bridge {
       this._wss = new WebSocketServer({ server: this._httpServer, path: "/page" });
       this._wss.on("connection", (ws, req) => this._onConnection(ws, req));
 
+      // The `ws` library attaches its own listener to the HTTP server's "error"
+      // event and re-emits it on the WebSocketServer. Without a handler here,
+      // an EADDRINUSE during listen() becomes an unhandled "error" event on the
+      // WSS and crashes the whole process — defeating the non-fatal handling
+      // below. Keep this handler so a busy port only disables live capture.
+      this._wss.on("error", (err) => {
+        this._log(`WebSocket server error: ${err.message}`);
+      });
+
       this._httpServer.on("error", (err) => {
         if (err.code === "EADDRINUSE") {
           this._log(`port ${this._port} already in use — live capture disabled, ` +
@@ -74,6 +83,46 @@ export class Bridge {
         this._log(`listening on http://${this._host}:${this._port} (WebSocket path /page)`);
         resolve(true);
       });
+    });
+  }
+
+  // Release the port and tear down connections. Safe to call when the bridge
+  // never started or already stopped. Without this, an unclean exit leaves the
+  // process squatting on the port, which makes the *next* launch's bind fail.
+  stop() {
+    return new Promise((resolve) => {
+      this._listening = false;
+      for (const page of this._pages.values()) {
+        try {
+          page.ws.terminate();
+        } catch (e) {
+          /* ignore */
+        }
+      }
+      this._pages.clear();
+      if (this._wss) {
+        try {
+          this._wss.close();
+        } catch (e) {
+          /* ignore */
+        }
+        this._wss = null;
+      }
+      if (this._httpServer) {
+        const server = this._httpServer;
+        this._httpServer = null;
+        try {
+          server.close(() => resolve());
+        } catch (e) {
+          resolve();
+        }
+        // close() waits for idle; force-close lingering keep-alive sockets.
+        if (typeof server.closeAllConnections === "function") {
+          server.closeAllConnections();
+        }
+        return;
+      }
+      resolve();
     });
   }
 

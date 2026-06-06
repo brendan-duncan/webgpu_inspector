@@ -19,6 +19,7 @@ import {
   summarize
 } from "../analysis.js";
 import { CaptureStore } from "../capture-store.js";
+import { Bridge } from "../bridge.js";
 import { captureStreamToLines, captureStreamToBlob } from "../../../src/utils/local_capture.js";
 
 let passed = 0;
@@ -261,6 +262,38 @@ await test("captureStreamToBlob budget omits oversized payloads (metadata still 
   const text = await blob.text();
   // Metadata line + the one included payload line only.
   assert.equal(text.trimEnd().split("\n").length, 2);
+});
+
+await test("Bridge binds a free port and stop() releases it for reuse", async () => {
+  const PORT = 47821; // uncommon; avoids the real 9690 a running server may hold
+  const b = new Bridge({ port: PORT, host: "127.0.0.1" });
+  assert.equal(await b.start(), true);
+  assert.equal(b.isListening(), true);
+  await b.stop();
+  assert.equal(b.isListening(), false);
+  // The port must be free again immediately — this is what prevents an orphaned
+  // process from blocking the next launch's bind.
+  const b2 = new Bridge({ port: PORT, host: "127.0.0.1" });
+  assert.equal(await b2.start(), true);
+  await b2.stop();
+});
+
+await test("Bridge start() on a busy port is non-fatal (regression: no WSS crash)", async () => {
+  const PORT = 47822;
+  const holder = new Bridge({ port: PORT, host: "127.0.0.1" });
+  assert.equal(await holder.start(), true);
+  try {
+    // Before the fix, the `ws` library re-emitted the EADDRINUSE on the
+    // WebSocketServer, which had no "error" handler, so this crashed the whole
+    // process instead of returning false. If that regresses, this test file's
+    // node process dies here and the run reports a failure (no summary).
+    const second = new Bridge({ port: PORT, host: "127.0.0.1" });
+    assert.equal(await second.start(), false);
+    assert.equal(second.isListening(), false);
+    await second.stop();
+  } finally {
+    await holder.stop();
+  }
 });
 
 // --- Summary ---------------------------------------------------------------
