@@ -15,6 +15,13 @@
   per-channel min/max/mean over a sampled subset, the fraction of "hole" texels (RGB all ~0 — e.g. a
   G-buffer's clear value showing through where nothing rasterised), and a small ASCII luminance view
   so the model can see the spatial pattern.
+* **A busy bridge port no longer disables live capture.** Each Claude session spawns its own bridge,
+  and they all want the default port 9690. Previously the first session won and every other session's
+  live capture was silently disabled. On `EADDRINUSE` the bridge now falls back to an OS-assigned free
+  port (`listen(0)`), tearing down the failed attempt first so nothing leaks. The actually-bound port
+  is recorded and read back by the server, so the pages it instruments connect to *this* session's
+  bridge instead of another's. A non-`EADDRINUSE` error (or a failure even on the OS-assigned port) is
+  still non-fatal — file-based tools keep working.
 
 ## v1.4.1
 
