@@ -146,6 +146,9 @@ export class BridgeClient {
       case "readBuffer":
         this._handleReadBuffer(msg);
         break;
+      case "readTexture":
+        this._handleReadTexture(msg);
+        break;
       case "ping":
         this._send({ type: "pong" });
         break;
@@ -174,6 +177,24 @@ export class BridgeClient {
     } catch (e) {
       this._send({
         type: "readResult",
+        requestId: msg.requestId,
+        error: (e && e.message) ? e.message : String(e)
+      });
+    }
+  }
+
+  // Read a live GPU texture region and send its pixel bytes (base64) + layout back
+  // over the WebSocket. Like _handleReadBuffer, the GPU work lives in the inspector.
+  async _handleReadTexture(msg) {
+    try {
+      const r = await this._inspector.readTexture(msg.textureId, {
+        mipLevel: msg.mipLevel, layer: msg.layer,
+        x: msg.x, y: msg.y, width: msg.width, height: msg.height
+      });
+      this._send({ type: "readTextureResult", requestId: msg.requestId, ...r });
+    } catch (e) {
+      this._send({
+        type: "readTextureResult",
         requestId: msg.requestId,
         error: (e && e.message) ? e.message : String(e)
       });

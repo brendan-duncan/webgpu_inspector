@@ -50,35 +50,72 @@ export class Bridge {
     this._listening = false;
   }
 
-  // Bind the HTTP/WS server. Resolves true on success, false if the port is
-  // taken — a busy port is non-fatal so file-based MCP tools still work.
+  // Bind the HTTP/WS server. Resolves true on success, false only if even an
+  // OS-assigned port can't be bound.
+  //
+  // Multiple Claude sessions each spawn their own bridge, and they all want the
+  // default port. Rather than let the first one win and leave every other
+  // session's live capture silently disabled, on EADDRINUSE we fall back to an
+  // OS-assigned free port (listen(0)). The actual bound port is recorded in
+  // `this._port` and read back by index.js so the injected pages connect here.
   start() {
+    return this._tryListen([this._port, 0], 0);
+  }
+
+  _tryListen(candidates, idx) {
     return new Promise((resolve) => {
-      this._httpServer = http.createServer((req, res) => this._onHttp(req, res));
-      this._wss = new WebSocketServer({ server: this._httpServer, path: "/page" });
-      this._wss.on("connection", (ws, req) => this._onConnection(ws, req));
+      const port = candidates[idx];
+      const httpServer = http.createServer((req, res) => this._onHttp(req, res));
+      const wss = new WebSocketServer({ server: httpServer, path: "/page" });
+      wss.on("connection", (ws, req) => this._onConnection(ws, req));
 
       // The `ws` library attaches its own listener to the HTTP server's "error"
       // event and re-emits it on the WebSocketServer. Without a handler here,
       // an EADDRINUSE during listen() becomes an unhandled "error" event on the
       // WSS and crashes the whole process — defeating the non-fatal handling
       // below. Keep this handler so a busy port only disables live capture.
-      this._wss.on("error", (err) => {
+      wss.on("error", (err) => {
         this._log(`WebSocket server error: ${err.message}`);
       });
 
-      this._httpServer.on("error", (err) => {
+      const onError = (err) => {
+        // Tear down this failed attempt before retrying so we don't leak it.
+        try {
+          wss.close();
+        } catch (e) {
+          /* ignore */
+        }
+        try {
+          httpServer.close();
+        } catch (e) {
+          /* ignore */
+        }
+        if (err.code === "EADDRINUSE" && idx + 1 < candidates.length) {
+          this._log(`port ${port} already in use — retrying on an OS-assigned port.`);
+          resolve(this._tryListen(candidates, idx + 1));
+          return;
+        }
         if (err.code === "EADDRINUSE") {
-          this._log(`port ${this._port} already in use — live capture disabled, ` +
+          this._log(`port ${port} already in use — live capture disabled, ` +
             "file-based tools still work.");
         } else {
           this._log(`HTTP server error: ${err.message}`);
         }
         this._listening = false;
         resolve(false);
-      });
+      };
+      httpServer.on("error", onError);
 
-      this._httpServer.listen(this._port, this._host, () => {
+      httpServer.listen(port, this._host, () => {
+        // Bound. Stop retrying on later (transient) errors, record the actual
+        // port (listen(0) → an OS-assigned one), and keep the server.
+        httpServer.removeListener("error", onError);
+        httpServer.on("error", (err) => {
+          this._log(`HTTP server error: ${err.message}`);
+        });
+        this._httpServer = httpServer;
+        this._wss = wss;
+        this._port = httpServer.address().port;
         this._listening = true;
         this._log(`listening on http://${this._host}:${this._port} (WebSocket path /page)`);
         resolve(true);
@@ -128,6 +165,12 @@ export class Bridge {
 
   isListening() {
     return this._listening;
+  }
+
+  // The actually-bound port (may differ from the requested one if it fell back
+  // to an OS-assigned port). Valid after start() resolves.
+  get port() {
+    return this._port;
   }
 
   // --- WebSocket side: instrumented pages -----------------------------------
@@ -213,6 +256,14 @@ export class Bridge {
             base64: msg.base64 || "",
             truncated: msg.truncated || null
           });
+        }
+        break;
+      case "readTextureResult":
+        if (msg.error) {
+          this._rejectPending(msg.requestId, new Error(msg.error));
+        } else {
+          // Pass the whole texture-read payload through (format, region, layout, base64).
+          this._resolvePending(msg.requestId, msg);
         }
         break;
       default:
@@ -364,6 +415,59 @@ export class Bridge {
         page.ws.send(JSON.stringify(message));
       } catch (e) {
         this._rejectPending(requestId, new Error(`Failed to send buffer read request: ${e.message}`));
+      }
+    });
+  }
+
+  // Read a live GPU texture region. Mirrors requestRead but for textures: resolves
+  // with the page's full readTextureResult payload (format, region, bytesPerRow, base64).
+  requestReadTexture(opts) {
+    opts = opts || {};
+    return new Promise((resolve, reject) => {
+      if (!this._listening) {
+        reject(new Error("Bridge is not listening, so live texture reads are unavailable."));
+        return;
+      }
+      const pages = [...this._pages.values()];
+      if (pages.length === 0) {
+        reject(new Error("No instrumented pages connected."));
+        return;
+      }
+      let page;
+      if (opts.pageId) {
+        page = this._pages.get(opts.pageId);
+        if (!page) {
+          reject(new Error(`No connected page with id "${opts.pageId}".`));
+          return;
+        }
+      } else if (pages.length === 1) {
+        page = pages[0];
+      } else {
+        reject(new Error(`${pages.length} pages connected (${pages.map((p) => p.pageId).join(", ")}). Pass pageId to choose one.`));
+        return;
+      }
+      if (typeof opts.textureId !== "number") {
+        reject(new Error("textureId is required."));
+        return;
+      }
+
+      const requestId = randomUUID();
+      const timeoutMs = opts.timeoutMs || 15000;
+      const timer = setTimeout(() => {
+        this._rejectPending(requestId, new Error(`Texture read timed out after ${timeoutMs}ms.`));
+      }, timeoutMs);
+      this._pending.set(requestId, { resolve, reject, timer, pageId: page.pageId });
+
+      const message = { type: "readTexture", requestId, textureId: opts.textureId };
+      for (const k of ["mipLevel", "layer", "x", "y", "width", "height"]) {
+        if (typeof opts[k] === "number") {
+          message[k] = opts[k];
+        }
+      }
+      try {
+        page.ws.send(JSON.stringify(message));
+      } catch (e) {
+        this._rejectPending(requestId, new Error(`Failed to send texture read request: ${e.message}`));
       }
     });
   }

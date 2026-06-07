@@ -41,8 +41,13 @@ async function main() {
     log("token authentication is enabled.");
   }
 
+  // Use the port the bridge actually bound — start() falls back to an
+  // OS-assigned port when the default is taken by another session — so the
+  // pages we instrument connect to *this* session's bridge, not another's.
+  const boundPort = bridge.port;
+
   const browser = new BrowserController({
-    bridgeWsUrl: `ws://localhost:${port}/page`,
+    bridgeWsUrl: `ws://localhost:${boundPort}/page`,
     token,
     inspectorScript: process.env.WEBGPU_INSPECTOR_SCRIPT || null,
     log

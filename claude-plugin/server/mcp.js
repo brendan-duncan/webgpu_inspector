@@ -91,6 +91,118 @@ function decodeReadback(result, type) {
   return out;
 }
 
+function _round(v) {
+  return (typeof v === "number" && isFinite(v)) ? Math.round(v * 1000) / 1000 : v;
+}
+
+// IEEE-754 half (uint16) → float.
+function halfToFloat(h) {
+  const s = (h & 0x8000) >> 15, e = (h & 0x7c00) >> 10, f = h & 0x03ff;
+  if (e === 0) {
+    return (s ? -1 : 1) * Math.pow(2, -14) * (f / 1024);
+  }
+  if (e === 0x1f) {
+    return f ? NaN : (s ? -Infinity : Infinity);
+  }
+  return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + f / 1024);
+}
+
+// Decode a readTexture payload (format, region, bytesPerRow, channels, base64) into a
+// model-friendly summary: per-channel min/max/mean, the fraction of "hole" texels (RGB
+// all ~0 — the G-buffer clear showing through where no triangle rasterised), and a small
+// ASCII luminance view of the spatial pattern. Never echoes raw pixels.
+function summarizeTexture(r) {
+  if (!r) {
+    return { error: "No texture data returned." };
+  }
+  if (r.error) {
+    return { error: r.error };
+  }
+  if (typeof r.base64 !== "string") {
+    return { error: "No pixel data returned." };
+  }
+  const bytes = Buffer.from(r.base64, "base64");
+  const { format, width, height, bytesPerRow } = r;
+  const channels = r.channels || 4;
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let chBytes, decode;
+  if (/16float/.test(format)) {
+    chBytes = 2; decode = (o) => halfToFloat(dv.getUint16(o, true));
+  } else if (/32float/.test(format)) {
+    chBytes = 4; decode = (o) => dv.getFloat32(o, true);
+  } else if (/(rgba8|bgra8|rg8|r8|rgb10)/.test(format)) {
+    chBytes = 1; decode = (o) => dv.getUint8(o) / 255;
+  } else {
+    return { format, width, height, error: `No decoder for format "${format}" yet.` };
+  }
+  const texelBytes = channels * chBytes;
+  const bgra = format.startsWith("bgra");
+  const px = (x, y) => {
+    const base = y * bytesPerRow + x * texelBytes;
+    const v = [];
+    for (let c = 0; c < channels; c++) {
+      v.push(base + c * chBytes + chBytes <= bytes.length ? decode(base + c * chBytes) : 0);
+    }
+    if (bgra && channels >= 3) { const t = v[0]; v[0] = v[2]; v[2] = t; }
+    return v;
+  };
+  // Per-channel stats over a sampled subset (~20k samples max).
+  const stride = Math.max(1, Math.floor(Math.sqrt((width * height) / 20000)));
+  const mins = new Array(channels).fill(Infinity);
+  const maxs = new Array(channels).fill(-Infinity);
+  const sums = new Array(channels).fill(0);
+  let n = 0, holes = 0;
+  for (let y = 0; y < height; y += stride) {
+    for (let x = 0; x < width; x += stride) {
+      const v = px(x, y); n++;
+      let allZero = true;
+      for (let c = 0; c < channels; c++) {
+        const val = v[c];
+        if (val < mins[c]) { mins[c] = val; }
+        if (val > maxs[c]) { maxs[c] = val; }
+        sums[c] += val;
+        if (c < 3 && Math.abs(val) > 1e-4) { allZero = false; }
+      }
+      if (allZero) { holes++; }
+    }
+  }
+  const channelStats = [];
+  for (let c = 0; c < channels; c++) {
+    channelStats.push({ channel: c, min: _round(mins[c]), max: _round(maxs[c]), mean: _round(sums[c] / Math.max(1, n)) });
+  }
+  // ASCII spatial view (point-sampled luminance), so the model can SEE the pattern.
+  const gw = Math.min(width, 72);
+  const gh = Math.max(1, Math.min(height, Math.round(gw * height / width / 2)));
+  const ramp = " .:-=+*#%@";
+  const rows = [];
+  for (let gy = 0; gy < gh; gy++) {
+    let row = "";
+    for (let gx = 0; gx < gw; gx++) {
+      const x = Math.min(width - 1, Math.floor((gx + 0.5) * width / gw));
+      const y = Math.min(height - 1, Math.floor((gy + 0.5) * height / gh));
+      const v = px(x, y);
+      let lum = channels >= 3 ? (0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2]) : v[0];
+      if (!(lum >= 0 && lum <= 1)) {
+        lum = (maxs[0] > mins[0]) ? (v[0] - mins[0]) / (maxs[0] - mins[0]) : 0;
+      }
+      lum = Math.max(0, Math.min(0.9999, lum));
+      row += ramp[Math.floor(lum * ramp.length)];
+    }
+    rows.push(row);
+  }
+  return {
+    format,
+    region: { x: r.x, y: r.y, width, height, mipLevel: r.mipLevel, layer: r.layer },
+    mipSize: { width: r.mipWidth, height: r.mipHeight },
+    sampleType: r.sampleType,
+    channels,
+    channelStats,
+    holeFraction: _round(holes / Math.max(1, n)),
+    holeNote: "fraction of sampled texels with RGB all ~0 — for a G-buffer that's the clear value showing through (unrasterised pixels / holes).",
+    asciiView: rows
+  };
+}
+
 export function createMcpServer(deps) {
   const store = deps.store;
   const bridge = deps.bridge;
@@ -369,6 +481,30 @@ export function createMcpServer(deps) {
         },
         required: ["bufferId"]
       }
+    },
+    {
+      name: "read_texture",
+      description: "Read a region of a live GPU texture / render target (G-buffer attachment, depth, " +
+        "canvas) on a connected page, without taking a full capture. Copies the texture to a readback " +
+        "buffer, decodes per its format, and returns per-channel min/max/mean, the fraction of " +
+        "unrasterised 'hole' texels (RGB all ~0 = the clear value showing through), and a small ASCII " +
+        "luminance view of the spatial pattern — never raw pixels. Pass a Texture id; a render pass " +
+        "attachment is a TextureView, so resolve its texture via get_object on the view first. The " +
+        "texture must have COPY_SRC, which the inspector adds to every texture while a capture is armed.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          pageId: { type: "string", description: "Page to read from. Optional when exactly one page is connected." },
+          textureId: { type: "integer", description: "Numeric id of the GPU Texture object to read." },
+          mipLevel: { type: "integer", description: "Mip level (default 0).", minimum: 0 },
+          layer: { type: "integer", description: "Array layer / depth slice (default 0).", minimum: 0 },
+          x: { type: "integer", description: "Region origin x (default 0).", minimum: 0 },
+          y: { type: "integer", description: "Region origin y (default 0).", minimum: 0 },
+          width: { type: "integer", description: "Region width (default: to the right edge, capped 1024).", minimum: 1 },
+          height: { type: "integer", description: "Region height (default: to the bottom edge, capped 1024).", minimum: 1 }
+        },
+        required: ["textureId"]
+      }
     }
   ];
 
@@ -504,6 +640,20 @@ export function createMcpServer(deps) {
         size: args.size
       });
       return decodeReadback(result, args.type || "float32");
+    },
+
+    read_texture: async (args) => {
+      const result = await bridge.requestReadTexture({
+        pageId: args.pageId,
+        textureId: args.textureId,
+        mipLevel: args.mipLevel,
+        layer: args.layer,
+        x: args.x,
+        y: args.y,
+        width: args.width,
+        height: args.height
+      });
+      return summarizeTexture(result);
     },
 
     get_object: async (args) => {

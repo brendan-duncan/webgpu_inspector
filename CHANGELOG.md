@@ -1,3 +1,21 @@
+## v1.4.2
+
+### Claude Code plugin / live capture
+
+* **New `read_texture` tool.** Reads a region of a live GPU texture / render target (G-buffer
+  attachment, depth, canvas) on a connected page without taking a full capture, mirroring
+  `read_buffer`. The inspector copies the requested mip level / array layer region to a `MAP_READ`
+  buffer via `copyTextureToBuffer` (256-byte row alignment, region capped at 1024×1024 to keep the
+  readback light) and returns the raw bytes plus the layout needed to decode them. All textures are
+  given `COPY_SRC` while a capture is armed, so render targets are readable; a render-pass attachment
+  is a `TextureView`, so resolve its texture via `get_object` on the view first. Depth/stencil
+  aspects are selected automatically; compressed/unknown formats are rejected.
+* **Decoded, model-friendly results.** Rather than echoing raw pixels, the tool decodes the payload
+  per its format (8-bit unorm, 16-bit float, 32-bit float, with BGRA swizzle handled) and returns
+  per-channel min/max/mean over a sampled subset, the fraction of "hole" texels (RGB all ~0 — e.g. a
+  G-buffer's clear value showing through where nothing rasterised), and a small ASCII luminance view
+  so the model can see the spatial pattern.
+
 ## v1.4.1
 
 ### Claude Code plugin / live capture

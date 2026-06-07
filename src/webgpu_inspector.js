@@ -819,6 +819,87 @@ export let webgpuInspector = null;
       }
     }
 
+    // Read a live GPU texture's current pixels (a region of one mip level / array
+    // layer) without taking a full capture. Copies the region to a MAP_READ buffer
+    // via copyTextureToBuffer, maps it, and returns the raw bytes as base64 plus the
+    // layout needed to decode them (format, channels, bytesPerRow, region). Mirrors
+    // readBuffer. All textures get COPY_SRC while a capture is armed, so render
+    // targets (G-buffer, depth, canvas) are readable. Returns
+    // { format, mipLevel, mipWidth, mipHeight, x, y, width, height, layer,
+    //   bytesPerRow, channels, sampleType, base64 }.
+    async readTexture(textureId, opts) {
+      opts = opts || {};
+      const texture = this._trackedObjects.get(textureId)?.deref();
+      if (!texture) {
+        throw new Error(`No live GPU texture with id ${textureId}.`);
+      }
+      if (texture.__destroyed) {
+        throw new Error(`Texture ${textureId} has been destroyed.`);
+      }
+      const device = texture.__device;
+      if (!device) {
+        throw new Error(`Texture ${textureId} has no associated device.`);
+      }
+      if (!(texture.usage & GPUTextureUsage.COPY_SRC)) {
+        throw new Error(`Texture ${textureId} lacks COPY_SRC usage and can't be read back. ` +
+          "Textures created while a capture is armed are given COPY_SRC automatically.");
+      }
+      const format = texture.format;
+      const info = TextureFormatInfo[format];
+      if (!info || info.isCompressed) {
+        throw new Error(`Texture format "${format}" is unsupported for readback (compressed/unknown).`);
+      }
+      const mipLevelCount = texture.mipLevelCount || 1;
+      const mipLevel = Math.max(0, Math.min(opts.mipLevel | 0, mipLevelCount - 1));
+      const mipW = Math.max(1, texture.width >> mipLevel);
+      const mipH = Math.max(1, texture.height >> mipLevel);
+      const x = Math.max(0, Math.min(opts.x | 0, mipW - 1));
+      const y = Math.max(0, Math.min(opts.y | 0, mipH - 1));
+      const maxDim = 1024; // cap the read region so the readback stays light
+      let w = (typeof opts.width === "number" && opts.width > 0) ? opts.width : (mipW - x);
+      let h = (typeof opts.height === "number" && opts.height > 0) ? opts.height : (mipH - y);
+      w = Math.min(w, mipW - x, maxDim);
+      h = Math.min(h, mipH - y, maxDim);
+      const layer = Math.max(0, opts.layer | 0);
+      const texel = info.bytesPerBlock;
+      const bytesPerRow = (w * texel + 255) & ~0xff; // 256-byte row alignment
+      const bufferSize = bytesPerRow * h;
+
+      this.disableRecording();
+      let readbackBuffer = null;
+      try {
+        readbackBuffer = device.createBuffer({
+          size: Math.max(4, bufferSize),
+          usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+          label: "READ TEXTURE"
+        });
+        const aspect = info.hasDepth ? "depth-only" : (info.hasStencil ? "stencil-only" : "all");
+        const encoder = device.createCommandEncoder();
+        encoder.copyTextureToBuffer(
+          { texture, mipLevel, origin: { x, y, z: layer }, aspect },
+          { buffer: readbackBuffer, bytesPerRow, rowsPerImage: h },
+          { width: w, height: h, depthOrArrayLayers: 1 }
+        );
+        device.queue.submit([encoder.finish()]);
+        await readbackBuffer.mapAsync(GPUMapMode.READ);
+        const bytes = new Uint8Array(readbackBuffer.getMappedRange()).slice(0, bufferSize);
+        readbackBuffer.unmap();
+        readbackBuffer.destroy();
+        readbackBuffer = null;
+        return {
+          format, mipLevel, mipWidth: mipW, mipHeight: mipH,
+          x, y, width: w, height: h, layer, bytesPerRow,
+          channels: info.channels, sampleType: info.sampleType,
+          base64: encodeBase64(bytes)
+        };
+      } finally {
+        if (readbackBuffer) {
+          try { readbackBuffer.destroy(); } catch (e) { /* ignore */ }
+        }
+        this.enableRecording();
+      }
+    }
+
     // Send a message to the devtools panel.
     _postMessage(message) {
       message.__webgpuInspector = true;

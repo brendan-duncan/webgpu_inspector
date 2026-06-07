@@ -278,18 +278,23 @@ await test("Bridge binds a free port and stop() releases it for reuse", async ()
   await b2.stop();
 });
 
-await test("Bridge start() on a busy port is non-fatal (regression: no WSS crash)", async () => {
+await test("Bridge start() on a busy port falls back to an OS-assigned port", async () => {
   const PORT = 47822;
   const holder = new Bridge({ port: PORT, host: "127.0.0.1" });
   assert.equal(await holder.start(), true);
   try {
-    // Before the fix, the `ws` library re-emitted the EADDRINUSE on the
-    // WebSocketServer, which had no "error" handler, so this crashed the whole
-    // process instead of returning false. If that regresses, this test file's
-    // node process dies here and the run reports a failure (no summary).
+    // The `ws` library re-emits an EADDRINUSE on the WebSocketServer; without an
+    // "error" handler that crashes the whole process. With the handler, a busy
+    // port is non-fatal — and rather than disabling live capture (which silently
+    // broke every concurrent session that lost the race for the default port),
+    // start() now falls back to an OS-assigned free port so this bridge still
+    // listens. If the WSS-crash regresses, this process dies here (no summary).
     const second = new Bridge({ port: PORT, host: "127.0.0.1" });
-    assert.equal(await second.start(), false);
-    assert.equal(second.isListening(), false);
+    assert.equal(await second.start(), true);
+    assert.equal(second.isListening(), true);
+    // It must have bound a *different* port, not the busy one.
+    assert.notEqual(second.port, PORT);
+    assert.equal(typeof second.port, "number");
     await second.stop();
   } finally {
     await holder.stop();
