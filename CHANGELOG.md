@@ -1,3 +1,23 @@
+## v1.4.3
+
+### Record Panel
+
+* **The recorder fully detaches when a recording finishes.** Once the recording data has been
+  generated, streamed to the inspector, and downloaded, the recorder restores the native WebGPU
+  prototype methods and the globals it patched (`requestAnimationFrame`, `document.createElement`,
+  per-canvas `getContext`), so it imposes no further per-call overhead on the page. The page overlay
+  is removed entirely instead of leaving a red "idle" dot, and while the recording data is being
+  generated the overlay shows a spinning busy indicator labelled "Generating recording data…". In
+  continuous/multi-frame stateful mode the recorder stays attached between captures as before.
+
+* **Binary recordings no longer drop bind groups (and other objects).** A texture view used only by
+  a bind group was left in the recorder's "unused views" set, so removing unused resources stripped
+  the `createView`/`createBindGroup` commands from the `.wgpu` binary export — leaving `setBindGroup`
+  pointing at an object that was never created ("missing object" errors on playback). The HTML export
+  was unaffected because it strips by each command's own object rather than its arguments. Views used
+  by bind groups are now marked used, and a creation command whose result is still used is never
+  stripped on an argument reference, so the binary and HTML exports stay in sync.
+
 ## v1.4.2
 
 ### Record Panel
