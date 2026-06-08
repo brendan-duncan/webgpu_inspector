@@ -1,5 +1,13 @@
 ## v1.4.2
 
+### Record Panel
+
+* **HTML export is JavaScript again.** Saving a recording as HTML now emits every command as plain
+  JavaScript (matching webgpu_recorder's generated pages), carrying only the raw buffer/texture bytes
+  as base64 data blobs — instead of embedding the whole recording as one binary blob replayed by an
+  inlined interpreter. The result is a readable, self-contained page; the `.wgpu` binary export is
+  unchanged. Disabled commands and any data they alone referenced are still dropped on save.
+
 ### Claude Code plugin / live capture
 
 * **New `read_texture` tool.** Reads a region of a live GPU texture / render target (G-buffer
