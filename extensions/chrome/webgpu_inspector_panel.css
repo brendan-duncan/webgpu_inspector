@@ -2534,3 +2534,128 @@ li.tree-item .expandbutton
   line-height: 16px;
   font-size: 12pt;
 }
+
+/* ---------------------------------------------------------------------------
+ * Shader performance analysis (shader_analysis_view.js)
+ * ------------------------------------------------------------------------- */
+
+/* A colored bar on the collapsible title hinting at the worst severity. */
+.perf-title-high { border-left: 3px solid var(--accent-error); }
+.perf-title-medium { border-left: 3px solid var(--accent-warning); }
+.perf-title-low { border-left: 3px solid var(--accent-info); }
+.perf-title-info { border-left: 3px solid transparent; }
+
+.perf-empty {
+  color: var(--text-secondary, #aaa);
+  font-style: italic;
+  padding: 4px 8px;
+  font-size: 10pt;
+}
+
+.perf-findings {
+  font-size: 10pt;
+}
+
+.perf-finding {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--bg-tertiary, #2d2d30);
+  /* The capture command view sets white-space: nowrap on ancestors; restore
+     normal wrapping so messages and the header don't run off to the right. */
+  white-space: normal;
+}
+
+.perf-finding.perf-lowconf {
+  opacity: 0.75;
+}
+
+.perf-finding-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.perf-badge {
+  display: inline-block;
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 8pt;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  color: #fff;
+}
+
+.perf-badge.perf-high { background-color: var(--accent-error); }
+.perf-badge.perf-medium { background-color: var(--accent-warning); color: #000; }
+.perf-badge.perf-low { background-color: var(--accent-info); }
+.perf-badge.perf-info { background-color: var(--bg-hover); }
+
+.perf-rule {
+  font-family: monospace;
+  color: var(--text-primary, #ddd);
+}
+
+.perf-line, .perf-line-link {
+  color: var(--text-secondary, #aaa);
+  font-size: 9pt;
+}
+
+.perf-line-link {
+  cursor: pointer;
+  text-decoration: underline;
+  color: var(--accent-info);
+}
+
+.perf-line-link:hover {
+  color: #fff;
+}
+
+.perf-msg {
+  color: var(--text-primary, #ddd);
+  line-height: 14px;
+}
+
+.perf-finding-meta {
+  margin-top: 3px;
+  color: var(--text-secondary, #888);
+  font-size: 9pt;
+}
+
+.perf-report-header {
+  padding: 8px;
+  font-size: 11pt;
+  border-bottom: 1px solid var(--bg-tertiary, #2d2d30);
+}
+
+.perf-inspect-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+}
+
+.perf-usage {
+  color: var(--text-secondary, #aaa);
+  font-size: 9pt;
+}
+
+.perf-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
+  font-size: 9pt;
+}
+
+.perf-filter-label {
+  color: var(--text-secondary, #aaa);
+}
+
+/* Severity filter: hide finding rows whose severity bucket is toggled off. */
+.perf-findings.perf-hide-high .perf-row-high,
+.perf-findings.perf-hide-medium .perf-row-medium,
+.perf-findings.perf-hide-low .perf-row-low,
+.perf-findings.perf-hide-info .perf-row-info {
+  display: none;
+}

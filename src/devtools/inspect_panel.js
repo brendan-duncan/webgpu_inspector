@@ -29,6 +29,7 @@ import { getInspectWorkers, setInspectWorkers } from "../utils/inspector_setting
 import { Plot } from "./widget/plot.js";
 import { Split } from "./widget/split.js";
 import { ShaderEditor } from "./shader_editor.js";
+import { addShaderAnalysisView } from "./shader_analysis_view.js";
 import { StacktraceViewer } from './stacktrace_viewer.js';
 import { TextureViewer } from "./texture_viewer.js";
 
@@ -1275,7 +1276,29 @@ export class InspectPanel {
       }
     }
 
-    const descriptionBox = new Div(this.inspectPanel, { style: "flex: 1 1 auto; min-height: 150px; overflow: auto;" });
+    if (object instanceof ShaderModule) {
+      const self = this;
+      const perfGrp = addShaderAnalysisView(infoBox, object, {
+        collapsed: true,
+        onLineClick: (line) => {
+          // Re-inspect with the target line set; ShaderEditor honors __line and
+          // scrolls/selects that line on construction.
+          object.__line = line;
+          self._inspectObject(object);
+        },
+      });
+      // Cap the findings height (it scrolls internally) so a long list can't push
+      // the info box tall enough to squeeze the shader editor below. Sized to fit
+      // about 3 findings before scrolling.
+      perfGrp.body.style.maxHeight = "225px";
+    }
+
+    // The info box (above) has a natural height that grows as its collapsibles
+    // expand. Give the editor area a generous minimum so expanding Performance
+    // Analysis / Reflection Info scrolls the panel rather than shrinking the
+    // editor to a sliver.
+    const descMinHeight = object instanceof ShaderModule ? 350 : 150;
+    const descriptionBox = new Div(this.inspectPanel, { style: `flex: 1 1 auto; min-height: ${descMinHeight}px; overflow: auto;` });
 
     if (object instanceof ShaderModule) {
       const self = this;

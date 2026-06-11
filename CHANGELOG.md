@@ -1,5 +1,17 @@
 ## v1.4.3
 
+### Shader Analysis
+
+* **Static shader performance analysis.** WGSL shaders are now run through `wgsl_reflect`'s static
+  performance analyzer, which flags well-known GPU cost patterns (expensive builtins, division/modulo,
+  loop-invariant work, barriers, and atomics inside loops) with a severity, confidence, and the
+  source line. Findings appear as an inline "Performance Analysis" section in three places: the Shader
+  Module inspector (line numbers link to the editor), the per-command shader info in a frame capture
+  (collapsed by default), and a frame-wide "Analyze Shaders" report (a button in the command-list
+  filter bar) covering every shader used in the frame. Each findings list has a Low/Med/High severity
+  filter, and the frame-wide report labels each shader (using its WebGPU label when set) with how many
+  draw calls / dispatches used it in the frame.
+
 ### Record Panel
 
 * **The recorder fully detaches when a recording finishes.** Once the recording data has been

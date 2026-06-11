@@ -24,6 +24,7 @@ import { getFormatFromReflection } from "../utils/reflection_format.js";
 import { ResourceType, WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
 import { CaptureData } from "./capture_data.js";
 import { ShaderDebugger } from "./shader_debugger.js";
+import { addShaderAnalysisView, buildFrameShaderAnalysis } from "./shader_analysis_view.js";
 import { captureToText, downloadCaptureJson } from "./capture_export.js";
 import { importCaptureJson, parseCaptureText } from "./capture_import.js";
 import { putCaptureHandoff } from "../utils/capture_handoff.js";
@@ -582,6 +583,12 @@ export class CapturePanel {
       label: "Frame Stats",
       class: "btn capture_filter_stats",
       callback: () => self._inspectStats(commandInfoContents)
+    });
+    new Button(filterArea, {
+      label: "Analyze Shaders",
+      class: "btn",
+      title: "Run static performance analysis on the shaders used in this frame",
+      callback: () => self._analyzeAllShaders(commands)
     });
 
     // GPU pass timeline. Stays at 0 height until timestamp data arrives, so captures
@@ -2197,6 +2204,109 @@ export class CapturePanel {
   }
 
   /**
+   * Runs static performance analysis on the shader modules used in this frame
+   * and opens a frame-wide report as a capture tab.
+   * @param {Array<Object>} commands - The frame's command records.
+   */
+  _analyzeAllShaders(commands) {
+    const self = this;
+    const usage = this._computeShaderUsage(commands);
+
+    // Only report on modules actually referenced this frame; fall back to all
+    // known modules if usage tracking found nothing (e.g. an odd capture).
+    let modules;
+    if (usage.size) {
+      modules = [];
+      for (const id of usage.keys()) {
+        const module = this._getObject(id);
+        if (module) {
+          modules.push(module);
+        }
+      }
+    } else {
+      modules = [...this.database.shaderModules.values()];
+    }
+
+    const panel = buildFrameShaderAnalysis(modules, {
+      usage,
+      onInspect: (module) => {
+        self.window.inspectObject(module);
+      },
+      onLineClick: (module, line) => {
+        module.__line = line;
+        self.window.inspectObject(module);
+      },
+    });
+    this._captureTab.addTab("Shader Analysis", panel);
+    this._captureTab.setActivePanel(panel);
+  }
+
+  /**
+   * Walk a frame's commands and count how many draw calls / dispatches use each
+   * shader module, by resolving the pipeline bound on each pass encoder.
+   * @param {Array<Object>} commands
+   * @returns {Map<number,{draws:number,dispatches:number}>}
+   */
+  _computeShaderUsage(commands) {
+    const usage = new Map();
+    const bump = (moduleId, kind) => {
+      if (moduleId === undefined || moduleId === null) {
+        return;
+      }
+      let u = usage.get(moduleId);
+      if (!u) {
+        u = { draws: 0, dispatches: 0 };
+        usage.set(moduleId, u);
+      }
+      u[kind]++;
+    };
+
+    // The pipeline currently set on each pass encoder (encoder id -> pipeline id).
+    const boundPipeline = new Map();
+
+    for (const command of commands) {
+      if (!command) {
+        continue;
+      }
+      const method = command.method;
+      const encoder = command.object;
+
+      if (method === "setPipeline") {
+        boundPipeline.set(encoder, command.args?.[0]?.__id);
+        continue;
+      }
+
+      const isDraw = method === "draw" || method === "drawIndexed" ||
+        method === "drawIndirect" || method === "drawIndexedIndirect";
+      const isDispatch = method === "dispatchWorkgroups" || method === "dispatchWorkgroupsIndirect";
+      if (!isDraw && !isDispatch) {
+        continue;
+      }
+
+      const pipeline = this._getObject(boundPipeline.get(encoder));
+      const desc = pipeline?.descriptor;
+      if (!desc) {
+        continue;
+      }
+
+      if (isDraw) {
+        // Vertex and fragment may be the same module; count the draw once per
+        // distinct module so a combined module isn't double-counted.
+        const vId = desc.vertex?.module?.__id;
+        const fId = desc.fragment?.module?.__id;
+        bump(vId, "draws");
+        if (fId !== undefined && fId !== vId) {
+          bump(fId, "draws");
+        }
+      } else {
+        bump(desc.compute?.module?.__id, "dispatches");
+      }
+    }
+
+    return usage;
+  }
+
+  /**
    * Opens shader debugger for a compute shader.
    * @param {Object} command - The command object.
    * @param {string} entry - Entry point name.
@@ -2644,6 +2754,16 @@ export class CapturePanel {
         }
       }
     }
+
+    const self = this;
+    addShaderAnalysisView(commandInfo, shader, {
+      label: `${type} Performance Analysis`,
+      collapsed: true,
+      onLineClick: (line) => {
+        shader.__line = line;
+        self.window.inspectObject(shader);
+      },
+    });
   }
 
   /**
