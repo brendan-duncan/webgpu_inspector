@@ -791,6 +791,10 @@ span {
   position: absolute;
   opacity: 0;
   z-index: 2;
+  /* The invisible native input sits slightly offset from the drawn box (the
+     label's ::before). Clicks go through the label instead, so the click area
+     matches the visual exactly. */
+  pointer-events: none;
 }
 
 .styled-checkbox + label {

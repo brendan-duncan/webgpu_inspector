@@ -60,13 +60,15 @@ When you start debugging, the inspector performs the "vertex fetch" that the GPU
 
 Select a **draw** or **drawIndexed** command, open the **Fragment Module** section (or the combined shader module section), and press the **Debug** / **Debug Fragment** button. Fragment debugging works by picking a pixel in the draw's render target.
 
-The fragment debugger's toolbar provides **Pixel X**, **Y**, and **Instance** inputs. Enter the pixel you want to debug and start debugging. The inspector then reproduces what the GPU rasterizer does:
+The fragment debugger's toolbar provides **Pixel X**, **Y**, **Instance**, and **Prim** inputs. Enter the pixel you want to debug and start debugging. **Prim** selects a specific primitive (triangle index) to debug at the pixel; the default of `-1` selects the front-most primitive covering it. The inspector then reproduces what the GPU rasterizer does:
 
 1. It assembles the draw into triangles from the index/vertex buffers and topology.
 2. It runs the vertex shader for the relevant vertices and rasterizes to find the triangle that covers the picked pixel.
 3. It builds the four perspective-correct, interpolated inputs of the 2×2 pixel quad that contains the picked pixel, so that derivatives (`dpdx`/`dpdy`) and texture sampling resolve correctly.
 
 You step through the picked pixel's lane; the other three lanes of the quad are advanced in lockstep at derivative and texture-sampling points. If no primitive in the draw covers the entered pixel, a message is shown in the toolbar (for example, `No primitive covers pixel (x, y)`) — pick a different pixel that lies inside the drawn geometry.
+
+Rather than entering a pixel by hand, you can use [Pixel History](capture.md#pixel-history) to click a pixel in a render-pass attachment, see every fragment that touched it, and open the fragment debugger pre-seeded with that fragment's pixel, instance, and primitive.
 
 <div style="background-color: #ffedcc; color: #000; border-radius: 5px;">
 <div style="background-color: #f0b37e; color: #fff; padding-left: 5px; padding-right: 5px;"><b>Note</b></div>

@@ -12,7 +12,9 @@ export class Checkbox extends Span {
     this.input.classList.add('styled-checkbox');
 
     if (!this.label) {
-      this.label = new Label('', this, { for: this });
+      // The label must target the input (not this container span), so that
+      // clicking the drawn box — the label's ::before — toggles the checkbox.
+      this.label = new Label('', this, { for: this.input });
     }
 
     if (options?.tooltip) {

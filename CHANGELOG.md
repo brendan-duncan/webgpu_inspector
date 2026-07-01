@@ -1,3 +1,27 @@
+## v1.5.0
+
+### Capture Panel
+
+* **Pixel history.** Render-pass attachments now have a **Pixel History** button (on the
+  beginRenderPass / draw / end command info) that opens the attachment in a capture-side texture
+  viewer: zoom, hover for pixel values, and click any pixel to trace every draw in the frame that
+  touched it. Each event reports what happened to the fragment — the value it wrote (with shader output and
+  blend result), or why it didn't contribute (failed depth/stencil test, backface culled, scissored,
+  depth clipped, discarded, or write-masked). Passes that load their attachments chain the replay
+  through the earlier passes in the frame that wrote them (including depth pre-passes), so depth
+  tests and blending see the right prior state. Every fragment event can jump to its draw command or
+  open the fragment shader debugger pre-seeded with that pixel, instance, and primitive. The replay
+  runs the frame's vertex/fragment shaders on the CPU WGSL interpreter and simulates the rasterizer
+  at the one pixel; indirect draws and render bundles are reported but not simulated, and MSAA is
+  simulated at pixel centers.
+
+* **Vertex shader debugging.** You can now debug vertex shaders from a frame capture. Select a draw
+command, select the vertex shader from the command information, and press the Debug button. This works
+much the same way as the compute shader debugger, but instead of selecting a workgroup id to debug, you
+can select the vertex index to debug.
+
+* **Fragment shader debugging.** You can now debug fragment shaders from a frame capture. When debugging a fragment shader, you can select the pixel coordinate to debug. You can also access the fragment shader debugger from the Pixel history panel for a renderpass output, by selecting a specific pixel to debug.
+
 ## v1.4.3
 
 ### Shader Analysis

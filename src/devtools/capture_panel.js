@@ -24,6 +24,7 @@ import { getFormatFromReflection } from "../utils/reflection_format.js";
 import { ResourceType, WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
 import { CaptureData } from "./capture_data.js";
 import { ShaderDebugger } from "./shader_debugger.js";
+import { CaptureTextureViewer } from "./capture_texture_viewer.js";
 import { addShaderAnalysisView, buildFrameShaderAnalysis } from "./shader_analysis_view.js";
 import { captureToText, downloadCaptureJson } from "./capture_export.js";
 import { importCaptureJson, parseCaptureText } from "./capture_import.js";
@@ -1105,6 +1106,10 @@ export class CapturePanel {
           new Button(colorAttachmentGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
+          new Button(colorAttachmentGrp.body, { label: "Pixel History", class: _inspectButtonStyle,
+            title: "Open the attachment in the capture texture viewer to pick a pixel and trace every draw that touched it", callback: () => {
+            self._showTextureViewer(texture, renderPassIndex, i, false);
+          } });
           const passId = this._getPassId(renderPassIndex, i);
           this._createTextureWidget(colorAttachmentGrp.body, texture, passId, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
         } else {
@@ -1131,6 +1136,10 @@ export class CapturePanel {
           const depthStencilAttachmentGrp = new collapsible(commandInfo, { label: `Depth-Stencil Attachment ${format} ${texture.resolutionString}` });
           new Button(depthStencilAttachmentGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
+          } });
+          new Button(depthStencilAttachmentGrp.body, { label: "Pixel History", class: _inspectButtonStyle,
+            title: "Open the attachment in the capture texture viewer to pick a pixel and trace every draw that touched it", callback: () => {
+            self._showTextureViewer(texture, renderPassIndex, 0, true);
           } });
           this._createTextureWidget(depthStencilAttachmentGrp.body, texture, -1, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
         } else {
@@ -2337,8 +2346,11 @@ export class CapturePanel {
    * @param {Object} command - The command object.
    * @param {string} entry - Entry point name.
    * @param {Object} parentCommand - Parent command.
+   * @param {string} [stage] - "compute" (default), "vertex" or "fragment".
+   * @param {Object} [seed] - Initial invocation selection (pixelX, pixelY,
+   *   instanceIndex, vertexIndex, primitiveIndex).
    */
-  _debugShader(command, entry, parentCommand, stage) {
+  _debugShader(command, entry, parentCommand, stage, seed) {
     stage = stage ?? "compute";
     const args = command.args;
     const id = args[0]?.__id;
@@ -2356,9 +2368,130 @@ export class CapturePanel {
       moduleId = desc.compute?.module?.__id;
       label = "Compute";
     }
-    const editor = new ShaderDebugger(parentCommand, entry, this._captureData, this.database, this, { style: "overflow: clip;", stage });
-    this._captureTab.addTab(`${label} Module ID:${moduleId}: ${entry}`, editor);
-    this._captureTab.setActivePanel(editor);
+    // Setting up the debugger can take a moment (the fragment stage runs the
+    // vertex shader on the CPU interpreter to rasterize the picked pixel), so
+    // show a busy overlay and defer the construction to let it paint.
+    const hideBusy = this._showBusyOverlay(`Starting the ${label.toLowerCase()} shader debugger…`);
+    setTimeout(() => {
+      try {
+        const editor = new ShaderDebugger(parentCommand, entry, this._captureData, this.database, this, { style: "overflow: clip;", stage, ...(seed ?? {}) });
+        this._captureTab.addTab(`${label} Module ID:${moduleId}: ${entry}`, editor);
+        this._captureTab.setActivePanel(editor);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        hideBusy();
+      }
+    }, 10);
+  }
+
+  /**
+   * Shows a modal busy overlay with a spinner and message. Returns a function
+   * that removes it.
+   * @param {string} message
+   * @returns {Function}
+   */
+  _showBusyOverlay(message) {
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; background-color: rgba(25, 25, 25, 0.65);";
+
+    const box = document.createElement("div");
+    box.style.cssText = "display: flex; align-items: center; gap: 10px; background-color: #333; color: #ddd; padding: 14px 20px; border-radius: 5px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);";
+    overlay.appendChild(box);
+
+    const spinner = document.createElement("div");
+    spinner.style.cssText = "width: 18px; height: 18px; flex: 0 0 auto; border: 3px solid #666; border-top-color: #eee; border-radius: 50%;";
+    spinner.animate(
+      [{ transform: "rotate(0deg)" }, { transform: "rotate(360deg)" }],
+      { duration: 800, iterations: Infinity });
+    box.appendChild(spinner);
+
+    const label = document.createElement("span");
+    label.textContent = message;
+    box.appendChild(label);
+
+    document.body.appendChild(overlay);
+    return () => overlay.remove();
+  }
+
+  /**
+   * Opens the fragment shader debugger for a draw, seeded with a pixel /
+   * instance / primitive from a pixel-history entry.
+   * @param {Object} drawCommand - The draw command.
+   * @param {Object} seed - { pixelX, pixelY, instanceIndex, primitiveIndex }
+   */
+  _debugFragmentFromHistory(drawCommand, seed) {
+    const state = this._getPipelineState(drawCommand);
+    if (!state?.pipeline) {
+      return;
+    }
+    const pipeline = this._getObject(state.pipeline.args[0]?.__id);
+    const entry = pipeline?.descriptor?.fragment?.entryPoint;
+    this._debugShader(state.pipeline, entry, drawCommand, "fragment", seed);
+  }
+
+  /**
+   * Opens a render-pass attachment in the capture texture viewer (pixel
+   * picking + pixel history), as a new capture tab.
+   * @param {Object} texture - The attachment's Texture object.
+   * @param {number} passIndex - The render pass index within the frame.
+   * @param {number} slot - Color attachment slot (ignored for depth).
+   * @param {boolean} isDepth - The depth-stencil attachment.
+   */
+  _showTextureViewer(texture, passIndex, slot, isDepth) {
+    const attachmentLabel = isDepth ? "Depth-Stencil" : `Color Attachment ${slot}`;
+
+    // The GPU copy to display: the per-pass entry when one was registered,
+    // else the texture's own GPU copy (its latest captured state).
+    const passId = isDepth ? -1 : this._getPassId(passIndex, slot);
+    const gpuTexture = this._gpuTextureMap.get(passId) ?? texture.gpuTexture;
+
+    // Pixel values (hover readout, history cross-check) can only be read from
+    // texture.imageData, which holds the texture's most recently captured
+    // state — only valid for this pass if no later pass writes the texture.
+    let lastWritingPass = -1;
+    for (const cmd of this._captureCommands ?? []) {
+      if (cmd?.method !== "beginRenderPass") {
+        continue;
+      }
+      const desc = cmd.args[0];
+      const attachments = [...(desc?.colorAttachments ?? [])];
+      if (desc?.depthStencilAttachment) {
+        attachments.push(desc.depthStencilAttachment);
+      }
+      for (const attachment of attachments) {
+        if (attachment && this._getTextureFromAttachment(attachment) === texture) {
+          lastWritingPass = Math.max(lastWritingPass, cmd._passIndex ?? -1);
+        }
+      }
+    }
+
+    const tabState = this._activeTabState;
+    const viewer = new CaptureTextureViewer({
+      texture,
+      passIndex,
+      attachmentLabel,
+      isDepth,
+      gpuTexture,
+      valuesAreCurrent: lastWritingPass === passIndex,
+      capturePanel: this,
+      database: this.database,
+      commands: this._captureCommands,
+      onShowCommand: (command) => {
+        if (tabState?.captureContents) {
+          this._captureTab.setActivePanel(tabState.captureContents);
+        }
+        if (command.widget?.element) {
+          command.widget.element.click();
+          command.widget.element.scrollIntoView({ block: "center" });
+        }
+      },
+      onDebugFragment: (drawCommand, seed) => {
+        this._debugFragmentFromHistory(drawCommand, seed);
+      },
+    });
+    this._captureTab.addTab(`Pass ${passIndex} ${attachmentLabel}`, viewer);
+    this._captureTab.setActivePanel(viewer);
   }
 
   /**
@@ -2838,6 +2971,11 @@ export class CapturePanel {
           new Button(outputGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
           } });
+          const colorIndex = index;
+          new Button(outputGrp.body, { label: "Pixel History", class: _inspectButtonStyle,
+            title: "Open the attachment in the capture texture viewer to pick a pixel and trace every draw that touched it", callback: () => {
+            self._showTextureViewer(texture, renderPassIndex, colorIndex, false);
+          } });
           if (texture.gpuTexture) {
             const canvasDiv = new Div(outputGrp.body);
             new Div(canvasDiv, { text: `Color: ${index} Texture: ${texture.idName} ${texture.format} ${texture.resolutionString}` });
@@ -2854,6 +2992,10 @@ export class CapturePanel {
         if (texture) {
           new Button(outputGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(texture);
+          } });
+          new Button(outputGrp.body, { label: "Pixel History", class: _inspectButtonStyle,
+            title: "Open the attachment in the capture texture viewer to pick a pixel and trace every draw that touched it", callback: () => {
+            self._showTextureViewer(texture, renderPassIndex, 0, true);
           } });
           if (texture.gpuTexture) {
             const canvasDiv = new Div(outputGrp.body);

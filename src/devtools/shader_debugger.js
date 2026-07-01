@@ -4,11 +4,11 @@ import { Split } from "./widget/split.js";
 import { Img } from "./widget/img.js";
 import { collapsible } from "./widget/collapsible.js";
 import { WgslDebug, detectRaces, createFragmentQuadDebugger } from "wgsl_reflect/wgsl_reflect.module.js";
-import { TextureView, Sampler } from "./gpu_objects/index.js";
 import { ShaderWatchView } from "./shader_watch_view.js";
 import { fetchVertexInputs } from "./vertex_fetcher.js";
 import { assembleTriangles, buildFragmentQuad } from "./fragment_debug.js";
 import { QuadDebuggerAdapter } from "./quad_debugger_adapter.js";
+import { buildBindGroups, collectVertexBufferData, decodeIndexArray, makeVertexRunner } from "./stage_debug_utils.js";
 
 import { EditorView } from "codemirror";
 import { keymap, highlightSpecialChars, drawSelection, dropCursor, gutter, GutterMarker,
@@ -257,11 +257,18 @@ export class ShaderDebugger extends Div {
 
         const code = this.module.descriptor.code;
 
+        // Initial invocation selection, optionally seeded by the caller (e.g.
+        // pixel history's per-fragment Debug buttons).
         this._idX = 0;
         this._idY = 0;
         this._idZ = 0;
-        this._vertexIndex = 0;
-        this._instanceIndex = 0;
+        this._vertexIndex = Math.floor(options?.vertexIndex ?? 0);
+        this._instanceIndex = Math.floor(options?.instanceIndex ?? 0);
+        this._pixelX = Math.floor(options?.pixelX ?? 0);
+        this._pixelY = Math.floor(options?.pixelY ?? 0);
+        // The primitive (triangle index) to debug; -1 selects the front-most
+        // primitive covering the pixel.
+        this._primitiveIndex = Math.floor(options?.primitiveIndex ?? -1);
 
         this.controls = new Div(this, { style: "display: flex; flex-direction: row; margin-top: 5px;" });
         this._buildInvocationPicker(this.controls);
@@ -392,31 +399,34 @@ export class ShaderDebugger extends Div {
         if (this.stage === "vertex") {
             new Span(controls, { text: "Vertex:", style: labelStyle });
             this.vertexInput = new NumberInput(controls, {
-                value: 0, min: 0, step: 1, precision: 0, style: numberStyle,
+                value: this._vertexIndex, min: 0, step: 1, precision: 0, style: numberStyle,
                 onChange: (value) => { this._vertexIndex = value; }
             });
             new Span(controls, { text: "Instance:", style: labelStyle });
             this.instanceInput = new NumberInput(controls, {
-                value: 0, min: 0, step: 1, precision: 0, style: numberStyle,
+                value: this._instanceIndex, min: 0, step: 1, precision: 0, style: numberStyle,
                 onChange: (value) => { this._instanceIndex = value; }
             });
         } else if (this.stage === "fragment") {
-            this._pixelX = 0;
-            this._pixelY = 0;
             new Span(controls, { text: "Pixel X:", style: labelStyle });
             this.pixelXInput = new NumberInput(controls, {
-                value: 0, min: 0, step: 1, precision: 0, style: numberStyle,
+                value: this._pixelX, min: 0, step: 1, precision: 0, style: numberStyle,
                 onChange: (value) => { this._pixelX = value; }
             });
             new Span(controls, { text: "Y:", style: labelStyle });
             this.pixelYInput = new NumberInput(controls, {
-                value: 0, min: 0, step: 1, precision: 0, style: numberStyle,
+                value: this._pixelY, min: 0, step: 1, precision: 0, style: numberStyle,
                 onChange: (value) => { this._pixelY = value; }
             });
             new Span(controls, { text: "Instance:", style: labelStyle });
             this.instanceInput = new NumberInput(controls, {
-                value: 0, min: 0, step: 1, precision: 0, style: numberStyle,
+                value: this._instanceIndex, min: 0, step: 1, precision: 0, style: numberStyle,
                 onChange: (value) => { this._instanceIndex = value; }
+            });
+            new Span(controls, { text: "Prim:", title: "Primitive (triangle) index to debug; -1 selects the front-most primitive covering the pixel", style: labelStyle });
+            this.primitiveInput = new NumberInput(controls, {
+                value: this._primitiveIndex, min: -1, step: 1, precision: 0, style: numberStyle,
+                onChange: (value) => { this._primitiveIndex = value; }
             });
             this._fragmentStatus = new Span(controls, {
                 style: "margin-left: 10px; vertical-align: middle; color: #e8a; align-self: center;"
@@ -605,49 +615,7 @@ export class ShaderDebugger extends Div {
     // Build the bound-resource map (buffers, uniforms, textures, samplers) that
     // WgslDebug expects, from the captured bind groups. Shared by every stage.
     _buildBindGroups() {
-        const bindGroups = {};
-
-        this.pipelineState.bindGroups.forEach((bgCmd) => {
-            const index = bgCmd.args[0];
-            const bg = this.pipelineState.bindGroups[index];
-
-            const bindGroup = {};
-            bindGroups[index] = bindGroup;
-
-            const bgObj = this.database.getObject(bgCmd.args[1].__id);
-
-            if (bg.bufferData !== undefined) {
-                const bufferData = bg.bufferData;
-                let entryIndex = 0;
-                for (const buffer of bufferData) {
-                    if (buffer) {
-                        const binding = bgObj.descriptor.entries[entryIndex].binding;
-                        bindGroup[binding] = buffer;
-                    }
-                    entryIndex++;
-                }
-            }
-
-            for (const b of bgObj.descriptor.entries) {
-                const binding = b.binding;
-                if (bindGroup[binding] !== undefined) {
-                    continue;
-                }
-
-                const resource = this.database.getObject(b.resource.__id);
-                if (resource instanceof TextureView) {
-                    const texture = resource.__texture;
-                    const size = [texture.width, texture.height, texture.depthOrArrayLayers];
-                    bindGroup[binding] = { texture: texture.imageData, size, view: resource.descriptor, descriptor: texture.descriptor };
-                } else if (resource instanceof Sampler) {
-                    // Sampler: pass its descriptor so compare/filter/address modes
-                    // are honored by the sampling builtins.
-                    bindGroup[binding] = { sampler: resource.descriptor };
-                }
-            }
-        });
-
-        return bindGroups;
+        return buildBindGroups(this.database, this.pipelineState.bindGroups);
     }
 
     // Gather the source, entry point, per-invocation vertex inputs and bound
@@ -670,14 +638,7 @@ export class ShaderDebugger extends Div {
         }
 
         // Collect the captured vertex-buffer data, indexed by slot.
-        const vertexBufferData = [];
-        const vbCmds = this.pipelineState.vertexBuffers ?? [];
-        for (let slot = 0; slot < vbCmds.length; ++slot) {
-            const vbCmd = vbCmds[slot];
-            if (vbCmd && vbCmd.bufferData) {
-                vertexBufferData[slot] = vbCmd.bufferData[slot];
-            }
-        }
+        const vertexBufferData = collectVertexBufferData(this.pipelineState.vertexBuffers);
 
         const inputs = fetchVertexInputs(
             this.pipelineDesc,
@@ -760,37 +721,31 @@ export class ShaderDebugger extends Div {
         const bindGroups = this._buildBindGroups();
 
         // Captured vertex-buffer data by slot.
-        const vertexBufferData = [];
-        const vbCmds = this.pipelineState.vertexBuffers ?? [];
-        for (let slot = 0; slot < vbCmds.length; ++slot) {
-            const vbCmd = vbCmds[slot];
-            if (vbCmd && vbCmd.bufferData) {
-                vertexBufferData[slot] = vbCmd.bufferData[slot];
-            }
-        }
+        const vertexBufferData = collectVertexBufferData(this.pipelineState.vertexBuffers);
 
-        const vsConstants = this.pipelineDesc.vertex?.constants;
-        const vsOptions = vsConstants ? { constants: vsConstants } : {};
         const instance = Math.floor(this._instanceIndex);
 
         // Reuse one WgslDebug for every VS invocation so the code is parsed once.
-        const vsDebug = new WgslDebug(vsCode);
-        const getVertex = (vertexIndex) => {
-            const inputs = fetchVertexInputs(this.pipelineDesc, vertexBufferData, vertexIndex, instance);
-            if (!vsDebug.debugVertex(vsEntry.name, inputs, bindGroups, vsOptions)) {
-                return null;
-            }
-            let guard = 0;
-            while (vsDebug.stepNext() && guard++ < 1000000) { /* run VS to completion */ }
-            return this._extractVsOutput(vsDebug.getReturnValue(), vsEntry.outputs);
-        };
+        const runVertex = makeVertexRunner({
+            code: vsCode,
+            entryName: vsEntry.name,
+            entryOutputs: vsEntry.outputs,
+            pipelineDesc: this.pipelineDesc,
+            vertexBufferData,
+            bindGroups,
+            constants: this.pipelineDesc.vertex?.constants,
+        });
+        const getVertex = (vertexIndex) => runVertex(vertexIndex, instance);
 
+        const primitive = Math.floor(this._primitiveIndex ?? -1);
         const quad = buildFragmentQuad(
             triangles, getVertex, size.width, size.height,
-            Math.floor(this._pixelX), Math.floor(this._pixelY), frontFace);
+            Math.floor(this._pixelX), Math.floor(this._pixelY), frontFace, primitive);
 
         if (!quad) {
-            this._fragmentMessage(`No primitive covers pixel (${Math.floor(this._pixelX)}, ${Math.floor(this._pixelY)}).`);
+            this._fragmentMessage(primitive >= 0
+                ? `Primitive ${primitive} does not cover pixel (${Math.floor(this._pixelX)}, ${Math.floor(this._pixelY)}).`
+                : `No primitive covers pixel (${Math.floor(this._pixelX)}, ${Math.floor(this._pixelY)}).`);
             return null;
         }
         this._fragmentMessage(null);
@@ -808,49 +763,9 @@ export class ShaderDebugger extends Div {
         };
     }
 
-    // Map a vertex shader's return value (a struct object keyed by member name,
-    // or a bare @builtin(position) value) to { position, varyings-by-location }.
-    _extractVsOutput(out, vsOutputs) {
-        if (out === null || out === undefined) {
-            return null;
-        }
-        if (Array.isArray(out)) {
-            // A bare return is the @builtin(position) vec4.
-            return { position: out, varyings: {} };
-        }
-        let position = null;
-        const varyings = {};
-        for (const o of vsOutputs) {
-            const val = out[o.name];
-            if (val === undefined) {
-                continue;
-            }
-            if (o.locationType === "builtin" && o.location === "position") {
-                position = val;
-            } else if (o.locationType === "location") {
-                varyings[o.location] = val;
-            }
-        }
-        return position ? { position, varyings } : null;
-    }
-
     // Decode the bound index buffer into a typed array.
     _getIndexArray() {
-        const ib = this.pipelineState.indexBuffer;
-        if (!ib || !ib.bufferData) {
-            return null;
-        }
-        const data = ib.bufferData[0];
-        if (!data) {
-            return null;
-        }
-        const format = ib.args[1]; // "uint16" | "uint32"
-        const buf = data instanceof ArrayBuffer ? data : data.buffer;
-        const off = data instanceof ArrayBuffer ? 0 : (data.byteOffset ?? 0);
-        const len = data.byteLength ?? buf.byteLength;
-        return format === "uint16"
-            ? new Uint16Array(buf, off, Math.floor(len / 2))
-            : new Uint32Array(buf, off, Math.floor(len / 4));
+        return decodeIndexArray(this.pipelineState.indexBuffer);
     }
 
     // The dimensions of the draw's first color render target.

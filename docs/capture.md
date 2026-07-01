@@ -12,6 +12,7 @@
 * [Uniform and Storage Buffer Inspection](#uniform-and-storage-buffer-inspection)
     * [Formatting Buffer Data](formatting_buffer_data.md)
 * [Vertex Buffer Data](#vertex-buffer-data)
+* [Pixel History](#pixel-history)
 * [Debug Groups](#debug-groups)
 * [Frame Stats](#frame-stats)
 * [Shader Debugger](#shader-debugger)
@@ -195,6 +196,34 @@ If you select a Draw command, it will inspect any Vertex Buffers bound for the d
 <a href="images/vertex_buffer_capture.png">
 <img src="images/vertex_buffer_capture.png" style="width:512px">
 </a>
+
+## Pixel History
+###### [Back to top](#capture)
+
+Pixel History traces every draw in the captured frame that touched a single pixel of a render-pass attachment, similar to RenderDoc's pixel history. It answers questions like "why is this pixel the wrong color?", "which draw overwrote my geometry?", or "why did my object not render here?".
+
+Select a **beginRenderPass**, **draw**, or **end** command and press the **Pixel History** button next to one of the pass's color or depth-stencil attachments. This opens the attachment in a capture texture viewer tab:
+
+* The image shows the texture's most recently captured contents (a note is shown if a later pass in the frame also writes it). The viewer has the same display controls as the Inspector's texture viewer: **Zoom** (a percentage, also CTRL + mouse-wheel), **Exposure**, a channel selector (RGB / Red / Green / Blue / Alpha / Luminance), and **Auto Range** for HDR and depth content. Hovering the image shows a tooltip with the pixel coordinates and value.
+* Click a pixel to select it — its history is computed automatically and shown in the panel on the right. Click other pixels to explore.
+
+The history panel lists, in order, every event in the frame that touched the selected pixel of that texture:
+
+* The pass's **clear** or **load** value, labeled with the render pass's `label` and the debug groups it is nested in, when present.
+* Every **fragment** generated at the pixel — the draw command, its shader module's `label` (when set), the primitive (triangle) index and instance — together with what happened to it: the value it wrote (with the shader's output and blend result when blending is enabled), or the reason it didn't contribute: failed the depth or stencil test, backface/frontface culled, outside the scissor or viewport, depth clipped, discarded by the fragment shader, or masked out by the target's write mask.
+* The value at the **end** of each pass.
+
+Each fragment entry has a **Go to** button that jumps to the draw command in the command list, and a **Debug** button that opens the [fragment shader debugger](shader_debugger.md) pre-seeded with that pixel, instance and primitive — so you can step through exactly the fragment you're looking at, even if it was later overdrawn or failed a test.
+
+Pixel history is computed by re-running the pass's vertex and fragment shaders on the inspector's CPU WGSL interpreter and re-doing the rasterizer's work (triangle coverage, perspective-correct interpolation, depth/stencil tests, blending) at the selected pixel. When a pass loads an attachment instead of clearing it, the earlier passes in the frame that wrote that texture (including depth pre-passes) are replayed at the pixel first, so the depth test and blending see the right prior state.
+
+Because it is a CPU simulation of the frame capture, it has some limitations:
+
+* All vertex/index buffers used by the pass need to have been captured (see [Max Buffer Size](#max-buffer-size)).
+* Indirect draws and render bundles are reported in the history but not simulated.
+* Multisampled attachments are simulated at pixel centers with a single sample.
+* If an attachment is loaded and the frame never establishes its value (its content comes from a previous frame), values that depend on it are reported as unknown.
+* Sampled textures use their most recently captured contents, which can differ from their contents at the time of an earlier draw.
 
 ## Debug Groups
 ###### [Back to top](#capture)

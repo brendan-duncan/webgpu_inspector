@@ -41,22 +41,34 @@ export function assembleTriangles(topology, count, indexArray, firstIndex, baseV
 
 // Project a clip-space position (vec4) to framebuffer space. Returns the pixel
 // coordinate, the interpolatable ndc depth, and 1/w for perspective correction.
-export function projectVertex(clip, width, height) {
+// `viewport` ({x, y, width, height}) defaults to the full render target.
+export function projectVertex(clip, width, height, viewport) {
     const w = clip[3];
     const invW = w !== 0 ? 1 / w : 0;
     const ndcX = clip[0] * invW;
     const ndcY = clip[1] * invW;
     const ndcZ = clip[2] * invW;
+    const vx = viewport?.x ?? 0;
+    const vy = viewport?.y ?? 0;
+    const vw = viewport?.width ?? width;
+    const vh = viewport?.height ?? height;
     return {
-        sx: (ndcX * 0.5 + 0.5) * width,
-        sy: (1 - (ndcY * 0.5 + 0.5)) * height, // framebuffer y is top-down
+        sx: vx + (ndcX * 0.5 + 0.5) * vw,
+        sy: vy + (1 - (ndcY * 0.5 + 0.5)) * vh, // framebuffer y is top-down
         ndcZ,
         invW,
+        w,
     };
 }
 
 function edge(ax, ay, bx, by, cx, cy) {
     return (cx - ax) * (by - ay) - (cy - ay) * (bx - ax);
+}
+
+// Signed framebuffer-space area of a projected triangle. With the edge()
+// convention here, an NDC-ccw triangle yields a positive area.
+export function triangleArea(p0, p1, p2) {
+    return edge(p0.sx, p0.sy, p1.sx, p1.sy, p2.sx, p2.sy);
 }
 
 // Signed-area barycentric weights of point (px,py) w.r.t. the projected
@@ -91,70 +103,16 @@ export function perspectiveInterp(bary, invW, attrs) {
     return weight(0) * attrs[0] + weight(1) * attrs[1] + weight(2) * attrs[2];
 }
 
-// Build the four interpolated quad inputs for a picked pixel.
-//
-//   triangles    - output of assembleTriangles
-//   getVertex    - (vertexIndex) => { position:[x,y,z,w] clip, varyings:{loc:value} } | null
-//   width,height - render-target dimensions
-//   px,py        - the picked pixel (integer framebuffer coords)
-//   frontFace    - pipeline primitive.frontFace ("ccw" default)
-//
-// Returns { quadInputs:[4], targetLane, triangle } (quadInputs are keyed by
-// @location index plus the `position`/`front_facing` builtins), or null if no
-// triangle covers the pixel.
-export function buildFragmentQuad(triangles, getVertex, width, height, px, py, frontFace = "ccw") {
-    const cx = px + 0.5;
-    const cy = py + 0.5;
-
-    // Cache projected vertices so each vertex's VS runs at most once.
-    const cache = new Map();
-    const project = (vi) => {
-        if (cache.has(vi)) {
-            return cache.get(vi);
-        }
-        const data = getVertex(vi);
-        const p = data ? { ...projectVertex(data.position, width, height), data } : null;
-        cache.set(vi, p);
-        return p;
-    };
-
-    // Find the front-most triangle covering the picked pixel.
-    let best = null;
-    for (const tri of triangles) {
-        const p0 = project(tri[0]);
-        const p1 = project(tri[1]);
-        const p2 = project(tri[2]);
-        if (!p0 || !p1 || !p2) {
-            continue;
-        }
-        const bary = barycentric(p0, p1, p2, cx, cy);
-        if (bary === null) {
-            continue;
-        }
-        if (bary[0] < 0 || bary[1] < 0 || bary[2] < 0) {
-            continue; // pixel not inside this triangle
-        }
-        const depth = bary[0] * p0.ndcZ + bary[1] * p1.ndcZ + bary[2] * p2.ndcZ;
-        if (best === null || depth < best.depth) {
-            best = { tri, p: [p0, p1, p2], depth };
-        }
-    }
-
-    if (best === null) {
-        return null;
-    }
-
-    const [p0, p1, p2] = best.p;
+// Build the four interpolated 2x2-quad inputs for a picked pixel from one
+// projected triangle. `p` is the three projected vertices (projectVertex plus
+// a `data: {position, varyings}` member). The quad is aligned to even
+// coordinates; lane order matches the fragment quad scheduler (0=TL,1=TR,
+// 2=BL,3=BR). Returns { quadInputs:[4], targetLane } (quadInputs keyed by
+// @location index plus the `position`/`front_facing` builtins).
+export function buildQuadInputs(p, px, py, frontFacing) {
+    const [p0, p1, p2] = p;
     const invW = [p0.invW, p1.invW, p2.invW];
 
-    // front_facing from the triangle's framebuffer winding. With this edge()
-    // convention a NDC-ccw triangle yields a positive signed area in framebuffer
-    // space, which is front-facing when frontFace is "ccw".
-    const area = edge(p0.sx, p0.sy, p1.sx, p1.sy, p2.sx, p2.sy);
-    const frontFacing = frontFace === "ccw" ? area > 0 : area < 0;
-
-    // The 2x2 quad is aligned to even coordinates; lane order matches the
-    // fragment quad scheduler (0=TL,1=TR,2=BL,3=BR).
     const baseX = px & ~1;
     const baseY = py & ~1;
     const targetLane = (px - baseX) + (py - baseY) * 2;
@@ -186,5 +144,75 @@ export function buildFragmentQuad(triangles, getVertex, width, height, px, py, f
         }
     }
 
-    return { quadInputs, targetLane, triangle: best.tri };
+    return { quadInputs, targetLane };
+}
+
+// Build the four interpolated quad inputs for a picked pixel.
+//
+//   triangles    - output of assembleTriangles
+//   getVertex    - (vertexIndex) => { position:[x,y,z,w] clip, varyings:{loc:value} } | null
+//   width,height - render-target dimensions
+//   px,py        - the picked pixel (integer framebuffer coords)
+//   frontFace    - pipeline primitive.frontFace ("ccw" default)
+//   primitive    - optional triangle index to debug; -1/undefined selects the
+//                  front-most triangle covering the pixel
+//
+// Returns { quadInputs:[4], targetLane, triangle } (quadInputs are keyed by
+// @location index plus the `position`/`front_facing` builtins), or null if no
+// triangle covers the pixel.
+export function buildFragmentQuad(triangles, getVertex, width, height, px, py, frontFace = "ccw", primitive = -1) {
+    const cx = px + 0.5;
+    const cy = py + 0.5;
+
+    // Cache projected vertices so each vertex's VS runs at most once.
+    const cache = new Map();
+    const project = (vi) => {
+        if (cache.has(vi)) {
+            return cache.get(vi);
+        }
+        const data = getVertex(vi);
+        const p = data ? { ...projectVertex(data.position, width, height), data } : null;
+        cache.set(vi, p);
+        return p;
+    };
+
+    // Find the front-most triangle covering the picked pixel (or the requested
+    // primitive, if it covers the pixel).
+    let best = null;
+    for (let ti = 0; ti < triangles.length; ++ti) {
+        if (primitive >= 0 && ti !== primitive) {
+            continue;
+        }
+        const tri = triangles[ti];
+        const p0 = project(tri[0]);
+        const p1 = project(tri[1]);
+        const p2 = project(tri[2]);
+        if (!p0 || !p1 || !p2) {
+            continue;
+        }
+        const bary = barycentric(p0, p1, p2, cx, cy);
+        if (bary === null) {
+            continue;
+        }
+        if (bary[0] < 0 || bary[1] < 0 || bary[2] < 0) {
+            continue; // pixel not inside this triangle
+        }
+        const depth = bary[0] * p0.ndcZ + bary[1] * p1.ndcZ + bary[2] * p2.ndcZ;
+        if (best === null || depth < best.depth) {
+            best = { tri, p: [p0, p1, p2], depth };
+        }
+    }
+
+    if (best === null) {
+        return null;
+    }
+
+    // front_facing from the triangle's framebuffer winding. With this edge()
+    // convention a NDC-ccw triangle yields a positive signed area in framebuffer
+    // space, which is front-facing when frontFace is "ccw".
+    const area = triangleArea(best.p[0], best.p[1], best.p[2]);
+    const frontFacing = frontFace === "ccw" ? area > 0 : area < 0;
+
+    const quad = buildQuadInputs(best.p, px, py, frontFacing);
+    return { quadInputs: quad.quadInputs, targetLane: quad.targetLane, triangle: best.tri };
 }
