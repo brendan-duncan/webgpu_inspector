@@ -3,10 +3,12 @@ import { Span } from "./widget/span.js";
 import { Split } from "./widget/split.js";
 import { Img } from "./widget/img.js";
 import { collapsible } from "./widget/collapsible.js";
-import { WgslDebug, detectRaces } from "wgsl_reflect/wgsl_reflect.module.js";
+import { WgslDebug, detectRaces, createFragmentQuadDebugger } from "wgsl_reflect/wgsl_reflect.module.js";
 import { TextureView, Sampler } from "./gpu_objects/index.js";
 import { ShaderWatchView } from "./shader_watch_view.js";
 import { fetchVertexInputs } from "./vertex_fetcher.js";
+import { assembleTriangles, buildFragmentQuad } from "./fragment_debug.js";
+import { QuadDebuggerAdapter } from "./quad_debugger_adapter.js";
 
 import { EditorView } from "codemirror";
 import { keymap, highlightSpecialChars, drawSelection, dropCursor, gutter, GutterMarker,
@@ -398,6 +400,27 @@ export class ShaderDebugger extends Div {
                 value: 0, min: 0, step: 1, precision: 0, style: numberStyle,
                 onChange: (value) => { this._instanceIndex = value; }
             });
+        } else if (this.stage === "fragment") {
+            this._pixelX = 0;
+            this._pixelY = 0;
+            new Span(controls, { text: "Pixel X:", style: labelStyle });
+            this.pixelXInput = new NumberInput(controls, {
+                value: 0, min: 0, step: 1, precision: 0, style: numberStyle,
+                onChange: (value) => { this._pixelX = value; }
+            });
+            new Span(controls, { text: "Y:", style: labelStyle });
+            this.pixelYInput = new NumberInput(controls, {
+                value: 0, min: 0, step: 1, precision: 0, style: numberStyle,
+                onChange: (value) => { this._pixelY = value; }
+            });
+            new Span(controls, { text: "Instance:", style: labelStyle });
+            this.instanceInput = new NumberInput(controls, {
+                value: 0, min: 0, step: 1, precision: 0, style: numberStyle,
+                onChange: (value) => { this._instanceIndex = value; }
+            });
+            this._fragmentStatus = new Span(controls, {
+                style: "margin-left: 10px; vertical-align: middle; color: #e8a; align-self: center;"
+            });
         } else {
             new Span(controls, { text: "Thread ID:", style: labelStyle });
             this.idXInput = new NumberInput(controls, {
@@ -490,6 +513,25 @@ export class ShaderDebugger extends Div {
             }
             this.debugger = new WgslDebug(config.code, this.runStateChanged.bind(this));
             this.debugger.debugVertex(config.entryName, config.inputs, config.bindGroups, config.options);
+            this.update();
+            return;
+        }
+
+        if (this.stage === "fragment") {
+            const config = this._buildFragmentConfig();
+            if (!config) {
+                this.debugger = null;
+                this._highlightLine(0);
+                return;
+            }
+            const { scheduler, errors } = createFragmentQuadDebugger(
+                config.code, config.entryName, config.quadInputs, config.bindGroups, config.targetLane, config.options);
+            if (!scheduler) {
+                console.error("Fragment debug setup failed:", errors);
+                this.debugger = null;
+                return;
+            }
+            this.debugger = new QuadDebuggerAdapter(scheduler, this.runStateChanged.bind(this));
             this.update();
             return;
         }
@@ -652,6 +694,183 @@ export class ShaderDebugger extends Div {
         }
 
         return { code: this.module.descriptor.code, entryName: entry.name, inputs, bindGroups, options };
+    }
+
+    // Rasterize the draw at the picked pixel and build the four interpolated quad
+    // inputs for createFragmentQuadDebugger. Returns null if the shader can't be
+    // set up or no primitive covers the pixel.
+    _buildFragmentConfig() {
+        const fragReflection = this.module?.reflection;
+        if (!fragReflection) {
+            return null;
+        }
+        let fragEntry = this.entry ? fragReflection.entry.fragment.find((e) => e.name === this.entry) : null;
+        if (!fragEntry) {
+            fragEntry = fragReflection.entry.fragment[0];
+        }
+        if (!fragEntry) {
+            return null;
+        }
+
+        // The vertex shader (its own module, or the same combined one) is run to
+        // produce clip positions + varyings for interpolation.
+        const vertexModule = this.database.getObject(this.pipelineDesc.vertex?.module?.__id);
+        const vsReflection = vertexModule?.reflection;
+        if (!vsReflection) {
+            return null;
+        }
+        const vsEntryName = this.pipelineDesc.vertex?.entryPoint;
+        let vsEntry = vsEntryName ? vsReflection.entry.vertex.find((e) => e.name === vsEntryName) : null;
+        if (!vsEntry) {
+            vsEntry = vsReflection.entry.vertex[0];
+        }
+        if (!vsEntry) {
+            return null;
+        }
+        const vsCode = vertexModule.descriptor.code;
+
+        // Assemble the draw into triangles.
+        const method = this.command.method;
+        const args = this.command.args ?? [];
+        const topology = this.pipelineDesc.primitive?.topology ?? "triangle-list";
+        const frontFace = this.pipelineDesc.primitive?.frontFace ?? "ccw";
+
+        let triangles;
+        if (method === "drawIndexed") {
+            const indexArray = this._getIndexArray();
+            if (!indexArray) {
+                return null;
+            }
+            triangles = assembleTriangles(topology, args[0], indexArray, args[2] ?? 0, args[3] ?? 0);
+        } else if (method === "draw") {
+            triangles = assembleTriangles(topology, args[0], null, args[2] ?? 0, 0);
+        } else {
+            this._fragmentMessage("Indirect draws are not supported for fragment debugging yet.");
+            return null;
+        }
+        if (!triangles.length) {
+            return null;
+        }
+
+        const size = this._getRenderTargetSize();
+        if (!size) {
+            return null;
+        }
+
+        const bindGroups = this._buildBindGroups();
+
+        // Captured vertex-buffer data by slot.
+        const vertexBufferData = [];
+        const vbCmds = this.pipelineState.vertexBuffers ?? [];
+        for (let slot = 0; slot < vbCmds.length; ++slot) {
+            const vbCmd = vbCmds[slot];
+            if (vbCmd && vbCmd.bufferData) {
+                vertexBufferData[slot] = vbCmd.bufferData[slot];
+            }
+        }
+
+        const vsConstants = this.pipelineDesc.vertex?.constants;
+        const vsOptions = vsConstants ? { constants: vsConstants } : {};
+        const instance = Math.floor(this._instanceIndex);
+
+        // Reuse one WgslDebug for every VS invocation so the code is parsed once.
+        const vsDebug = new WgslDebug(vsCode);
+        const getVertex = (vertexIndex) => {
+            const inputs = fetchVertexInputs(this.pipelineDesc, vertexBufferData, vertexIndex, instance);
+            if (!vsDebug.debugVertex(vsEntry.name, inputs, bindGroups, vsOptions)) {
+                return null;
+            }
+            let guard = 0;
+            while (vsDebug.stepNext() && guard++ < 1000000) { /* run VS to completion */ }
+            return this._extractVsOutput(vsDebug.getReturnValue(), vsEntry.outputs);
+        };
+
+        const quad = buildFragmentQuad(
+            triangles, getVertex, size.width, size.height,
+            Math.floor(this._pixelX), Math.floor(this._pixelY), frontFace);
+
+        if (!quad) {
+            this._fragmentMessage(`No primitive covers pixel (${Math.floor(this._pixelX)}, ${Math.floor(this._pixelY)}).`);
+            return null;
+        }
+        this._fragmentMessage(null);
+
+        const fsConstants = this.pipelineDesc.fragment?.constants;
+        const options = fsConstants ? { constants: fsConstants } : {};
+
+        return {
+            code: this.module.descriptor.code,
+            entryName: fragEntry.name,
+            quadInputs: quad.quadInputs,
+            targetLane: quad.targetLane,
+            bindGroups,
+            options,
+        };
+    }
+
+    // Map a vertex shader's return value (a struct object keyed by member name,
+    // or a bare @builtin(position) value) to { position, varyings-by-location }.
+    _extractVsOutput(out, vsOutputs) {
+        if (out === null || out === undefined) {
+            return null;
+        }
+        if (Array.isArray(out)) {
+            // A bare return is the @builtin(position) vec4.
+            return { position: out, varyings: {} };
+        }
+        let position = null;
+        const varyings = {};
+        for (const o of vsOutputs) {
+            const val = out[o.name];
+            if (val === undefined) {
+                continue;
+            }
+            if (o.locationType === "builtin" && o.location === "position") {
+                position = val;
+            } else if (o.locationType === "location") {
+                varyings[o.location] = val;
+            }
+        }
+        return position ? { position, varyings } : null;
+    }
+
+    // Decode the bound index buffer into a typed array.
+    _getIndexArray() {
+        const ib = this.pipelineState.indexBuffer;
+        if (!ib || !ib.bufferData) {
+            return null;
+        }
+        const data = ib.bufferData[0];
+        if (!data) {
+            return null;
+        }
+        const format = ib.args[1]; // "uint16" | "uint32"
+        const buf = data instanceof ArrayBuffer ? data : data.buffer;
+        const off = data instanceof ArrayBuffer ? 0 : (data.byteOffset ?? 0);
+        const len = data.byteLength ?? buf.byteLength;
+        return format === "uint16"
+            ? new Uint16Array(buf, off, Math.floor(len / 2))
+            : new Uint32Array(buf, off, Math.floor(len / 4));
+    }
+
+    // The dimensions of the draw's first color render target.
+    _getRenderTargetSize() {
+        const colorAttachments = this.pipelineState.renderPass?.args?.[0]?.colorAttachments;
+        if (!colorAttachments || !colorAttachments.length) {
+            return null;
+        }
+        const texture = this.capturePanel._getTextureFromAttachment(colorAttachments[0]);
+        if (!texture) {
+            return null;
+        }
+        return { width: texture.width, height: texture.height };
+    }
+
+    // Show a transient fragment-setup message (e.g. no coverage) in the picker.
+    _fragmentMessage(msg) {
+        if (this._fragmentStatus) {
+            this._fragmentStatus.element.textContent = msg ?? "";
+        }
     }
 
     // Run the wgsl_reflect data-race detector over the shader and display the

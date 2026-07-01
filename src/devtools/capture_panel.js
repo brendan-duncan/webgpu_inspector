@@ -2146,6 +2146,11 @@ export class CapturePanel {
               title: "Debug Vertex Shader", style: "background-color: rgb(90, 40, 40);", callback: () => {
                 self._debugShader(command, vertexEntry, parentCommand, "vertex");
             } });
+            new Button(grp.body, {
+              text: "Debug Fragment",
+              title: "Debug Fragment Shader (pick a pixel)", style: "background-color: rgb(90, 40, 40);", callback: () => {
+                self._debugShader(command, fragmentEntry, parentCommand, "fragment");
+            } });
           }
           const code = module.descriptor.code;
           new Widget("pre", grp.body, { text: code });
@@ -2183,6 +2188,13 @@ export class CapturePanel {
             new Button(fragmentGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
               self.window.inspectObject(fragmentModule);
             } });
+            if (parentCommand) {
+              new Button(fragmentGrp.body, {
+                text: "Debug",
+                title: "Debug Fragment Shader (pick a pixel)", style: "background-color: rgb(90, 40, 40);", callback: () => {
+                  self._debugShader(command, fragmentEntry, parentCommand, "fragment");
+              } });
+            }
             const code = fragmentModule.descriptor.code;
             new Widget("pre", fragmentGrp.body, { text: code });
 
