@@ -217,7 +217,7 @@ The Capture tool can provide various statistics about the capture. Press the **F
 ## Shader Debugger
 ###### [Back to top](#capture)
 
-Frame captures include the ability to debug shaders. This is an experimental feature, with only compute shaders currently supported.
+Frame captures include the ability to debug shaders. This is an experimental feature.
 
 **[Shader Debugger](shader_debugger.md)**
 
