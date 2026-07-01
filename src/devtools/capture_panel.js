@@ -2140,6 +2140,13 @@ export class CapturePanel {
           new Button(grp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
             self.window.inspectObject(module);
           } });
+          if (parentCommand) {
+            new Button(grp.body, {
+              text: "Debug Vertex",
+              title: "Debug Vertex Shader", style: "background-color: rgb(90, 40, 40);", callback: () => {
+                self._debugShader(command, vertexEntry, parentCommand, "vertex");
+            } });
+          }
           const code = module.descriptor.code;
           new Widget("pre", grp.body, { text: code });
 
@@ -2154,6 +2161,13 @@ export class CapturePanel {
             new Button(vertexGrp.body, { label: "Inspect", class: _inspectButtonStyle, callback: () => {
               self.window.inspectObject(vertexModule);
             } });
+            if (parentCommand) {
+              new Button(vertexGrp.body, {
+                text: "Debug",
+                title: "Debug Vertex Shader", style: "background-color: rgb(90, 40, 40);", callback: () => {
+                  self._debugShader(command, vertexEntry, parentCommand, "vertex");
+              } });
+            }
             const code = vertexModule.descriptor.code;
             new Widget("pre", vertexGrp.body, { text: code });
 
@@ -2312,14 +2326,26 @@ export class CapturePanel {
    * @param {string} entry - Entry point name.
    * @param {Object} parentCommand - Parent command.
    */
-  _debugShader(command, entry, parentCommand) {
+  _debugShader(command, entry, parentCommand, stage) {
+    stage = stage ?? "compute";
     const args = command.args;
     const id = args[0]?.__id;
     const pipeline = this._getObject(id);
     const desc = pipeline.descriptor;
-    const computeId = desc.compute?.module?.__id;
-    const editor = new ShaderDebugger(parentCommand, entry, this._captureData, this.database, this, { style: "overflow: clip;" });
-    this._captureTab.addTab(`Compute Module ID:${computeId}: ${entry}`, editor);
+    let moduleId;
+    let label;
+    if (stage === "vertex") {
+      moduleId = desc.vertex?.module?.__id;
+      label = "Vertex";
+    } else if (stage === "fragment") {
+      moduleId = desc.fragment?.module?.__id;
+      label = "Fragment";
+    } else {
+      moduleId = desc.compute?.module?.__id;
+      label = "Compute";
+    }
+    const editor = new ShaderDebugger(parentCommand, entry, this._captureData, this.database, this, { style: "overflow: clip;", stage });
+    this._captureTab.addTab(`${label} Module ID:${moduleId}: ${entry}`, editor);
     this._captureTab.setActivePanel(editor);
   }
 
@@ -2902,7 +2928,7 @@ export class CapturePanel {
     this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
-      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo);
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, command);
     }
 
     for (const vertexBuffer of state.vertexBuffers) {
@@ -2928,7 +2954,7 @@ export class CapturePanel {
     this._showTextureInputs(state, commandInfo);
 
     if (state.pipeline) {
-      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo);
+      this._showCaptureCommandInfo_setPipeline(state.pipeline, commandInfo, command);
     }
     if (state.indexBuffer) {
       this._showCaptureCommandInfo_setIndexBuffer(state.indexBuffer, commandInfo, true, command.args[2] ?? 0, command.args[0]);

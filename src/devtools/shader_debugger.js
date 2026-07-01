@@ -4,8 +4,9 @@ import { Split } from "./widget/split.js";
 import { Img } from "./widget/img.js";
 import { collapsible } from "./widget/collapsible.js";
 import { WgslDebug, detectRaces } from "wgsl_reflect/wgsl_reflect.module.js";
-import { TextureView } from "./gpu_objects/index.js";
+import { TextureView, Sampler } from "./gpu_objects/index.js";
 import { ShaderWatchView } from "./shader_watch_view.js";
+import { fetchVertexInputs } from "./vertex_fetcher.js";
 
 import { EditorView } from "codemirror";
 import { keymap, highlightSpecialChars, drawSelection, dropCursor, gutter, GutterMarker,
@@ -230,55 +231,38 @@ export class ShaderDebugger extends Div {
         this.captureData = data;
         this.database = database;
         this.entry = entry;
+        // Which shader stage this debugger drives: "compute" (default),
+        // "vertex", or "fragment". Compute uses debugWorkgroup; vertex uses
+        // debugVertex. The stepping/watch/callstack surface is identical.
+        this.stage = options?.stage ?? "compute";
 
         this.pipelineState = this.capturePanel._getPipelineState(command);
-        const computePass = this.pipelineState.pipeline;
+        const pipelineCmd = this.pipelineState.pipeline;
 
-        const args = computePass.args;
-        const id = args[0]?.__id;
-        const pipeline = database.getObject(id);
+        const pipeline = database.getObject(pipelineCmd.args[0]?.__id);
         const desc = pipeline.descriptor;
-        const computeId = desc.compute?.module?.__id;
-        this.module = database.getObject(computeId);
+        this.pipelineDesc = desc;
+
+        let moduleId;
+        if (this.stage === "vertex") {
+            moduleId = desc.vertex?.module?.__id;
+        } else if (this.stage === "fragment") {
+            moduleId = desc.fragment?.module?.__id;
+        } else {
+            moduleId = desc.compute?.module?.__id;
+        }
+        this.module = database.getObject(moduleId);
 
         const code = this.module.descriptor.code;
 
         this._idX = 0;
         this._idY = 0;
         this._idZ = 0;
+        this._vertexIndex = 0;
+        this._instanceIndex = 0;
 
         this.controls = new Div(this, { style: "display: flex; flex-direction: row; margin-top: 5px;" });
-        new Span(this.controls, { text: "Thread ID:", style: "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;" });
-        this.idXInput = new NumberInput(this.controls, {
-            value: 0,
-            min: 0,
-            precision: 0,
-            step: 1,
-            style: "flex: 0 0 auto; display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;",
-            onChange: (value) => {
-                this._idX = value;
-            }
-        });
-        this.idYInput = new NumberInput(this.controls, {
-            value: 0,
-            min: 0,
-            step: 1,
-            precision: 0,
-            style: "flex: 0 0 auto; display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;",
-            onChange: (value) => {
-                this._idY = value;
-            }
-        });
-        this.idZInput = new NumberInput(this.controls, {
-            value: 0,
-            min: 0,
-            step: 1,
-            precision: 0,
-            style: "flex: 0 0 auto; display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;",
-            onChange: (value) => {
-                this._idZ = value;
-            }
-        });
+        this._buildInvocationPicker(this.controls);
 
         new Button(this.controls, {
             children: [ new Img(null, { title: "Debug Shader (F8)", src: "img/debug.svg", style: "width: 15px; height: 15px; filter: invert(1);" }) ],
@@ -334,14 +318,16 @@ export class ShaderDebugger extends Div {
 
         new Div(this.controls, { style: "flex-grow: 2;" });
 
-        this.detectRacesButton = new Button(this.controls, {
-            text: "Detect Races",
-            title: "Scan the workgroup for data races caused by missing barriers",
-            style: "background-color: #777;",
-            onClick: () => {
-                this._detectRaces();
-            }
-        });
+        if (this.stage === "compute") {
+            this.detectRacesButton = new Button(this.controls, {
+                text: "Detect Races",
+                title: "Scan the workgroup for data races caused by missing barriers",
+                style: "background-color: #777;",
+                onClick: () => {
+                    this._detectRaces();
+                }
+            });
+        }
 
         new Button(this.controls, {
             text: "Help",
@@ -387,10 +373,46 @@ export class ShaderDebugger extends Div {
 
         this.callstack = new collapsible(this.watch, { collapsed: false, label: `Callstack` });
 
-        this.raceDetection = new collapsible(this.watch, { collapsed: false, label: `Race Detection` });
-        new Div(this.raceDetection.body, { class: "race-hint", text: "Press “Detect Races” to scan the workgroup for data races." });
+        if (this.stage === "compute") {
+            this.raceDetection = new collapsible(this.watch, { collapsed: false, label: `Race Detection` });
+            new Div(this.raceDetection.body, { class: "race-hint", text: "Press “Detect Races” to scan the workgroup for data races." });
+        }
 
         this.debug();
+    }
+
+    // Build the stage-specific invocation picker: X/Y/Z thread id for compute,
+    // or vertex-index + instance-index for a vertex shader.
+    _buildInvocationPicker(controls) {
+        const numberStyle = "flex: 0 0 auto; display: inline-block; width: 100px; margin-right: 10px; vertical-align: middle;";
+        const labelStyle = "margin-left: 10px; margin-right: 5px; vertical-align: middle; color: #bbb;";
+
+        if (this.stage === "vertex") {
+            new Span(controls, { text: "Vertex:", style: labelStyle });
+            this.vertexInput = new NumberInput(controls, {
+                value: 0, min: 0, step: 1, precision: 0, style: numberStyle,
+                onChange: (value) => { this._vertexIndex = value; }
+            });
+            new Span(controls, { text: "Instance:", style: labelStyle });
+            this.instanceInput = new NumberInput(controls, {
+                value: 0, min: 0, step: 1, precision: 0, style: numberStyle,
+                onChange: (value) => { this._instanceIndex = value; }
+            });
+        } else {
+            new Span(controls, { text: "Thread ID:", style: labelStyle });
+            this.idXInput = new NumberInput(controls, {
+                value: 0, min: 0, precision: 0, step: 1, style: numberStyle,
+                onChange: (value) => { this._idX = value; }
+            });
+            this.idYInput = new NumberInput(controls, {
+                value: 0, min: 0, step: 1, precision: 0, style: numberStyle,
+                onChange: (value) => { this._idY = value; }
+            });
+            this.idZInput = new NumberInput(controls, {
+                value: 0, min: 0, step: 1, precision: 0, style: numberStyle,
+                onChange: (value) => { this._idZ = value; }
+            });
+        }
     }
 
     onDestroy() {
@@ -461,6 +483,17 @@ export class ShaderDebugger extends Div {
             this.variableFilter.value = "";
         }
 
+        if (this.stage === "vertex") {
+            const config = this._buildVertexConfig();
+            if (!config) {
+                return;
+            }
+            this.debugger = new WgslDebug(config.code, this.runStateChanged.bind(this));
+            this.debugger.debugVertex(config.entryName, config.inputs, config.bindGroups, config.options);
+            this.update();
+            return;
+        }
+
         const config = this._buildDebugConfig();
         if (!config) {
             return;
@@ -512,6 +545,24 @@ export class ShaderDebugger extends Div {
 
         const kernelName = kernel.name;
 
+        const bindGroups = this._buildBindGroups();
+
+        const pipeline = this.database.getObject(this.pipelineState.pipeline.args[0].__id);
+        const constants = pipeline?.descriptor?.compute?.constants;
+
+        const options = {};
+        if (constants) {
+            options.constants = constants;
+        }
+
+        const code = this.module.descriptor.code;
+
+        return { code, kernelName, dispatchCount, bindGroups, options };
+    }
+
+    // Build the bound-resource map (buffers, uniforms, textures, samplers) that
+    // WgslDebug expects, from the captured bind groups. Shared by every stage.
+    _buildBindGroups() {
         const bindGroups = {};
 
         this.pipelineState.bindGroups.forEach((bgCmd) => {
@@ -525,20 +576,20 @@ export class ShaderDebugger extends Div {
 
             if (bg.bufferData !== undefined) {
                 const bufferData = bg.bufferData;
-                let index = 0;
+                let entryIndex = 0;
                 for (const buffer of bufferData) {
                     if (buffer) {
-                        const binding = bgObj.descriptor.entries[index].binding;
+                        const binding = bgObj.descriptor.entries[entryIndex].binding;
                         bindGroup[binding] = buffer;
                     }
-                    index++;
+                    entryIndex++;
                 }
             }
 
             for (const b of bgObj.descriptor.entries) {
                 const binding = b.binding;
                 if (bindGroup[binding] !== undefined) {
-                    continue
+                    continue;
                 }
 
                 const resource = this.database.getObject(b.resource.__id);
@@ -546,21 +597,61 @@ export class ShaderDebugger extends Div {
                     const texture = resource.__texture;
                     const size = [texture.width, texture.height, texture.depthOrArrayLayers];
                     bindGroup[binding] = { texture: texture.imageData, size, view: resource.descriptor, descriptor: texture.descriptor };
+                } else if (resource instanceof Sampler) {
+                    // Sampler: pass its descriptor so compare/filter/address modes
+                    // are honored by the sampling builtins.
+                    bindGroup[binding] = { sampler: resource.descriptor };
                 }
             }
         });
 
-        const pipeline = this.database.getObject(this.pipelineState.pipeline.args[0].__id);
-        const constants = pipeline?.descriptor?.compute?.constants;
+        return bindGroups;
+    }
 
+    // Gather the source, entry point, per-invocation vertex inputs and bound
+    // resources needed to run debugVertex for the selected vertex/instance.
+    _buildVertexConfig() {
+        const reflection = this.module?.reflection;
+        if (!reflection) {
+            return null;
+        }
+
+        let entry = null;
+        if (this.entry) {
+            entry = reflection.entry.vertex.find((e) => e.name === this.entry);
+        }
+        if (!entry) {
+            entry = reflection.entry.vertex[0];
+        }
+        if (!entry) {
+            return null;
+        }
+
+        // Collect the captured vertex-buffer data, indexed by slot.
+        const vertexBufferData = [];
+        const vbCmds = this.pipelineState.vertexBuffers ?? [];
+        for (let slot = 0; slot < vbCmds.length; ++slot) {
+            const vbCmd = vbCmds[slot];
+            if (vbCmd && vbCmd.bufferData) {
+                vertexBufferData[slot] = vbCmd.bufferData[slot];
+            }
+        }
+
+        const inputs = fetchVertexInputs(
+            this.pipelineDesc,
+            vertexBufferData,
+            Math.floor(this._vertexIndex),
+            Math.floor(this._instanceIndex));
+
+        const bindGroups = this._buildBindGroups();
+
+        const constants = this.pipelineDesc?.vertex?.constants;
         const options = {};
         if (constants) {
             options.constants = constants;
         }
 
-        const code = this.module.descriptor.code;
-
-        return { code, kernelName, dispatchCount, bindGroups, options };
+        return { code: this.module.descriptor.code, entryName: entry.name, inputs, bindGroups, options };
     }
 
     // Run the wgsl_reflect data-race detector over the shader and display the
