@@ -644,7 +644,8 @@ export class ShaderDebugger extends Div {
             this.pipelineDesc,
             vertexBufferData,
             Math.floor(this._vertexIndex),
-            Math.floor(this._instanceIndex));
+            Math.floor(this._instanceIndex),
+            entry.inputs);
 
         const bindGroups = this._buildBindGroups();
 
@@ -729,6 +730,7 @@ export class ShaderDebugger extends Div {
         const runVertex = makeVertexRunner({
             code: vsCode,
             entryName: vsEntry.name,
+            entryInputs: vsEntry.inputs,
             entryOutputs: vsEntry.outputs,
             pipelineDesc: this.pipelineDesc,
             vertexBufferData,

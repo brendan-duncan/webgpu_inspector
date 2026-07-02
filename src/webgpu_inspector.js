@@ -3190,11 +3190,25 @@ export let webgpuInspector = null;
         // `self.__webgpu_src()` runs, so the fetch / URL / WebSocket / Request
         // proxies installed by the inspector would not yet be in place when the
         // user's worker code makes its first request against a relative URL.
-        // `await import(...)` runs at this textual point and keeps the worker
-        // module in evaluation state until the user's module finishes loading,
-        // so any messages posted by the parent are queued until the user's
-        // onmessage handler is installed.
-        src += `await import(${JSON.stringify(_url.href)});`;
+        //
+        // Messages posted by the parent while `await import(...)` is still
+        // loading are NOT queued for the user's module: the worker's port
+        // message queue is enabled when the initial evaluation suspends at the
+        // first `await`, so those messages fire with no listener and are lost.
+        // Apps that post a job to a worker right after constructing it (tile
+        // decoders, bake workers, ...) would silently never get a response.
+        // Buffer every message that arrives during the import and re-dispatch
+        // once the user's module has installed its handlers.
+        src += `
+const __wgiQueuedMessages = [];
+const __wgiBufferMessage = (e) => { __wgiQueuedMessages.push(e); };
+self.addEventListener("message", __wgiBufferMessage);
+await import(${JSON.stringify(_url.href)});
+self.removeEventListener("message", __wgiBufferMessage);
+for (const e of __wgiQueuedMessages) {
+  self.dispatchEvent(new MessageEvent("message", { data: e.data, origin: e.origin, lastEventId: e.lastEventId, ports: [...e.ports] }));
+}
+__wgiQueuedMessages.length = 0;`;
       } else {
         src += `importScripts(${JSON.stringify(_url.href)});`;
       }

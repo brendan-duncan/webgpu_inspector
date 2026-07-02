@@ -123,11 +123,11 @@ export function extractVsOutput(out, vsOutputs) {
 // executes the vertex shader on the CPU interpreter, fetching the vertex
 // attributes from the captured vertex buffers. One WgslDebug is reused for
 // every invocation so the shader is parsed once.
-export function makeVertexRunner({ code, entryName, entryOutputs, pipelineDesc, vertexBufferData, bindGroups, constants }) {
+export function makeVertexRunner({ code, entryName, entryInputs, entryOutputs, pipelineDesc, vertexBufferData, bindGroups, constants }) {
     const options = constants ? { constants } : {};
     const vsDebug = new WgslDebug(code);
     return (vertexIndex, instanceIndex) => {
-        const inputs = fetchVertexInputs(pipelineDesc, vertexBufferData, vertexIndex, instanceIndex);
+        const inputs = fetchVertexInputs(pipelineDesc, vertexBufferData, vertexIndex, instanceIndex, entryInputs);
         if (!vsDebug.debugVertex(entryName, inputs, bindGroups, options)) {
             return null;
         }

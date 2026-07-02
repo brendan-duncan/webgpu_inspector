@@ -85,6 +85,36 @@ function asDataView(data) {
     return null;
 }
 
+// The number of components of a shader vertex-input type ("vec3f",
+// "vec4<f32>", "f32", ...), or null if unknown.
+function componentCount(type) {
+    if (!type?.name) {
+        return null;
+    }
+    const m = /^vec(\d)/.exec(type.name);
+    return m ? parseInt(m[1], 10) : 1;
+}
+
+// Conform a decoded vertex attribute to the shader's declared input type, the
+// way GPU vertex fetch does: extra components are dropped, missing components
+// default to 0 (and 1 for w). Without this, a float32x3 attribute feeding a
+// vec4f input would flow a 3-vector into 4-vector math in the interpreter.
+export function conformVertexInput(value, type) {
+    const count = componentCount(type);
+    if (count === null || value === null || value === undefined) {
+        return value;
+    }
+    const isArray = Array.isArray(value);
+    if (count === 1) {
+        return isArray ? value[0] : value;
+    }
+    const out = isArray ? value.slice(0, count) : [value];
+    while (out.length < count) {
+        out.push(out.length === 3 ? 1 : 0);
+    }
+    return out;
+}
+
 // Build the debugVertex `inputs` for a given vertex/instance from a pipeline's
 // vertex layout and the captured per-slot vertex-buffer data.
 //
@@ -93,12 +123,21 @@ function asDataView(data) {
 //                     captured bytes for that slot, already at its bound offset
 //   vertexIndex     - the @builtin(vertex_index) value to debug
 //   instanceIndex   - the @builtin(instance_index) value to debug
+//   shaderInputs    - optional: the vertex entry point's reflection inputs,
+//                     used to conform each attribute to its declared type
 //
 // Attributes on vertex-stepped buffers are fetched at vertexIndex*stride, and on
 // instance-stepped buffers at instanceIndex*stride (both relative to the bound
 // offset, which the captured data already accounts for).
-export function fetchVertexInputs(pipelineDesc, vertexBufferData, vertexIndex, instanceIndex) {
+export function fetchVertexInputs(pipelineDesc, vertexBufferData, vertexIndex, instanceIndex, shaderInputs) {
     const inputs = { vertex_index: vertexIndex, instance_index: instanceIndex };
+
+    const typeByLocation = new Map();
+    for (const input of shaderInputs ?? []) {
+        if (input.locationType === "location") {
+            typeByLocation.set(input.location, input.type);
+        }
+    }
 
     const buffers = pipelineDesc?.vertex?.buffers ?? [];
     for (let slot = 0; slot < buffers.length; ++slot) {
@@ -118,7 +157,9 @@ export function fetchVertexInputs(pipelineDesc, vertexBufferData, vertexIndex, i
         for (const attr of layout.attributes ?? []) {
             const value = decodeVertexAttribute(dv, elemOffset + attr.offset, attr.format);
             if (value !== null) {
-                inputs[attr.shaderLocation] = value;
+                inputs[attr.shaderLocation] = typeByLocation.has(attr.shaderLocation)
+                    ? conformVertexInput(value, typeByLocation.get(attr.shaderLocation))
+                    : value;
             }
         }
     }

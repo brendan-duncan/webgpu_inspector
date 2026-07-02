@@ -119,7 +119,7 @@ function buildDraw(ctx, command, encoderState, pass) {
     }
 
     draw.getVertex = (vertexIndex, instanceIndex) => {
-        const inputs = fetchVertexInputs(desc, vertexBufferData, vertexIndex, instanceIndex);
+        const inputs = fetchVertexInputs(desc, vertexBufferData, vertexIndex, instanceIndex, vsEntry.inputs);
         if (!vsDebug.debugVertex(vsEntry.name, inputs, bindGroups, vsOptions)) {
             return null;
         }
@@ -143,14 +143,30 @@ function buildDraw(ctx, command, encoderState, pass) {
             const fsConfig = desc.fragment.constants ? { constants: desc.fragment.constants } : {};
             draw.fsOutputs = fsEntry.outputs;
             draw.runFragment = (quadInputs, targetLane) => {
+                // The interpreter reports execution problems (e.g. vector
+                // length mismatches) via console.error and keeps going.
+                // Collect them so the history entry can show what went wrong
+                // instead of silently reporting a wrong value.
+                const collected = new Set();
+                const originalError = console.error;
+                console.error = (...args) => {
+                    collected.add(args.map((a) => `${a}`).join(" "));
+                    originalError.apply(console, args);
+                };
                 try {
                     const result = debugFragmentQuad(fsCode, fsEntry.name, quadInputs, bindGroups, fsConfig);
-                    if (result.errors?.length) {
-                        return { output: null, discarded: false, error: result.errors.join("; ") };
+                    for (const err of result.errors ?? []) {
+                        collected.add(err);
                     }
-                    return { output: result.outputs[targetLane], discarded: result.discarded[targetLane] };
+                    return {
+                        output: result.outputs[targetLane],
+                        discarded: result.discarded[targetLane],
+                        error: collected.size ? Array.from(collected).join("; ") : undefined,
+                    };
                 } catch (e) {
                     return { output: null, discarded: false, error: `${e.message ?? e}` };
+                } finally {
+                    console.error = originalError;
                 }
             };
         }

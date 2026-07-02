@@ -262,9 +262,6 @@ function simulatePass(pass, x, y, targetTextureId, state, entries) {
     const emitFragments = targetState !== null;
 
     // --- Draws. -----------------------------------------------------------
-    const cx = x + 0.5;
-    const cy = y + 0.5;
-
     for (const draw of pass.draws) {
         if (draw.error) {
             if (emitFragments) {
@@ -272,203 +269,15 @@ function simulatePass(pass, x, y, targetTextureId, state, entries) {
             }
             continue;
         }
-
-        const viewport = draw.viewport;
-        const scissor = draw.scissor;
-        const inViewport = within({ x: viewport.x, y: viewport.y, w: viewport.w, h: viewport.h }, cx, cy);
-        const inScissor = scissor === null || within(scissor, cx, cy);
-
-        const dsDesc = draw.depthStencilState;
-        const hasStencil = !!(ds && dsDesc && (dsDesc.stencilFront || dsDesc.stencilBack));
-
-        for (let instance = 0; instance < draw.instanceCount; ++instance) {
-            const instanceIndex = draw.firstInstance + instance;
-
-            // Project each vertex once per instance.
-            const cache = new Map();
-            const project = (vi) => {
-                if (cache.has(vi)) {
-                    return cache.get(vi);
-                }
-                const data = draw.getVertex(vi, instanceIndex);
-                const p = data ? { ...projectVertex(data.position, pass.width, pass.height, { x: viewport.x, y: viewport.y, width: viewport.w, height: viewport.h }), data } : null;
-                cache.set(vi, p);
-                return p;
-            };
-
-            for (let ti = 0; ti < draw.triangles.length; ++ti) {
-                const tri = draw.triangles[ti];
-                const p0 = project(tri[0]);
-                const p1 = project(tri[1]);
-                const p2 = project(tri[2]);
-                if (!p0 || !p1 || !p2) {
-                    continue;
-                }
-                // Primitives crossing the w=0 plane would need clipping, which
-                // this software rasterizer doesn't do; skip them.
-                if (p0.w <= 0 || p1.w <= 0 || p2.w <= 0) {
-                    continue;
-                }
-                const bary = barycentric(p0, p1, p2, cx, cy);
-                if (bary === null || bary[0] < 0 || bary[1] < 0 || bary[2] < 0) {
-                    continue; // pixel not covered by this triangle
-                }
-
-                const entry = {
-                    type: "fragment",
-                    pass,
-                    draw,
-                    instance: instanceIndex,
-                    primitive: ti,
-                    status: "written",
-                };
-                if (emitFragments) {
-                    entries.push(entry);
-                }
-
-                // Viewport / scissor.
-                if (!inViewport) {
-                    entry.status = "viewport-clipped";
-                    continue;
-                }
-                if (!inScissor) {
-                    entry.status = "scissor-failed";
-                    continue;
-                }
-
-                // Face culling.
-                const area = triangleArea(p0, p1, p2);
-                if (area === 0) {
-                    entry.status = "degenerate";
-                    continue;
-                }
-                const frontFacing = draw.frontFace === "cw" ? area < 0 : area > 0;
-                if (draw.cullMode === "back" && !frontFacing) {
-                    entry.status = "backface-culled";
-                    continue;
-                }
-                if (draw.cullMode === "front" && frontFacing) {
-                    entry.status = "frontface-culled";
-                    continue;
-                }
-                entry.frontFacing = frontFacing;
-
-                // Fragment depth from the interpolated ndc z, mapped through the
-                // viewport depth range.
-                const ndcZ = bary[0] * p0.ndcZ + bary[1] * p1.ndcZ + bary[2] * p2.ndcZ;
-                if (!draw.unclippedDepth && (ndcZ < 0 || ndcZ > 1)) {
-                    entry.status = "depth-clipped";
-                    continue;
-                }
-                let fragDepth = viewport.minDepth + ndcZ * (viewport.maxDepth - viewport.minDepth);
-
-                // Run the fragment shader (also needed for frag_depth/discard).
-                let fsOut = null;
-                if (draw.runFragment) {
-                    const quad = buildQuadInputs([p0, p1, p2], x, y, frontFacing);
-                    const fsResult = draw.runFragment(quad.quadInputs, quad.targetLane);
-                    if (fsResult === null) {
-                        entry.fsError = "The fragment shader could not be executed.";
-                    } else if (fsResult.error) {
-                        entry.fsError = fsResult.error;
-                    } else if (fsResult.discarded) {
-                        entry.status = "discarded";
-                        continue;
-                    } else {
-                        fsOut = extractFsOutput(fsResult.output, draw.fsOutputs);
-                        if (fsOut.fragDepth !== null) {
-                            fragDepth = Math.min(Math.max(fsOut.fragDepth, viewport.minDepth), viewport.maxDepth);
-                        }
-                        entry.shaderOutput = targetSlot >= 0 ? (fsOut.colors[targetSlot] ?? null) : null;
-                    }
-                }
-                entry.fragDepth = fragDepth;
-
-                // Stencil test.
-                let stencilPassed = true;
-                let stencilUnknown = false;
-                let face = null;
-                if (hasStencil) {
-                    face = (frontFacing ? dsDesc.stencilFront : dsDesc.stencilBack) ?? {};
-                    const readMask = dsDesc.stencilReadMask ?? 0xff;
-                    const writeMask = dsDesc.stencilWriteMask ?? 0xff;
-                    const ref = draw.stencilReference & 0xff;
-                    if (dsState.stencil === null) {
-                        stencilUnknown = true;
-                        entry.stencilUnknown = true;
-                    } else {
-                        stencilPassed = compareFunc(face.compare ?? "always", ref & readMask, dsState.stencil & readMask);
-                    }
-                    if (!stencilPassed) {
-                        entry.status = "stencil-failed";
-                        if (dsState.stencil !== null && !ds.stencilReadOnly) {
-                            const newSt = stencilOp(face.failOp ?? "keep", dsState.stencil, ref);
-                            dsState.stencil = (dsState.stencil & ~writeMask) | (newSt & writeMask);
-                        }
-                        continue;
-                    }
-                }
-
-                // Depth test.
-                let depthPassed = true;
-                if (ds && dsDesc && (dsDesc.depthCompare ?? "always") !== "always") {
-                    if (dsState.depth === null) {
-                        entry.depthUnknown = true;
-                    } else {
-                        depthPassed = compareFunc(dsDesc.depthCompare, fragDepth, dsState.depth);
-                    }
-                    entry.depthBefore = dsState.depth;
-                }
-
-                if (!depthPassed) {
-                    entry.status = "depth-failed";
-                    if (hasStencil && dsState.stencil !== null && !ds.stencilReadOnly) {
-                        const writeMask = dsDesc.stencilWriteMask ?? 0xff;
-                        const newSt = stencilOp(face.depthFailOp ?? "keep", dsState.stencil, draw.stencilReference & 0xff);
-                        dsState.stencil = (dsState.stencil & ~writeMask) | (newSt & writeMask);
-                    }
-                    continue;
-                }
-
-                // The fragment survived: apply writes.
-                if (stencilUnknown) {
-                    entry.status = "stencil-unknown";
-                } else if (entry.depthUnknown) {
-                    entry.status = "depth-unknown";
-                }
-
-                if (hasStencil && dsState.stencil !== null && !ds.stencilReadOnly) {
-                    const writeMask = dsDesc.stencilWriteMask ?? 0xff;
-                    const newSt = stencilOp(face.passOp ?? "keep", dsState.stencil, draw.stencilReference & 0xff);
-                    dsState.stencil = (dsState.stencil & ~writeMask) | (newSt & writeMask);
-                }
-
-                if (ds && dsDesc?.depthWriteEnabled && !ds.depthReadOnly) {
-                    dsState.depth = fragDepth;
-                    if (targetIsDepth) {
-                        entry.value = [fragDepth];
-                    }
-                } else if (targetIsDepth && entry.status === "written") {
-                    entry.status = "not-written";
-                }
-
-                // Color write + blend for every color attachment (only the
-                // target attachment's state is tracked).
-                if (targetSlot >= 0 && fsOut) {
-                    const src = fsOut.colors[targetSlot];
-                    const target = (draw.targets ?? [])[targetSlot];
-                    const writeMask = target?.writeMask ?? 0xf;
-                    if (src && writeMask !== 0) {
-                        const ts = getState(targetTextureId);
-                        ts.color = blendPixel(src, ts.color, target?.blend ?? null, writeMask, draw.blendConstant);
-                        entry.value = ts.color.slice();
-                        entry.blended = !!target?.blend;
-                    } else {
-                        entry.status = "not-written";
-                    }
-                } else if (targetSlot >= 0 && !draw.runFragment) {
-                    entry.status = "not-written";
-                }
+        try {
+            simulateDraw(pass, draw, x, y, targetTextureId, {
+                getState, entries, emitFragments, ds, dsState, targetSlot, targetIsDepth,
+            });
+        } catch (e) {
+            // An interpreter failure in one draw (e.g. a shader the CPU
+            // interpreter can't execute) shouldn't kill the whole history.
+            if (emitFragments) {
+                entries.push({ type: "draw-error", pass, draw, message: `The draw could not be simulated: ${e.message ?? e}` });
             }
         }
     }
@@ -487,6 +296,223 @@ function simulatePass(pass, x, y, targetTextureId, state, entries) {
     }
 
     return entries;
+}
+
+// Simulate a single draw at pixel (x, y): rasterize its triangles, run the
+// pipeline tests and the fragment shader for covering fragments, apply writes
+// to the tracked state, and append history entries (when the pass has the
+// target texture attached).
+function simulateDraw(pass, draw, x, y, targetTextureId, sim) {
+    const { getState, entries, emitFragments, ds, dsState, targetSlot, targetIsDepth } = sim;
+
+    const cx = x + 0.5;
+    const cy = y + 0.5;
+
+    const viewport = draw.viewport;
+    const scissor = draw.scissor;
+    const inViewport = within({ x: viewport.x, y: viewport.y, w: viewport.w, h: viewport.h }, cx, cy);
+    const inScissor = scissor === null || within(scissor, cx, cy);
+
+    const dsDesc = draw.depthStencilState;
+    const hasStencil = !!(ds && dsDesc && (dsDesc.stencilFront || dsDesc.stencilBack));
+
+    for (let instance = 0; instance < draw.instanceCount; ++instance) {
+        const instanceIndex = draw.firstInstance + instance;
+
+        // Project each vertex once per instance.
+        const cache = new Map();
+        const project = (vi) => {
+            if (cache.has(vi)) {
+                return cache.get(vi);
+            }
+            const data = draw.getVertex(vi, instanceIndex);
+            const p = data ? { ...projectVertex(data.position, pass.width, pass.height, { x: viewport.x, y: viewport.y, width: viewport.w, height: viewport.h }), data } : null;
+            cache.set(vi, p);
+            return p;
+        };
+
+        for (let ti = 0; ti < draw.triangles.length; ++ti) {
+            const tri = draw.triangles[ti];
+            const p0 = project(tri[0]);
+            const p1 = project(tri[1]);
+            const p2 = project(tri[2]);
+            if (!p0 || !p1 || !p2) {
+                continue;
+            }
+            // Primitives crossing the w=0 plane would need clipping, which
+            // this software rasterizer doesn't do; skip them.
+            if (p0.w <= 0 || p1.w <= 0 || p2.w <= 0) {
+                continue;
+            }
+            const bary = barycentric(p0, p1, p2, cx, cy);
+            if (bary === null || bary[0] < 0 || bary[1] < 0 || bary[2] < 0) {
+                continue; // pixel not covered by this triangle
+            }
+
+            const entry = {
+                type: "fragment",
+                pass,
+                draw,
+                instance: instanceIndex,
+                primitive: ti,
+                status: "written",
+            };
+            if (emitFragments) {
+                entries.push(entry);
+            }
+
+            // Viewport / scissor.
+            if (!inViewport) {
+                entry.status = "viewport-clipped";
+                continue;
+            }
+            if (!inScissor) {
+                entry.status = "scissor-failed";
+                continue;
+            }
+
+            // Face culling.
+            const area = triangleArea(p0, p1, p2);
+            if (area === 0) {
+                entry.status = "degenerate";
+                continue;
+            }
+            const frontFacing = draw.frontFace === "cw" ? area < 0 : area > 0;
+            if (draw.cullMode === "back" && !frontFacing) {
+                entry.status = "backface-culled";
+                continue;
+            }
+            if (draw.cullMode === "front" && frontFacing) {
+                entry.status = "frontface-culled";
+                continue;
+            }
+            entry.frontFacing = frontFacing;
+
+            // Fragment depth from the interpolated ndc z, mapped through the
+            // viewport depth range.
+            const ndcZ = bary[0] * p0.ndcZ + bary[1] * p1.ndcZ + bary[2] * p2.ndcZ;
+            if (!draw.unclippedDepth && (ndcZ < 0 || ndcZ > 1)) {
+                entry.status = "depth-clipped";
+                continue;
+            }
+            let fragDepth = viewport.minDepth + ndcZ * (viewport.maxDepth - viewport.minDepth);
+
+            // Run the fragment shader (also needed for frag_depth/discard).
+            let fsOut = null;
+            if (draw.runFragment) {
+                const quad = buildQuadInputs([p0, p1, p2], x, y, frontFacing);
+                const fsResult = draw.runFragment(quad.quadInputs, quad.targetLane);
+                if (fsResult === null) {
+                    entry.fsError = "The fragment shader could not be executed.";
+                } else {
+                    // Execution errors don't discard the output: the
+                    // interpreter reports and keeps going, so show the value
+                    // it produced along with what went wrong.
+                    if (fsResult.error) {
+                        entry.fsError = fsResult.error;
+                    }
+                    if (fsResult.discarded) {
+                        entry.status = "discarded";
+                        continue;
+                    }
+                    if (fsResult.output !== null && fsResult.output !== undefined) {
+                        fsOut = extractFsOutput(fsResult.output, draw.fsOutputs);
+                        if (fsOut.fragDepth !== null) {
+                            fragDepth = Math.min(Math.max(fsOut.fragDepth, viewport.minDepth), viewport.maxDepth);
+                        }
+                        entry.shaderOutput = targetSlot >= 0 ? (fsOut.colors[targetSlot] ?? null) : null;
+                    }
+                }
+            }
+            entry.fragDepth = fragDepth;
+
+            // Stencil test.
+            let stencilPassed = true;
+            let stencilUnknown = false;
+            let face = null;
+            if (hasStencil) {
+                face = (frontFacing ? dsDesc.stencilFront : dsDesc.stencilBack) ?? {};
+                const readMask = dsDesc.stencilReadMask ?? 0xff;
+                const writeMask = dsDesc.stencilWriteMask ?? 0xff;
+                const ref = draw.stencilReference & 0xff;
+                if (dsState.stencil === null) {
+                    stencilUnknown = true;
+                    entry.stencilUnknown = true;
+                } else {
+                    stencilPassed = compareFunc(face.compare ?? "always", ref & readMask, dsState.stencil & readMask);
+                }
+                if (!stencilPassed) {
+                    entry.status = "stencil-failed";
+                    if (dsState.stencil !== null && !ds.stencilReadOnly) {
+                        const newSt = stencilOp(face.failOp ?? "keep", dsState.stencil, ref);
+                        dsState.stencil = (dsState.stencil & ~writeMask) | (newSt & writeMask);
+                    }
+                    continue;
+                }
+            }
+
+            // Depth test.
+            let depthPassed = true;
+            if (ds && dsDesc && (dsDesc.depthCompare ?? "always") !== "always") {
+                if (dsState.depth === null) {
+                    entry.depthUnknown = true;
+                } else {
+                    depthPassed = compareFunc(dsDesc.depthCompare, fragDepth, dsState.depth);
+                }
+                entry.depthBefore = dsState.depth;
+            }
+
+            if (!depthPassed) {
+                entry.status = "depth-failed";
+                if (hasStencil && dsState.stencil !== null && !ds.stencilReadOnly) {
+                    const writeMask = dsDesc.stencilWriteMask ?? 0xff;
+                    const newSt = stencilOp(face.depthFailOp ?? "keep", dsState.stencil, draw.stencilReference & 0xff);
+                    dsState.stencil = (dsState.stencil & ~writeMask) | (newSt & writeMask);
+                }
+                continue;
+            }
+
+            // The fragment survived: apply writes.
+            if (stencilUnknown) {
+                entry.status = "stencil-unknown";
+            } else if (entry.depthUnknown) {
+                entry.status = "depth-unknown";
+            }
+
+            if (hasStencil && dsState.stencil !== null && !ds.stencilReadOnly) {
+                const writeMask = dsDesc.stencilWriteMask ?? 0xff;
+                const newSt = stencilOp(face.passOp ?? "keep", dsState.stencil, draw.stencilReference & 0xff);
+                dsState.stencil = (dsState.stencil & ~writeMask) | (newSt & writeMask);
+            }
+
+            if (ds && dsDesc?.depthWriteEnabled && !ds.depthReadOnly) {
+                dsState.depth = fragDepth;
+                if (targetIsDepth) {
+                    entry.value = [fragDepth];
+                }
+            } else if (targetIsDepth && entry.status === "written") {
+                entry.status = "not-written";
+            }
+
+            // Color write + blend for every color attachment (only the
+            // target attachment's state is tracked).
+            if (targetSlot >= 0 && fsOut) {
+                const src = fsOut.colors[targetSlot];
+                const target = (draw.targets ?? [])[targetSlot];
+                const writeMask = target?.writeMask ?? 0xf;
+                if (src && writeMask !== 0) {
+                    const ts = getState(targetTextureId);
+                    ts.color = blendPixel(src, ts.color, target?.blend ?? null, writeMask, draw.blendConstant);
+                    entry.value = ts.color.slice();
+                    entry.blended = !!target?.blend;
+                } else {
+                    entry.status = "not-written";
+                }
+            } else if (targetSlot >= 0 && !draw.runFragment) {
+                entry.status = "not-written";
+            }
+        }
+    }
 }
 
 // Determine which passes need simulating: the ones writing the target texture,
