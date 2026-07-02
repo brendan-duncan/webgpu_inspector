@@ -144,14 +144,34 @@ breakpoint or the end of the shader.
 
 The **Variables** panel, on the right side of the debugger, shows every variable
 in scope at the current statement, along with its type and value. Each function
-call currently on the stack contributes its own group of variables.
+call currently on the stack contributes its own group of variables; module-scope
+state is split into **Globals** (uniform/storage values), **Constants**
+(`const` / `override` values, shown dimmed since they never change while
+stepping — both groups collapsed by default), and **Resources** (bound textures
+and samplers, shown with their format, dimensions, and sampler modes).
 
 Composite values — structs, arrays, vectors, and matrices — can be expanded to
-inspect their members and elements. When stepping, any value that changed since
-the previous step is highlighted.
+inspect their members and elements; structs show an inline preview of their
+first members, and matrices expand into their column vectors. Floating point
+values are shown rounded to a few significant digits (hover for full
+precision), and vec3/vec4 values that look like colors get a color swatch.
+When stepping, any value that changed since the previous step is highlighted.
+The entry point's inputs are expanded by default.
+
+Right-clicking a variable (or a struct member / array element) opens a context
+menu with **Copy Name** (the full path, e.g. `material.alphaCutoff`),
+**Copy Value** (full precision), and **Pin to Watch**. Pinned paths appear in a
+**Watch** group at the top of the panel and stay pinned across restarts of the
+debug session, so a deeply nested member can be tracked without re-expanding
+its parents after every step.
 
 The **Filter variables by name** field at the top of the panel narrows the list
-to variables whose name matches the entered text.
+to variables whose name matches the entered text. The filter also matches
+struct member names, expanding the tree to show where the matches are.
+
+Hovering a variable in the shader editor shows its current value; member and
+element chains like `material.alphaCutoff` or `lights[2].color` resolve to the
+hovered member's value.
 
 ## Callstack
 ###### [Back to top](#shader-debugger-experimental)

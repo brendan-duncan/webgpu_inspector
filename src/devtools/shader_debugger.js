@@ -4,7 +4,7 @@ import { Split } from "./widget/split.js";
 import { Img } from "./widget/img.js";
 import { collapsible } from "./widget/collapsible.js";
 import { WgslDebug, detectRaces, createFragmentQuadDebugger } from "wgsl_reflect/wgsl_reflect.module.js";
-import { ShaderWatchView } from "./shader_watch_view.js";
+import { ShaderWatchView, resolveVariablePath, formatDataValue } from "./shader_watch_view.js";
 import { fetchVertexInputs } from "./vertex_fetcher.js";
 import { assembleTriangles, buildFragmentQuad } from "./fragment_debug.js";
 import { QuadDebuggerAdapter } from "./quad_debugger_adapter.js";
@@ -155,24 +155,33 @@ const tooltipHover = hoverTooltip((view, pos, side) => {
 
     let name = text.slice(start - from, end - from);
 
-    if (/[.\[\]]/.test(name)) {
-        const fullName = name;
-        const match = fullName.match(/^(\w+)/);
+    const dbg = view.debugger;
+    if (!dbg?.debugger) {
+        return null;
+    }
+    const context = dbg.debugger.context;
+    if (!context) {
+        return null;
+    }
+    const exec = dbg.debugger._exec;
+
+    // Resolve the full member/index chain ("material.alphaCutoff",
+    // "lights[2].color") so hovering a struct member shows that member's
+    // value. Chains with non-literal indices fall back to the root variable.
+    let data = resolveVariablePath(exec, context, name);
+    if (!data && /[.\[\]]/.test(name)) {
+        const match = name.match(/^(\w+)/);
         if (match) {
             name = match[1];
-            // TODO: build a postfix expression of array indices and field accesses
-            // to inspect the individual array elements and struct fields
+            data = resolveVariablePath(exec, context, name);
         }
     }
-
-    const dbg = view.debugger;
-    const context = dbg.debugger.context;
-    const variable = context.getVariableValue(name);
-    if (!variable) {
+    if (!data) {
         return null;
     }
 
-    const tip = `${name}: ${variable.typeInfo.name} = ${variable.toString()}`;
+    const formatted = formatDataValue(data, exec, context);
+    const tip = `${name}: ${data.typeInfo.getTypeName()} = ${formatted.text}`;
 
     return {
       pos: start,

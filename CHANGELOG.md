@@ -22,6 +22,19 @@ can select the vertex index to debug.
 
 * **Fragment shader debugging.** You can now debug fragment shaders from a frame capture. When debugging a fragment shader, you can select the pixel coordinate to debug. You can also access the fragment shader debugger from the Pixel history panel for a renderpass output, by selecting a specific pixel to debug.
 
+### Shader Debugger
+
+* **Variables panel overhaul.** Module scope is now split into **Globals**, **Constants** (dimmed,
+  collapsed), and **Resources** — textures show their format and dimensions and samplers their
+  filter/address modes instead of `<texture_2d<f32>>`. Floats display at ~5 significant digits with
+  full precision on hover; structs get an inline member preview; matrices display and expand as
+  column vectors (previously just `[...]`); color-like vec3/vec4 values get a swatch; and the entry
+  point's inputs auto-expand. Right-clicking a row offers **Copy Name** (full path), **Copy Value**
+  (full precision), and **Pin to Watch** — pinned paths live in a Watch group at the top and survive
+  session restarts. The name filter also matches struct member names, expanding the tree to the
+  matches. Hovering `material.alphaCutoff` in the editor now shows that member's value instead of
+  the whole struct.
+
 ## v1.4.3
 
 ### Shader Analysis
