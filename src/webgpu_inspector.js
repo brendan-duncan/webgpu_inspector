@@ -5,7 +5,8 @@ import { TextureUtils } from "./utils/texture_utils.js";
 import { Actions, PanelActions } from "./utils/actions.js";
 import { RollingAverage } from "./utils/rolling_average.js";
 import { alignTo } from "./utils/align.js";
-import { LocalCaptureStore, captureStreamToBlob } from "./utils/local_capture.js";
+import { LocalCaptureStore } from "./utils/local_capture.js";
+import { encodeCaptureBinaryParts } from "./utils/capture_binary.js";
 import { BridgeClient } from "./utils/bridge_client.js";
 
 export let webgpuInspector = null;
@@ -690,8 +691,8 @@ export let webgpuInspector = null;
       await sleep();
     }
 
-    // Build the capture JSON and trigger a download. Returns the JSON
-    // object for callers that want to handle the bytes themselves.
+    // Build the capture and trigger a download of the binary capture file.
+    // Returns the capture stream for callers that want the data themselves.
     // Pass `{ download: false }` as `options` to skip the file download and
     // only return the data (used by the live bridge to upload instead).
     async saveCaptureData(filename, options) {
@@ -719,7 +720,7 @@ export let webgpuInspector = null;
       this._localCapture.resetCaptures();
 
       const frame = stream.metadata.frame ?? 0;
-      const name = filename || `webgpu_capture_frame_${frame}.json`;
+      const name = filename || `webgpu_capture_frame_${frame}.wgpuc`;
       if (!options || options.download !== false) {
         this._downloadCaptureStream(stream, name);
       }
@@ -727,15 +728,27 @@ export let webgpuInspector = null;
       return stream;
     }
 
-    // Download a capture as NDJSON (metadata line + one line per payload), built
-    // as a Blob from an array of bounded strings — no single >512MB allocation.
-    // The file is loadable via DevTools "Load Capture" / load_capture_file, which
-    // accept both this format and legacy single-object 1.0 captures.
+    // Encode a capture stream (the `{ metadata, payloads }` value
+    // saveCaptureData() resolves with) into a Blob of the binary capture file
+    // (WGPUCAP container; see src/utils/capture_binary.js). The Blob parts
+    // reference the payload typed arrays directly, so nothing is
+    // base64-inflated or built as a giant string. Public because a worker has
+    // no `document` to trigger a download with — it can build the Blob here,
+    // post it to a page context (Blobs are structured-cloneable), and let the
+    // page download it.
+    captureStreamToBlob(stream) {
+      const { parts } = encodeCaptureBinaryParts(stream);
+      return new Blob(parts, { type: "application/octet-stream" });
+    }
+
+    // Download a capture as a binary capture file. The file is loadable via
+    // DevTools "Load Capture" / load_capture_file, which also still accept the
+    // legacy NDJSON (1.1) and single-object JSON (1.0) captures.
     _downloadCaptureStream(stream, filename) {
       if (!_document) {
         return;
       }
-      const { blob } = captureStreamToBlob(stream, "application/json");
+      const blob = this.captureStreamToBlob(stream);
       const url = URL.createObjectURL(blob);
       const a = _document.createElement("a");
       a.href = url;

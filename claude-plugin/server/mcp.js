@@ -334,12 +334,13 @@ export function createMcpServer(deps) {
     },
     {
       name: "load_capture_file",
-      description: "Load a WebGPU Inspector capture .json file from disk (one saved by " +
-        "saveCaptureData() or the DevTools 'Save Capture' action) so it can be analyzed.",
+      description: "Load a WebGPU Inspector capture file from disk (a .wgpuc binary saved by " +
+        "saveCaptureData() or the DevTools 'Save Capture' action, or a legacy .json capture) " +
+        "so it can be analyzed.",
       inputSchema: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Path to the capture .json file." }
+          path: { type: "string", description: "Path to the capture file (.wgpuc, or legacy .json)." }
         },
         required: ["path"]
       }

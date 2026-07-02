@@ -1,6 +1,7 @@
 // Node test suite for the WebGPU Inspector bridge server's pure logic:
-// NDJSON capture round-trip + legacy load, payload truncation markers, vertex
-// decode math, and per-draw state resolution. No browser or MCP SDK needed.
+// binary (WGPUCAP) capture round-trips, legacy NDJSON/JSON loads, payload
+// truncation markers, vertex decode math, and per-draw state resolution. No
+// browser or MCP SDK needed.
 //
 //   node claude-plugin/server/test/run.js
 
@@ -20,7 +21,18 @@ import {
 } from "../analysis.js";
 import { CaptureStore } from "../capture-store.js";
 import { Bridge } from "../bridge.js";
-import { captureStreamToLines, captureStreamToBlob } from "../../../src/utils/local_capture.js";
+import { isCaptureBinary, decodeCaptureBinary } from "../capture-binary.js";
+import { captureStreamToLines } from "../../../src/utils/local_capture.js";
+// The browser-side twin of capture-binary.js — cross-codec tests below keep
+// the two implementations agreeing on the format.
+import {
+  encodeCaptureBinaryParts as pageEncodeBinaryParts,
+  decodeCaptureBinary as pageDecodeBinary
+} from "../../../src/utils/capture_binary.js";
+
+function concatParts(parts) {
+  return Buffer.concat(parts.map((p) => Buffer.from(p.buffer, p.byteOffset, p.byteLength)));
+}
 
 let passed = 0;
 const failures = [];
@@ -167,7 +179,7 @@ await test("diffDraws reports identical and changed bindings", () => {
   assert.ok(diff.differences.some((d) => d.field === "vertexBuffer[0].bufferId" && d.a === 20 && d.b === 99));
 });
 
-await test("CaptureStore round-trips NDJSON (addLive -> getPayload -> reload)", async () => {
+await test("CaptureStore round-trips a live capture (addLive -> getPayload -> reload)", async () => {
   const dir = await mkdtemp(join(tmpdir(), "wgpucap-"));
   try {
     const bytes = vertexBytes();
@@ -180,7 +192,8 @@ await test("CaptureStore round-trips NDJSON (addLive -> getPayload -> reload)", 
     assert.deepEqual([...got], [...bytes]);
     assert.equal(meta.totalCommands, 5);
 
-    // Reload the persisted NDJSON file in a fresh store.
+    // Persisted as a WGPUCAP binary file; reload it in a fresh store.
+    assert.ok(meta.path.endsWith(".wgpuc"));
     const store2 = new CaptureStore({ dir });
     const meta2 = await store2.addFile(meta.path);
     assert.deepEqual([...store2.getPayload(meta2.id, 0)], [...bytes]);
@@ -235,33 +248,98 @@ await test("page captureStreamToLines round-trips through the server loader", as
   }
 });
 
-await test("captureStreamToBlob produces the same NDJSON as captureStreamToLines", async () => {
+await test("binary codec: page encoder and server decoder agree on the format", () => {
   const bytes = vertexBytes();
-  const stream = { metadata: syntheticCapture(), payloads: [{ id: 0, typedArray: "Uint8Array", bytes }] };
-  const fromLines = captureStreamToLines(stream).join("");
-  const { blob, omittedPayloads } = captureStreamToBlob(stream, "text/plain");
-  const fromBlob = await blob.text();
-  assert.equal(fromBlob, fromLines);
-  assert.equal(omittedPayloads, 0);
-  // The blob is valid NDJSON: 1 metadata line + 1 payload line.
-  assert.equal(fromBlob.trimEnd().split("\n").length, 2);
-});
-
-await test("captureStreamToBlob budget omits oversized payloads (metadata still present)", async () => {
-  const big = Buffer.alloc(1000);
+  const odd = Buffer.from([9, 8, 7]); // odd length exercises 8-byte padding
   const stream = {
     metadata: syntheticCapture(),
     payloads: [
-      { id: 0, typedArray: "Uint8Array", bytes: Buffer.alloc(10) },
-      { id: 1, typedArray: "Uint8Array", bytes: big }
+      { id: 0, typedArray: "Uint8Array", bytes },
+      { id: 1, typedArray: "Uint8Array", bytes: odd }
     ]
   };
-  const { blob, omittedPayloads, includedPayloads } = captureStreamToBlob(stream, "text/plain", 100);
-  assert.equal(omittedPayloads, 1);
-  assert.equal(includedPayloads, 1);
-  const text = await blob.text();
-  // Metadata line + the one included payload line only.
-  assert.equal(text.trimEnd().split("\n").length, 2);
+  const file = concatParts(pageEncodeBinaryParts(stream).parts);
+
+  // The front of the file is readable text: header line + metadata JSON.
+  assert.ok(isCaptureBinary(file));
+  const text = file.toString("utf8", 0, 64);
+  assert.ok(text.startsWith("WGPUCAP 1 "), `header was ${JSON.stringify(text.slice(0, 16))}`);
+  assert.ok(text.includes('{"schemaVersion"'));
+
+  // Server decoder reads what the page encoder wrote.
+  const { metadata, payloads } = decodeCaptureBinary(file);
+  assert.equal(metadata.frame, 7);
+  assert.deepEqual([...payloads.get(0)], [...bytes]);
+  assert.deepEqual([...payloads.get(1)], [9, 8, 7]);
+  // Payloads are 8-aligned so loaders can view them as any TypedArray.
+  assert.deepEqual(metadata.payloadTable, [[0, bytes.length], [40, 3]]);
+
+  // And the page decoder reads it too (panel "Load Capture" path).
+  const pageSide = pageDecodeBinary(new Uint8Array(file));
+  assert.deepEqual([...pageSide.payloads.get(1)], [9, 8, 7]);
+});
+
+await test("binary codec: truncated file loads with the cut payload omitted", () => {
+  const stream = {
+    metadata: syntheticCapture(),
+    payloads: [
+      { id: 0, typedArray: "Uint8Array", bytes: Buffer.alloc(8).fill(1) },
+      { id: 1, typedArray: "Uint8Array", bytes: Buffer.alloc(64).fill(2) }
+    ]
+  };
+  const file = concatParts(pageEncodeBinaryParts(stream).parts);
+  const cut = file.subarray(0, file.length - 32); // slices into payload 1
+  const { metadata, payloads } = decodeCaptureBinary(cut);
+  assert.equal(metadata.frame, 7);
+  assert.deepEqual([...payloads.get(0)], [...Buffer.alloc(8).fill(1)]);
+  assert.equal(payloads.has(1), false);
+});
+
+await test("binary capture file loads through CaptureStore.addFile", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "wgpucap-"));
+  try {
+    const bytes = vertexBytes();
+    const stream = { metadata: syntheticCapture(), payloads: [{ id: 0, typedArray: "Uint8Array", bytes }] };
+    const p = join(dir, "frame.wgpuc");
+    await writeFile(p, concatParts(pageEncodeBinaryParts(stream).parts));
+
+    const store = new CaptureStore({ dir });
+    const meta = await store.addFile(p);
+    assert.equal(meta.frame, 7);
+    assert.deepEqual([...store.getPayload(meta.id, 0)], [...bytes]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+await test("bridge upload sniffs binary and legacy NDJSON bodies", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "wgpucap-"));
+  const PORT = 47823;
+  const store = new CaptureStore({ dir });
+  await store.init();
+  const bridge = new Bridge({ port: PORT, host: "127.0.0.1", store });
+  assert.equal(await bridge.start(), true);
+  try {
+    const bytes = vertexBytes();
+    const stream = { metadata: syntheticCapture(), payloads: [{ id: 0, typedArray: "Uint8Array", bytes }] };
+
+    // Binary body (what the page's bridge client uploads now).
+    const binBody = concatParts(pageEncodeBinaryParts(stream).parts);
+    let res = await fetch(`http://127.0.0.1:${bridge.port}/capture/test-bin`, { method: "POST", body: binBody });
+    assert.equal(res.status, 200);
+    let captureId = (await res.json()).captureId;
+    assert.deepEqual([...store.getPayload(captureId, 0)], [...bytes]);
+
+    // Legacy NDJSON body (older instrumented pages).
+    const ndjsonBody = captureStreamToLines(stream).join("");
+    res = await fetch(`http://127.0.0.1:${bridge.port}/capture/test-ndjson`, { method: "POST", body: ndjsonBody });
+    assert.equal(res.status, 200);
+    captureId = (await res.json()).captureId;
+    assert.deepEqual([...store.getPayload(captureId, 0)], [...bytes]);
+  } finally {
+    await bridge.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 await test("Bridge binds a free port and stop() releases it for reuse", async () => {

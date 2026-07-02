@@ -26,7 +26,8 @@ import { CaptureData } from "./capture_data.js";
 import { ShaderDebugger } from "./shader_debugger.js";
 import { CaptureTextureViewer } from "./capture_texture_viewer.js";
 import { addShaderAnalysisView, buildFrameShaderAnalysis } from "./shader_analysis_view.js";
-import { captureToText, downloadCaptureJson } from "./capture_export.js";
+import { captureToText, downloadCapture } from "./capture_export.js";
+import { isCaptureBinary, decodeCaptureBinary } from "../utils/capture_binary.js";
 import { importCaptureJson, parseCaptureText } from "./capture_import.js";
 import { putCaptureHandoff } from "../utils/capture_handoff.js";
 import { getInspectWorkers } from "../utils/inspector_settings.js";
@@ -34,6 +35,14 @@ import { commandArgs, processCommandArgs, renderArgumentsSection, renderCommandS
 import { renderCommandList } from "./command_list_view.js";
 
 const _inspectButtonStyle = "btn btn-info";
+
+// Resolve after the browser has painted a frame. Double-rAF: the first
+// callback runs before the paint, the second after it, so a status-label
+// change awaited through this is guaranteed on screen before the next
+// blocking phase starts.
+function _nextPaint() {
+  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
 
 const _statLabelOverrides = {
   apiCalls: "API Calls",
@@ -127,14 +136,14 @@ export class CapturePanel {
         return;
       }
       Promise.resolve()
-        .then(() => downloadCaptureJson(
+        .then(() => downloadCapture(
           state.frame,
           state.commands,
           self.database,
           state.statistics,
           "__buildVersion"
         ))
-        .catch((e) => console.error("Failed to save capture JSON:", e));
+        .catch((e) => console.error("Failed to save capture:", e));
     });
 
     const loadMenuItem = new Div(menuDropdown, { class: "menu-item", text: "Load Capture" });
@@ -142,7 +151,7 @@ export class CapturePanel {
       menuDropdown.element.classList.remove("open");
       const input = document.createElement("input");
       input.type = "file";
-      input.accept = ".json,application/json";
+      input.accept = ".wgpuc,.json,application/json,application/octet-stream";
       input.style.display = "none";
       input.addEventListener("change", () => {
         const file = input.files && input.files[0];
@@ -150,10 +159,15 @@ export class CapturePanel {
         if (!file) {
           return;
         }
-        file.text().then((text) => {
-          self._importCaptureJson(text, file.name);
+        // Read as bytes: _importCaptureJson sniffs the WGPUCAP magic and falls
+        // back to text parsing for legacy JSON/NDJSON captures.
+        self._showLoadingOverlay(`Reading ${file.name}...`);
+        file.arrayBuffer().then((buffer) => {
+          return self._importCaptureJson(new Uint8Array(buffer), file.name);
         }).catch((e) => {
-          console.error("Failed to read capture JSON:", e);
+          console.error("Failed to read capture file:", e);
+        }).finally(() => {
+          self._hideLoadingOverlay();
         });
       });
       document.body.appendChild(input);
@@ -943,35 +957,99 @@ export class CapturePanel {
   }
 
   /**
-   * Load a previously-exported capture JSON file as a new tab.
-   * @param {string} text - The file contents.
+   * Show (or update) the full-panel loading overlay. The spinner's animation
+   * is transform-only, so it keeps spinning on the compositor thread even
+   * while the main thread is blocked in a long parse/build phase; the label
+   * text updates between phases.
+   * @param {string} text - Status line shown under the spinner.
+   */
+  _showLoadingOverlay(text) {
+    if (!this._loadingOverlay) {
+      const overlay = document.createElement("div");
+      overlay.className = "capture_loading_overlay";
+      const spinner = document.createElement("div");
+      spinner.className = "capture_loading_spinner";
+      overlay.appendChild(spinner);
+      const label = document.createElement("div");
+      label.className = "capture_loading_label";
+      overlay.appendChild(label);
+      this._loadingOverlay = overlay;
+      this._loadingOverlayLabel = label;
+    }
+    this._loadingOverlayLabel.textContent = text;
+    if (!this._loadingOverlay.parentNode) {
+      document.body.appendChild(this._loadingOverlay);
+    }
+  }
+
+  _hideLoadingOverlay() {
+    if (this._loadingOverlay?.parentNode) {
+      this._loadingOverlay.parentNode.removeChild(this._loadingOverlay);
+    }
+  }
+
+  /**
+   * Load a previously-exported capture file as a new tab. Accepts the binary
+   * WGPUCAP container (as a Uint8Array), legacy JSON/NDJSON text, or a
+   * Uint8Array of legacy text (sniffed by magic).
+   *
+   * Async so a loading overlay can paint between the blocking phases (parse,
+   * object/command import, UI build) of a large capture.
+   * @param {string|Uint8Array} contents - The file contents.
    * @param {string} filename - The originating filename (used as the tab label).
    */
-  _importCaptureJson(text, filename) {
-    let data;
-    let payloads;
+  async _importCaptureJson(contents, filename) {
+    this._showLoadingOverlay("Parsing capture...");
     try {
-      ({ data, payloads } = parseCaptureText(text));
-    } catch (e) {
-      console.error("Capture JSON parse error:", e);
-      return;
+      await _nextPaint();
+      let data;
+      let payloads;
+      try {
+        if (contents instanceof Uint8Array) {
+          if (isCaptureBinary(contents)) {
+            ({ metadata: data, payloads } = decodeCaptureBinary(contents));
+          } else {
+            ({ data, payloads } = parseCaptureText(new TextDecoder().decode(contents)));
+          }
+        } else {
+          ({ data, payloads } = parseCaptureText(contents));
+        }
+      } catch (e) {
+        console.error("Capture parse error:", e);
+        return;
+      }
+      let imported;
+      try {
+        const offset = this._nextImportIdOffset;
+        this._nextImportIdOffset += 1_000_000_000;
+        // Update the progress line as objects/commands import, but only pay
+        // for an actual paint every ~100ms.
+        let lastPaint = performance.now();
+        imported = await importCaptureJson(data, this.database, offset, payloads,
+          async (phase, done, total) => {
+            this._showLoadingOverlay(`${phase}... ${done.toLocaleString()} / ${total.toLocaleString()}`);
+            const now = performance.now();
+            if (now - lastPaint >= 100) {
+              lastPaint = now;
+              await _nextPaint();
+            }
+          });
+      } catch (e) {
+        console.error("Failed to load capture:", e);
+        return;
+      }
+      this._showLoadingOverlay(`Building capture view... (${imported.commands.length.toLocaleString()} commands)`);
+      await _nextPaint();
+      this._buildCaptureTab({
+        frame: imported.frame,
+        commands: imported.commands,
+        statistics: imported.statistics,
+        importedObjectIds: imported.importedObjectIds,
+        source: filename || "imported"
+      });
+    } finally {
+      this._hideLoadingOverlay();
     }
-    let imported;
-    try {
-      const offset = this._nextImportIdOffset;
-      this._nextImportIdOffset += 1_000_000_000;
-      imported = importCaptureJson(data, this.database, offset, payloads);
-    } catch (e) {
-      console.error("Failed to load capture JSON:", e);
-      return;
-    }
-    this._buildCaptureTab({
-      frame: imported.frame,
-      commands: imported.commands,
-      statistics: imported.statistics,
-      importedObjectIds: imported.importedObjectIds,
-      source: filename || "imported"
-    });
   }
 
   /**

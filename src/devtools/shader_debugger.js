@@ -976,11 +976,15 @@ export class ShaderDebugger extends Div {
         let state = this.debugger.currentState;
 
         if (state === null) {
+            // The context is null once execution has finished (e.g. the
+            // fragment quad's target lane ran to completion).
             const context = this.debugger.context;
-            frames.push({
-                name: context.currentFunctionName || "<shader>",
-                line: this.debugger.currentCommand?.line ?? -1
-            });
+            if (context) {
+                frames.push({
+                    name: context.currentFunctionName || "<shader>",
+                    line: this.debugger.currentCommand?.line ?? -1
+                });
+            }
         } else {
             let lastName = null;
             while (state !== null) {

@@ -5,14 +5,24 @@ description: >-
   list, render/compute passes, buffers, textures, shaders, validation errors,
   and common performance problems. Use when analyzing captures produced by the
   webgpu-inspector plugin's MCP tools or by saveCaptureData() / DevTools "Save
-  Capture" .json files.
+  Capture" files (.wgpuc binary, or legacy .json).
 ---
 
 # WebGPU capture analysis
 
-A WebGPU Inspector capture is a JSON record of one or more rendered frames: the
+A WebGPU Inspector capture is a record of one or more rendered frames: the
 full GPU object graph plus the ordered list of WebGPU API calls. This skill
 explains how to read one and what to flag.
+
+## Capture files
+
+Saved captures are `.wgpuc` binary files: an ASCII header line
+(`WGPUCAP <version> <jsonByteLength>\n`), then `<jsonByteLength>` bytes of
+metadata JSON (the object described under "Capture shape" below, so the front
+of the file is readable text), then raw buffer/texture payload bytes located
+by the metadata's `payloadTable`. Don't parse one by hand — pass the path to
+`load_capture_file` and use the MCP tools. Legacy captures (single-object
+`.json`, or NDJSON with base64 payload lines) load the same way.
 
 ## Capture shape
 
@@ -25,8 +35,9 @@ explains how to read one and what to flag.
   arguments. References to GPU objects appear as `{ "__id": N, "__class": ...,
   "__label": ... }`.
 - `validationErrors` — WebGPU validation errors raised during the capture.
-- Large buffer/texture payloads are base64; the MCP tools strip them, so you
-  see `__base64Omitted` markers and byte lengths instead of bytes.
+- Large buffer/texture payloads live out-of-band (referenced by
+  `__payloadId`); the MCP tools strip them, so you see `__base64Omitted`
+  markers and byte lengths instead of bytes.
 
 ## Workflow
 

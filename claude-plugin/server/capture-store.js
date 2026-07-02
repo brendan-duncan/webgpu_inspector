@@ -1,4 +1,4 @@
-// In-memory index of captures, backed by NDJSON files on disk.
+// In-memory index of captures, backed by capture files on disk.
 //
 // Captures arrive two ways:
 //  - Live: uploaded by an instrumented page through the bridge.
@@ -6,18 +6,20 @@
 //
 // A capture is stored as small metadata (object descriptors, command list,
 // validation errors) plus out-of-band payloads (buffer/texture bytes) kept in a
-// Map keyed by payload id. Splitting the two is what lets large captures persist
-// without ever building one >512MB string. Both halves are written to a single
-// NDJSON file (metadata line + one line per payload) so a capture survives and
-// can be reopened here or in the DevTools "Load Capture" action.
+// Map keyed by payload id. Both halves are written to a single WGPUCAP binary
+// file (ASCII header + metadata JSON + raw payload bytes; see
+// capture-binary.js) so a capture survives and can be reopened here or in the
+// DevTools "Load Capture" action. Loading also still accepts the legacy NDJSON
+// (schema 1.1) and single-JSON (1.0) formats.
 
 import { createReadStream } from "node:fs";
 import { createWriteStream } from "node:fs";
-import { readFile, mkdir } from "node:fs/promises";
+import { open, readFile, mkdir } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { resolve, isAbsolute, join } from "node:path";
 
 import { summarize } from "./analysis.js";
+import { isCaptureBinary, decodeCaptureBinary, encodeCaptureBinaryParts } from "./capture-binary.js";
 
 export class CaptureStore {
   constructor(options) {
@@ -62,11 +64,12 @@ export class CaptureStore {
       summary: safeSummary(json)
     };
 
-    // Persist so the capture survives and is loadable elsewhere. Streamed line
-    // by line so even a multi-GB capture never builds a giant string on write.
-    const filePath = join(this._dir, `${id}.json`);
+    // Persist so the capture survives and is loadable elsewhere. Written as
+    // the WGPUCAP binary container, chunk by chunk with backpressure, so even
+    // a multi-GB capture never builds a giant string or double-buffers.
+    const filePath = join(this._dir, `${id}.wgpuc`);
     try {
-      await writeCaptureNdjson(filePath, json, payloads);
+      await writeCaptureBinary(filePath, json, payloads);
       entry.path = filePath;
     } catch (e) {
       process.stderr.write(`[webgpu-bridge] failed to write ${filePath}: ${e.message}\n`);
@@ -76,8 +79,9 @@ export class CaptureStore {
     return this.describe(entry);
   }
 
-  // Load a capture from a file on disk and index it. Accepts both formats:
-  //  - 1.1 NDJSON: metadata line + one payload line each.
+  // Load a capture from a file on disk and index it. Accepts all formats:
+  //  - WGPUCAP binary: metadata JSON + raw payload bytes (the save format).
+  //  - 1.1 NDJSON: metadata line + one base64 payload line each.
   //  - 1.0 legacy: a single JSON object with base64 payloads inlined.
   async addFile(filePath) {
     const abs = isAbsolute(filePath) ? filePath : resolve(process.cwd(), filePath);
@@ -165,29 +169,61 @@ function safeSummary(json) {
   }
 }
 
-// Stream a capture to disk as NDJSON without building one big string.
-function writeCaptureNdjson(filePath, metadata, payloads) {
-  return new Promise((resolveP, reject) => {
-    const out = createWriteStream(filePath, { encoding: "utf8" });
+// Stream a capture to disk as a WGPUCAP binary file. Payload entries may hold
+// raw `bytes` (binary uploads) or `base64` (legacy NDJSON uploads); base64 is
+// decoded once here and the bytes cached back on the entry for getPayload.
+async function writeCaptureBinary(filePath, metadata, payloads) {
+  const list = [];
+  for (const [payloadId, p] of payloads) {
+    if (!p.bytes && typeof p.base64 === "string") {
+      p.bytes = Buffer.from(p.base64, "base64");
+    }
+    list.push({ id: payloadId, bytes: p.bytes || Buffer.alloc(0) });
+  }
+  const { parts } = encodeCaptureBinaryParts({ metadata, payloads: list });
+  const out = createWriteStream(filePath);
+  const finished = new Promise((resolveP, reject) => {
     out.on("error", reject);
     out.on("finish", resolveP);
-    out.write(JSON.stringify(metadata) + "\n");
-    for (const [payloadId, p] of payloads) {
-      out.write(JSON.stringify({
-        __payloadId: payloadId,
-        __typedArray: p.typedArray,
-        base64: p.base64
-      }) + "\n");
-    }
-    out.end();
   });
+  for (const part of parts) {
+    if (!out.write(part)) {
+      await new Promise((resolveP) => out.once("drain", resolveP));
+    }
+  }
+  out.end();
+  await finished;
 }
 
-// Read a capture file line by line. The first non-empty line is the metadata;
-// each remaining line is a payload. If the file is a single legacy 1.0 JSON
-// object, the whole thing parses as the metadata and payloads stays empty (its
-// base64 blobs are resolved inline by the accessors).
+// Read a capture file, sniffing the format from its first bytes: WGPUCAP
+// binary files are read whole and decoded with zero-copy payload views; text
+// files fall back to the legacy NDJSON / single-JSON parsing below.
 async function readCaptureFile(abs) {
+  const fh = await open(abs, "r");
+  let head;
+  try {
+    head = Buffer.alloc(8);
+    const { bytesRead } = await fh.read(head, 0, 8, 0);
+    head = head.subarray(0, bytesRead);
+  } finally {
+    await fh.close();
+  }
+  if (isCaptureBinary(head)) {
+    const { metadata, payloads: raw } = decodeCaptureBinary(await readFile(abs));
+    const payloads = new Map();
+    for (const [id, bytes] of raw) {
+      payloads.set(id, { bytes });
+    }
+    return { metadata, payloads };
+  }
+  return readCaptureText(abs);
+}
+
+// Read a legacy text capture file line by line. The first non-empty line is
+// the metadata; each remaining line is a payload. If the file is a single
+// legacy 1.0 JSON object, the whole thing parses as the metadata and payloads
+// stays empty (its base64 blobs are resolved inline by the accessors).
+async function readCaptureText(abs) {
   // Fast path for small files / legacy single-object captures: a quick whole-
   // file parse. If it succeeds and yields a capture object, it's legacy 1.0.
   // (A 1.1 NDJSON file has multiple JSON objects and fails to whole-parse.)

@@ -306,19 +306,22 @@ function onCapture(count) {
 }
 
 // ---- 3. Save the capture ---------------------------------------------------
-// saveCaptureData() builds the JSON and would normally trigger a browser
+// saveCaptureData() builds the capture and would normally trigger a browser
 // download. A worker has no `document`, so the download step is skipped and
-// the method just returns the JSON object. We post it up to the iframe, which
-// forwards it to the parent page where the actual download happens.
+// the method just returns the capture stream. Encode it to a Blob of the
+// binary capture file (Blobs are structured-cloneable) and post it up to the
+// iframe, which forwards it to the parent page where the download happens.
 async function onSave() {
   setState("saving", "cap");
   log("saveCaptureData() — waiting for any in-flight readbacks...");
   try {
     // saveCaptureData() throws if initialize() was never called.
-    const data = await self.webgpuInspector.saveCaptureData();
-    const frame = data.frame ?? 0;
-    log(`Capture built: frame=${frame}, objects=${Object.keys(data.objects).length}, commands=${data.commands.length}.`);
-    post({ type: "capture-data", data, filename: "webgpu_iframe_worker_capture.json" });
+    const stream = await self.webgpuInspector.saveCaptureData();
+    const metadata = stream.metadata;
+    const frame = metadata.frame ?? 0;
+    log(`Capture built: frame=${frame}, objects=${Object.keys(metadata.objects).length}, commands=${metadata.commands.length}.`);
+    const blob = self.webgpuInspector.captureStreamToBlob(stream);
+    post({ type: "capture-data", blob, filename: "webgpu_iframe_worker_capture.wgpuc" });
     framesCaptured = 0;
     post({ type: "frames", count: 0 });
   } catch (e) {

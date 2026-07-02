@@ -46,7 +46,7 @@ Once the inspector is loaded, you have two ways to view what it records:
 ## Local Capture API
 
 The manually-injected script exposes a small JavaScript API that lets the page record one or more
-frames of WebGPU activity entirely on the page side and save the result as a JSON file. The JSON file
+frames of WebGPU activity entirely on the page side and save the result as a capture file. The file
 is in the same format as **Save Capture** in the DevTools Capture panel produces, so it can be opened
 with **Load Capture** in the [Capture panel](capture.md) for inspection.
 
@@ -70,25 +70,25 @@ renderOneFrame();
 webgpuInspector.endFrameCapture();
 
 // 3. Wait for any in-flight texture/buffer readbacks,
-// build the JSON, and trigger a browser download.
+// build the capture, and trigger a browser download.
 // The filename argument is optional.
-await webgpuInspector.saveCaptureData("my_capture.json");
+await webgpuInspector.saveCaptureData("my_capture.wgpuc");
 ```
 
-`saveCaptureData()` returns a `Promise` that resolves once the download is initiated. To avoid ever
-building one giant string (large captures used to overflow V8's ~512MB string limit), the capture is
+`saveCaptureData()` returns a `Promise` that resolves once the download is initiated. The capture is
 split into small metadata plus out-of-band payload byte blobs, and the resolved value is
 `{ metadata, payloads }`:
 
 - `metadata` — the capture object (objects, command list, validation errors). Buffer/texture bytes
   appear as lightweight `{ __payloadId, __typedArray, __length, __byteLength }` references instead of
-  inline base64.
+  inline data.
 - `payloads` — an array of `{ id, typedArray, bytes }` (the actual `Uint8Array` byte blobs).
 
-The downloaded file is **NDJSON**: the metadata on the first line, then one payload per line. It is
+The downloaded file is the **WGPUCAP binary container**: an ASCII header line and the metadata JSON
+(readable in a text editor), followed by the raw payload bytes, so nothing is base64-inflated. It is
 loadable via DevTools "Load Capture" and the plugin's `load_capture_file` tool, which also still
-accept the older single-object `.json` captures. To serialize it yourself, use
-`captureStreamToLines({ metadata, payloads })` from `src/utils/local_capture.js`.
+accept the older NDJSON and single-object `.json` captures. To serialize it yourself, use
+`encodeCaptureBinaryParts({ metadata, payloads })` from `src/utils/capture_binary.js`.
 
 After `saveCaptureData()` resolves, captured commands are cleared. You can call `beginFrameCapture()`
 / `endFrameCapture()` again to record more frames and `saveCaptureData()` again to produce another
@@ -187,6 +187,9 @@ interface WebGPUInspector {
   }): void;
   endFrameCapture(): void;
   saveCaptureData(filename?: string, options?: { download?: boolean }): Promise<CaptureStream>;
+  // Encode a CaptureStream into a Blob of the binary capture file. Useful in
+  // workers, which can't trigger downloads: post the Blob to a page context.
+  captureStreamToBlob(stream: CaptureStream): Blob;
   readBuffer(bufferId: number, offset?: number, size?: number): Promise<{
     offset: number; byteLength: number; base64: string;
     truncated?: { byteLength: number; capturedBytes: number } | null;

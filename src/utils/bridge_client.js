@@ -16,7 +16,7 @@
 // to over MCP. This file only knows how to talk to that bridge; it has no
 // dependency on the plugin itself.
 
-import { captureStreamToBlob } from "./local_capture.js";
+import { encodeCaptureBinaryParts } from "./capture_binary.js";
 
 const DEFAULT_URL = "ws://localhost:9690/page";
 
@@ -326,13 +326,13 @@ export class BridgeClient {
     if (this._token) {
       url += `?token=${encodeURIComponent(this._token)}`;
     }
-    // Build the body as NDJSON: a Blob over an array of individually-bounded
-    // strings (metadata line + one line per payload). This never allocates a
-    // single >512MB string the way `JSON.stringify(wholeCapture)` did, which is
-    // what made large captures fail with "Invalid string length".
+    // Build the body in the WGPUCAP binary container: the Blob parts reference
+    // the payload typed arrays directly, so the upload carries raw bytes (no
+    // base64 inflation) and never allocates giant strings.
     // text/plain keeps this a CORS "simple request" (no preflight); the bridge
-    // stream-parses the body line by line regardless of the declared type.
-    const { blob: body } = captureStreamToBlob(stream, "text/plain");
+    // sniffs the WGPUCAP magic regardless of the declared content type.
+    const { parts } = encodeCaptureBinaryParts(stream);
+    const body = new Blob(parts, { type: "text/plain" });
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },

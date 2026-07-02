@@ -1,11 +1,14 @@
-import { captureStreamToLines, captureStreamToBlob, captureStreamLines } from "../utils/local_capture.js";
+import { captureStreamToLines } from "../utils/local_capture.js";
+import { encodeCaptureBinaryParts } from "../utils/capture_binary.js";
 import { Texture } from "./gpu_objects/texture.js";
 import { TextureView } from "./gpu_objects/texture_view.js";
 import { Buffer } from "./gpu_objects/buffer.js";
 import { ShaderModule } from "./gpu_objects/shader_module.js";
 
-// 1.1 splits payload bytes out of the metadata into NDJSON payload lines so the
-// panel's "Save Capture" never builds one >512MB string. Loaders accept 1.0 too.
+// Metadata schema version. 1.1 split payload bytes out of the metadata into
+// out-of-band payloads referenced by `{__payloadId}`. "Save Capture" wraps this
+// metadata in the WGPUCAP binary container (src/utils/capture_binary.js);
+// loaders also still accept the older NDJSON (1.1) and single-JSON (1.0) files.
 const SCHEMA_VERSION = "1.1";
 
 // Collects payload byte blobs during serialization, handing back `{__payloadId}`
@@ -337,79 +340,26 @@ export function captureToText(frame, commands, database, statistics, toolVersion
 }
 
 /**
- * Build the capture and trigger an anchor download as NDJSON. The Blob is
- * assembled line by line (captureStreamToBlob) so a large capture's base64
- * inflation isn't all held in the JS heap at once.
- *
- * Note: this deliberately does NOT use the File System Access API
- * (showSaveFilePicker) — it is unreliable inside a DevTools extension panel and
- * could destabilize the panel renderer. The plain anchor download works there.
+ * Build the capture and trigger an anchor download in the binary container
+ * format (see src/utils/capture_binary.js). The Blob parts reference the
+ * payload typed arrays directly — no base64 strings are ever built, so even
+ * multi-GB captures never blow up the panel renderer's JS heap. That is what
+ * lets this path skip the File System Access API entirely (which is unreliable
+ * inside a DevTools extension panel) and the payload-omission budget the old
+ * NDJSON save needed.
  */
-// Above this many raw payload bytes, assembling the full base64 Blob in the
-// DevTools panel renderer risks an out-of-memory crash. Beyond it we stream to
-// disk (File System Access API) when possible, otherwise we cap how much payload
-// data the Blob fallback includes.
-const SAVE_STREAM_THRESHOLD = 32 * 1024 * 1024;
-const SAVE_BLOB_BUDGET = 96 * 1024 * 1024;
-
-export async function downloadCaptureJson(frame, commands, database, statistics, toolVersion) {
+export async function downloadCapture(frame, commands, database, statistics, toolVersion) {
   console.log("[webgpu-inspector] Save: building capture stream...");
   const stream = buildCaptureStream(frame, commands, database, statistics, toolVersion);
-  let payloadBytes = 0;
-  for (const p of stream.payloads) {
-    payloadBytes += p.bytes ? p.bytes.length : 0;
-  }
-  const filename = `webgpu_capture_frame_${frame}.json`;
-  const fsaAvailable = typeof window !== "undefined" && typeof window.showSaveFilePicker === "function";
+  const { parts, byteLength } = encodeCaptureBinaryParts(stream);
   console.log(`[webgpu-inspector] Save: ${Object.keys(stream.metadata.objects).length} objects, ` +
     `${stream.metadata.commands.length} commands, ${stream.payloads.length} payloads, ` +
-    `${payloadBytes} payload bytes; showSaveFilePicker=${fsaAvailable}.`);
-
-  // Large captures: stream NDJSON straight to disk so the (base64-inflated)
-  // bytes never accumulate in the panel renderer. One line is encoded at a time
-  // and flushed, so peak memory stays near the already-in-memory capture size.
-  if (fsaAvailable && payloadBytes > SAVE_STREAM_THRESHOLD) {
-    try {
-      console.log("[webgpu-inspector] Save: opening file picker to stream to disk...");
-      const handle = await window.showSaveFilePicker({
-        suggestedName: filename,
-        types: [{ description: "WebGPU Inspector capture", accept: { "application/json": [".json"] } }]
-      });
-      const writable = await handle.createWritable();
-      let i = 0;
-      for (const line of captureStreamLines(stream)) {
-        await writable.write(line);
-        if ((++i % 8) === 0) {
-          console.log(`[webgpu-inspector] Save: streamed ${i} lines...`);
-        }
-      }
-      await writable.close();
-      console.log(`[webgpu-inspector] Save: streamed ${i} lines to disk. Done.`);
-      return;
-    } catch (e) {
-      if (e && e.name === "AbortError") {
-        console.log("[webgpu-inspector] Save: cancelled.");
-        return;
-      }
-      console.warn("[webgpu-inspector] Save: disk streaming failed, falling back to a budgeted in-memory save:", e && e.message);
-    }
-  }
-
-  // Blob fallback. Budget the payloads so the panel renderer can't OOM; omitted
-  // payloads are still referenced in the metadata and load as "omitted".
-  const budget = payloadBytes > SAVE_BLOB_BUDGET ? SAVE_BLOB_BUDGET : undefined;
-  console.log(`[webgpu-inspector] Save: assembling blob${budget ? ` (capped at ${budget} payload bytes)` : ""}...`);
-  const { blob, omittedPayloads, includedPayloads } = captureStreamToBlob(stream, "application/json", budget);
-  if (omittedPayloads) {
-    console.warn(`[webgpu-inspector] Save: ${omittedPayloads} payload(s) omitted to fit memory ` +
-      `(${includedPayloads} included). For a complete save of a large capture, use a browser that ` +
-      "supports the File System Access API, or capture via the Claude Code bridge.");
-  }
-  console.log(`[webgpu-inspector] Save: blob ready (${blob.size} bytes); starting download.`);
+    `${byteLength} bytes.`);
+  const blob = new Blob(parts, { type: "application/octet-stream" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
+  a.download = `webgpu_capture_frame_${frame}.wgpuc`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

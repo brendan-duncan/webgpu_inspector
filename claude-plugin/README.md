@@ -163,7 +163,7 @@ needs no page changes.
 | `list_pages` | Pages connected to the bridge |
 | `capture_frames` | Capture N frames from a page, return a summary |
 | `list_captures` | Captures available to analyze |
-| `load_capture_file` | Ingest a saved capture `.json` file |
+| `load_capture_file` | Ingest a saved capture file (`.wgpuc`, or legacy `.json`) |
 | `get_capture_summary` | Counts, stats, shaders, validation errors, issues |
 | `get_commands` | Paginated, base64-stripped command list |
 | `get_object` | One GPU object's descriptor |

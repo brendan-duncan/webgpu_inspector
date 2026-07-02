@@ -13,9 +13,10 @@ import { randomUUID } from "node:crypto";
 
 import { WebSocketServer } from "ws";
 
+import { isCaptureBinary, decodeCaptureBinary } from "./capture-binary.js";
+
 // Upper bound on a single capture upload. Texture-heavy frames (full-res render
-// targets, base64-inflated) can run to hundreds of MB, so this is generous; the
-// store streams the body to disk as it parses. Override with the
+// targets) can run to hundreds of MB, so this is generous. Override with the
 // WEBGPU_INSPECTOR_MAX_UPLOAD_MB env var or the maxUploadBytes option.
 const DEFAULT_MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 
@@ -535,19 +536,22 @@ export class Bridge {
     }
     const requestId = decodeURIComponent(url.pathname.slice("/capture/".length));
 
-    // The body is NDJSON: the first line is the capture metadata, each
-    // subsequent line is one out-of-band payload ({__payloadId, __typedArray,
-    // base64}). We parse it line by line at the byte level (splitting on \n)
-    // and never concatenate the whole body into one giant string — that is what
-    // made large captures fail. A legacy page that uploaded a single compact
-    // JSON object (schema 1.0, base64 inlined) arrives as one line and still
-    // parses fine.
+    // The body is normally a WGPUCAP binary capture (ASCII header + metadata
+    // JSON + raw payload bytes; see capture-binary.js) — sniffed by magic once
+    // the first 8 bytes have arrived and buffered whole, then decoded with
+    // zero-copy payload views. Legacy pages still upload NDJSON (metadata line
+    // + one base64 payload line each) or a single compact JSON object (schema
+    // 1.0); those are stream-parsed line by line so the base64 never
+    // concatenates into one giant string.
+    let mode = null; // null (undecided) | "binary" | "ndjson"
+    let chunks = []; // buffered body (binary mode / pre-sniff)
+    let sniffed = 0;
     let leftover = Buffer.alloc(0);
     let size = 0;
     let aborted = false;
     let parseError = null;
     let metadata = null;
-    const payloads = new Map(); // payloadId -> { typedArray, base64 }
+    const payloads = new Map(); // payloadId -> { typedArray, base64 } | { bytes }
 
     const handleLine = (buf) => {
       // Skip blank lines (e.g. trailing newline).
@@ -569,6 +573,19 @@ export class Bridge {
       // Any other line shape is ignored defensively.
     };
 
+    const feedNdjson = (data) => {
+      if (leftover.length) {
+        data = Buffer.concat([leftover, data]);
+      }
+      let start = 0;
+      let nl;
+      while ((nl = data.indexOf(0x0a, start)) !== -1) {
+        handleLine(data.subarray(start, nl));
+        start = nl + 1;
+      }
+      leftover = data.subarray(start);
+    };
+
     req.on("data", (chunk) => {
       if (aborted) {
         return;
@@ -582,21 +599,47 @@ export class Bridge {
         this._rejectPending(requestId, new Error("Uploaded capture exceeded the size limit."));
         return;
       }
-      let data = leftover.length ? Buffer.concat([leftover, chunk]) : chunk;
-      let start = 0;
-      let nl;
-      while ((nl = data.indexOf(0x0a, start)) !== -1) {
-        handleLine(data.subarray(start, nl));
-        start = nl + 1;
+      if (mode === "ndjson") {
+        feedNdjson(chunk);
+        return;
       }
-      leftover = data.subarray(start);
+      chunks.push(chunk);
+      sniffed += chunk.length;
+      if (mode === null && sniffed >= 8) {
+        const head = chunks.length === 1 ? chunks[0] : Buffer.concat(chunks);
+        if (isCaptureBinary(head)) {
+          mode = "binary";
+          chunks = [head];
+        } else {
+          mode = "ndjson";
+          chunks = [];
+          feedNdjson(head);
+        }
+      }
     });
 
     req.on("end", async () => {
       if (aborted) {
         return;
       }
-      handleLine(leftover);
+      if (mode === "binary") {
+        try {
+          const body = chunks.length === 1 ? chunks[0] : Buffer.concat(chunks);
+          const decoded = decodeCaptureBinary(body);
+          metadata = decoded.metadata;
+          for (const [id, bytes] of decoded.payloads) {
+            payloads.set(id, { bytes });
+          }
+        } catch (e) {
+          parseError = e;
+        }
+      } else {
+        if (mode === null && chunks.length) {
+          // Body shorter than the sniff window — treat it as (ND)JSON.
+          feedNdjson(Buffer.concat(chunks));
+        }
+        handleLine(leftover);
+      }
       if (metadata === null || parseError) {
         res.writeHead(400, { ...cors, "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "invalid capture stream" }));

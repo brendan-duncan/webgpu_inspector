@@ -6,7 +6,7 @@ argument-hint: [capture id or file path]
 Analyze a WebGPU Inspector capture in depth.
 
 `$ARGUMENTS` may be a capture id (e.g. `cap-2`), a path to a saved capture
-`.json` file, or empty (use the most recent capture).
+file (`.wgpuc`, or legacy `.json`), or empty (use the most recent capture).
 
 Do this:
 

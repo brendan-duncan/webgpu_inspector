@@ -148,6 +148,11 @@ export function parseCaptureText(text) {
   return { data, payloads };
 }
 
+// How many objects/commands to import between onProgress callbacks. Small
+// enough for a responsive progress readout, large enough that the callback
+// (and any paint it awaits) doesn't dominate the import time.
+const PROGRESS_CHUNK = 500;
+
 /**
  * Deserialize an exported capture JSON file and install its objects into the
  * given database under a fresh ID range.
@@ -156,14 +161,18 @@ export function parseCaptureText(text) {
  * @param {ObjectDatabase} database - The live database; imported objects are
  *   added to `database.capturedObjects` under remapped IDs.
  * @param {number} idOffset - The offset to add to every imported ID.
- * @returns {{
+ * @param {Map<number, Uint8Array>} [payloads] - Out-of-band payload bytes.
+ * @param {function(string, number, number): Promise|void} [onProgress] -
+ *   Called with (phase, done, total) every PROGRESS_CHUNK items; awaited, so
+ *   the caller can yield to the event loop to keep a progress UI painting.
+ * @returns {Promise<{
  *   frame: number,
  *   commands: Array<Object>,
  *   statistics: CaptureStatistics,
  *   importedObjectIds: Set<number>
- * }}
+ * }>}
  */
-export function importCaptureJson(data, database, idOffset, payloads) {
+export async function importCaptureJson(data, database, idOffset, payloads, onProgress) {
   if (!data || typeof data !== "object") {
     throw new Error("Capture JSON is empty or not an object.");
   }
@@ -172,9 +181,11 @@ export function importCaptureJson(data, database, idOffset, payloads) {
   const importedObjectIds = new Set();
 
   const objects = data.objects || {};
-  for (const idStr in objects) {
-    if (!Object.prototype.hasOwnProperty.call(objects, idStr)) {
-      continue;
+  const objectKeys = Object.keys(objects);
+  let objectsDone = 0;
+  for (const idStr of objectKeys) {
+    if (onProgress && (++objectsDone % PROGRESS_CHUNK) === 0) {
+      await onProgress("Importing objects", objectsDone, objectKeys.length);
     }
     const rec = objects[idStr];
     const Ctor = _typeConstructors[rec.type];
@@ -226,6 +237,9 @@ export function importCaptureJson(data, database, idOffset, payloads) {
   const rawCommands = Array.isArray(data.commands) ? data.commands : [];
   const commands = new Array(rawCommands.length);
   for (let i = 0; i < rawCommands.length; ++i) {
+    if (onProgress && ((i + 1) % PROGRESS_CHUNK) === 0) {
+      await onProgress("Importing commands", i + 1, rawCommands.length);
+    }
     const c = rawCommands[i];
     if (!c) {
       commands[i] = null;

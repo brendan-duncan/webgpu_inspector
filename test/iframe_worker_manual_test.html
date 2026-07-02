@@ -18,9 +18,9 @@
 
       * Local capture mode  — the worker calls initialize() and drives the
         local capture API (beginFrameCapture / endFrameCapture /
-        saveCaptureData) to record frames and produce the same JSON the
-        DevTools Capture panel's "Save Capture" produces. Nothing depends on
-        the extension.
+        saveCaptureData) to record frames and produce the same capture file
+        the DevTools Capture panel's "Save Capture" produces. Nothing depends
+        on the extension.
 
       * DevTools panel mode — the worker does NOT call initialize(). The
         inspector still posts its normal messages; this page relays them so
@@ -33,9 +33,10 @@
              -> iframe_worker_manual_worker.js       — WebGPU + manual inspector
 
     For local capture mode: a worker has no `document`, so saveCaptureData()
-    inside the worker can't trigger a download — it just returns the JSON. The
-    worker posts that JSON up to the iframe, the iframe forwards it to this
-    parent page, and this page performs the download.
+    inside the worker can't trigger a download — it just returns the capture
+    stream. The worker encodes it to a Blob (captureStreamToBlob) and posts it
+    up to the iframe, the iframe forwards it to this parent page, and this
+    page performs the download.
 
     For DevTools panel mode: the worker's __WebGPUInspector messages are
     relayed worker -> iframe -> parent, and this page re-dispatches them as
@@ -45,7 +46,7 @@
     exercises.
 
     Serve this over a local web server (workers cannot be loaded from file://).
-    Open a downloaded capture JSON with "Load Capture" in the WebGPU Inspector
+    Open a downloaded capture file with "Load Capture" in the WebGPU Inspector
     DevTools Capture panel.
   -->
   <style>
@@ -135,10 +136,10 @@
       $iframe.contentWindow.postMessage({ __manualCmd: cmd }, "*");
     }
 
-    // The actual file download. The worker built the JSON; the worker and the
-    // iframe both could be limited contexts, so the top-level page does this.
-    function downloadJson(data, filename) {
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    // The actual file download. The worker built the capture Blob; the worker
+    // and the iframe both could be limited contexts, so the top-level page
+    // does this.
+    function downloadBlob(blob, filename) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -191,7 +192,7 @@
           $btnSave.disabled = false;
           break;
         case "capture-data":
-          downloadJson(msg.data, msg.filename);
+          downloadBlob(msg.blob, msg.filename);
           log(`Downloaded ${msg.filename}. Open it with "Load Capture" in the ` +
               `WebGPU Inspector DevTools Capture panel.`);
           break;

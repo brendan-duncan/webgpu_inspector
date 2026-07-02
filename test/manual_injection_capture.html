@@ -297,8 +297,8 @@
         setState("saving", "cap");
         log("saveCaptureData() — waiting for any in-flight readbacks...");
         try {
-          const data = await webgpuInspector.saveCaptureData();
-          log(`Saved. frame=${data.frame}, objects=${Object.keys(data.objects).length}, commands=${data.commands.length}.`);
+          const { metadata } = await webgpuInspector.saveCaptureData();
+          log(`Saved. frame=${metadata.frame}, objects=${Object.keys(metadata.objects).length}, commands=${metadata.commands.length}.`);
           log("Download triggered. Load it in the WebGPU Inspector DevTools Capture panel via 'Load Capture'.");
           framesCaptured = 0;
           updateFrames();

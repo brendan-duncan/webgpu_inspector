@@ -1,7 +1,8 @@
 // Page-side store that mirrors what the devtools panel keeps when a frame is
 // captured. Lets the inspector script be used outside of devtools to capture
-// frames and save them as JSON files in the exact same format the devtools
-// Capture panel reads with its "Load Capture" action.
+// frames and save them as capture files in the exact same format the devtools
+// Capture panel reads with its "Load Capture" action (the WGPUCAP binary
+// container; see src/utils/capture_binary.js).
 //
 // The flow:
 // - `processMessage(msg)` consumes the same messages `_postMessage` posts to
@@ -610,49 +611,12 @@ export function* captureStreamLines(stream) {
 }
 
 // All NDJSON lines as an array of individually-bounded strings — no single giant
-// string (the V8 ~512MB limit is what made large captures fail). Prefer
-// captureStreamToBlob for downloads/uploads: holding every base64 line at once,
-// as this does, can still exhaust memory on a texture-heavy capture.
+// string (the V8 ~512MB limit is what made large captures fail). Only used for
+// the in-panel "reopen capture" round-trip; files on disk and bridge uploads
+// use the WGPUCAP binary container (src/utils/capture_binary.js) instead, which
+// skips base64 entirely.
 export function captureStreamToLines(stream) {
   return [...captureStreamLines(stream)];
-}
-
-// Build a Blob of the NDJSON without ever holding more than one payload's base64
-// string in the JS heap at a time: each line is wrapped in its own Blob (which
-// the browser can back by disk), so the large intermediate strings are freed as
-// we go.
-//
-// `maxPayloadBytes` (optional) caps the total raw payload bytes included. Once
-// the budget is exhausted, further payload lines are skipped — the metadata
-// still references them, and loaders treat a missing payload as omitted. This is
-// the safety valve for memory-constrained contexts (e.g. the DevTools panel
-// renderer) where assembling the full base64 of a multi-hundred-MB capture would
-// crash. Returns `{ blob, omittedPayloads, includedPayloads }`.
-export function captureStreamToBlob(stream, type, maxPayloadBytes) {
-  const parts = [JSON.stringify(stream.metadata) + "\n"];
-  let used = 0;
-  let omitted = 0;
-  let included = 0;
-  for (const p of stream.payloads) {
-    const len = p.bytes ? p.bytes.length : 0;
-    if (maxPayloadBytes != null && used + len > maxPayloadBytes) {
-      omitted++;
-      continue;
-    }
-    used += len;
-    included++;
-    const line = JSON.stringify({
-      __payloadId: p.id,
-      __typedArray: p.typedArray,
-      base64: encodeBase64(p.bytes)
-    }) + "\n";
-    parts.push(new Blob([line]));
-  }
-  return {
-    blob: new Blob(parts, { type: type || "application/json" }),
-    omittedPayloads: omitted,
-    includedPayloads: included
-  };
 }
 
 function _textureDims(descriptor) {

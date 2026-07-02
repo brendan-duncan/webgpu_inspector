@@ -85,19 +85,19 @@ Frame capture works best when requestAnimationFrame is used, as Capture uses tha
 ## Saving and Loading Captures
 ###### [Back to top](#capture)
 
-Captures can be saved to disk as a JSON file and re-opened later in the panel. This is useful for sharing a frame capture in bug reports, comparing captures from different builds, or returning to a capture after closing the DevTools.
+Captures can be saved to disk as a file and re-opened later in the panel. This is useful for sharing a frame capture in bug reports, comparing captures from different builds, or returning to a capture after closing the DevTools.
 
 The Save / Load actions live in the hamburger (**☰**) menu on the left side of the Capture panel's toolbar, next to the **Capture** button.
 
 ### Save Capture
 
-**Save Capture** is enabled whenever a capture tab is active. Selecting it downloads the active tab as a `webgpu_capture_frame_<N>.json` file, where `<N>` is the captured frame index.
+**Save Capture** is enabled whenever a capture tab is active. Selecting it downloads the active tab as a `webgpu_capture_frame_<N>.wgpuc` file, where `<N>` is the captured frame index.
 
-The JSON file contains everything the panel needs to fully reconstruct the capture:
+The file is a binary container: an ASCII `WGPUCAP` header line and the capture metadata as JSON (both readable if you open the file in a text editor), followed by the raw buffer/texture payload bytes. Storing the payloads as raw binary instead of base64-encoded JSON keeps files ~25% smaller and lets even very large captures save without memory pressure. The file contains everything the panel needs to fully reconstruct the capture:
 
 * The full GPU object graph (adapters, devices, buffers, textures, texture views, samplers, bind groups, bind group layouts, pipeline layouts, render and compute pipelines, render bundles, shader modules) with their descriptors and stacktraces.
 * The recorded command list for the frame, with arguments, results, and captured stacktraces.
-* The image data for each render pass color/depth attachment that was read back during capture, stored as base64-encoded mip data on the corresponding Texture record.
+* The image data for each render pass color/depth attachment that was read back during capture, stored as per-mip payload data on the corresponding Texture record.
 * The buffer data captured for `setVertexBuffer`, `setIndexBuffer`, indirect draws/dispatches, and any Uniform / Storage buffer bound for inspection, attached to the command record it belongs to.
 * Validation errors raised during the capture.
 
@@ -105,7 +105,7 @@ The file is self-contained, so once saved it can be shared and opened on any mac
 
 ### Load Capture
 
-**Load Capture** opens a file picker; selecting a previously-saved capture JSON file opens it as a new tab in the Capture panel alongside any live or already-loaded captures. The loaded tab supports all of the same inspection features (command list, render pass thumbnails, BindGroup / vertex buffer / pipeline inspection, frame stats), driven entirely off the data in the file.
+**Load Capture** opens a file picker; selecting a previously-saved capture file opens it as a new tab in the Capture panel alongside any live or already-loaded captures. Both the binary `.wgpuc` format and the older JSON / NDJSON capture files are accepted. The loaded tab supports all of the same inspection features (command list, render pass thumbnails, BindGroup / vertex buffer / pipeline inspection, frame stats), driven entirely off the data in the file.
 
 Imported textures with serialized image data are uploaded back onto the inspector's WebGPU device when the tab is built, so render-pass thumbnails and BindGroup texture previews render the same way they did in the original live capture. Textures that didn't have image data captured (e.g. resources that weren't bound or written to as an attachment) show their descriptor without a preview.
 
@@ -113,7 +113,7 @@ Each imported capture lives in its own ID namespace, so loading multiple capture
 
 ### Capturing Outside DevTools
 
-The same JSON format can also be produced *without* the DevTools panel by loading `webgpu_inspector.js` directly via a `<script>` tag and using the page-side capture API (`initialize()` / `beginFrameCapture()` / `endFrameCapture()` / `saveCaptureData()`). Files produced that way are loadable here through **Load Capture** the same as panel-produced files. See the **[Local Capture API](manual_injection.md#local-capture-api)** for the script-side workflow.
+The same capture format can also be produced *without* the DevTools panel by loading `webgpu_inspector.js` directly via a `<script>` tag and using the page-side capture API (`initialize()` / `beginFrameCapture()` / `endFrameCapture()` / `saveCaptureData()`). Files produced that way are loadable here through **Load Capture** the same as panel-produced files. See the **[Local Capture API](manual_injection.md#local-capture-api)** for the script-side workflow.
 
 
 ## Reopening a Capture in a New Tab or Window
@@ -121,12 +121,12 @@ The same JSON format can also be produced *without* the DevTools panel by loadin
 
 Right-clicking on a capture tab handle opens a context menu with two actions for duplicating the capture without going through a file on disk:
 
-* **Open in New Tab** — Serializes the active capture to the same JSON format that **Save Capture** would write, then immediately re-imports it as a fresh tab in the Capture panel. The new tab is fully independent of the original (its own ID namespace, its own selection state) and survives the original tab being closed.
+* **Open in New Tab** — Serializes the active capture to the same data **Save Capture** would write, then immediately re-imports it as a fresh tab in the Capture panel. The new tab is fully independent of the original (its own ID namespace, its own selection state) and survives the original tab being closed.
 * **Open in New Window** — Same serialization, but the result is handed off to a new browser window loading the inspector panel as a standalone page. Useful for putting two captures side-by-side across monitors, or keeping a reference capture visible while you continue capturing in DevTools.
 
 Both actions operate purely in memory — nothing is written to the filesystem. The "Open in New Window" handoff goes through IndexedDB (rather than localStorage) so captures larger than a few megabytes — including ones with full mip data for render-pass attachments — transfer cleanly.
 
-The standalone window opened by **Open in New Window** is a viewer: it loads the capture and provides the same inspection features as a loaded JSON file, but it isn't attached to a DevTools-inspected page, so the **Inspect** and **Record** tabs won't show live data there. Use the original DevTools panel for live capture and inspection.
+The standalone window opened by **Open in New Window** is a viewer: it loads the capture and provides the same inspection features as a loaded capture file, but it isn't attached to a DevTools-inspected page, so the **Inspect** and **Record** tabs won't show live data there. Use the original DevTools panel for live capture and inspection.
 
 
 ## Frame Commands
