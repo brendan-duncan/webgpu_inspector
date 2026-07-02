@@ -1,6 +1,6 @@
 # WebGPU Inspector
 
-[Inspect](docs/inspect.md) . [Capture](docs/capture.md) . [Record](docs/record.md)
+[Inspect](docs/inspect.md) . [Capture](docs/capture.md) . [Record](docs/record.md) . [Shader Debugger](docs/shader_debugger.md)
 
 * [Introduction](#introduction)
 * [Developer Tools Window](#developer-tools-window)
@@ -17,6 +17,7 @@
 * [Claude Code Integration](#claude-code-integration)
   * [Install the Plugin](#install-the-plugin)
   * [Update the Plugin](#update-the-plugin)
+    * [Automatic Updates](#automatic-updates)
 * [Development](#development)
 * [External Dependencies](#external-dependencies)
 
@@ -28,9 +29,9 @@ WebGPU Inspector is designed to inspect what's happening with WebGPU on the page
 
 WebGPU Inspector includes three tools:
 
-* **[Inspect](docs/inspect.md)** — a live view of every GPU object on the page. Inspect their details, plot frame times and object allocations over time, inspect textures (including pixel values), and [edit](docs/inspect.md#editing-shaders) and [debug](docs/shader_debugger.md) shaders live on the page.
-* **[Capture](docs/capture.md)** — records the GPU commands used to render a frame, with render pass output images, textures, buffer data, and render state, letting you inspect details about each command, including the storage and uniform buffers used for draw and dispatch calls.
-* **[Record](docs/record.md)** — records all GPU commands and data used to render a set of frames, generating a self-contained HTML file (or compact binary) that can play back the render or be used for bug reports.
+* **[Inspect](docs/inspect.md)** — a live view of every GPU object on the page. Inspect their details, plot frame times and object allocations over time, inspect textures, and [edit](docs/inspect.md#editing-shaders) shaders live on the page.
+* **[Capture](docs/capture.md)** — records the GPU commands used to render a frame, with render pass output images, textures, buffer data, and render state, letting you inspect details about each command, including the storage and uniform buffers used for draw and dispatch calls. Includes the ability to interactively [debug shaders](docs/shader_debugger.md).
+* **[Record](docs/record.md)** — records all GPU commands and data used to render a set of frames, generating a self-contained HTML or binary file that can play back the render or be used for bug reports.
 
 <a href="docs/images/webgpu_inspector_screen.png">
 <img src="docs/images/webgpu_inspector_screen.png" style="width: 512px; border-radius: 10px; box-shadow: 3px 3px 10px rgba(0,0,0,0.5);">
@@ -69,77 +70,6 @@ Install WebGPU Inspector from the [Chrome Web Store](https://chromewebstore.goog
 ### Firefox Add-Ons Store
 
 Install WebGPU Inspector from the [Firefox Add-Ons Store](https://addons.mozilla.org/en-US/firefox/addon/webgpu-inspector).
-
-## Claude Code Integration
-
-##### [Back to top](#webgpu-inspector)
-
-WebGPU Inspector can be integrated with [Claude Code](https://claude.com/claude-code) as a plugin that brings WebGPU frame capture and analysis into a conversation with Claude.
-
-Claude can launch (or attach to) a browser, instrument any page — with no
-browser extension and no changes to the page being analyzed — capture one or
-more frames, and then analyze the result: command and draw-call counts, the GPU
-object graph, shaders, validation errors, and common performance problems. It
-builds on the [Local Capture API](docs/manual_injection.md#local-capture-api) and produces the same
-capture JSON the DevTools Capture panel reads.
-
-The plugin lives in [claude-plugin/](claude-plugin/) — see
-[claude-plugin/README.md](claude-plugin/README.md) for full usage, the MCP tool
-list, and configuration. It installs straight from this repository, which
-doubles as a Claude Code plugin marketplace; the bridge server's dependencies
-are vendored, so there is no `npm install` step. Requires Node.js 18+ and a
-local Chrome or Edge install.
-
-### Install the Plugin
-
-From any terminal, add this repo as a marketplace and install the plugin:
-
-```sh
-claude plugin marketplace add brendan-duncan/webgpu_inspector
-claude plugin install webgpu-inspector@webgpu-inspector-plugins
-```
-
-`webgpu-inspector` is the plugin name; `webgpu-inspector-plugins` is the
-marketplace name. The same steps work from inside Claude Code with
-`/plugin marketplace add brendan-duncan/webgpu_inspector` then
-`/plugin install webgpu-inspector@webgpu-inspector-plugins` (terminal CLI), or
-the `/plugins` dialog in the VS Code / JetBrains extension. Claude Code starts
-the bundled MCP server automatically once the plugin is enabled.
-
-### Update the Plugin
-
-Updates are **not** automatic by default. When a new version is released, pull
-it in two steps — refresh the marketplace catalog, then update the plugin:
-
-```sh
-claude plugin marketplace update webgpu-inspector-plugins
-claude plugin update webgpu-inspector@webgpu-inspector-plugins
-```
-
-Then run `/reload-plugins` (or restart) to load it. To get updates
-automatically, open `/plugin` (terminal CLI) or `/plugins` (extension), go to
-the **Marketplaces** tab, select `webgpu-inspector-plugins`, and enable
-**auto-update**. Check your installed version with `claude plugin list`.
-
-#### Automatic Updates
-
-Auto-updating has to be enabled manually for plugins installed this way.
-Edit **~/.claud/settings.json**
-Look for **"webgpu-inspector-plugins"**
-add **"autoUpdates": true**
-after the "source" block,
-
-```json
-"webgpu-inspector-plugins": {
-  "source": {
-    "source": "github",
-    "repo": "brendan-duncan/webgpu_inspector"
-  },
-  "autoUpdate": true
-}
-```
-
-You can check your installed version anytime with `claude plugin list`.
 
 ### Manual Injection
 
@@ -212,6 +142,77 @@ Chrome and Firefox don't support the same version of extension plug-ins, so you'
 - If you make changes to the WebGPU Inspector source
   - From Xcode, select **Product / Build** (**cmd-b**)
 
+## Claude Code Integration
+
+##### [Back to top](#webgpu-inspector)
+
+WebGPU Inspector can be integrated with [Claude Code](https://claude.com/claude-code) as a plugin that brings WebGPU frame capture and analysis into a conversation with Claude.
+
+Claude can launch (or attach to) a browser, instrument any page — with no
+browser extension and no changes to the page being analyzed — capture one or
+more frames, and then analyze the result: command and draw-call counts, the GPU
+object graph, shaders, validation errors, and common performance problems. It
+builds on the [Local Capture API](docs/manual_injection.md#local-capture-api) and produces the same
+capture files the DevTools Capture panel reads.
+
+The plugin lives in [claude-plugin/](claude-plugin/) — see
+[claude-plugin/README.md](claude-plugin/README.md) for full usage, the MCP tool
+list, and configuration. It installs straight from this repository, which
+doubles as a Claude Code plugin marketplace; the bridge server's dependencies
+are vendored, so there is no `npm install` step. Requires Node.js 18+ and a
+local Chrome or Edge install.
+
+### Install the Plugin
+
+From any terminal, add this repo as a marketplace and install the plugin:
+
+```sh
+claude plugin marketplace add brendan-duncan/webgpu_inspector
+claude plugin install webgpu-inspector@webgpu-inspector-plugins
+```
+
+`webgpu-inspector` is the plugin name; `webgpu-inspector-plugins` is the
+marketplace name. The same steps work from inside Claude Code with
+`/plugin marketplace add brendan-duncan/webgpu_inspector` then
+`/plugin install webgpu-inspector@webgpu-inspector-plugins` (terminal CLI), or
+the `/plugins` dialog in the VS Code / JetBrains extension. Claude Code starts
+the bundled MCP server automatically once the plugin is enabled.
+
+### Update the Plugin
+
+Updates are **not** automatic by default. When a new version is released, pull
+it in two steps — refresh the marketplace catalog, then update the plugin:
+
+```sh
+claude plugin marketplace update webgpu-inspector-plugins
+claude plugin update webgpu-inspector@webgpu-inspector-plugins
+```
+
+Then run `/reload-plugins` (or restart) to load it. Check your installed
+version with `claude plugin list`.
+
+#### Automatic Updates
+
+Auto-update is disabled by default for third-party marketplaces like this one.
+The easiest way to enable it: open `/plugin` (terminal CLI) or `/plugins`
+(VS Code / JetBrains extension), go to the **Marketplaces** tab, select
+`webgpu-inspector-plugins`, and choose **Enable auto-update**.
+
+Alternatively, enable it in `~/.claude/settings.json` by declaring the
+marketplace under `extraKnownMarketplaces` with `"autoUpdate": true`:
+
+```json
+"extraKnownMarketplaces": {
+  "webgpu-inspector-plugins": {
+    "source": {
+      "source": "github",
+      "repo": "brendan-duncan/webgpu_inspector"
+    },
+    "autoUpdate": true
+  }
+}
+```
+
 ## Development
 
 ##### [Back to top](#webgpu-inspector)
@@ -240,6 +241,3 @@ After the project is built:
   * Used for parsing and getting reflection information from WGSL shaders.
 * [WebGPU Recorder](https://github.com/brendan-duncan/webgpu_recorder)
   * Used for generating recordings of WebGPU content.
-
-
-
