@@ -24,9 +24,12 @@ export class RecorderData {
     this.dataTypes = [];
     this.initializeCommands = [];
     this.frames = [];
-    // Canvas size and root-object variable names, recovered when a binary recording is loaded so
-    // the recording can be exported again. Defaults match the live-record object ids ("x1" is the
-    // navigator.gpu id used by webgpu_recorder; the canvas context is always "context").
+    // Canvas size and root-object variable names, recovered either from a loaded binary's header
+    // or (for a live capture) from the recorded commands themselves, so the recording can be
+    // exported again. gpuVar's default is only a placeholder: webgpu_recorder doesn't have a
+    // fixed id for navigator.gpu (it's derived from its label, typically bare "x"), so addCommand
+    // recovers the real id from the requestAdapter command as soon as it arrives. The canvas
+    // context's id is always "context".
     this.canvasWidth = 0;
     this.canvasHeight = 0;
     this.gpuVar = "x1";
@@ -742,6 +745,13 @@ export class RecorderData {
     try {
       this._parseCommandArgs(command);
 
+      // A live capture streams individual commands and never sends the gpuVar/contextVar the
+      // binary header carries, so recover the real navigator.gpu id (e.g. "x", not the "x1"
+      // default) from the one command that's always called directly on it.
+      if (command.method === "requestAdapter" && command.object) {
+        this.gpuVar = command.object;
+      }
+
       if (frame < 0) {
         this.initializeCommands[commandIndex] = command;
       } else {
@@ -821,7 +831,7 @@ export class RecorderData {
   }
 
   _getObject(id) {
-    if (id === "x1") {
+    if (id === this.gpuVar) {
       return navigator.gpu;
     }
     if (id === "context") {
