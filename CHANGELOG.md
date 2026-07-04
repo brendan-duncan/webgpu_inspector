@@ -15,6 +15,34 @@
   at the one pixel; indirect draws and render bundles are reported but not simulated, and MSAA is
   simulated at pixel centers.
 
+* **Overdraw view.** The pixel-history texture viewer has an **Overdraw** checkbox that overlays a
+  heatmap of how many fragments the frame rasterized at each pixel (green 1× through red to white
+  8×+), with the exact count in the hover tooltip. Counts are taken after culling, viewport, scissor,
+  and depth clipping but before the depth/stencil tests and the fragment shader — the pixel's
+  fragment-shading cost. Counts come from GPU replay: the frame's draws are re-executed on the
+  DevTools panel's own GPU device (pipelines, buffers, and bind groups re-created from the capture's
+  descriptors and captured bytes) with each draw's original vertex stage and a stub fragment shader
+  that additively counts fragments — fast on heavy frames, and indirect draws are counted since
+  their argument buffers are captured. Draws that can't be re-created (render bundles, uncaptured
+  resources, buffers truncated by Max Buffer Size) are reported. Falls back to a CPU software
+  rasterizer driven by the WGSL interpreter when GPU replay isn't possible. The replay layer
+  (capture_replay.js) is the seed for broader capture replay features.
+
+* **GPU-accelerated pixel history.** Before the CPU simulation runs, the frame's draws are
+  GPU-replayed with a 1×1 scissor at the picked pixel and an occlusion query per draw (reusing the
+  overdraw replay layer, with culling disabled), so the WGSL interpreter only simulates the draws
+  that actually rasterize fragments at that pixel — heavy frames drop from minutes to seconds.
+  Draws the replay can't answer for are conservatively simulated. Backface/frontface-culled
+  fragments are no longer listed in the history (the summary shows their count) unless they are the
+  only fragments at the pixel, where they appear collapsed to explain why nothing rendered.
+
+* **Near-plane clipping in the CPU replay.** The pixel-history / fragment-debugger / CPU-overdraw
+  software rasterizer now clips triangles crossing the w=0 plane (interpolating varyings in clip
+  space, as the GPU's clipper does) instead of skipping them — previously a large ground plane
+  extending behind the camera was silently missing from pixel history, which also corrupted
+  downstream blending. Pixel history also collapses consecutive culled/degenerate fragments from a
+  draw into one summary row, since every pixel of a closed mesh sees its backfaces.
+
 * **Vertex shader debugging.** You can now debug vertex shaders from a frame capture. Select a draw
 command, select the vertex shader from the command information, and press the Debug button. This works
 much the same way as the compute shader debugger, but instead of selecting a workgroup id to debug, you

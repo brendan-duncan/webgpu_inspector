@@ -1,2 +1,141 @@
-(()=>{const e=new Map;function n(n,t){const s=function(n){return e.has(n)||e.set(n,new Map),e.get(n)}(t);s.has(n.name)||s.set(n.name,[]);const o=s.get(n.name);o.includes(n)||(o.push(n),n.onDisconnect.addListener(()=>{const a=o.indexOf(n);-1!==a&&o.splice(a,1),0===o.length&&s.delete(n.name),0===s.size&&e.delete(t)}))}function t(e,n){e.forEach(e=>{try{e.postMessage(n)}catch(n){console.error(`[WebGPU Inspector] Failed to post message to port ${e.name}:`,n)}})}chrome.runtime.onConnect.addListener(s=>{const o=[];let a=!1;function p(n,s,o){const a=e.get(s);a?('webgpu-inspector-panel'===n.name&&a.has('webgpu-inspector-page')&&t(a.get('webgpu-inspector-page'),o),'webgpu-inspector-page'===n.name&&a.has('webgpu-inspector-panel')&&t(a.get('webgpu-inspector-panel'),o)):console.error(`[WebGPU Inspector] No port map found for tab ${s}`)}'webgpu-inspector-page'===s.name&&void 0!==s.sender?.tab?.id&&(n(s,s.sender.tab.id),a=!0),s.onMessage.addListener(e=>{const t=void 0!==e.tabId?e.tabId:s.sender?.tab?.id??0;if(a)p(s,t,e);else for(o.push(e),n(s,t),a=!0;o.length>0;){const e=o.shift(),n=void 0!==e.tabId?e.tabId:s.sender?.tab?.id??0;p(s,n,e)}})})})();
+(function () {
+  'use strict';
+
+  /**
+   * The background script manages connections between the devtools panel and
+   * the content scripts injected into web pages. It forwards messages between
+   * these two contexts. The background script is persistent and runs as long
+   * as the extension is active. It keeps a record of active connections from
+   * tabs to their associated ports.
+   * @module background
+   */
+
+  /** Map of tabId to port name to port array */
+  const connections = new Map();
+
+  /**
+   * Gets or creates a connection map for a given tab.
+   * @param {number} tabId - The tab ID
+   * @returns {Map} The port map for the tab
+   */
+  function getOrCreateTabConnection(tabId) {
+    if (!connections.has(tabId)) {
+      connections.set(tabId, new Map());
+    }
+    return connections.get(tabId);
+  }
+
+  /**
+   * Registers a port for a given tab and sets up disconnect handling.
+   * @param {chrome.runtime.Port} port - The port to register
+   * @param {number} tabId - The tab ID
+   */
+  function registerPort(port, tabId) {
+    const portMap = getOrCreateTabConnection(tabId);
+
+    if (!portMap.has(port.name)) {
+      portMap.set(port.name, []);
+    }
+
+    const ports = portMap.get(port.name);
+    if (!ports.includes(port)) {
+      ports.push(port);
+
+      port.onDisconnect.addListener(() => {
+        const idx = ports.indexOf(port);
+        if (idx !== -1) {
+          ports.splice(idx, 1);
+        }
+        if (ports.length === 0) {
+          portMap.delete(port.name);
+        }
+        if (portMap.size === 0) {
+          connections.delete(tabId);
+        }
+      });
+    }
+  }
+
+  /**
+   * Posts a message to multiple ports, catching any errors.
+   * @param {chrome.runtime.Port[]} ports - Array of ports to message
+   * @param {Object} message - The message to send
+   */
+  function postMessageToPorts(ports, message) {
+    ports.forEach((p) => {
+      try {
+        p.postMessage(message);
+      } catch (e) {
+        console.error(`[WebGPU Inspector] Failed to post message to port ${p.name}:`, e);
+      }
+    });
+  }
+
+  /**
+   * Handles incoming connections and message routing between panel and page scripts.
+   * @param {chrome.runtime.Port} port - The connected port
+   */
+  chrome.runtime.onConnect.addListener((port) => {
+    /** @type {Object[]} Queue of messages received before registration */
+    const pendingMessages = [];
+    /** @type {boolean} Whether the port has been registered */
+    let registered = false;
+
+    // Page ports always carry tab info in port.sender, so register them eagerly.
+    // Otherwise a service-worker restart can leave the reconnected page port
+    // unregistered until the page sends a message — which it normally doesn't do
+    // until the panel asks it to. The panel-driven Start command would then have
+    // no page port to route to, and the user has to refresh the tab to unstick it.
+    if (port.name === "webgpu-inspector-page" && port.sender?.tab?.id !== undefined) {
+      registerPort(port, port.sender.tab.id);
+      registered = true;
+    }
+
+    /**
+     * Handles incoming messages, queuing them until registered.
+     * @param {Object} message - The incoming message
+     */
+    port.onMessage.addListener((message) => {
+      const tabId = message.tabId !== undefined ? message.tabId : (port.sender?.tab?.id ?? 0);
+
+      if (!registered) {
+        pendingMessages.push(message);
+        registerPort(port, tabId);
+        registered = true;
+
+        while (pendingMessages.length > 0) {
+          const pending = pendingMessages.shift();
+          const pendingTabId = pending.tabId !== undefined ? pending.tabId : (port.sender?.tab?.id ?? 0);
+          handleMessage(port, pendingTabId, pending);
+        }
+        return;
+      }
+
+      handleMessage(port, tabId, message);
+    });
+
+    /**
+     * Routes a message to the appropriate destination ports.
+     * @param {chrome.runtime.Port} port - The source port
+     * @param {number} tabId - The tab ID
+     * @param {Object} message - The message to route
+     */
+    function handleMessage(port, tabId, message) {
+      const portMap = connections.get(tabId);
+      if (!portMap) {
+        console.error(`[WebGPU Inspector] No port map found for tab ${tabId}`);
+        return;
+      }
+
+      if (port.name === "webgpu-inspector-panel" && portMap.has("webgpu-inspector-page")) {
+        postMessageToPorts(portMap.get("webgpu-inspector-page"), message);
+      }
+
+      if (port.name === "webgpu-inspector-page" && portMap.has("webgpu-inspector-panel")) {
+        postMessageToPorts(portMap.get("webgpu-inspector-panel"), message);
+      }
+    }
+  });
+
+})();
 //# sourceMappingURL=background.js.map

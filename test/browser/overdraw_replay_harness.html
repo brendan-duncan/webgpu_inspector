@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html>
+<!-- Browser harness for the GPU overdraw replay (src/devtools/capture_replay.js).
+     Feeds replayOverdraw a mock capture database on a real GPUDevice and checks
+     the resulting counts. Driven by test/browser/run_overdraw_harness.mjs
+     (puppeteer); results land in window.__results / document.title. -->
+<body>
+<script type="module">
+import { replayOverdraw, queryPixelCoverage } from "../../src/devtools/capture_replay.js";
+
+const results = [];
+window.__results = null;
+
+function makeDatabase(objects) {
+    const map = new Map(Object.entries(objects).map(([k, v]) => [Number(k), v]));
+    return {
+        getObject: (id) => map.get(id) ?? null,
+        getTextureFromView: (view) => view?.__texture ?? null,
+    };
+}
+
+// A tiny "captured frame": an 8x8 rgba8unorm target, a vertex shader reading
+// @location(0) positions offset by a uniform, one fullscreen-triangle vertex
+// buffer, and a uniform buffer holding a zero offset.
+const WIDTH = 8, HEIGHT = 8;
+
+const VS_CODE = `
+struct Uniforms { offset: vec4f }
+@group(0) @binding(0) var<uniform> u: Uniforms;
+@vertex fn vsMain(@location(0) pos: vec4f) -> @builtin(position) vec4f {
+    return pos + u.offset;
+}
+@fragment fn fsMain() -> @location(0) vec4f { return vec4f(0.5); }
+`;
+
+// Fullscreen triangle, clip space.
+const VERTS = new Float32Array([
+    -1, -1, 0.5, 1,
+    3, -1, 0.5, 1,
+    -1, 3, 0.5, 1,
+]);
+const VERT_BYTES = new Uint8Array(VERTS.buffer.slice(0));
+const UNIFORM_BYTES = new Uint8Array(16); // zero offset
+
+const SHADER = {
+    code: VS_CODE,
+    reflection: {
+        entry: {
+            vertex: [{ name: "vsMain", resources: [{ group: 0, binding: 0 }] }],
+        },
+    },
+};
+
+function makeTargetTexture() {
+    return {
+        id: 100,
+        label: "target",
+        width: WIDTH,
+        height: HEIGHT,
+        depthOrArrayLayers: 1,
+        descriptor: { format: "rgba8unorm", size: [WIDTH, HEIGHT], usage: 16 },
+    };
+}
+
+function baseObjects() {
+    return {
+        1: SHADER,
+        2: { // render pipeline, auto layout
+            label: "pipe",
+            descriptor: {
+                layout: "auto",
+                vertex: {
+                    module: { __id: 1 },
+                    entryPoint: "vsMain",
+                    buffers: [{
+                        arrayStride: 16,
+                        attributes: [{ shaderLocation: 0, offset: 0, format: "float32x4" }],
+                    }],
+                },
+                fragment: { module: { __id: 1 }, entryPoint: "fsMain", targets: [{ format: "rgba8unorm" }] },
+                primitive: { topology: "triangle-list" },
+            },
+        },
+        3: { label: "verts", descriptor: { size: VERT_BYTES.length, usage: 32 | 8 } },   // VERTEX|COPY_DST
+        4: { label: "uniforms", descriptor: { size: 16, usage: 64 | 8 } },               // UNIFORM|COPY_DST
+        5: { // bind group
+            label: "bg",
+            descriptor: {
+                layout: { __id: 99 }, // no captured BGL descriptor -> auto path
+                entries: [{ binding: 0, resource: { buffer: { __id: 4 }, offset: 0, size: 16 } }],
+            },
+        },
+        6: { label: "indirect", descriptor: { size: 16, usage: 256 | 8 } },              // INDIRECT|COPY_DST
+        9: { label: "indices", descriptor: { size: 12, usage: 16 | 8 } },                // INDEX|COPY_DST
+    };
+}
+
+const attachment = { view: { __id: 50 }, loadOp: "clear", storeOp: "store" };
+const targetTexture = makeTargetTexture();
+const getTextureFromAttachment = (att) => (att?.view?.__id === 50 ? targetTexture : null);
+
+function frameCommands(draws) {
+    return [
+        { method: "beginRenderPass", args: [{ colorAttachments: [attachment] }] },
+        { method: "setPipeline", args: [{ __id: 2 }] },
+        { method: "setBindGroup", args: [0, { __id: 5 }], bufferData: [UNIFORM_BYTES] },
+        { method: "setVertexBuffer", args: [0, { __id: 3 }], bufferData: [VERT_BYTES] },
+        ...draws,
+        { method: "end", args: [] },
+    ];
+}
+
+async function runCase(name, commands, objects, check) {
+    try {
+        const adapter = await navigator.gpu.requestAdapter();
+        const device = await adapter.requestDevice();
+        const uncaptured = [];
+        device.onuncapturederror = (e) => uncaptured.push(e.error.message);
+        const result = await replayOverdraw({
+            device,
+            database: makeDatabase(objects),
+            commands,
+            targetTexture,
+            getTextureFromAttachment,
+        });
+        const failure = check(result);
+        results.push({
+            name,
+            ok: !failure,
+            failure: failure ?? null,
+            maxCount: result.maxCount,
+            skippedDraws: result.skippedDraws,
+            notes: result.notes,
+            uncaptured,
+            counts: Array.from(result.counts),
+        });
+        device.destroy();
+    } catch (e) {
+        results.push({ name, ok: false, failure: `threw: ${e.message ?? e}\n${e.stack ?? ""}` });
+    }
+}
+
+function everyCountIs(result, expected) {
+    if (result.counts.length !== WIDTH * HEIGHT) {
+        return `counts length ${result.counts.length}`;
+    }
+    for (let i = 0; i < result.counts.length; ++i) {
+        if (result.counts[i] !== expected) {
+            return `counts[${i}] = ${result.counts[i]}, expected ${expected}`;
+        }
+    }
+    return null;
+}
+
+async function main() {
+    if (!navigator.gpu) {
+        window.__results = [{ name: "webgpu", ok: false, failure: "navigator.gpu unavailable" }];
+        document.title = "DONE";
+        return;
+    }
+
+    await runCase("fullscreen draw counts 1 everywhere",
+        frameCommands([{ method: "draw", args: [3] }]),
+        baseObjects(),
+        (r) => everyCountIs(r, 1));
+
+    await runCase("two draws count 2",
+        frameCommands([{ method: "draw", args: [3] }, { method: "draw", args: [3] }]),
+        baseObjects(),
+        (r) => everyCountIs(r, 2));
+
+    await runCase("instanced draw counts instances",
+        frameCommands([{ method: "draw", args: [3, 3] }]),
+        baseObjects(),
+        (r) => everyCountIs(r, 3));
+
+    {
+        // drawIndirect with captured argument bytes [3, 2, 0, 0].
+        const indirectArgs = new Uint8Array(new Uint32Array([3, 2, 0, 0]).buffer);
+        await runCase("indirect draw counts from captured args",
+            frameCommands([{ method: "drawIndirect", args: [{ __id: 6 }, 0], bufferData: [indirectArgs] }]),
+            baseObjects(),
+            (r) => everyCountIs(r, 2));
+    }
+
+    {
+        // Explicit layout path: BGL + pipeline layout descriptors captured.
+        const objects = baseObjects();
+        objects[7] = { descriptor: { entries: [{ binding: 0, visibility: 3, buffer: { type: "uniform" } }] } };
+        objects[8] = { descriptor: { bindGroupLayouts: [{ __id: 7 }] } };
+        objects[2].descriptor.layout = { __id: 8 };
+        objects[5].descriptor.layout = { __id: 7 };
+        await runCase("explicit pipeline layout",
+            frameCommands([{ method: "draw", args: [3] }]),
+            objects,
+            (r) => everyCountIs(r, 1));
+    }
+
+    {
+        // Scissor limits counts.
+        const commands = frameCommands([
+            { method: "setScissorRect", args: [0, 0, 4, HEIGHT] },
+            { method: "draw", args: [3] },
+        ]);
+        await runCase("scissor limits counts",
+            commands,
+            baseObjects(),
+            (r) => {
+                for (let y = 0; y < HEIGHT; ++y) {
+                    for (let x = 0; x < WIDTH; ++x) {
+                        const expected = x < 4 ? 1 : 0;
+                        if (r.counts[y * WIDTH + x] !== expected) {
+                            return `counts[${x},${y}] = ${r.counts[y * WIDTH + x]}, expected ${expected}`;
+                        }
+                    }
+                }
+                return null;
+            });
+    }
+
+    {
+        // JSON turns omitted optional args (undefined) into null; a null size
+        // must bind "rest of the buffer", not a zero-size range.
+        const indexBytes = new Uint8Array(new Uint32Array([0, 1, 2]).buffer);
+        const commands = [
+            { method: "beginRenderPass", args: [{ colorAttachments: [attachment] }] },
+            { method: "setPipeline", args: [{ __id: 2 }] },
+            { method: "setBindGroup", args: [0, { __id: 5 }, null], bufferData: [UNIFORM_BYTES] },
+            { method: "setVertexBuffer", args: [0, { __id: 3 }, 0, null], bufferData: [VERT_BYTES] },
+            { method: "setIndexBuffer", args: [{ __id: 9 }, "uint32", 0, null], bufferData: [indexBytes] },
+            { method: "drawIndexed", args: [3, null, null, null, null] },
+            { method: "end", args: [] },
+        ];
+        await runCase("null optional args bind whole buffers",
+            commands,
+            baseObjects(),
+            (r) => everyCountIs(r, 1));
+    }
+
+    {
+        // Failure isolation: a draw that fails validation (vertex count far
+        // beyond the vertex buffer) must not lose the valid draws' counts.
+        await runCase("invalid draw doesn't zero the pass",
+            frameCommands([
+                { method: "draw", args: [3] },
+                { method: "draw", args: [30000] },
+                { method: "draw", args: [3] },
+            ]),
+            baseObjects(),
+            (r) => {
+                if (r.skippedDraws !== 1) {
+                    return `skippedDraws = ${r.skippedDraws}, expected 1`;
+                }
+                return everyCountIs(r, 2);
+            });
+    }
+
+    {
+        // queryPixelCoverage: occlusion-query replay reports which draws
+        // rasterize fragments at a pixel.
+        const name = "queryPixelCoverage finds covering draws";
+        try {
+            const adapter = await navigator.gpu.requestAdapter();
+            const device = await adapter.requestDevice();
+            const objects = baseObjects();
+            objects[10] = { label: "cornerVerts", descriptor: { size: 48, usage: 32 | 8 } };
+            // NDC triangle (0,0)-(1,0)-(0,1): covers the top-right quadrant's
+            // lower-left half — pixel (4,3) is strictly interior, (1,1) is
+            // outside. (Avoid pixels on the hypotenuse: the GPU's fill rule
+            // legitimately excludes centers exactly on a right edge.)
+            const corner = new Float32Array([0, 0, 0.5, 1, 1, 0, 0.5, 1, 0, 1, 0.5, 1]);
+            const drawA = { method: "draw", args: [3] };
+            const drawB = { method: "draw", args: [3] };
+            const commands = [
+                { method: "beginRenderPass", args: [{ colorAttachments: [attachment] }] },
+                { method: "setPipeline", args: [{ __id: 2 }] },
+                { method: "setBindGroup", args: [0, { __id: 5 }], bufferData: [UNIFORM_BYTES] },
+                { method: "setVertexBuffer", args: [0, { __id: 3 }], bufferData: [VERT_BYTES] },
+                drawA,
+                { method: "setVertexBuffer", args: [0, { __id: 10 }], bufferData: [new Uint8Array(corner.buffer)] },
+                drawB,
+                { method: "end", args: [] },
+            ];
+            const database = makeDatabase(objects);
+            const at11 = await queryPixelCoverage({ device, database, commands, x: 1, y: 1, getTextureFromAttachment });
+            const at43 = await queryPixelCoverage({ device, database, commands, x: 4, y: 3, getTextureFromAttachment });
+            let failure = null;
+            if (!at11.covered.has(drawA)) {
+                failure = "fullscreen draw not detected at (1,1)";
+            } else if (at11.covered.has(drawB)) {
+                failure = "corner draw wrongly detected at (1,1)";
+            } else if (at11.unknown.size) {
+                failure = `unexpected unknown draws: ${at11.unknown.size}`;
+            } else if (!at43.covered.has(drawA) || !at43.covered.has(drawB)) {
+                failure = "coverage at (4,3) should include both draws";
+            }
+            results.push({ name, ok: !failure, failure, notes: [...at11.notes, ...at43.notes] });
+            device.destroy();
+        } catch (e) {
+            results.push({ name, ok: false, failure: `threw: ${e.message ?? e}\n${e.stack ?? ""}` });
+        }
+    }
+
+    window.__results = results;
+    document.title = "DONE";
+}
+
+main();
+</script>
+</body>
+</html>

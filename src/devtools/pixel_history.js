@@ -16,7 +16,7 @@
 // texture). Unknown values propagate through blending; a write that doesn't
 // depend on the destination makes the value known again.
 
-import { barycentric, projectVertex, triangleArea, buildQuadInputs } from "./fragment_debug.js";
+import { barycentric, projectVertex, triangleArea, buildQuadInputs, clipTriangleToNearW, W_CLIP_EPSILON } from "./fragment_debug.js";
 
 // ---------------------------------------------------------------------------
 // Pipeline test helpers
@@ -205,9 +205,18 @@ function makeTextureState() {
 // (Map<textureId, {color, depth, stencil}>) and appending history entries for
 // events touching `targetTextureId`.
 //
+// A generator so long simulations can be time-sliced: yields { draw,
+// drawCount } before each draw, and plain yields inside heavy draws (the
+// vertex-shader interpreter dominates the cost).
+//
+// `drawFilter` (optional, (draw) => boolean) skips draws it rejects — the
+// GPU pixel-coverage query uses it to keep the interpreter away from draws
+// with no fragments at the pixel. Erroring draws bypass it so their
+// diagnostic entries stay.
+//
 // The pass record and its draw records are documented in
 // pixel_history_builder.js (buildPixelHistoryPasses).
-function simulatePass(pass, x, y, targetTextureId, state, entries) {
+function* simulatePass(pass, x, y, targetTextureId, state, entries, drawFilter) {
     const getState = (id) => {
         if (!state.has(id)) {
             state.set(id, makeTextureState());
@@ -262,15 +271,20 @@ function simulatePass(pass, x, y, targetTextureId, state, entries) {
     const emitFragments = targetState !== null;
 
     // --- Draws. -----------------------------------------------------------
-    for (const draw of pass.draws) {
+    for (let di = 0; di < pass.draws.length; ++di) {
+        const draw = pass.draws[di];
+        yield { draw: di, drawCount: pass.draws.length };
         if (draw.error) {
             if (emitFragments) {
                 entries.push({ type: "draw-error", pass, draw, message: draw.error });
             }
             continue;
         }
+        if (drawFilter && !drawFilter(draw)) {
+            continue; // no fragments at this pixel (GPU coverage query)
+        }
         try {
-            simulateDraw(pass, draw, x, y, targetTextureId, {
+            yield* simulateDraw(pass, draw, x, y, targetTextureId, {
                 getState, entries, emitFragments, ds, dsState, targetSlot, targetIsDepth,
             });
         } catch (e) {
@@ -301,8 +315,9 @@ function simulatePass(pass, x, y, targetTextureId, state, entries) {
 // Simulate a single draw at pixel (x, y): rasterize its triangles, run the
 // pipeline tests and the fragment shader for covering fragments, apply writes
 // to the tracked state, and append history entries (when the pass has the
-// target texture attached).
-function simulateDraw(pass, draw, x, y, targetTextureId, sim) {
+// target texture attached). Yields periodically (between instances and every
+// 16 triangles) so callers can time-slice the interpreter work.
+function* simulateDraw(pass, draw, x, y, targetTextureId, sim) {
     const { getState, entries, emitFragments, ds, dsState, targetSlot, targetIsDepth } = sim;
 
     const cx = x + 0.5;
@@ -317,35 +332,67 @@ function simulateDraw(pass, draw, x, y, targetTextureId, sim) {
     const hasStencil = !!(ds && dsDesc && (dsDesc.stencilFront || dsDesc.stencilBack));
 
     for (let instance = 0; instance < draw.instanceCount; ++instance) {
+        if (instance !== 0) {
+            yield;
+        }
         const instanceIndex = draw.firstInstance + instance;
+        const vpRect = { x: viewport.x, y: viewport.y, width: viewport.w, height: viewport.h };
 
-        // Project each vertex once per instance.
-        const cache = new Map();
-        const project = (vi) => {
-            if (cache.has(vi)) {
-                return cache.get(vi);
+        // Run the vertex shader once per vertex per instance; project lazily
+        // (triangles crossing the w=0 plane are clipped before projection).
+        const dataCache = new Map();
+        const getData = (vi) => {
+            if (dataCache.has(vi)) {
+                return dataCache.get(vi);
             }
             const data = draw.getVertex(vi, instanceIndex);
-            const p = data ? { ...projectVertex(data.position, pass.width, pass.height, { x: viewport.x, y: viewport.y, width: viewport.w, height: viewport.h }), data } : null;
-            cache.set(vi, p);
+            dataCache.set(vi, data);
+            return data;
+        };
+        const projCache = new Map();
+        const project = (vi, data) => {
+            if (projCache.has(vi)) {
+                return projCache.get(vi);
+            }
+            const p = { ...projectVertex(data.position, pass.width, pass.height, vpRect), data };
+            projCache.set(vi, p);
             return p;
         };
 
         for (let ti = 0; ti < draw.triangles.length; ++ti) {
+            if ((ti & 15) === 15) {
+                yield;
+            }
             const tri = draw.triangles[ti];
-            const p0 = project(tri[0]);
-            const p1 = project(tri[1]);
-            const p2 = project(tri[2]);
-            if (!p0 || !p1 || !p2) {
+            const d0 = getData(tri[0]);
+            const d1 = getData(tri[1]);
+            const d2 = getData(tri[2]);
+            if (!d0 || !d1 || !d2) {
                 continue;
             }
-            // Primitives crossing the w=0 plane would need clipping, which
-            // this software rasterizer doesn't do; skip them.
-            if (p0.w <= 0 || p1.w <= 0 || p2.w <= 0) {
-                continue;
+
+            // Common case: fully in front of the projection plane. Otherwise
+            // clip against w > 0 (the GPU rasterizes such triangles; a large
+            // ground plane extending behind the camera is the classic case).
+            let parts;
+            if (d0.position[3] > W_CLIP_EPSILON && d1.position[3] > W_CLIP_EPSILON && d2.position[3] > W_CLIP_EPSILON) {
+                parts = [[project(tri[0], d0), project(tri[1], d1), project(tri[2], d2)]];
+            } else {
+                parts = clipTriangleToNearW(d0, d1, d2).map((part) =>
+                    part.map((d) => ({ ...projectVertex(d.position, pass.width, pass.height, vpRect), data: d })));
             }
-            const bary = barycentric(p0, p1, p2, cx, cy);
-            if (bary === null || bary[0] < 0 || bary[1] < 0 || bary[2] < 0) {
+
+            // The pixel is covered by at most one part (they only share edges).
+            let p0 = null, p1 = null, p2 = null, bary = null;
+            for (const part of parts) {
+                const b = barycentric(part[0], part[1], part[2], cx, cy);
+                if (b !== null && b[0] >= 0 && b[1] >= 0 && b[2] >= 0) {
+                    [p0, p1, p2] = part;
+                    bary = b;
+                    break;
+                }
+            }
+            if (bary === null) {
                 continue; // pixel not covered by this triangle
             }
 
@@ -540,20 +587,23 @@ export function selectNeededPasses(passes, targetTextureId) {
     return passes.filter((_, i) => needed[i]);
 }
 
-// Run the pixel history: simulate the needed render passes of the frame, in
-// order, at pixel (x, y), and return the history entries for events touching
-// `targetTextureId`.
-//
-// Returns { entries, finalValue } where entries is the ordered event list and
-// finalValue is the tracked value of the target texture at the end of the
-// frame ([r,g,b,a] with null for unknown channels, or [depth] for a
-// depth-stencil target; null if entirely unknown).
-export function runPixelHistory(passes, x, y, targetTextureId) {
+// Run the pixel history incrementally: simulate the needed render passes of
+// the frame, in order, at pixel (x, y). A generator so the (potentially
+// minutes-long, interpreter-bound) simulation can be time-sliced by the UI:
+// yields { passIndex, passCount, draw?, drawCount? } progress markers, and
+// returns { entries, finalValue } (see runPixelHistory). `drawFilter` is
+// documented on simulatePass.
+export function* runPixelHistoryGen(passes, x, y, targetTextureId, drawFilter) {
     const needed = selectNeededPasses(passes, targetTextureId);
     const state = new Map();
     const entries = [];
-    for (const pass of needed) {
-        simulatePass(pass, x, y, targetTextureId, state, entries);
+    for (let pi = 0; pi < needed.length; ++pi) {
+        const it = simulatePass(needed[pi], x, y, targetTextureId, state, entries, drawFilter);
+        let r = it.next();
+        while (!r.done) {
+            yield { passIndex: pi, passCount: needed.length, ...(r.value ?? {}) };
+            r = it.next();
+        }
     }
 
     const targetState = state.get(targetTextureId);
@@ -566,4 +616,19 @@ export function runPixelHistory(passes, x, y, targetTextureId) {
         }
     }
     return { entries, finalValue };
+}
+
+// Run the pixel history to completion synchronously.
+//
+// Returns { entries, finalValue } where entries is the ordered event list and
+// finalValue is the tracked value of the target texture at the end of the
+// frame ([r,g,b,a] with null for unknown channels, or [depth] for a
+// depth-stencil target; null if entirely unknown).
+export function runPixelHistory(passes, x, y, targetTextureId) {
+    const it = runPixelHistoryGen(passes, x, y, targetTextureId);
+    let r = it.next();
+    while (!r.done) {
+        r = it.next();
+    }
+    return r.value;
 }

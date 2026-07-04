@@ -11,6 +11,7 @@ import {
     extractFsOutput,
     selectNeededPasses,
     runPixelHistory,
+    runPixelHistoryGen,
 } from "../../src/devtools/pixel_history.js";
 
 // ---------------------------------------------------------------------------
@@ -400,4 +401,61 @@ test("selectNeededPasses: includes depth-prepass dependencies, excludes unrelate
 test("selectNeededPasses: unrelated frames yield nothing", () => {
     const pass = makePass({ colorAttachments: [{ textureId: 5, slot: 0, loadOp: "clear", clearValue: [0, 0, 0, 1] }] });
     assert.deepEqual(selectNeededPasses([pass], 1), []);
+});
+
+test("triangles crossing w=0 are clipped, not skipped", () => {
+    // A "wall" with its apex behind the camera (w = -1): the GPU clips and
+    // rasterizes the visible part, so the history must report its fragment
+    // (a large ground plane extending behind the camera is the real-world
+    // case this models).
+    const draw = makeDraw({ getVertex: makeGetVertex([[-1, -3, 0, 1], [-1, 3, 0, 1], [3, 0, 0, -1]]) });
+    const { entries } = runPixelHistory([makePass({ draws: [draw] })], 2, 2, 1);
+    const frags = fragments(entries);
+    assert.equal(frags.length, 1);
+    assert.equal(frags[0].status, "written");
+});
+
+test("fully-behind (w <= 0) primitives produce no fragments", () => {
+    const positions = FULLSCREEN.positions.map((p) => [p[0], p[1], 0.5, -1]);
+    const draw = makeDraw({ getVertex: makeGetVertex(positions) });
+    const { entries } = runPixelHistory([makePass({ draws: [draw] })], 2, 2, 1);
+    assert.equal(fragments(entries).length, 0);
+});
+
+test("runPixelHistoryGen: a draw filter skips rejected draws", () => {
+    const drawA = makeDraw();
+    const drawB = makeDraw();
+    const errorDraw = { command: { method: "drawIndirect" }, error: "Indirect draws are not supported by pixel history." };
+    const pass = makePass({ draws: [drawA, errorDraw, drawB] });
+
+    const it = runPixelHistoryGen([pass], 1, 1, 1, (draw) => draw === drawB);
+    let r = it.next();
+    while (!r.done) {
+        r = it.next();
+    }
+    const frags = fragments(r.value.entries);
+    assert.equal(frags.length, 1);
+    assert.equal(frags[0].draw, drawB);
+    // Erroring draws bypass the filter so their diagnostic entries stay.
+    assert.equal(r.value.entries.filter((e) => e.type === "draw-error").length, 1);
+});
+
+test("runPixelHistoryGen: yields progress and matches runPixelHistory", () => {
+    const pass = makePass({ draws: [makeDraw(), makeDraw({ instanceCount: 3 })] });
+    const sync = runPixelHistory([pass], 1, 1, 1);
+
+    const it = runPixelHistoryGen([pass], 1, 1, 1);
+    const progress = [];
+    let r = it.next();
+    while (!r.done) {
+        if (r.value) {
+            progress.push(r.value);
+        }
+        r = it.next();
+    }
+    assert.deepEqual(r.value, sync);
+    // A {draw, drawCount} marker precedes each draw, tagged with the pass.
+    const drawMarkers = progress.filter((p) => p.drawCount !== undefined);
+    assert.deepEqual(drawMarkers.map((p) => p.draw), [0, 1]);
+    assert.ok(progress.every((p) => p.passIndex === 0 && p.passCount === 1));
 });

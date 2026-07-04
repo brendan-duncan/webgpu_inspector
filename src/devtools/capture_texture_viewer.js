@@ -12,8 +12,10 @@ import { Span } from "./widget/span.js";
 import { Checkbox } from "./widget/checkbox.js";
 import { Select } from "./widget/select.js";
 import { NumberInput } from "./widget/number_input.js";
-import { runPixelHistory } from "./pixel_history.js";
+import { runPixelHistoryGen } from "./pixel_history.js";
 import { buildPixelHistoryPasses } from "./pixel_history_builder.js";
+import { computeOverdraw } from "./overdraw.js";
+import { replayOverdraw, queryPixelCoverage } from "./capture_replay.js";
 
 function _formatChannel(v) {
     if (v === null || v === undefined) {
@@ -43,6 +45,19 @@ function _swatchColor(value) {
     const c = value.map((v) => Math.round(Math.min(Math.max(v, 0), 1) * 255));
     return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${Math.min(Math.max(value[3], 0), 1)})`;
 }
+
+// Heatmap ramp for the overdraw overlay: index = count - 1, last entry is
+// "N or more". Green (1×) through red to white (8×+).
+const _overdrawRamp = [
+    [40, 130, 50],
+    [110, 160, 30],
+    [185, 180, 20],
+    [230, 150, 20],
+    [235, 90, 25],
+    [220, 40, 50],
+    [230, 40, 140],
+    [255, 255, 255],
+];
 
 const _fragmentStatusInfo = {
     "written": { label: "wrote", color: "#6fcf6f" },
@@ -146,7 +161,22 @@ export class CaptureTextureViewer extends Div {
             this._applyZoom();
         }, style: "width: 100px; display: inline-block;" });
 
+        new Checkbox(toolbar, { text: "Overdraw", checked: false, tooltip: "Heatmap of how many fragments the frame rasterized at each pixel", style: "margin-left: 10px; font-size: 9pt; color: #bbb;", onChange: (checked) => {
+            this._setOverdraw(checked);
+        } });
+
         this._pixelLabel = new Span(toolbar, { style: "margin-left: 10px; color: #ddd;" });
+
+        // --- Overdraw status + legend (shown while the overlay is on). -------
+        this._overdrawBar = new Div(this, { style: "flex: 0 0 auto; display: none; align-items: center; gap: 4px; padding: 0px 5px 5px 5px; color: #bbb; font-size: 9pt;" });
+        this._overdrawStatus = new Span(this._overdrawBar, { style: "margin-right: 8px;" });
+        this._overdrawLegend = new Span(this._overdrawBar, { style: "display: none;" });
+        for (let i = 0; i < _overdrawRamp.length; ++i) {
+            const c = _overdrawRamp[i];
+            new Span(this._overdrawLegend, { style: `display: inline-block; width: 12px; height: 12px; margin-left: 6px; vertical-align: middle; border: 1px solid #555; background-color: rgb(${c[0]}, ${c[1]}, ${c[2]});` });
+            new Span(this._overdrawLegend, { text: i === _overdrawRamp.length - 1 ? `${i + 1}+` : `${i + 1}`, style: "margin-left: 2px; vertical-align: middle;" });
+        }
+        this._overdrawNotesPane = new Div(this, { style: "flex: 0 0 auto; display: none; padding: 0px 5px 5px 5px; color: #999; font-size: 9pt; font-style: italic; white-space: normal;" });
 
         if (!this.valuesAreCurrent) {
             new Div(this, {
@@ -184,9 +214,18 @@ export class CaptureTextureViewer extends Div {
         // replay depends on the picked pixel).
         this._builtPasses = null;
         this._historyRunId = 0;
+
+        // Overdraw overlay state: the count buffer is pixel-independent, so it
+        // is computed once per viewer and reused when the overlay is retoggled.
+        this._overdrawEnabled = false;
+        this._overdrawResult = null;
+        this._overdrawRunId = 0;
+        this._overdrawFallbackReason = null;
+        this._overlayCanvas = null;
     }
 
     onDestroy() {
+        this._overdrawRunId++; // cancel any in-flight overdraw compute
         const tooltip = this.capturePanel?._tooltip;
         if (tooltip) {
             tooltip.style.display = "none";
@@ -250,6 +289,10 @@ export class CaptureTextureViewer extends Div {
         if (this._canvas) {
             this._canvas.style.width = `${this.texture.width * zoom}px`;
             this._canvas.style.height = `${this.texture.height * zoom}px`;
+        }
+        if (this._overlayCanvas) {
+            this._overlayCanvas.style.width = `${this.texture.width * zoom}px`;
+            this._overlayCanvas.style.height = `${this.texture.height * zoom}px`;
         }
         this._updateMarker();
     }
@@ -368,6 +411,10 @@ export class CaptureTextureViewer extends Div {
             tooltip.style.left = `${left}px`;
             tooltip.style.top = `${top}px`;
             tooltip.innerHTML = `X:${p.x} Y:${p.y}\n${this._getPixelString(this._getPixel(p.x, p.y))}`;
+            const count = this._overdrawCountAt(p.x, p.y);
+            if (count !== null) {
+                tooltip.innerHTML += `Overdraw: ${count}\n`;
+            }
         });
 
         canvas.addEventListener("click", (e) => this._onCanvasClick(e));
@@ -415,19 +462,47 @@ export class CaptureTextureViewer extends Div {
         }
         const pane = this._historyPane;
         pane.removeAllChildren();
-        new Div(pane, { class: "race-status", text: `Computing pixel history for (${this._pixelX}, ${this._pixelY})…` });
+        const statusText = `Computing pixel history for (${this._pixelX}, ${this._pixelY})…`;
+        const status = new Div(pane, { class: "race-status", text: statusText });
 
-        // The replay is synchronous and can take a moment (it runs vertex and
-        // fragment shaders on the CPU interpreter); defer so the status paints.
+        // The replay runs vertex and fragment shaders on the CPU interpreter
+        // and can take minutes on heavy frames, so drive it in ~12ms slices to
+        // keep the panel responsive, with pass/draw progress in the status.
         // If the user picks another pixel before this run finishes, the newer
         // run supersedes it.
         const runId = ++this._historyRunId;
-        setTimeout(() => {
+        setTimeout(async () => {
             if (runId !== this._historyRunId) {
                 return;
             }
-            let result = null;
-            let error = null;
+
+            // GPU pre-filter: replay the frame's draws with a 1x1 scissor and
+            // occlusion queries to learn which ones rasterize fragments at
+            // this pixel, so the CPU interpreter only simulates those. Falls
+            // back to simulating everything if replay isn't possible.
+            let drawFilter = null;
+            const device = this.capturePanel?.window?.device;
+            if (device) {
+                status.text = `${statusText} locating draws with GPU replay…`;
+                try {
+                    const coverage = await queryPixelCoverage({
+                        device,
+                        database: this.database,
+                        commands: this.commands,
+                        x: this._pixelX,
+                        y: this._pixelY,
+                        getTextureFromAttachment: (attachment) => this.capturePanel._getTextureFromAttachment(attachment),
+                    });
+                    drawFilter = (draw) => coverage.covered.has(draw.command) || coverage.unknown.has(draw.command);
+                } catch (e) {
+                    console.warn("GPU pixel-coverage query failed; simulating every draw:", e);
+                }
+                if (runId !== this._historyRunId) {
+                    return;
+                }
+            }
+
+            let iter;
             try {
                 if (!this._builtPasses) {
                     this._builtPasses = buildPixelHistoryPasses(
@@ -435,28 +510,72 @@ export class CaptureTextureViewer extends Div {
                         this.commands,
                         (attachment) => this.capturePanel._getTextureFromAttachment(attachment));
                 }
-                result = runPixelHistory(this._builtPasses.passes, this._pixelX, this._pixelY, this.texture.id);
+                iter = runPixelHistoryGen(this._builtPasses.passes, this._pixelX, this._pixelY, this.texture.id, drawFilter);
             } catch (e) {
                 console.error(e);
-                error = e;
-            }
-            if (runId !== this._historyRunId) {
+                pane.removeAllChildren();
+                new Div(pane, { class: "race-error", text: `Pixel history failed: ${e.message ?? e}` });
                 return;
             }
-            pane.removeAllChildren();
-            if (error !== null) {
-                new Div(pane, { class: "race-error", text: `Pixel history failed: ${error.message ?? error}` });
-                return;
-            }
-            this._showHistory(result, this._builtPasses?.notes ?? []);
+            let progress = null;
+            const step = () => {
+                if (runId !== this._historyRunId) {
+                    return;
+                }
+                let result;
+                try {
+                    const start = performance.now();
+                    let r = iter.next();
+                    while (!r.done && performance.now() - start < 12) {
+                        if (r.value) {
+                            progress = { ...progress, ...r.value };
+                        }
+                        r = iter.next();
+                    }
+                    if (!r.done) {
+                        if (progress) {
+                            let text = `${statusText} pass ${progress.passIndex + 1}/${progress.passCount}`;
+                            if (progress.drawCount) {
+                                text += `, draw ${(progress.draw ?? 0) + 1}/${progress.drawCount}`;
+                            }
+                            status.text = text;
+                        }
+                        setTimeout(step, 0);
+                        return;
+                    }
+                    result = r.value;
+                } catch (e) {
+                    console.error(e);
+                    pane.removeAllChildren();
+                    new Div(pane, { class: "race-error", text: `Pixel history failed: ${e.message ?? e}` });
+                    return;
+                }
+                pane.removeAllChildren();
+                this._showHistory(result, this._builtPasses?.notes ?? []);
+            };
+            step();
         }, 10);
     }
 
     _showHistory(result, notes) {
         const pane = this._historyPane;
-        const entries = result.entries;
 
-        new Div(pane, { class: "race-summary", text: `Pixel (${this._pixelX}, ${this._pixelY}) — ${this.attachmentLabel} — ${entries.filter((e) => e.type === "fragment").length} fragment event(s)` });
+        // Culled fragments are expected in bulk on any closed mesh (every
+        // pixel sees the object's backfaces), so they are excluded from the
+        // history — unless nothing else touched the pixel, where "it was
+        // culled" is exactly the answer to "why didn't my object render"
+        // (wrong winding), so they stay, collapsed.
+        const isCulled = (e) => e.type === "fragment" && (e.status === "backface-culled" || e.status === "frontface-culled");
+        const culledCount = result.entries.filter(isCulled).length;
+        const fragmentCount = result.entries.filter((e) => e.type === "fragment").length;
+        const keepCulled = culledCount > 0 && culledCount === fragmentCount;
+        const entries = keepCulled ? result.entries : result.entries.filter((e) => !isCulled(e));
+
+        let summary = `Pixel (${this._pixelX}, ${this._pixelY}) — ${this.attachmentLabel} — ${keepCulled ? fragmentCount : fragmentCount - culledCount} fragment event(s)`;
+        if (!keepCulled && culledCount) {
+            summary += ` (${culledCount} culled not shown)`;
+        }
+        new Div(pane, { class: "race-summary", text: summary });
 
         for (const note of notes) {
             new Div(pane, { class: "race-hint", text: note });
@@ -467,8 +586,27 @@ export class CaptureTextureViewer extends Div {
             return;
         }
 
-        for (const entry of entries) {
-            this._showHistoryEntry(pane, entry);
+        // Consecutive same-status culled (all-culled fallback only) or
+        // degenerate fragments from the same draw collapse into one summary
+        // row.
+        const collapsible = new Set(["backface-culled", "frontface-culled", "degenerate"]);
+        for (let i = 0; i < entries.length;) {
+            const entry = entries[i];
+            let j = i;
+            if (entry.type === "fragment" && collapsible.has(entry.status)) {
+                while (j + 1 < entries.length &&
+                    entries[j + 1].type === "fragment" &&
+                    entries[j + 1].status === entry.status &&
+                    entries[j + 1].draw === entry.draw) {
+                    j++;
+                }
+            }
+            if (j > i) {
+                this._showCollapsedFragments(pane, entries.slice(i, j + 1));
+            } else {
+                this._showHistoryEntry(pane, entry);
+            }
+            i = j + 1;
         }
 
         // Cross-check the simulated final value against the captured texture
@@ -480,6 +618,221 @@ export class CaptureTextureViewer extends Div {
                 text: `Captured value at end of pass: ${captured}. The simulation is a CPU approximation; small differences are expected.`,
             });
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // Overdraw overlay
+    // ------------------------------------------------------------------------
+
+    _overdrawCountAt(x, y) {
+        const result = this._overdrawEnabled ? this._overdrawResult : null;
+        if (!result || x >= result.width || y >= result.height) {
+            return null;
+        }
+        return result.counts[y * result.width + x];
+    }
+
+    _setOverdraw(enabled) {
+        this._overdrawEnabled = enabled;
+        if (!this._canvas) {
+            return;
+        }
+        if (!enabled) {
+            this._overdrawRunId++; // cancel an in-flight compute
+            if (this._overlayCanvas) {
+                this._overlayCanvas.style.display = "none";
+            }
+            this._overdrawBar.element.style.display = "none";
+            this._overdrawNotesPane.element.style.display = "none";
+            return;
+        }
+        this._overdrawBar.element.style.display = "flex";
+        if (this._overdrawResult) {
+            this._showOverdraw();
+        } else {
+            this._computeOverdraw();
+        }
+    }
+
+    // Compute the overdraw counts: GPU replay first (fast, and covers indirect
+    // draws), falling back to the chunked CPU engine when replay isn't
+    // possible.
+    _computeOverdraw() {
+        const runId = ++this._overdrawRunId;
+        this._overdrawStatus.text = "Computing overdraw (GPU replay)…";
+        this._overdrawLegend.element.style.display = "none";
+        this._overdrawFallbackReason = null;
+
+        setTimeout(async () => {
+            if (runId !== this._overdrawRunId) {
+                return;
+            }
+            try {
+                const result = await replayOverdraw({
+                    device: this.capturePanel?.window?.device,
+                    database: this.database,
+                    commands: this.commands,
+                    targetTexture: this.texture,
+                    getTextureFromAttachment: (attachment) => this.capturePanel._getTextureFromAttachment(attachment),
+                });
+                if (runId !== this._overdrawRunId) {
+                    return;
+                }
+                this._overdrawResult = result;
+                this._showOverdraw();
+                return;
+            } catch (e) {
+                console.warn("GPU overdraw replay failed; falling back to the CPU engine:", e);
+                if (runId !== this._overdrawRunId) {
+                    return;
+                }
+                this._overdrawFallbackReason = `GPU replay failed (${e.message ?? e}); computed with the CPU engine instead.`;
+            }
+            this._computeOverdrawCPU(runId);
+        }, 10);
+    }
+
+    // The CPU fallback, run in time slices so the panel stays responsive: the
+    // engine yields after every instance of every draw, and each slice runs
+    // ~12ms of it before yielding back to the event loop.
+    _computeOverdrawCPU(runId) {
+        this._overdrawStatus.text = "Computing overdraw (CPU)…";
+        let iter;
+        try {
+            if (!this._builtPasses) {
+                this._builtPasses = buildPixelHistoryPasses(
+                    this.database,
+                    this.commands,
+                    (attachment) => this.capturePanel._getTextureFromAttachment(attachment));
+            }
+            iter = computeOverdraw(this._builtPasses.passes, this.texture.id);
+        } catch (e) {
+            console.error(e);
+            this._overdrawStatus.text = `Overdraw failed: ${e.message ?? e}`;
+            return;
+        }
+        const step = () => {
+            if (runId !== this._overdrawRunId) {
+                return;
+            }
+            try {
+                const start = performance.now();
+                let r = iter.next();
+                while (!r.done && performance.now() - start < 12) {
+                    r = iter.next();
+                }
+                if (!r.done) {
+                    this._overdrawStatus.text = `Computing overdraw (CPU)… ${Math.round(r.value.progress * 100)}%`;
+                    setTimeout(step, 0);
+                    return;
+                }
+                this._overdrawResult = r.value;
+                this._showOverdraw();
+            } catch (e) {
+                console.error(e);
+                this._overdrawStatus.text = `Overdraw failed: ${e.message ?? e}`;
+            }
+        };
+        step();
+    }
+
+    _showOverdraw() {
+        const result = this._overdrawResult;
+
+        let status = `Max overdraw: ${result.maxCount}× (${result.gpu ? "GPU replay" : "CPU"}).`;
+        if (result.skippedDraws) {
+            status += ` ${result.skippedDraws} draw(s) not counted.`;
+        }
+        this._overdrawStatus.text = status;
+        this._overdrawLegend.element.style.display = "inline";
+        const notes = [
+            "Counts are rasterized fragments (after culling, viewport, scissor and depth clip); depth/stencil tests and fragment-shader discard do not reduce them.",
+            ...(this._overdrawFallbackReason ? [this._overdrawFallbackReason] : []),
+            ...result.notes,
+        ];
+        this._overdrawBar.element.title = notes.join("\n");
+
+        // Surface the actionable notes (skips, truncation, fallbacks) inline;
+        // the full list also goes to the console for debugging.
+        const inline = notes.slice(1);
+        const pane = this._overdrawNotesPane;
+        pane.removeAllChildren();
+        if (inline.length) {
+            const shown = inline.slice(0, 4);
+            for (const note of shown) {
+                new Div(pane, { text: note });
+            }
+            if (inline.length > shown.length) {
+                new Div(pane, { text: `(+${inline.length - shown.length} more — see the DevTools console)` });
+            }
+            pane.element.style.display = "block";
+            console.info("[webgpu-inspector] overdraw notes:", inline);
+        } else {
+            pane.element.style.display = "none";
+        }
+
+        if (!this._overlayCanvas) {
+            const overlay = document.createElement("canvas");
+            overlay.width = this.texture.width;
+            overlay.height = this.texture.height;
+            overlay.style.cssText = "position: absolute; left: 0; top: 0; pointer-events: none; image-rendering: pixelated; z-index: 1;";
+            this._imageHolder.element.appendChild(overlay);
+            this._marker.style.zIndex = "2";
+            this._overlayCanvas = overlay;
+        }
+
+        const overlay = this._overlayCanvas;
+        const ctx = overlay.getContext("2d");
+        const image = ctx.createImageData(overlay.width, overlay.height);
+        const data = image.data;
+        const w = Math.min(overlay.width, result.width);
+        const h = Math.min(overlay.height, result.height);
+        for (let y = 0; y < h; ++y) {
+            for (let x = 0; x < w; ++x) {
+                const count = result.counts[y * result.width + x];
+                if (!count) {
+                    continue;
+                }
+                const c = _overdrawRamp[Math.min(count, _overdrawRamp.length) - 1];
+                const i = (y * overlay.width + x) * 4;
+                data[i] = c[0];
+                data[i + 1] = c[1];
+                data[i + 2] = c[2];
+                data[i + 3] = 217; // ~0.85 alpha, so the image shows through
+            }
+        }
+        ctx.putImageData(image, 0, 0);
+        overlay.style.display = "block";
+        this._applyZoom();
+    }
+
+    // One row summarizing a run of same-status culled/degenerate fragments
+    // from the same draw.
+    _showCollapsedFragments(pane, group) {
+        const entry = group[0];
+        const draw = entry.draw;
+        const info = _fragmentStatusInfo[entry.status] ?? { label: entry.status, color: "#999" };
+
+        let text = `${this._passTitle(entry.pass, false)} ${draw.command.method}`;
+        if (draw.shaderLabel) {
+            text += ` (shader “${draw.shaderLabel}”)`;
+        }
+        const shown = group.slice(0, 4).map((e) => e.primitive);
+        text += ` — ${group.length} primitives (${shown.join(", ")}${group.length > shown.length ? ", …" : ""}): ${info.label}`;
+
+        const row = this._entryRow(pane, info.color, text);
+        const buttonBar = document.createElement("div");
+        buttonBar.style.cssText = "margin-left: auto; display: flex; gap: 4px; flex: 0 0 auto;";
+        row.appendChild(buttonBar);
+        const goBtn = document.createElement("button");
+        goBtn.textContent = "Go to";
+        goBtn.title = "Show this draw in the command list";
+        goBtn.style.cssText = "background-color: #555; color: #ddd; border: none; border-radius: 3px; cursor: pointer; padding: 2px 6px;";
+        goBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.onShowCommand?.(draw.command);
+        });
+        buttonBar.appendChild(goBtn);
     }
 
     // "Pass 2 “Scene / Opaque / main pass”" — the pass index plus its label,

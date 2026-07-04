@@ -61,6 +61,69 @@ export function projectVertex(clip, width, height, viewport) {
     };
 }
 
+// Threshold for near-w clipping: vertices with w at or below this are behind
+// the projection plane and can't be projected.
+export const W_CLIP_EPSILON = 1e-6;
+
+function lerpValue(a, b, t) {
+    if (Array.isArray(a) || ArrayBuffer.isView(a)) {
+        const out = [];
+        for (let i = 0; i < a.length; ++i) {
+            out.push(a[i] + (b[i] - a[i]) * t);
+        }
+        return out;
+    }
+    return a + (b - a) * t;
+}
+
+// Interpolate two vertices' clip-space positions and varyings. Linear
+// interpolation in clip space is what the GPU's clipper does; the result is
+// perspective-correct after rasterization interpolation.
+function lerpVertexData(a, b, t) {
+    const varyings = {};
+    for (const key in a.varyings) {
+        const bv = b.varyings?.[key];
+        varyings[key] = bv === undefined ? a.varyings[key] : lerpValue(a.varyings[key], bv, t);
+    }
+    return { position: lerpValue(Array.from(a.position), Array.from(b.position), t), varyings };
+}
+
+// Clip a triangle of vertex data ({ position: clip-space vec4, varyings })
+// against the w > eps plane, the part of primitive clipping this software
+// rasterizer needs before it can project (a large ground plane extending
+// behind the camera is the classic case). Returns 0, 1, or 2 triangles with
+// every vertex projectable; winding is preserved. Depth (z) clipping stays a
+// per-pixel test after projection.
+export function clipTriangleToNearW(v0, v1, v2, eps = W_CLIP_EPSILON) {
+    const verts = [v0, v1, v2];
+    const inside = [v0.position[3] > eps, v1.position[3] > eps, v2.position[3] > eps];
+    if (inside[0] && inside[1] && inside[2]) {
+        return [[v0, v1, v2]];
+    }
+    if (!inside[0] && !inside[1] && !inside[2]) {
+        return [];
+    }
+    // Sutherland-Hodgman against the single plane: 3 or 4 output vertices.
+    const poly = [];
+    for (let i = 0; i < 3; ++i) {
+        const a = verts[i];
+        const b = verts[(i + 1) % 3];
+        if (inside[i]) {
+            poly.push(a);
+        }
+        if (inside[i] !== inside[(i + 1) % 3]) {
+            const wa = a.position[3];
+            const wb = b.position[3];
+            poly.push(lerpVertexData(a, b, (eps - wa) / (wb - wa)));
+        }
+    }
+    const tris = [];
+    for (let i = 1; i + 1 < poly.length; ++i) {
+        tris.push([poly[0], poly[i], poly[i + 1]]);
+    }
+    return tris;
+}
+
 function edge(ax, ay, bx, by, cx, cy) {
     return (cx - ax) * (by - ay) - (cy - ay) * (bx - ax);
 }
@@ -164,15 +227,24 @@ export function buildFragmentQuad(triangles, getVertex, width, height, px, py, f
     const cx = px + 0.5;
     const cy = py + 0.5;
 
-    // Cache projected vertices so each vertex's VS runs at most once.
-    const cache = new Map();
-    const project = (vi) => {
-        if (cache.has(vi)) {
-            return cache.get(vi);
+    // Cache vertex data so each vertex's VS runs at most once; project lazily
+    // (triangles crossing the w=0 plane are clipped before projection).
+    const dataCache = new Map();
+    const getData = (vi) => {
+        if (dataCache.has(vi)) {
+            return dataCache.get(vi);
         }
         const data = getVertex(vi);
-        const p = data ? { ...projectVertex(data.position, width, height), data } : null;
-        cache.set(vi, p);
+        dataCache.set(vi, data);
+        return data;
+    };
+    const projCache = new Map();
+    const project = (vi, data) => {
+        if (projCache.has(vi)) {
+            return projCache.get(vi);
+        }
+        const p = { ...projectVertex(data.position, width, height), data };
+        projCache.set(vi, p);
         return p;
     };
 
@@ -184,22 +256,31 @@ export function buildFragmentQuad(triangles, getVertex, width, height, px, py, f
             continue;
         }
         const tri = triangles[ti];
-        const p0 = project(tri[0]);
-        const p1 = project(tri[1]);
-        const p2 = project(tri[2]);
-        if (!p0 || !p1 || !p2) {
+        const d0 = getData(tri[0]);
+        const d1 = getData(tri[1]);
+        const d2 = getData(tri[2]);
+        if (!d0 || !d1 || !d2) {
             continue;
         }
-        const bary = barycentric(p0, p1, p2, cx, cy);
-        if (bary === null) {
-            continue;
+        let parts;
+        if (d0.position[3] > W_CLIP_EPSILON && d1.position[3] > W_CLIP_EPSILON && d2.position[3] > W_CLIP_EPSILON) {
+            parts = [[project(tri[0], d0), project(tri[1], d1), project(tri[2], d2)]];
+        } else {
+            parts = clipTriangleToNearW(d0, d1, d2).map((part) =>
+                part.map((d) => ({ ...projectVertex(d.position, width, height), data: d })));
         }
-        if (bary[0] < 0 || bary[1] < 0 || bary[2] < 0) {
-            continue; // pixel not inside this triangle
-        }
-        const depth = bary[0] * p0.ndcZ + bary[1] * p1.ndcZ + bary[2] * p2.ndcZ;
-        if (best === null || depth < best.depth) {
-            best = { tri, p: [p0, p1, p2], depth };
+        for (const [p0, p1, p2] of parts) {
+            const bary = barycentric(p0, p1, p2, cx, cy);
+            if (bary === null) {
+                continue;
+            }
+            if (bary[0] < 0 || bary[1] < 0 || bary[2] < 0) {
+                continue; // pixel not inside this triangle
+            }
+            const depth = bary[0] * p0.ndcZ + bary[1] * p1.ndcZ + bary[2] * p2.ndcZ;
+            if (best === null || depth < best.depth) {
+                best = { tri, p: [p0, p1, p2], depth };
+            }
         }
     }
 
