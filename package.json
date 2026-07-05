@@ -18,7 +18,8 @@
     "watch": "npm run watch:js",
     "watch:js": "rollup -c rollup.config.js --watch",
     "plugin:deps": "npm install --prefix claude-plugin/server",
-    "plugin:install": "npm run plugin:deps && claude plugin marketplace add ./claude-plugin && claude plugin install webgpu-inspector@webgpu-inspector-plugins"
+    "plugin:install": "npm run plugin:deps && claude plugin marketplace add . && claude plugin install webgpu-inspector@webgpu-inspector-plugins",
+    "plugin:update": "npm run build && claude plugin marketplace update webgpu-inspector-plugins && claude plugin update webgpu-inspector@webgpu-inspector-plugins"
   },
   "keywords": [
     "webgpu_inspector",
