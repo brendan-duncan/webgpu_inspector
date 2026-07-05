@@ -144,6 +144,85 @@ function writeBufferBytes(args) {
 // Build a compact summary of a capture: object/command counts, derived
 // render statistics, validation errors, and heuristic issues. `options` can
 // omit the heavier `methodCounts` map and `issues` list for a leaner result.
+// Walk the command list and group work by render/compute pass, keyed on the
+// pass label. This mirrors how an engine built on a render-graph names its
+// passes (shadows, gbuffer, ocean, tonemap, ...), so a capture summary reads in
+// the same terms the engine author thinks in — far faster than scanning raw
+// command indices. Each entry carries the pass's command range and the counts
+// that matter for spotting where the frame's cost and draws actually land.
+export function summarizePasses(commands) {
+  const passes = [];
+  let current = null;
+  let passIndex = -1;
+  for (let i = 0; i < commands.length; ++i) {
+    const cmd = commands[i];
+    if (!cmd || !cmd.method) {
+      continue;
+    }
+    const m = cmd.method;
+    if (m === "beginRenderPass" || m === "beginComputePass") {
+      passIndex++;
+      current = {
+        pass: passIndex,
+        type: m === "beginRenderPass" ? "render" : "compute",
+        label: (cmd.args && cmd.args[0] && cmd.args[0].label) || "",
+        beginCommand: i,
+        endCommand: null,
+        draws: 0,
+        dispatches: 0,
+        setPipeline: 0,
+        setBindGroup: 0,
+        pipelines: new Set(),
+        // Present only when the capture was taken with profilePasses/timestamps;
+        // the page merges these (ms) onto the beginRenderPass/beginComputePass
+        // command directly.
+        durationMs: (typeof cmd.duration === "number") ? cmd.duration : null
+      };
+      passes.push(current);
+      continue;
+    }
+    if (!current) {
+      continue;
+    }
+    if (m === "end") {
+      current.endCommand = i;
+      current = null;
+      continue;
+    }
+    if (DRAW_METHODS.has(m)) {
+      current.draws++;
+    } else if (DISPATCH_METHODS.has(m)) {
+      current.dispatches++;
+    } else if (m === "setPipeline") {
+      current.setPipeline++;
+      const id = refId(cmd.args && cmd.args[0]);
+      if (id !== null) {
+        current.pipelines.add(id);
+      }
+    } else if (m === "setBindGroup") {
+      current.setBindGroup++;
+    }
+  }
+  return passes.map((p) => {
+    const entry = {
+      pass: p.pass,
+      type: p.type,
+      label: p.label,
+      commandRange: [p.beginCommand, p.endCommand],
+      draws: p.draws,
+      dispatches: p.dispatches,
+      setPipeline: p.setPipeline,
+      setBindGroup: p.setBindGroup,
+      uniquePipelines: p.pipelines.size
+    };
+    if (p.durationMs !== null) {
+      // Round to microseconds — sub-µs precision here is noise.
+      entry.durationMs = Math.round(p.durationMs * 1000) / 1000;
+    }
+    return entry;
+  });
+}
+
 export function summarize(capture, options) {
   options = options || {};
   const objects = objectsOf(capture);
@@ -231,6 +310,27 @@ export function summarize(capture, options) {
   };
   if (options.includeMethodCounts !== false) {
     summary.methodCounts = methodCounts;
+  }
+  if (options.includePasses !== false) {
+    summary.passes = summarizePasses(commands);
+    // When the capture carried per-pass GPU timings (profilePasses), roll them
+    // up so the summary shows total frame GPU time and the costliest pass.
+    const timed = summary.passes.filter((p) => typeof p.durationMs === "number");
+    if (timed.length) {
+      let total = 0;
+      let slowest = timed[0];
+      for (const p of timed) {
+        total += p.durationMs;
+        if (p.durationMs > slowest.durationMs) {
+          slowest = p;
+        }
+      }
+      summary.gpuTiming = {
+        frameGpuTimeMs: Math.round(total * 1000) / 1000,
+        timedPasses: timed.length,
+        slowestPass: { pass: slowest.pass, label: slowest.label, durationMs: slowest.durationMs }
+      };
+    }
   }
   if (options.includeIssues !== false) {
     summary.issues = findIssues(capture);

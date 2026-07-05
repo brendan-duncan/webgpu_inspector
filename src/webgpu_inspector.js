@@ -610,6 +610,10 @@ export let webgpuInspector = null;
     //                   whose label matches this string or RegExp.
     //   passType      - "render" | "compute": only capture payloads for passes
     //                   of this type.
+    //   captureTimestamps - inject per-pass timestamp queries so each captured
+    //                   beginRenderPass/beginComputePass carries startTime/endTime/
+    //                   duration (ms). Requires adapter "timestamp-query" support;
+    //                   a no-op otherwise.
     beginFrameCapture(options) {
       if (!this._localCapture) {
         throw new Error("WebGPU Inspector: call initialize() before beginFrameCapture()");
@@ -626,6 +630,13 @@ export let webgpuInspector = null;
         ? options.maxTextureSize
         : maxTextureCaptureSize;
       this._captureScope = _buildCaptureScope(options);
+      // Opt-in per-pass GPU timing. The timestampWrites injection in
+      // _preMethodCall keys off _captureTimestamps; it only takes effect when the
+      // adapter exposed "timestamp-query" (see the requestDevice guard, which
+      // sets _timestampQuerySupported). When unsupported this silently stays off
+      // and passes simply carry no duration.
+      this._captureTimestamps = !!options.captureTimestamps && this._timestampQuerySupported;
+      this._timestampIndex = 0;
       this._captureFrameRequest = true;
     }
 
@@ -865,9 +876,25 @@ export let webgpuInspector = null;
     //   bytesPerRow, channels, sampleType, base64 }.
     async readTexture(textureId, opts) {
       opts = opts || {};
-      const texture = this._trackedObjects.get(textureId)?.deref();
+      let texture = this._trackedObjects.get(textureId)?.deref();
       if (!texture) {
         throw new Error(`No live GPU texture with id ${textureId}.`);
+      }
+      // Accept a TextureView id as well as a Texture id: a render pass colour/
+      // depth attachment is a TextureView, so resolving it here saves the caller
+      // a get_object round-trip just to find the underlying texture. Views store
+      // their source texture on __texture (set at createView time).
+      let resolvedFromViewId = null;
+      const isView = (typeof GPUTextureView !== "undefined" && texture instanceof GPUTextureView) ||
+        (texture.__texture !== undefined && texture.width === undefined);
+      if (isView) {
+        const src = texture.__texture;
+        if (!src) {
+          throw new Error(`Object ${textureId} is a TextureView with no resolvable source texture ` +
+            "(it may be an expired canvas view). Read the texture directly.");
+        }
+        resolvedFromViewId = textureId;
+        texture = src;
       }
       if (texture.__destroyed) {
         throw new Error(`Texture ${textureId} has been destroyed.`);
@@ -926,6 +953,8 @@ export let webgpuInspector = null;
           format, mipLevel, mipWidth: mipW, mipHeight: mipH,
           x, y, width: w, height: h, layer, bytesPerRow,
           channels: info.channels, sampleType: info.sampleType,
+          textureId: texture.__id,
+          resolvedFromViewId,
           base64: encodeBase64(bytes)
         };
       } finally {

@@ -284,6 +284,24 @@ export function createMcpServer(deps) {
       inputSchema: { type: "object", properties: {} }
     },
     {
+      name: "screenshot_page",
+      description: "Capture a PNG screenshot of an instrumented page and return it as an image. " +
+        "This reads the COMPOSITED page — the WebGPU canvas exactly as it was presented — so it " +
+        "is the reliable way to SEE what an engine rendered, independent of how it pools/aliases " +
+        "its render targets (reading a pooled target back after the frame is unreliable; the " +
+        "presented surface is not). Requires a page opened via launch_browser/open_page. Use this " +
+        "to visually verify a rendering change, not to inspect intermediate G-buffer contents " +
+        "(use read_texture / capture_frames for those).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          pageId: { type: "string", description: "Page to screenshot. Optional when exactly one page is connected." },
+          selector: { type: "string", description: "Optional CSS selector to clip the shot to one element (e.g. \"canvas\")." },
+          fullPage: { type: "boolean", description: "Capture the full scrollable page instead of just the viewport (default false). Ignored when selector is set." }
+        }
+      }
+    },
+    {
       name: "capture_frames",
       description: "Ask a connected page to capture one or more WebGPU frames, then " +
         "return a summary of the resulting capture (command/draw/pass counts, object " +
@@ -322,6 +340,24 @@ export function createMcpServer(deps) {
             type: "string",
             enum: ["render", "compute"],
             description: "Optional: only capture heavy payloads for passes of this type."
+          },
+          payloads: {
+            type: "string",
+            enum: ["all", "none", "buffers", "textures"],
+            description: "Convenience over maxBufferSize/maxTextureSize for capturing a large frame " +
+              "(e.g. a full game world) without a heavy upload. \"none\" records only the command " +
+              "list, object graph and validation errors — no buffer/texture bytes — which is the " +
+              "fastest way to inspect draw calls, passes and pipeline usage at scale. \"buffers\" or " +
+              "\"textures\" keeps only that payload kind. \"all\" (default) keeps both, subject to the " +
+              "maxBufferSize/maxTextureSize caps. Explicit maxBufferSize/maxTextureSize override this."
+          },
+          profilePasses: {
+            type: "boolean",
+            description: "Inject per-pass GPU timestamp queries so each render/compute pass in the " +
+              "capture carries a measured GPU duration (surfaced in get_capture_summary's passes " +
+              "breakdown as durationMs, and as frameGpuTimeMs total). Requires the adapter to support " +
+              "the \"timestamp-query\" feature (the inspector enables it automatically when available); " +
+              "a no-op otherwise. Default false. Pairs well with payloads:\"none\" for a light perf pass."
           }
         }
       }
@@ -355,6 +391,7 @@ export function createMcpServer(deps) {
         properties: {
           captureId: { type: "string", description: "Capture id (default: most recent)." },
           includeMethodCounts: { type: "boolean", description: "Include the per-method command counts map (default true)." },
+          includePasses: { type: "boolean", description: "Include the per-pass breakdown (label, command range, draw/dispatch/bind counts) grouped by render/compute pass (default true)." },
           includeIssues: { type: "boolean", description: "Include heuristic performance/correctness issues (default true)." }
         }
       }
@@ -489,14 +526,17 @@ export function createMcpServer(deps) {
         "canvas) on a connected page, without taking a full capture. Copies the texture to a readback " +
         "buffer, decodes per its format, and returns per-channel min/max/mean, the fraction of " +
         "unrasterised 'hole' texels (RGB all ~0 = the clear value showing through), and a small ASCII " +
-        "luminance view of the spatial pattern — never raw pixels. Pass a Texture id; a render pass " +
-        "attachment is a TextureView, so resolve its texture via get_object on the view first. The " +
-        "texture must have COPY_SRC, which the inspector adds to every texture while a capture is armed.",
+        "luminance view of the spatial pattern — never raw pixels. Pass a Texture id OR a TextureView " +
+        "id (a render pass attachment is a TextureView — it is resolved to its source texture " +
+        "automatically, so no get_object round-trip is needed). The texture must have COPY_SRC, which " +
+        "the inspector adds to every texture while a capture is armed. Note: reading an engine's POOLED " +
+        "render target after the frame can be unreliable (the pool may have recycled it); to see the " +
+        "final image use screenshot_page instead.",
       inputSchema: {
         type: "object",
         properties: {
           pageId: { type: "string", description: "Page to read from. Optional when exactly one page is connected." },
-          textureId: { type: "integer", description: "Numeric id of the GPU Texture object to read." },
+          textureId: { type: "integer", description: "Numeric id of the GPU Texture OR TextureView object to read (a view is resolved to its texture)." },
           mipLevel: { type: "integer", description: "Mip level (default 0).", minimum: 0 },
           layer: { type: "integer", description: "Array layer / depth slice (default 0).", minimum: 0 },
           x: { type: "integer", description: "Region origin x (default 0).", minimum: 0 },
@@ -562,14 +602,53 @@ export function createMcpServer(deps) {
       pages: bridge.listPages()
     }),
 
+    screenshot_page: async (args) => {
+      const instanceId = bridge.pageInstanceId(args.pageId);
+      // instanceId may be null for a single CDP page the bridge hasn't correlated;
+      // browser.screenshot falls back to the sole instrumented page in that case.
+      const shot = await browser.screenshot(instanceId, {
+        selector: args.selector,
+        fullPage: args.fullPage
+      });
+      const meta = {
+        url: shot.url,
+        mimeType: shot.mimeType,
+        byteLength: shot.byteLength,
+        selector: shot.selector,
+        viewport: shot.viewport
+      };
+      return {
+        __mcpContent: [
+          { type: "image", data: shot.base64, mimeType: shot.mimeType },
+          { type: "text", text: JSON.stringify(meta, null, 2) }
+        ]
+      };
+    },
+
     capture_frames: async (args) => {
+      // Translate the `payloads` convenience onto the per-kind size caps. A cap
+      // of 0 means "keep no bytes of this kind" (buffers truncate to 0, textures
+      // are skipped). An explicit maxBufferSize/maxTextureSize always wins.
+      let maxBufferSize = args.maxBufferSize;
+      let maxTextureSize = args.maxTextureSize;
+      if (args.payloads && args.payloads !== "all") {
+        const keepBuffers = args.payloads === "buffers";
+        const keepTextures = args.payloads === "textures";
+        if (maxBufferSize === undefined) {
+          maxBufferSize = keepBuffers ? -1 : 0;
+        }
+        if (maxTextureSize === undefined) {
+          maxTextureSize = keepTextures ? -1 : 0;
+        }
+      }
       const meta = await bridge.requestCapture({
         pageId: args.pageId,
         frames: args.frames,
-        maxBufferSize: args.maxBufferSize,
-        maxTextureSize: args.maxTextureSize,
+        maxBufferSize,
+        maxTextureSize,
         passLabel: args.passLabel,
-        passType: args.passType
+        passType: args.passType,
+        captureTimestamps: !!args.profilePasses
       });
       const json = store.getJson(meta.id);
       return { captureId: meta.id, summary: summarize(json) };
@@ -592,6 +671,7 @@ export function createMcpServer(deps) {
         captureId: id,
         summary: summarize(json, {
           includeMethodCounts: args.includeMethodCounts,
+          includePasses: args.includePasses,
           includeIssues: args.includeIssues
         })
       };
@@ -699,6 +779,11 @@ export function createMcpServer(deps) {
     }
     try {
       const result = await handler(args);
+      // A handler may return raw MCP content items (e.g. an image screenshot)
+      // that must not be JSON-stringified. Pass those through verbatim.
+      if (result && Array.isArray(result.__mcpContent)) {
+        return { content: result.__mcpContent };
+      }
       const clamped = typeof result === "string" ? result : clampResult(result);
       const text = typeof clamped === "string"
         ? clamped

@@ -245,7 +245,8 @@ export class BridgeClient {
       maxBufferSize: (typeof msg.maxBufferSize === "number") ? msg.maxBufferSize : undefined,
       maxTextureSize: (typeof msg.maxTextureSize === "number") ? msg.maxTextureSize : undefined,
       passLabel: msg.passLabel,
-      passType: msg.passType
+      passType: msg.passType,
+      captureTimestamps: !!msg.captureTimestamps
     };
 
     this._send({

@@ -287,6 +287,22 @@ export class Bridge {
     return [...this._pages.values()].map((p) => this._pageInfo(p));
   }
 
+  // Map a bridge pageId to the browser instanceId that instrumented it (the
+  // page's `hello` name, which the CDP controller set to the instanceId). Lets
+  // the MCP layer drive CDP-only features (screenshots) for a bridge page.
+  // Returns null when the page can't be resolved; falls back to the sole page
+  // when no id is given and exactly one page is connected.
+  pageInstanceId(pageId) {
+    if (pageId) {
+      const p = this._pages.get(pageId);
+      return p ? (p.name || null) : null;
+    }
+    if (this._pages.size === 1) {
+      return [...this._pages.values()][0].name || null;
+    }
+    return null;
+  }
+
   // Resolve once a page connects whose `hello` name matches, or with null on
   // timeout. Used to correlate a CDP-opened tab with its bridge connection.
   waitForPage(name, timeoutMs) {
@@ -357,6 +373,9 @@ export class Bridge {
       }
       if (opts.passType) {
         message.passType = opts.passType;
+      }
+      if (opts.captureTimestamps) {
+        message.captureTimestamps = true;
       }
       try {
         page.ws.send(JSON.stringify(message));

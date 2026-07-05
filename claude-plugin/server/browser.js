@@ -178,7 +178,7 @@ export class BrowserController {
 
   async _doInstrumentPage(page, target) {
     const instanceId = randomUUID();
-    this._pages.set(instanceId, { target, url: page.url() });
+    this._pages.set(instanceId, { target, page, url: page.url() });
 
     try {
       // Let the page open a WebSocket / fetch to the localhost bridge even
@@ -218,6 +218,77 @@ export class BrowserController {
       }
     }
     return { instanceId, url: page.url() };
+  }
+
+  // Capture a PNG screenshot of an instrumented page and return it base64-encoded.
+  // This reads the *composited* page — including the WebGPU canvas as it was
+  // presented — so it works regardless of how the engine pools its render
+  // targets (a pooled/aliased texture read back after the frame is unreliable;
+  // the presented surface is not). Pass an instanceId to pick a page, or omit it
+  // when exactly one page is instrumented. An optional CSS `selector` clips the
+  // shot to a single element (e.g. "canvas").
+  async screenshot(instanceId, opts) {
+    opts = opts || {};
+    if (!this._browser) {
+      throw new Error("No browser connected. Use launch_browser or attach_browser first.");
+    }
+    let record = instanceId ? this._pages.get(instanceId) : null;
+    if (!record && !instanceId) {
+      if (this._pages.size === 1) {
+        record = [...this._pages.values()][0];
+      } else if (this._pages.size === 0) {
+        throw new Error("No instrumented pages to screenshot. Open one with open_page.");
+      } else {
+        throw new Error(`${this._pages.size} instrumented pages. Pass a pageId to choose one.`);
+      }
+    }
+    if (!record) {
+      throw new Error(`No instrumented page for id "${instanceId}". ` +
+        "Screenshots require a page opened via launch_browser/open_page (CDP-driven).");
+    }
+    let page = record.page;
+    if (!page || page.isClosed?.()) {
+      try {
+        page = await record.target.page();
+      } catch (e) {
+        page = null;
+      }
+    }
+    if (!page) {
+      throw new Error("The page is no longer available (it may have been closed).");
+    }
+
+    const shotOpts = { type: "png", captureBeyondViewport: false };
+    let buffer;
+    if (opts.selector) {
+      const el = await page.$(opts.selector);
+      if (!el) {
+        throw new Error(`No element matched selector "${opts.selector}" on the page.`);
+      }
+      buffer = await el.screenshot(shotOpts);
+    } else {
+      shotOpts.fullPage = !!opts.fullPage;
+      buffer = await page.screenshot(shotOpts);
+    }
+    const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+    let viewport = null;
+    try {
+      viewport = await page.evaluate(() => ({
+        width: window.innerWidth,
+        height: window.innerHeight,
+        devicePixelRatio: window.devicePixelRatio
+      }));
+    } catch (e) {
+      /* viewport is best-effort metadata only */
+    }
+    return {
+      base64: buf.toString("base64"),
+      mimeType: "image/png",
+      byteLength: buf.length,
+      url: page.url(),
+      selector: opts.selector || null,
+      viewport
+    };
   }
 
   async dispose() {
