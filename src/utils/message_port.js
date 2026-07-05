@@ -61,13 +61,17 @@ export class MessagePort {
         }
         // null means "not a chunk, dispatch the message as-is"; otherwise it's the reassembled message.
         const msg = result === null ? message : result;
-        for (const listener of self.listeners) {
-          try {
-            listener(msg);
-          } catch (e) {
-            console.error(`[WebGPU Inspector] Error in message listener for port ${self.name}:`, e);
+        // A coalesced batch (the sender bundled several high-frequency messages into one to cut
+        // per-message overhead) is unwrapped here so listeners receive each sub-message as if it
+        // had arrived on its own — transparent, like chunk reassembly above.
+        const batch = msg && msg.__webgpuInspectorBatch;
+        if (Array.isArray(batch)) {
+          for (const sub of batch) {
+            self._dispatch(sub);
           }
+          return;
         }
+        self._dispatch(msg);
       });
 
       this._isConnecting = false;
@@ -197,6 +201,21 @@ export class MessagePort {
     } catch (e) {
       console.error(`[WebGPU Inspector] Failed to reassemble chunked message on port ${this.name}:`, e);
       return undefined;
+    }
+  }
+
+  /**
+   * Dispatches a single (fully reassembled, unbatched) message to all listeners.
+   * @param {Object} msg The message to deliver.
+   * @private
+   */
+  _dispatch(msg) {
+    for (const listener of this.listeners) {
+      try {
+        listener(msg);
+      } catch (e) {
+        console.error(`[WebGPU Inspector] Error in message listener for port ${this.name}:`, e);
+      }
     }
   }
 

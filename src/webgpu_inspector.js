@@ -24,10 +24,27 @@ export let webgpuInspector = null;
 
   const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 
-  // How much data should we send to the panel via message as a chunk.
-  // Messages can't send that much data.
-  const maxDataChunkSize = (1024 * 1024); // 1MB
+  // How much data should we send to the panel via message as a chunk. Each chunk becomes its
+  // own page→content-script→background→panel message (base64-encoded, so ~1.33x on the wire),
+  // and every hop re-serializes it, so fewer/larger chunks means far less per-message overhead
+  // for big buffer/texture captures. 16MB binary → ~21MB base64, which stays under MessagePort's
+  // ~32MB transparent-split threshold and Chrome's 64MB per-message port cap.
+  const maxDataChunkSize = (16 * 1024 * 1024); // 16MB
   const maxBufferCaptureSize = 64 * 1024; // 64KB — light by default; raise via capture options.
+
+  // High-frequency, panel-only notification messages that carry no binary payload. During capture
+  // (or heavy object churn) hundreds or thousands of these fire, each otherwise paying a full
+  // CustomEvent clone + two JSON serializations + two IPC hops. They are coalesced into a single
+  // batched message (see _postMessage / _flushPendingMessages) that MessagePort unwraps on receive.
+  // Only page→panel notifications the panel consumes purely as state updates belong here — anything
+  // the page itself acts on (DeltaTime, capture/buffer/texture payloads) must stay unbatched.
+  const _batchableActions = new Set([
+    Actions.AddObject,
+    Actions.DeleteObject,
+    Actions.DeleteObjects,
+    Actions.ObjectSetLabel,
+    Actions.ResolveAsyncObject
+  ]);
   // Default cap on captured texture pixel data, per texture (bytes). Full-res
   // render targets are large, so the programmatic/bridge capture path skips
   // textures above this by default to stay light; raise or set -1 to disable.
@@ -106,6 +123,12 @@ export let webgpuInspector = null;
       this._captureFrameCount = 0;
       this._pendingMapCount = 0; // Number of pending async map requests
       this._hasPendingDeviceDestroy = false;
+
+      // Coalescing buffer for high-frequency notification messages (see _batchableActions).
+      // Filled by _postMessage and drained by _flushPendingMessages on the next microtask, or
+      // eagerly whenever a non-batchable message is posted (to preserve global send order).
+      this._pendingMessages = [];
+      this._messageFlushScheduled = false;
 
       // Local-capture mode (manual injection): when `initialize()` is called,
       // the same messages that would have gone to the devtools panel are also
@@ -926,11 +949,62 @@ export let webgpuInspector = null;
 
       // Feed the local capture store (manual-injection use case). Same
       // payload the devtools panel consumes, so the resulting JSON is
-      // identical to a panel-side Save Capture.
+      // identical to a panel-side Save Capture. Done per-message (not per-batch)
+      // so the store sees the same stream regardless of coalescing.
       if (this._localCapture) {
         this._localCapture.processMessage(message);
       }
 
+      // High-frequency notification? Queue it for coalescing instead of sending immediately.
+      if (_batchableActions.has(message.action)) {
+        this._pendingMessages.push(message);
+        if (!this._messageFlushScheduled) {
+          this._messageFlushScheduled = true;
+          // Microtask flush bounds latency without waiting for a frame: a synchronous burst of
+          // object creations coalesces into one batch, but nothing lingers past the current task.
+          Promise.resolve().then(() => { this._flushPendingMessages(); });
+        }
+        return;
+      }
+
+      // A non-batchable message must not overtake queued notifications, so flush them first.
+      this._flushPendingMessages();
+      this._dispatchMessage(message);
+    }
+
+    // Sends the pending coalesced notification messages as a single batched message. A batch of one
+    // is sent as-is (no wrapper) so the common case adds no overhead.
+    _flushPendingMessages() {
+      this._messageFlushScheduled = false;
+      const messages = this._pendingMessages;
+      if (messages.length === 0) {
+        return;
+      }
+      this._pendingMessages = [];
+
+      if (messages.length === 1) {
+        this._dispatchMessage(messages[0]);
+        return;
+      }
+
+      // Mirror the routing flags of a normal page message so the wrapper flows through the
+      // content-script/iframe/worker forwarding identically; MessagePort unwraps it on the panel
+      // side via the __webgpuInspectorBatch marker and dispatches each sub-message to listeners.
+      const batch = {
+        action: Actions.MessageBatch,
+        __webgpuInspector: true,
+        __webgpuInspectorPage: true,
+        __webgpuInspectorWorker: !_window,
+        __webgpuInspectorBatch: messages
+      };
+      if (this._iframeOrigin !== null) {
+        batch.__webgpuInspectorFrame = true;
+        batch.__webgpuInspectorFrameOrigin = this._iframeOrigin;
+      }
+      this._dispatchMessage(batch);
+    }
+
+    _dispatchMessage(message) {
       // If _window is null, we're in a worker context. Send the message to the main thread,
       // which will then send it to the devtools panel.
       if (!_window) {

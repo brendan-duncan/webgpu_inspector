@@ -16,6 +16,12 @@ export const Actions = {
   CaptureBufferData: "webgpu_inspect_capture_buffer_data",
   WriteBuffer: "wrebgpu_inspect_write_buffer",
 
+  // Wrapper action for a coalesced group of high-frequency notification messages
+  // (AddObject, DeleteObject, etc.). The page batches them into one message to cut
+  // per-message serialization/IPC overhead; MessagePort unwraps it transparently on
+  // receive (via the __webgpuInspectorBatch marker) so panel listeners never see it.
+  MessageBatch: "webgpu_inspect_message_batch",
+
   Recording: "webgpu_record_recording",
   RecordingCommand: "webgpu_record_command",
   RecordingDataCount: "webgpu_record_data_count",
