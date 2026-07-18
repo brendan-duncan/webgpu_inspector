@@ -622,7 +622,9 @@ export class CapturePanel {
         return false;
       }
       timed.sort((a, b) => a.startTime - b.startTime);
-      timeline.setData({ commands: timed, firstTime: timed[0].startTime });
+      const budgetMs = this.database.refreshPeriod > 0
+        ? this.database.refreshPeriod : this.database.deltaFrameTime;
+      timeline.setData({ commands: timed, firstTime: timed[0].startTime, budgetMs });
       return true;
     };
     // Imported captures and late-rebuilt live tabs already have the data on the
@@ -3393,6 +3395,7 @@ export class CapturePanel {
       }
     }
     if (timed.length) {
+      this._renderFrameBound(root);
       this._renderPassTimingsSection(root, timed);
     }
 
@@ -3406,6 +3409,60 @@ export class CapturePanel {
         continue;
       }
       this._renderStatsSection(root, title, keys, stats);
+    }
+  }
+
+  /**
+   * "Frame Bound" verdict card. Compares main-thread submit time (CPU) and GPU busy
+   * time against the frame budget (display refresh interval) and names the bottleneck.
+   * GPU time is exact for this capture; CPU/frame are the most recent live values, so
+   * the verdict is a strong heuristic rather than a hardware-aligned measurement.
+   */
+  _renderFrameBound(parent) {
+    const db = this.database;
+    const frame = db.deltaFrameTime;
+    const cpu = db.cpuFrameTime;
+    const gpu = db.gpuFrameTime;
+    const budget = db.refreshPeriod > 0 ? db.refreshPeriod : frame;
+    if (!(budget > 0)) {
+      return;
+    }
+
+    let verdict, color;
+    if (cpu > 0 && cpu / budget > 0.8) {
+      verdict = "CPU / main-thread bound"; color = "#c08040";
+    } else if (gpu > 0 && gpu / budget > 0.8) {
+      verdict = "GPU bound"; color = "#4a8db8";
+    } else {
+      verdict = "vsync / present bound — headroom on both"; color = "#4a9d5a";
+    }
+
+    const section = new Div(parent, { style: "margin-bottom: 18px;" });
+    new Div(section, { text: "Frame Bound", style:
+      "font-size: 11pt; font-weight: bold; margin-bottom: 4px; color: var(--fg-primary);" });
+    new Div(section, { text: verdict, style:
+      `font-size: 10pt; font-weight: bold; color: #fff; background: ${color}; ` +
+      "display: inline-block; padding: 2px 10px; border-radius: 10px; margin-bottom: 8px;" });
+
+    const row = (label, ms, pct, barColor) => {
+      const r = new Div(section, { style:
+        "display: flex; align-items: center; gap: 8px; margin: 3px 0; font-size: 9pt;" });
+      new Div(r, { text: label, style: "width: 60px; color: var(--fg-secondary);" });
+      const track = new Div(r, { style:
+        "flex: 1; height: 12px; background: var(--bg-elevated); border-radius: 3px; overflow: hidden;" });
+      new Div(track, { style:
+        `height: 100%; width: ${Math.min(pct, 100)}%; background: ${barColor};` });
+      new Div(r, { text: `${ms.toFixed(2)}ms (${pct.toFixed(0)}%)`, style:
+        "width: 130px; text-align: right; font-variant-numeric: tabular-nums; color: var(--fg-primary);" });
+    };
+
+    new Div(section, { text: `Budget: ${budget.toFixed(2)}ms (${db.refreshPeriod > 0 ? "refresh" : "frame"})`,
+      style: "font-size: 9pt; color: var(--fg-secondary); margin-bottom: 4px;" });
+    if (cpu >= 0) {
+      row("CPU", cpu, (cpu / budget) * 100, "#5fd08a");
+    }
+    if (gpu >= 0) {
+      row("GPU", gpu, (gpu / budget) * 100, "#4a8db8");
     }
   }
 

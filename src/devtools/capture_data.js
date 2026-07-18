@@ -307,6 +307,20 @@ export class CaptureData {
 
         timestampMap.sort((a, b) => { return a.startTime - b.startTime; });
 
+        // Whole-frame GPU busy time = first pass start -> last pass end. This covers gaps
+        // between passes; a bare sum of durations would undercount serialized idle. Feeds
+        // the panel's CPU-vs-GPU bound verdict.
+        let gpuFrameTime = 0;
+        if (timestampMap.length) {
+          const first = timestampMap[0];
+          const last = timestampMap.reduce((a, b) => (b.endTime > a.endTime ? b : a));
+          gpuFrameTime = last.endTime - first.startTime;
+        }
+        this.gpuFrameTime = gpuFrameTime;
+        if (this.database) {
+          this.database.gpuFrameTime = gpuFrameTime;
+        }
+
         this.timestampData = { commands: timestampMap, firstTime };
         this.onTimestampDataReady.emit(this.timestampData);
         this.onUpdateCaptureStatus.emit();

@@ -1,3 +1,14 @@
+## v1.6.0
+
+### Inspector Panel
+
+* **CPU / GPU time.** Estimate how much of the frame time is spent in the CPU vs the GPU.
+* **Skip frame detection.** Identify and count skip frames, indicating how often the frame render is stalling.
+
+### Capture Panel
+
+* **CPU / GPU bound detection.** Use frame timings to estimate if the captured frame is CPU or GPU bound.
+
 ## v1.5.0
 
 ### Capture Panel

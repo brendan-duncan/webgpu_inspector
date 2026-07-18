@@ -83,6 +83,11 @@ export class TimelineWidget extends Widget {
       return;
     }
 
+    // Frame budget (display refresh interval, ms). GPU span and budget are both
+    // wall-clock ms, so they're directly comparable: the passes fill some fraction
+    // of the budget, and overflow past the marker means the GPU can't keep up.
+    const budgetMs = data?.budgetMs ?? 0;
+
     let minStart = Infinity;
     let maxEnd = -Infinity;
     for (const cmd of commands) {
@@ -97,6 +102,26 @@ export class TimelineWidget extends Widget {
     if (!(span > 0)) {
       return;
     }
+    // Scale so both the GPU passes and the budget marker fit across the strip.
+    const scaleMax = Math.max(span, budgetMs);
+
+    // Budget marker: a dashed vertical line where the frame budget falls. Passes to
+    // its left = GPU has headroom; passes crossing it = GPU-bound.
+    if (budgetMs > 0 && budgetMs < scaleMax) {
+      const marker = document.createElement("div");
+      marker.style.cssText = [
+        "position: absolute",
+        "top: 0",
+        "bottom: 0",
+        `left: ${(budgetMs / scaleMax) * 100}%`,
+        "width: 0",
+        "border-left: 1px dashed #e0b050",
+        "pointer-events: none",
+        "z-index: 5"
+      ].join(";");
+      marker.title = `Frame budget: ${budgetMs.toFixed(2)}ms`;
+      this._strip.element.appendChild(marker);
+    }
 
     let totalGpuMs = 0;
     for (const cmd of commands) {
@@ -104,10 +129,10 @@ export class TimelineWidget extends Widget {
 
       const isRender = cmd.method === "beginRenderPass";
       const color = isRender ? renderColor : computeColor;
-      const leftPct = ((cmd.startTime - minStart) / span) * 100;
+      const leftPct = ((cmd.startTime - minStart) / scaleMax) * 100;
       // CSS `min-width: ${minSegmentPx}px` below keeps tiny passes visible; the
       // width percentage just needs to be proportional and non-negative.
-      const widthPct = Math.max((cmd.duration / span) * 100, 0);
+      const widthPct = Math.max((cmd.duration / scaleMax) * 100, 0);
 
       const seg = document.createElement("div");
       seg.style.cssText = [
@@ -149,7 +174,12 @@ export class TimelineWidget extends Widget {
       this._segments.push(seg);
     }
 
-    this._scale.element.textContent = `${commands.length} passes - ${totalGpuMs.toFixed(2)}ms GPU - ${span.toFixed(2)}ms span`;
+    let scaleText = `${commands.length} passes - ${totalGpuMs.toFixed(2)}ms GPU - ${span.toFixed(2)}ms span`;
+    if (budgetMs > 0) {
+      const pct = (span / budgetMs) * 100;
+      scaleText += ` - ${pct.toFixed(0)}% of ${budgetMs.toFixed(2)}ms budget`;
+    }
+    this._scale.element.textContent = scaleText;
     this._element.style.height = (stripHeightPx + 14) + "px";
   }
 

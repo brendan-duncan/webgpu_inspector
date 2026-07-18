@@ -85,6 +85,10 @@ export class InspectPanel {
 
     const stats = new Span(controlBar, { class: "control-bar-stats" });
     this.uiFrameTime = new Span(stats, { style: "width: 140px; overflow: hidden;" });
+    // Live CPU/GPU-bound verdict + dropped-frame counter live in the control bar so the
+    // plot row's two meters stay balanced.
+    this.uiBoundBadge = new Span(stats, { text: "", style: "font-size: 9pt; padding: 1px 6px; border-radius: 8px; color: #fff; background: #555; margin-right: 8px;" });
+    this.uiDroppedBadge = new Span(stats, { text: "", style: "font-size: 9pt; color: #e06060; margin-right: 8px;" });
     this.uiTotalTextureMemory = new Span(stats, { class: "control-bar-stat" });
     this.uiTotalBufferMemory = new Span(stats, { class: "control-bar-stat" });
 
@@ -94,10 +98,28 @@ export class InspectPanel {
       window.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/inspect.md", "_blank");
     }});
 
-    this.plots = new Div(parent, { style: "display: flex; flex-direction: row; margin-bottom: 10px; margin-top: 0px; padding-top: 0px; height: 30px;" });
-    new Span(this.plots, { text: "Frame Time", class: "text-secondary mt-sm mr-sm", style: "font-size: 11pt; color: #ccc;"  });
-    this.frameRatePlot = new Plot(this.plots, { precision: 2, suffix: "ms", class: "plot-container", style: "flex-grow: 1; margin-right: 10px; max-width: 500px;" });
-    this.frameRateData = this.frameRatePlot.addData("Frame Time");
+    // overflow:hidden keeps a too-narrow window from pushing items out of the row; the
+    // label can shrink/clip (flex 0 1 auto below) so the meters keep priority on width.
+    this.plots = new Div(parent, { style: "display: flex; flex-direction: row; flex-wrap: nowrap; align-items: stretch; overflow: hidden; margin-bottom: 10px; margin-top: 0px; padding-top: 0px; height: 30px;" });
+
+    // Frame-time label with a spaced color key for the three overlaid lines. Allowed to
+    // shrink and clip (flex 0 1 auto) so the meters stay visible when the panel narrows.
+    const frameLabel = new Span(this.plots, { style: "display: inline-flex; align-items: center; gap: 10px; margin-right: 12px; overflow: hidden; flex: 0 1 auto; min-width: 0; white-space: nowrap;" });
+    new Span(frameLabel, { text: "Frame Time", class: "text-secondary", style: "font-size: 11pt; color: #ccc;" });
+    const legend = new Span(frameLabel, { style: "display: inline-flex; align-items: center; gap: 10px; font-size: 8pt;" });
+    new Span(legend, { text: "■ frame", style: "color: #cccccc;" });
+    new Span(legend, { text: "■ cpu", style: "color: #5fd08a;" });
+    const gpuKey = new Span(legend, { text: "■ gpu*", style: "color: #4a8db8;" });
+    gpuKey.element.title = "gpu* = last captured frame's GPU time, held between captures";
+
+    // flex: 1 1 0 so both meters grow equally to fill the panel width (no max-width),
+    // with a min-width floor so they never collapse to nothing on a narrow window.
+    // minValue:0 anchors the baseline; maxValue (set live to ~4x refresh) clips huge
+    // dropped-frame spikes so normal variation stays readable.
+    this.frameRatePlot = new Plot(this.plots, { precision: 2, suffix: "ms", sharedScale: true, minValue: 0, class: "plot-container", style: "flex: 1 1 0; min-width: 80px; margin-right: 10px;" });
+    this.frameRateData = this.frameRatePlot.addData("Frame Time", "#cccccc");
+    this.cpuTimeData = this.frameRatePlot.addData("CPU", "#5fd08a");
+    this.gpuTimeData = this.frameRatePlot.addData("GPU", "#4a8db8");
 
     this._objectCountType = null;
     this._objectCountObject = null;
@@ -110,7 +132,7 @@ export class InspectPanel {
       onChange: (value) => {
         self._changeObjectCountPlot(value);
       } });
-    this.objectCountPlot = new Plot(this.plots, { class: "plot-container", style: "flex-grow: 1; max-width: 500px;" });
+    this.objectCountPlot = new Plot(this.plots, { class: "plot-container", style: "flex: 1 1 0; min-width: 80px;" });
     this.objectCountData = this.objectCountPlot.addData("Object Count");
     this._changeObjectCountPlot(0);
 
@@ -333,17 +355,66 @@ export class InspectPanel {
   }
 
   _updateFrameStats() {
-    this.uiFrameTime.text = `Frame Time: ${this.database.deltaFrameTime.toFixed(2)}ms`;
-    const totalTextureMemory = this.database.totalTextureMemory.toLocaleString("en-US");
+    const db = this.database;
+    this.uiFrameTime.text = `Frame Time: ${db.deltaFrameTime.toFixed(2)}ms`;
+    const totalTextureMemory = db.totalTextureMemory.toLocaleString("en-US");
     this.uiTotalTextureMemory.text = `Texture Memory: ${totalTextureMemory} Bytes`;
-    const totalBufferMemory = this.database.totalBufferMemory.toLocaleString("en-US");
+    const totalBufferMemory = db.totalBufferMemory.toLocaleString("en-US");
     this.uiTotalBufferMemory.text = `Buffer Memory: ${totalBufferMemory} Bytes`;
 
-    this.frameRateData.add(this.database.deltaFrameTime);
+    // All three series get a sample every frame so their x positions stay aligned.
+    // CPU is live; GPU holds its last captured value (0 until the first capture).
+    this.frameRateData.add(db.deltaFrameTime);
+    this.cpuTimeData.add(db.cpuFrameTime >= 0 ? db.cpuFrameTime : 0);
+    this.gpuTimeData.add(db.gpuFrameTime >= 0 ? db.gpuFrameTime : 0);
+    if (db.refreshPeriod > 0) {
+      this.frameRatePlot.setThreshold(db.refreshPeriod);
+      // Clip at ~4 refreshes so a single long stall doesn't flatten the whole plot;
+      // drops still read as lines pegged at the ceiling above the dashed refresh line.
+      this.frameRatePlot.setMaxValue(db.refreshPeriod * 4);
+    }
+    this._updateBoundBadge();
     this.frameRatePlot.draw();
 
-    this.objectCountData.add(this._objectCountObject?.size ?? this.database.allObjects.size);
+    this.objectCountData.add(this._objectCountObject?.size ?? db.allObjects.size);
     this.objectCountPlot.draw();
+  }
+
+  // Classify the frame as CPU-, GPU-, or vsync-bound from the CPU submit / GPU busy
+  // ratios against the frame interval. The CPU ratio is smoothed to avoid per-frame
+  // flicker. GPU is only known after a Profile-Passes capture; without it the badge
+  // reports "GPU/vsync" (main thread has headroom, but we can't split the two).
+  _updateBoundBadge() {
+    const db = this.database;
+    const frame = db.deltaFrameTime;
+    if (!(frame > 0)) {
+      return;
+    }
+    const cpuRatio = db.cpuFrameTime > 0 ? db.cpuFrameTime / frame : 0;
+    const gpuRatio = db.gpuFrameTime > 0 ? db.gpuFrameTime / frame : 0;
+    this._cpuRatioEma = this._cpuRatioEma == null
+      ? cpuRatio : (this._cpuRatioEma * 0.8 + cpuRatio * 0.2);
+
+    let text, color;
+    if (this._cpuRatioEma > 0.8) {
+      text = "CPU-bound"; color = "#c08040";
+    } else if (gpuRatio > 0.8) {
+      text = "GPU-bound"; color = "#4a8db8";
+    } else if (gpuRatio > 0) {
+      text = "vsync-bound"; color = "#4a9d5a";
+    } else {
+      text = "GPU/vsync"; color = "#4a9d5a";
+    }
+    this.uiBoundBadge.text = text;
+    this.uiBoundBadge.element.style.background = color;
+    this.uiBoundBadge.element.title =
+      `CPU ${db.cpuFrameTime >= 0 ? db.cpuFrameTime.toFixed(2) : "?"}ms · ` +
+      `GPU ${db.gpuFrameTime >= 0 ? db.gpuFrameTime.toFixed(2) : "?"}ms · ` +
+      `frame ${frame.toFixed(2)}ms`;
+
+    if (db.totalSkippedFrames > 0) {
+      this.uiDroppedBadge.text = `⚠ ${db.totalSkippedFrames} dropped`;
+    }
   }
 
   _objectLabelChanged(id, object, label) {

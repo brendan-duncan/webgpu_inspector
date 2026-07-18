@@ -93,10 +93,29 @@ export class Plot extends Div {
 
     this.suffix = options.suffix ?? "";
     this.precision = options.precision ?? 0;
+    // When true, every series (and the threshold line) share one value scale so the
+    // lines are directly comparable. Single-series plots leave this off and self-scale.
+    this.sharedScale = options.sharedScale ?? false;
+    this.threshold = options.threshold ?? null;         // horizontal reference value
+    this.thresholdColor = options.thresholdColor ?? "#e0b050";
+    // Optional fixed scale bounds (shared-scale plots only). Anchors the baseline and
+    // clips outliers so one spike can't crush the range; values outside just clip.
+    this.minValue = options.minValue ?? null;
+    this.maxValue = options.maxValue ?? null;
     this._drawPending = false;
 
     this.onResize();
     this.draw();
+
+    // The element's real width isn't known until flex layout settles, and can change
+    // afterwards without a window resize (sibling/panel changes). Observe it directly so
+    // the canvas and sample buffers track the visible width. Without this they keep their
+    // construction-time size, which is often wider than the visible canvas, so the plot
+    // fills well past the right edge before it starts scrolling.
+    if (typeof ResizeObserver !== "undefined") {
+      this._resizeObserver = new ResizeObserver(() => this.onResize());
+      this._resizeObserver.observe(this.element);
+    }
   }
 
   reset() {
@@ -116,13 +135,28 @@ export class Plot extends Div {
       for (const data of this.data.values()) {
         data.size = this.width;
       }
+      // Setting canvas.width clears it; redraw so the plot isn't blank until the next
+      // data tick (matters for plots that only update on a running render loop).
+      this.draw();
     }
   }
 
-  addData(name) {
+  addData(name, color) {
     const data = new PlotData(name, this.width);
+    data.color = color ?? "#999";
     this.data.set(name, data);
     return data;
+  }
+
+  setThreshold(value, color) {
+    this.threshold = value;
+    if (color) {
+      this.thresholdColor = color;
+    }
+  }
+
+  setMaxValue(value) {
+    this.maxValue = value;
   }
 
   getData(name) {
@@ -142,15 +176,72 @@ export class Plot extends Div {
 
   _render() {
     const ctx = this.context;
+    const h = this.height;
     ctx.fillStyle = "#333";
     ctx.fillRect(0, 0, this.width, this.height);
 
-    for (const data of this.data.values()) {
-      this._drawData(data);
+    if (!this.sharedScale) {
+      // Legacy path: each series self-scales and draws its own labels.
+      for (const data of this.data.values()) {
+        this._drawData(data);
+      }
+      return;
     }
+
+    // Shared scale: one value range spanning every series and the threshold.
+    let min = Infinity;
+    let max = -Infinity;
+    for (const data of this.data.values()) {
+      if (data.count === 0) {
+        continue;
+      }
+      if (data.min < min) min = data.min;
+      if (data.max > max) max = data.max;
+    }
+    if (this.threshold != null) {
+      if (this.threshold < min) min = this.threshold;
+      if (this.threshold > max) max = this.threshold;
+    }
+    if (!isFinite(min)) {
+      min = 0;
+      max = 1;
+    }
+    // Fixed bounds override the data-derived range (baseline anchor + outlier clip).
+    if (this.minValue != null) {
+      min = this.minValue;
+    }
+    if (this.maxValue != null) {
+      max = this.maxValue;
+    }
+    if (max === min) {
+      min -= 1;
+      max += 1;
+    }
+    const range = max - min;
+
+    // Threshold line under the series (e.g. the display refresh interval).
+    if (this.threshold != null && range > 0) {
+      const y = h - ((this.threshold - min) / range) * h;
+      ctx.strokeStyle = this.thresholdColor;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(this.width, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    for (const data of this.data.values()) {
+      this._drawData(data, min, max);
+    }
+
+    const format = (v) => `${v.toFixed(this.precision)}${this.suffix}`;
+    ctx.fillStyle = "#fff";
+    ctx.fillText(format(max), 2, 10);
+    ctx.fillText(format(min), 2, h - 1);
   }
 
-  _drawData(data) {
+  _drawData(data, sharedMin, sharedMax) {
     const ctx = this.context;
     const h = this.height;
     const count = data.count;
@@ -159,21 +250,29 @@ export class Plot extends Div {
       return;
     }
 
-    let min = data.min;
-    let max = data.max;
-
-    if (max === min) {
-      min -= 1;
-      max += 1;
+    let min;
+    let max;
+    if (sharedMin != null) {
+      min = sharedMin;
+      max = sharedMax;
+    } else {
+      min = data.min;
+      max = data.max;
+      if (max === min) {
+        min -= 1;
+        max += 1;
+      }
+      const format = (v) => `${v.toFixed(this.precision)}${this.suffix}`;
+      ctx.fillStyle = "#fff";
+      ctx.fillText(format(max), 2, 10);
+      ctx.fillText(format(min), 2, h - 1);
     }
 
-    const format = (v) => `${v.toFixed(this.precision)}${this.suffix}`;
-    ctx.fillStyle = "#fff";
-    ctx.fillText(format(max), 2, 10);
-    ctx.fillText(format(min), 2, h - 1);
-
     const range = max - min;
-    ctx.strokeStyle = "#999";
+    if (range <= 0) {
+      return;
+    }
+    ctx.strokeStyle = data.color || "#999";
     ctx.beginPath();
     let v = data.get(0);
     v = ((v - min) / range) * h;

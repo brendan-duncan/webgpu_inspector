@@ -45,6 +45,11 @@ export class ObjectDatabase {
     this.totalBufferMemory = 0;
 
     this.deltaFrameTime = -1;
+    this.cpuFrameTime = -1;        // main-thread submit time of the last frame (ms)
+    this.gpuFrameTime = -1;        // GPU busy time of the last captured frame (ms); set by CaptureData
+    this.refreshPeriod = 0;        // estimated display refresh interval (ms)
+    this.skippedFrames = 0;        // frames dropped in the last interval
+    this.totalSkippedFrames = 0;   // cumulative dropped frames since load
 
     const self = this;
 
@@ -52,6 +57,10 @@ export class ObjectDatabase {
       switch (message.action) {
         case Actions.DeltaTime:
           this.deltaFrameTime = message.deltaTime;
+          this.cpuFrameTime = message.cpuTime ?? -1;
+          this.refreshPeriod = message.refresh ?? 0;
+          this.skippedFrames = message.skipped ?? 0;
+          this.totalSkippedFrames += (message.skipped ?? 0);
           this.onDeltaFrameTime.emit();
           break;
         case Actions.ValidationError: {

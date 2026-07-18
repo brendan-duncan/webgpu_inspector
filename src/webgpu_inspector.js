@@ -114,6 +114,19 @@ export let webgpuInspector = null;
       this._mappedBufferCount = 0;
       this._captureData = null;
       this._frameRate = new RollingAverage(60);
+      // Skipped-frame detection. The display refresh interval is estimated as a low
+      // percentile of a sliding window of recent frame deltas (robust to VRR / outlier
+      // frames), recomputed every _refreshRecalcInterval frames.
+      this._refreshPeriod = 0;      // est. refresh interval (ms); 0 until warmed up
+      this._skippedFrameTotal = 0;  // cumulative dropped frames since load
+      this._frameDeltaWindow = new Float32Array(150);
+      this._frameDeltaWindowLen = 0;
+      this._frameDeltaWindowPos = 0;
+      this._refreshRecalcCountdown = 0;
+      this._refreshRecalcInterval = 15;
+      // CPU/GPU bound: main-thread submit time is measured across the app's rAF callback.
+      this._frameCpuStart = 0;      // performance.now() at top of the callback
+      this._lastCpuTime = 0;        // submit time of the previous frame (ms)
       this._captureTimestamps = false;
       this._timestampQuerySupported = false;
       this._timestampQuerySet = null;
@@ -384,7 +397,7 @@ export let webgpuInspector = null;
         if (message.action === Actions.DeltaTime) {
           // Update framerate display. This message comes from worker threads.
           if (message.__webgpuInspectorWorker) {
-            self._updateFrameRate(message.deltaTime);
+            self._updateFrameRate(message.deltaTime, message.skipped);
           }
         } else if (message.action === PanelActions.RequestTexture) {
           // The devtools panel is requesting the data for a texture.
@@ -1909,10 +1922,14 @@ export let webgpuInspector = null;
       this._inspectingStatusText.textContent = status;
     }
 
-    // Update the frame rate overlay.
-    _updateFrameRate(deltaTime) {
+    // Update the frame rate overlay. Called for DeltaTime messages forwarded from worker
+    // and iframe contexts, so the page HUD aggregates their dropped frames too — matching
+    // the devtools panel, which sums skips across every context (the worker usually does
+    // the actual rendering, so its drops dominate).
+    _updateFrameRate(deltaTime, skipped) {
       this._frameRate.add(deltaTime);
       this._frameIndex++;
+      this._skippedFrameTotal += (skipped || 0);
       if (this._inspectingStatusFrame) {
         this._updateFrameStatus();
       }
@@ -1925,6 +1942,15 @@ export let webgpuInspector = null;
         const frameRate = this._frameRate.average;
         if (frameRate !== 0) {
           statusMessage += ` : ${frameRate.toFixed(2)}ms`;
+        }
+        // Bound tag: CPU submit time filling most of the frame => main-thread bound.
+        // Otherwise the main thread has headroom (GPU- or vsync-bound; the panel
+        // disambiguates GPU vs vsync using capture timestamps).
+        if (this._lastCpuTime > 0 && frameRate > 0) {
+          statusMessage += this._lastCpuTime / frameRate > 0.8 ? " [CPU]" : " [GPU/vsync]";
+        }
+        if (this._skippedFrameTotal > 0) {
+          statusMessage += ` ⚠ ${this._skippedFrameTotal} dropped`;
         }
         this._inspectingStatusFrame.textContent = statusMessage;
       }
@@ -1957,19 +1983,65 @@ export let webgpuInspector = null;
       }
     }
 
+    // Push a frame delta into the sliding window and periodically re-estimate the
+    // display refresh period from it. Called only with sane deltas (> 2ms).
+    _recordFrameDelta(deltaTime) {
+      this._frameDeltaWindow[this._frameDeltaWindowPos] = deltaTime;
+      this._frameDeltaWindowPos = (this._frameDeltaWindowPos + 1) % this._frameDeltaWindow.length;
+      if (this._frameDeltaWindowLen < this._frameDeltaWindow.length) {
+        this._frameDeltaWindowLen++;
+      }
+      if (--this._refreshRecalcCountdown <= 0) {
+        this._refreshRecalcCountdown = this._refreshRecalcInterval;
+        this._refreshPeriod = this._estimateRefreshPeriod();
+      }
+    }
+
+    // Estimate the display refresh period as the 20th-percentile frame delta over the
+    // window: the fast-but-typical frames, ignoring the handful of unusually short ones
+    // (VRR, warm-up) that would drag an all-time minimum down. Returns 0 until warmed.
+    _estimateRefreshPeriod() {
+      const len = this._frameDeltaWindowLen;
+      if (len < 10) {
+        return this._refreshPeriod; // keep the previous estimate until we have enough data
+      }
+      const sorted = Array.prototype.slice.call(this._frameDeltaWindow.subarray(0, len));
+      sorted.sort((a, b) => a - b);
+      return sorted[Math.floor(len * 0.2)];
+    }
+
     // Called at the start of each frame, before the requestAnimationFrame callback is invoked.
     _frameStart(time) {
       this._frameGpuCommandCount = 0;
+      // Wall-clock at the top of the app's frame callback. _frameEnd subtracts this to
+      // get main-thread submit time (CPU cost of building + issuing the frame's work).
+      this._frameCpuStart = performance.now();
 
       let deltaTime = 0;
       if (this._lastFrameTime == 0) {
         this._lastFrameTime = time;
       } else {
         deltaTime = time - this._lastFrameTime;
-        this._postMessage({ "action": Actions.DeltaTime, deltaTime });
         this._lastFrameTime = time;
-
         this._frameRate.add(deltaTime);
+
+        // rAF fires once per vsync, so a kept frame lands ~1 refresh period apart and each
+        // extra whole period is a dropped frame. The refresh period is estimated as a low
+        // percentile of a sliding window of recent deltas (see _estimateRefreshPeriod) —
+        // NOT the all-time minimum, which a single sub-period frame (a VRR display, an
+        // early light frame) would poison permanently, making every later frame read as a
+        // drop. The 2ms floor ignores double-fired rAFs that share a timestamp.
+        let skipped = 0;
+        if (deltaTime > 2) {
+          this._recordFrameDelta(deltaTime);
+          if (this._refreshPeriod > 0) {
+            skipped = Math.max(0, Math.round(deltaTime / this._refreshPeriod) - 1);
+            this._skippedFrameTotal += skipped;
+          }
+        }
+
+        this._postMessage({ "action": Actions.DeltaTime, deltaTime, skipped,
+          "refresh": this._refreshPeriod, "cpuTime": this._lastCpuTime });
       }
 
       if (_sessionStorage) {
@@ -2040,6 +2112,12 @@ export let webgpuInspector = null;
 
     // Called at the end of each frame, after the requestAnimationFrame callback have been invoked.
     _frameEnd(time) {
+      // Main-thread time inside the app's frame callback (build + submit). On the
+      // async-callback path (cb returns a Promise) this includes awaited time, so read
+      // it as callback wall time. Stashed for the next frame's DeltaTime message.
+      if (this._frameCpuStart) {
+        this._lastCpuTime = performance.now() - this._frameCpuStart;
+      }
       if (this._frameGpuCommandCount > 0) {
         this._gpuFrameIndex++;
         this._frameGpuCommandCount = 0;
