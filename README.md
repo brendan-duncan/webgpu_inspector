@@ -29,7 +29,7 @@ WebGPU Inspector is designed to inspect what's happening with WebGPU on the page
 
 WebGPU Inspector includes three tools:
 
-* **[Inspect](docs/inspect.md)** — a live view of every GPU object on the page. Inspect their details, plot frame times and object allocations over time, inspect textures, and [edit](docs/inspect.md#editing-shaders) shaders live on the page.
+* **[Inspect](docs/inspect.md)** — a live view of every GPU object on the page. Inspect their details, plot frame times (with CPU submit and GPU time), detect dropped frames and whether the frame is CPU- or GPU-bound, plot object allocations over time, inspect textures, and [edit](docs/inspect.md#editing-shaders) shaders live on the page.
 * **[Capture](docs/capture.md)** — records the GPU commands used to render a frame, with render pass output images, textures, buffer data, and render state, letting you inspect details about each command, including the storage and uniform buffers used for draw and dispatch calls. Includes the ability to interactively [debug shaders](docs/shader_debugger.md).
 * **[Record](docs/record.md)** — records all GPU commands and data used to render a set of frames, generating a self-contained HTML or binary file that can play back the render or be used for bug reports.
 

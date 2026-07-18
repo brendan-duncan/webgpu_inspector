@@ -69,13 +69,15 @@ The **Profile Passes** checkbox injects GPU timestamp queries around each render
 
 This requires the page's adapter to support the `timestamp-query` feature. If the adapter doesn't grant it, the injection is silently skipped and no timing data is produced.
 
-When timing data is available, it is presented in three places:
+When timing data is available, it is presented in several places:
 
-* A **GPU pass timeline** at the top of the frame's command list, showing each render/compute pass as a bar sized to the fraction of the frame it took.
+* A **GPU pass timeline** at the top of the frame's command list, showing each render/compute pass as a bar sized to the fraction of the frame it took. A dashed **frame-budget marker** shows where the display refresh interval falls, so you can see how much of the budget the GPU work fills — passes crossing the marker mean the GPU can't keep up with the refresh rate.
 * Each pass header in the command list is annotated with its `Duration:<N>ms`.
-* The [Frame Stats](#frame-stats) panel includes a **Pass Timings** breakdown.
+* The [Frame Stats](#frame-stats) panel includes a **Frame Bound** card and a **Pass Timings** breakdown.
 
-Because the timing data travels with the capture, the timeline and pass timings also appear for [saved/loaded](#saving-and-loading-captures) captures.
+The **Frame Bound** card estimates whether the frame is **CPU-**, **GPU-**, or **vsync-bound** by comparing the main-thread submit time and the total GPU time against the frame budget (the display refresh interval), with bars showing each against the budget. The CPU submit time and frame budget come from the live page's frame metrics, so the verdict is most meaningful for captures taken from a running page; GPU time comes from the pass timestamps.
+
+Because the timing data travels with the capture, the timeline, pass timings, and Frame Bound card also appear for [saved/loaded](#saving-and-loading-captures) captures.
 
 #### Note
 
@@ -245,7 +247,7 @@ If the page pushes/pops Debug Groups, they will be used to group commands in the
 ## Frame Stats
 ###### [Back to top](#capture)
 
-The Capture tool can provide various statistics about the capture. Press the **Frame Stats** to show the capture statistics. These include how many graphics commands were called; how many draw calls; and so on. When [Profile Passes](#profile-passes) is enabled, Frame Stats also includes a **Pass Timings** breakdown of per-pass GPU duration.
+The Capture tool can provide various statistics about the capture. Press the **Frame Stats** to show the capture statistics. These include how many graphics commands were called; how many draw calls; and so on. When [Profile Passes](#profile-passes) is enabled, Frame Stats also includes a **Frame Bound** card (CPU-/GPU-/vsync-bound verdict with CPU/GPU-vs-budget bars) and a **Pass Timings** breakdown of per-pass GPU duration.
 
 <a href="images/capture_frame_stats.png">
 <img src="images/capture_frame_stats.png" style="width:512px">

@@ -161,14 +161,25 @@ needs no page changes.
 | `open_page` | Open a new instrumented tab at a URL |
 | `browser_status` | Browser connection + instrumented targets |
 | `list_pages` | Pages connected to the bridge |
-| `capture_frames` | Capture N frames from a page, return a summary |
+| `screenshot_page` | Screenshot an instrumented page |
+| `capture_frames` | Capture N frames from a page, return a summary (`profilePasses: true` measures per-pass GPU time) |
 | `list_captures` | Captures available to analyze |
 | `load_capture_file` | Ingest a saved capture file (`.wgpuc`, or legacy `.json`) |
-| `get_capture_summary` | Counts, stats, shaders, validation errors, issues |
+| `get_capture_summary` | Counts, stats, shaders, validation errors, issues; `frameBudget` bound verdict when available |
+| `analyze_performance` | Frame-budget/bound verdict, passes ranked by GPU time with fillrate vs fragment-ALU bottleneck, and suggestions |
+| `get_frame_stats` | Sample a live page's fps, dropped frames, CPU submit time, and bound verdict over a window (no capture) |
 | `get_commands` | Paginated, base64-stripped command list |
 | `get_object` | One GPU object's descriptor |
 | `get_shader` | A ShaderModule's WGSL source |
+| `get_draw_state` | Resolved pipeline / bind groups / vertex+index buffers for a draw |
+| `decode_vertex_buffer` | Decode a vertex buffer's first N vertices per attribute |
+| `diff_draws` | Compare the resolved state of two draw commands |
 | `get_validation_errors` | Validation errors from the capture |
+| `read_buffer` | Read a live GPU buffer's current contents without a full capture |
+| `read_texture` | Read a live GPU texture/render-target region (stats + ASCII preview) |
+
+For **performance analysis**, capture with `profilePasses: true` (a performance
+request implies it) so passes carry GPU timings, then call `analyze_performance`.
 
 Tools never return raw base64 texture/buffer blobs — captures can be many
 megabytes. They return summaries, paginated slices, and counts instead.

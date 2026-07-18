@@ -62,13 +62,32 @@ The inspector will report basic statistics about what's going on with the page.
 
 **Frame Time**: How long it took the last frame to render. This will be updated every frame.
 
+Next to the frame time is a **bound badge** — a live estimate of whether the frame is **CPU-bound**
+(the main thread's per-frame work fills most of the frame budget), or **GPU/vsync** (the main thread
+has headroom, so the bottleneck is the GPU or the display refresh cap). GPU time is only measured
+during a [Profile Passes](capture.md#profile-passes) capture, so the live badge can flag CPU-bound but
+defers to a capture to tell GPU-bound apart from vsync-bound.
+
+A **dropped-frame counter** (`⚠ N dropped`) appears once the page misses vsync intervals. The display
+refresh rate is estimated from the frame deltas, and dropped frames are counted across the page and its
+workers, so the count reflects the whole page (workers usually do the real rendering).
+
 **Texture Memory**: How much memory is currently being used for textures on the GPU.
 
 **Buffer Memory**: How much memory is currently being used for buffers on the GPU.
 
 ### Meters
 
-**Frame Time**: Plots the frame duration over time. This lets you identify spikes in your renders. A common source of spikes is garbage collection. The graph labels show you the minimum frame time and maximum frame time over the plotted frames.
+**Frame Time**: Plots the frame duration over time. This lets you identify spikes in your renders. A common source of spikes is garbage collection.
+
+The plot overlays three lines on a shared scale: the **frame** interval (grey), the **CPU** submit time
+spent on the main thread each frame (green), and the last-captured **GPU** frame time (blue, held between
+captures — GPU time is only measured during a [Profile Passes](capture.md#profile-passes) capture). A dashed
+horizontal line marks the estimated **display refresh interval** (the frame budget); frame-time spikes rise
+above it, so anything touching or crossing that line is a dropped frame. Whichever line rides up against the
+budget tells you where the frame time is going — if CPU is near the budget you're CPU-bound; if it has
+headroom the GPU or vsync is the limit. The scale is clamped to a few times the refresh interval so a single
+long stall doesn't flatten the rest of the plot.
 
 **GPU Objects**: Plots the number of GPU Objects that are allocated over time. You can select a specific GPU object type to plot from the option box. The GPU Objects option tracks all GPU objects.
 
@@ -227,6 +246,8 @@ timestamp queries around render and compute passes and presents the results as a
 what percentage of the frame each pass takes. The Inspect panel's stats can also reveal some
 opportunities for optimization:
 
+* The **bound badge** and the CPU line on the Frame Time meter tell you where to look first: a CPU-bound frame calls for fewer/cheaper draw submissions on the main thread (batching, render bundles, fewer state changes), while a GPU/vsync frame calls for a capture to measure per-pass GPU time.
+* A rising **dropped-frame** count means the page is regularly missing vsync — cross-reference the frame-time spikes above the dashed refresh line to see when.
 * Periodic spikes in the frame time graph indicate your page is probably doing garbage collection during those frames. Try to minimize JavaScript's garbage collection by caching and re-using GPU objects as much as possible.
 * Object numbers rising and falling over time indicate the page is allocating and destroying objects frequently. If the objects accumulate quickly and go down gradually, it indicates you are creating objects and relying on garbage collection to destroy them.
     * Buffer and texture objects in particular are expensive to create and destroy, so you should try to cache buffers and textures in particular as much as possible. Other types of objects, like Texture Views, may be inexpensive but can still cause garbage collection stalls.
