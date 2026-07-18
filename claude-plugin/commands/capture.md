@@ -18,7 +18,13 @@ Do this:
 3. Call `list_pages`. If none are connected, the page may not use WebGPU, or it
    created GPU objects before finishing load — say so and stop. If exactly one
    page is connected, use it; if several, ask which `pageId`.
-4. Call `capture_frames` with that page and the requested frame count.
+4. Call `capture_frames` with that page and the requested frame count. If the
+   request is about **performance** (slow, janky, dropped frames, bottleneck,
+   CPU/GPU bound, fillrate, timing), pass `profilePasses: true` so each pass
+   carries a measured GPU duration — and `payloads: "none"` for a lighter
+   perf-only capture — then report via `analyze_performance`. Treat a
+   performance request as implying `profilePasses: true`; you don't need the
+   user to ask for it.
 5. Report the returned summary in plain language: total commands, draw calls,
    dispatches, render/compute passes, object counts, validation errors, and
    every entry in `issues`.

@@ -306,7 +306,10 @@ export function createMcpServer(deps) {
       name: "capture_frames",
       description: "Ask a connected page to capture one or more WebGPU frames, then " +
         "return a summary of the resulting capture (command/draw/pass counts, object " +
-        "counts, validation errors, flagged issues). Use list_pages first if unsure.",
+        "counts, validation errors, flagged issues). Use list_pages first if unsure. " +
+        "For a PERFORMANCE analysis, set profilePasses:true (and payloads:\"none\" for a " +
+        "light perf-only capture) to measure per-pass GPU time, then call analyze_performance " +
+        "— treat a performance request as implying profilePasses:true.",
       inputSchema: {
         type: "object",
         properties: {

@@ -68,6 +68,38 @@ live buffer without a full capture, use `read_buffer`.
 Cite `index` (command) and `id` (object) values in findings so the user can
 locate them in the WebGPU Inspector DevTools Capture panel.
 
+## Performance analysis
+
+When the goal is performance — the frame is slow, janky, dropping frames, or the
+user asks where the time goes / whether it's CPU- or GPU-bound / about fillrate —
+take the GPU-timed path **by default, without being asked to enable it**:
+
+1. Capture with per-pass GPU timing:
+   `capture_frames({ profilePasses: true, payloads: "none" })`. `profilePasses`
+   injects per-pass GPU timestamp queries so each render/compute pass carries a
+   measured `durationMs` (and the frame a total GPU time); `payloads: "none"` keeps
+   the capture light — profiling needs the command list and object graph, not the
+   buffer/texture bytes. **Treat "analyze the performance of a frame" as implying
+   `profilePasses: true`.**
+2. Call `analyze_performance` (not just `get_capture_summary`). It returns the frame
+   budget and a CPU-/GPU-/vsync-bound verdict, passes ranked by GPU time each
+   annotated with render-target size/format/MSAA, blend usage, fragment-shader
+   complexity, and a likely bottleneck (fillrate/ROP vs fragment-ALU), plus
+   heuristic issues and ranked improvement suggestions.
+3. For a live page, `get_frame_stats` samples fps / dropped frames / CPU submit time
+   / bound verdict over a short window without a capture — use it to confirm the page
+   is actually dropping frames or is CPU-bound before drilling in.
+
+Notes:
+- GPU timing needs the adapter's `timestamp-query` feature; the inspector enables it
+  automatically when available and it is a no-op otherwise. Without it,
+  `analyze_performance` still ranks passes by fill workload and says GPU time is
+  unavailable — re-run once the feature is present for real timings.
+- The fillrate-vs-fragment-ALU verdict is a static heuristic (render-target bytes ×
+  MSAA × area × blend, plus a WGSL fragment-complexity scan). To *confirm* fillrate,
+  reduce the render-target resolution and re-measure: GPU time scaling ~linearly with
+  pixel count ⇒ per-pixel (fillrate/fragment) bound; flat ⇒ vertex/geometry/CPU bound.
+
 ## What to look for
 
 **Correctness**
