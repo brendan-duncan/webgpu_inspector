@@ -100,7 +100,10 @@ export class InspectPanel {
 
     // overflow:hidden keeps a too-narrow window from pushing items out of the row; the
     // label can shrink/clip (flex 0 1 auto below) so the meters keep priority on width.
-    this.plots = new Div(parent, { style: "display: flex; flex-direction: row; flex-wrap: nowrap; align-items: stretch; overflow: hidden; margin-bottom: 10px; margin-top: 0px; padding-top: 0px; height: 30px;" });
+    // flex: 0 0 auto so the row keeps its 30px in the panel's flex column and is never
+    // squeezed (and clipped) when the window is shortened — only the object tree below,
+    // which is flex: 1 1 auto with min-height: 0, absorbs the vertical shrink.
+    this.plots = new Div(parent, { style: "display: flex; flex: 0 0 auto; flex-direction: row; flex-wrap: nowrap; align-items: stretch; overflow: hidden; margin-bottom: 10px; margin-top: 0px; padding-top: 0px; height: 30px;" });
 
     // Frame-time label with a spaced color key for the three overlaid lines. Allowed to
     // shrink and clip (flex 0 1 auto) so the meters stay visible when the panel narrows.
