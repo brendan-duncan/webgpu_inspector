@@ -2,12 +2,31 @@
 
 ### Inspector Panel
 
-* **CPU / GPU time.** Estimate how much of the frame time is spent in the CPU vs the GPU.
-* **Skip frame detection.** Identify and count skip frames, indicating how often the frame render is stalling.
+* **CPU / GPU time.** Estimate how much of the frame time is spent in the CPU vs the GPU. The Frame
+  Time meter overlays frame-interval, CPU-submit and (last-captured) GPU lines on a shared scale with
+  a dashed refresh-rate line, and a live CPU-/GPU-/vsync-bound badge sits next to the frame time.
+* **Skip frame detection.** Identify and count skip frames, indicating how often the frame render is
+  stalling. Dropped frames are counted across the page and its workers, and the refresh interval is
+  estimated robustly (percentile over a sliding window) so a single fast frame can't inflate the count.
 
 ### Capture Panel
 
-* **CPU / GPU bound detection.** Use frame timings to estimate if the captured frame is CPU or GPU bound.
+* **CPU / GPU bound detection.** Use frame timings to estimate if the captured frame is CPU or GPU
+  bound. A **Frame Bound** card shows the verdict with CPU/GPU-vs-budget bars, and the pass timeline
+  draws a frame-budget marker so you can see how much of the budget the GPU work fills.
+
+### Claude Code Plugin (MCP)
+
+* **`analyze_performance` tool.** One-call performance diagnosis of a capture: frame budget and a
+  CPU-/GPU-/vsync-bound verdict, render passes ranked by GPU time and each annotated with
+  render-target size/format/MSAA, blend usage, fragment-shader complexity, and a likely bottleneck
+  (fillrate/ROP vs fragment-ALU), plus heuristic issues and ranked improvement suggestions.
+* **`get_frame_stats` tool.** Sample a live page's frame health over a short window without a
+  capture — fps, average/worst frame time, dropped frames, CPU submit time, refresh interval, and a
+  bound verdict.
+* **Frame budget in captures.** Captures now carry live frame-health context (CPU submit / interval /
+  refresh / dropped), so `get_capture_summary` reports a `frameBudget` with a bound verdict and flags
+  a dominant GPU pass as a fillrate or fragment-ALU hotspot.
 
 ## v1.5.0
 

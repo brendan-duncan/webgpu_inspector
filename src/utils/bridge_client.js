@@ -149,6 +149,9 @@ export class BridgeClient {
       case "readTexture":
         this._handleReadTexture(msg);
         break;
+      case "frameStats":
+        this._handleFrameStats(msg);
+        break;
       case "ping":
         this._send({ type: "pong" });
         break;
@@ -199,6 +202,54 @@ export class BridgeClient {
         error: (e && e.message) ? e.message : String(e)
       });
     }
+  }
+
+  // --- Live frame-health stats ----------------------------------------------
+
+  // Sample the inspector's live frame metrics across a short window and report
+  // aggregates: frame rate, dropped frames, CPU submit time, and a bound verdict.
+  // GPU time isn't available live (it's measured only during a timestamp capture),
+  // so the verdict can flag CPU-bound but defers GPU-vs-vsync to a profilePasses
+  // capture — which is the honest thing to say from live data alone.
+  _handleFrameStats(msg) {
+    const round3 = (v) => Math.round(v * 1000) / 1000;
+    const durationMs = Math.min(Math.max((msg.durationMs | 0) || 1000, 100), 10000);
+    let start, startTime;
+    try {
+      start = this._inspector.getFrameStats();
+      startTime = performance.now();
+    } catch (e) {
+      this._send({ type: "frameStatsResult", requestId: msg.requestId,
+        error: (e && e.message) ? e.message : String(e) });
+      return;
+    }
+    setTimeout(() => {
+      try {
+        const end = this._inspector.getFrameStats();
+        const elapsedMs = performance.now() - startTime;
+        const framesRendered = Math.max(0, end.frameIndex - start.frameIndex);
+        const droppedFrames = Math.max(0, end.skippedTotal - start.skippedTotal);
+        const fps = elapsedMs > 0 ? (framesRendered / (elapsedMs / 1000)) : 0;
+        const budget = end.refreshMs > 0 ? end.refreshMs : end.avgFrameMs;
+        const cpuBound = end.cpuSubmitMs > 0 && budget > 0 && (end.cpuSubmitMs / budget) > 0.8;
+        this._send({
+          type: "frameStatsResult",
+          requestId: msg.requestId,
+          windowMs: Math.round(elapsedMs),
+          framesRendered,
+          droppedFrames,
+          fps: Math.round(fps * 10) / 10,
+          avgFrameMs: round3(end.avgFrameMs),
+          worstFrameMs: round3(end.worstFrameMs),
+          cpuSubmitMs: round3(end.cpuSubmitMs),
+          refreshMs: round3(end.refreshMs),
+          bound: cpuBound ? "CPU" : "GPU/vsync"
+        });
+      } catch (e) {
+        this._send({ type: "frameStatsResult", requestId: msg.requestId,
+          error: (e && e.message) ? e.message : String(e) });
+      }
+    }, durationMs);
   }
 
   // --- Capture driver -------------------------------------------------------

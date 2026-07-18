@@ -1,6 +1,6 @@
 {
   "name": "webgpu-inspector",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Capture and analyze WebGPU frames from a live page with Claude, using the WebGPU Inspector local capture API and a live bridge.",
   "author": {
     "name": "Brendan Duncan",

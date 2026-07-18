@@ -759,6 +759,12 @@ export let webgpuInspector = null;
       // giant JSON string. Returns `{ metadata, payloads }`.
       const stream = this._localCapture.buildCaptureStream("__buildVersion");
 
+      // Attach live frame-health context so a capture carries its own CPU-submit /
+      // frame-interval / refresh / dropped-frame numbers. Combined with per-pass GPU
+      // timings (profilePasses) this lets the analyzer state whether the frame is
+      // CPU-, GPU-, or vsync-bound rather than just listing pass durations.
+      stream.metadata.frameStats = this.getFrameStats();
+
       // Subsequent begin/end pairs start a fresh frame list. Object records
       // stay so anything created before this save (and still referenced by
       // a later capture) is exported next time too.
@@ -1933,6 +1939,28 @@ export let webgpuInspector = null;
       if (this._inspectingStatusFrame) {
         this._updateFrameStatus();
       }
+    }
+
+    // Snapshot of live frame-health metrics. Shared by the capture metadata
+    // (frameStats, so a capture carries its CPU/vsync context) and the live bridge
+    // frameStats request. gpu time is intentionally absent — it's only measured during
+    // a timestamp capture, not continuously.
+    getFrameStats() {
+      const buf = this._frameRate.buffer;
+      let worst = 0;
+      for (let i = 0; i < buf.length; ++i) {
+        if (buf[i] > worst) {
+          worst = buf[i];
+        }
+      }
+      return {
+        frameIndex: this._frameIndex,
+        avgFrameMs: this._frameRate.average,
+        worstFrameMs: worst,
+        cpuSubmitMs: this._lastCpuTime,
+        refreshMs: this._refreshPeriod,
+        skippedTotal: this._skippedFrameTotal
+      };
     }
 
     // Update the frame status overlay.

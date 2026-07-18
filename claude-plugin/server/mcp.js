@@ -12,6 +12,7 @@ import {
 
 import {
   summarize,
+  analyzePerformance,
   listCommands,
   getObject,
   getShader,
@@ -385,7 +386,10 @@ export function createMcpServer(deps) {
       name: "get_capture_summary",
       description: "Summarize a capture: object counts by type, command counts by method, " +
         "derived render statistics, shader entry points, validation error count, and " +
-        "heuristic performance/correctness issues.",
+        "heuristic performance/correctness issues. When the capture was taken with " +
+        "profilePasses:true it also includes gpuTiming (per-frame GPU time, slowest pass); " +
+        "when taken from a live page it includes frameBudget with a CPU/GPU/vsync bound " +
+        "verdict. For a focused performance report, use analyze_performance instead.",
       inputSchema: {
         type: "object",
         properties: {
@@ -393,6 +397,22 @@ export function createMcpServer(deps) {
           includeMethodCounts: { type: "boolean", description: "Include the per-method command counts map (default true)." },
           includePasses: { type: "boolean", description: "Include the per-pass breakdown (label, command range, draw/dispatch/bind counts) grouped by render/compute pass (default true)." },
           includeIssues: { type: "boolean", description: "Include heuristic performance/correctness issues (default true)." }
+        }
+      }
+    },
+    {
+      name: "analyze_performance",
+      description: "Diagnose a capture's performance and return concrete improvement suggestions. " +
+        "Reports the frame budget and a CPU- / GPU- / vsync-bound verdict (needs a live capture for " +
+        "CPU/refresh context and profilePasses:true for GPU time), render passes ranked by GPU time " +
+        "(or fill workload when untimed) each annotated with render-target size/format/MSAA, blend " +
+        "usage, fragment-shader complexity, and a likely bottleneck (fillrate/ROP vs fragment-ALU), " +
+        "plus heuristic issues and ranked suggestions. Best paired with a capture taken via " +
+        "capture_frames({ profilePasses: true, payloads: \"none\" }).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          captureId: { type: "string", description: "Capture id (default: most recent)." }
         }
       }
     },
@@ -546,6 +566,23 @@ export function createMcpServer(deps) {
         },
         required: ["textureId"]
       }
+    },
+    {
+      name: "get_frame_stats",
+      description: "Sample a live page's frame-health metrics over a short window (without taking a " +
+        "capture) and return aggregates: frame rate (fps), average and worst frame time, dropped " +
+        "frames, CPU submit time (main-thread cost per frame), the estimated display refresh interval, " +
+        "and a CPU-vs-GPU/vsync bound verdict. Use this to tell whether a page is dropping frames and " +
+        "whether it's CPU/main-thread bound; GPU time is not measured live, so a non-CPU verdict reads " +
+        "\"GPU/vsync\" — take a capture with profilePasses:true to measure GPU time and confirm. " +
+        "Requires the page's rendering loop to use requestAnimationFrame.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          pageId: { type: "string", description: "Page to sample. Optional when exactly one page is connected." },
+          durationMs: { type: "integer", description: "Sampling window in milliseconds (default 1000, clamped 100–10000).", minimum: 100, maximum: 10000 }
+        }
+      }
     }
   ];
 
@@ -677,6 +714,11 @@ export function createMcpServer(deps) {
       };
     },
 
+    analyze_performance: async (args) => {
+      const { id, json } = resolveCapture(args);
+      return { captureId: id, performance: analyzePerformance(json) };
+    },
+
     get_commands: async (args) => {
       const { id, json } = resolveCapture(args);
       return {
@@ -735,6 +777,13 @@ export function createMcpServer(deps) {
         height: args.height
       });
       return summarizeTexture(result);
+    },
+
+    get_frame_stats: async (args) => {
+      return await bridge.requestFrameStats({
+        pageId: args.pageId,
+        durationMs: args.durationMs
+      });
     },
 
     get_object: async (args) => {

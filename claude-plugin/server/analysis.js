@@ -332,6 +332,23 @@ export function summarize(capture, options) {
       };
     }
   }
+  // Frame budget + CPU/GPU/vsync bound verdict, when the capture carried live
+  // frame-health context (frameStats). Present for bridge captures taken after the
+  // frame-analysis feature; absent for older/file captures (bound reads "unknown").
+  if (capture && capture.frameStats) {
+    const fs = capture.frameStats;
+    const gpu = summary.gpuTiming ? summary.gpuTiming.frameGpuTimeMs : null;
+    const budget = num(fs.refreshMs) > 0 ? num(fs.refreshMs) : num(fs.avgFrameMs);
+    summary.frameBudget = {
+      avgFrameMs: round3(fs.avgFrameMs),
+      cpuSubmitMs: round3(fs.cpuSubmitMs),
+      gpuTimeMs: gpu,
+      refreshMs: round3(fs.refreshMs),
+      budgetMs: round3(budget),
+      droppedTotal: fs.skippedTotal ?? null,
+      bound: classifyBound(num(fs.cpuSubmitMs), gpu, budget)
+    };
+  }
   if (options.includeIssues !== false) {
     summary.issues = findIssues(capture);
   }
@@ -429,6 +446,36 @@ export function findIssues(capture) {
     });
   }
 
+  // GPU hotspot: when the capture has per-pass timings, flag a pass that dominates
+  // frame GPU time and name its likely bottleneck (fillrate vs fragment-ALU).
+  const passInfos = analyzeRenderPasses(capture);
+  const timedPasses = passInfos.filter((p) => typeof p.durationMs === "number");
+  if (timedPasses.length) {
+    const frameGpu = timedPasses.reduce((s, p) => s + p.durationMs, 0);
+    let top = timedPasses[0];
+    for (const p of timedPasses) {
+      if (p.durationMs > top.durationMs) top = p;
+    }
+    const share = frameGpu > 0 ? (top.durationMs / frameGpu) : 0;
+    if (share >= 0.4) {
+      const bottleneck = classifyPassBottleneck(top);
+      let msg = `Pass "${top.label || `#${top.pass}`}" is ${Math.round(share * 100)}% of frame GPU ` +
+        `time (${round3(top.durationMs)}ms).`;
+      if (bottleneck && bottleneck.indexOf("fillrate") === 0) {
+        msg += ` Likely fillrate-bound (${describeFill(top)}) — reduce resolution, overdraw, blending, ` +
+          "MSAA, or target precision.";
+      } else if (bottleneck === "fragment-ALU") {
+        msg += " Heavy fragment shader — optimize the shader or shade fewer pixels.";
+      }
+      issues.push({
+        severity: "info",
+        code: "gpu-hotspot",
+        message: msg,
+        commandIndices: [top.beginCommand]
+      });
+    }
+  }
+
   // Validation errors are always worth surfacing.
   const validationErrors = Array.isArray(capture && capture.validationErrors)
     ? capture.validationErrors
@@ -443,6 +490,318 @@ export function findIssues(capture) {
   }
 
   return issues;
+}
+
+// --- Performance analysis --------------------------------------------------
+
+function num(v) {
+  return (typeof v === "number" && isFinite(v)) ? v : 0;
+}
+function round3(v) {
+  return Math.round(num(v) * 1000) / 1000;
+}
+
+// Bytes written per pixel for common render-target formats — the ROP/bandwidth
+// cost proxy for fillrate analysis. Unknown formats assume 4.
+const FORMAT_BYTES = {
+  r8unorm: 1, r8snorm: 1, r8uint: 1, r8sint: 1, stencil8: 1,
+  rg8unorm: 2, rg8snorm: 2, rg8uint: 2, rg8sint: 2,
+  r16uint: 2, r16sint: 2, r16float: 2, depth16unorm: 2,
+  rgba8unorm: 4, "rgba8unorm-srgb": 4, rgba8snorm: 4, rgba8uint: 4, rgba8sint: 4,
+  bgra8unorm: 4, "bgra8unorm-srgb": 4,
+  rg16uint: 4, rg16sint: 4, rg16float: 4,
+  r32uint: 4, r32sint: 4, r32float: 4,
+  rgb10a2unorm: 4, rgb10a2uint: 4, rg11b10ufloat: 4,
+  depth24plus: 4, "depth24plus-stencil8": 4, depth32float: 4,
+  rgba16uint: 8, rgba16sint: 8, rgba16float: 8,
+  rg32uint: 8, rg32sint: 8, rg32float: 8, "depth32float-stencil8": 5,
+  rgba32uint: 16, rgba32sint: 16, rgba32float: 16
+};
+function formatBytes(fmt) {
+  return (fmt && FORMAT_BYTES[fmt]) || 4;
+}
+
+// Resolve a beginRenderPass command's color targets: pixel dimensions, MSAA
+// sample count, target count, and total bytes-per-pixel across all attachments.
+// Returns nulls for anything it can't resolve (pooled/undescribed textures);
+// never throws.
+function resolvePassTarget(objects, beginCmd) {
+  const desc = beginCmd && beginCmd.args && beginCmd.args[0];
+  const colorAttachments = (desc && desc.colorAttachments) || [];
+  let width = null, height = null, sampleCount = 1, colorTargets = 0, bytesPerPixel = 0;
+  for (const at of colorAttachments) {
+    if (!at || !at.view) {
+      continue;
+    }
+    colorTargets++;
+    const viewId = refId(at.view);
+    const view = viewId != null ? objects[String(viewId)] : null;
+    const texId = view ? refId(view.texture) : null;
+    const tex = texId != null ? objects[String(texId)] : null;
+    if (!tex) {
+      continue;
+    }
+    if (width == null) {
+      width = num(tex.width) || null;
+      height = num(tex.height) || null;
+      sampleCount = num(tex.descriptor && tex.descriptor.sampleCount) || 1;
+    }
+    bytesPerPixel += formatBytes(tex.format || (tex.descriptor && tex.descriptor.format));
+  }
+  return { width, height, sampleCount, colorTargets, bytesPerPixel };
+}
+
+const COMPLEXITY_RANK = { unknown: 0, trivial: 1, moderate: 2, heavy: 3 };
+
+// Crude fragment-shader cost proxy from WGSL source: texture-sample count, loops,
+// and length. Only meaningful bucketed as trivial/moderate/heavy — it distinguishes
+// "cheap shader, must be fillrate" from "expensive shader, must be ALU".
+function fragmentComplexity(code) {
+  if (!code || typeof code !== "string") {
+    return { bucket: "unknown", textureSamples: 0 };
+  }
+  const samples = (code.match(/textureSample|textureLoad|textureGather/g) || []).length;
+  const loops = (code.match(/\b(for|while|loop)\b/g) || []).length;
+  const lines = code.split("\n").length;
+  const score = samples * 2 + loops * 3 + lines / 40;
+  let bucket = "trivial";
+  if (score > 12) {
+    bucket = "heavy";
+  } else if (score > 4) {
+    bucket = "moderate";
+  }
+  return { bucket, textureSamples: samples };
+}
+
+// One 8bpp 1080p target's worth of fill — the reference for "high fill workload".
+const FILL_REF = 1920 * 1080 * 8;
+
+// Per-render-pass performance profile: resolved render-target size/format/MSAA,
+// blend usage, fragment-shader complexity, a relative fill-workload number, and
+// the measured GPU duration when the capture was taken with profilePasses.
+export function analyzeRenderPasses(capture) {
+  const objects = objectsOf(capture);
+  const commands = commandsOf(capture);
+  const passes = [];
+  let cur = null;
+  let passIndex = -1;
+  for (let i = 0; i < commands.length; ++i) {
+    const cmd = commands[i];
+    if (!cmd || !cmd.method) {
+      continue;
+    }
+    const m = cmd.method;
+    if (m === "beginRenderPass") {
+      passIndex++;
+      const t = resolvePassTarget(objects, cmd);
+      cur = {
+        pass: passIndex,
+        label: (cmd.args && cmd.args[0] && cmd.args[0].label) || "",
+        beginCommand: i,
+        draws: 0,
+        durationMs: (typeof cmd.duration === "number") ? cmd.duration : null,
+        width: t.width, height: t.height, sampleCount: t.sampleCount,
+        colorTargets: t.colorTargets, bytesPerPixel: t.bytesPerPixel,
+        blend: false,
+        fragment: { bucket: "unknown", textureSamples: 0 },
+        seen: new Set()
+      };
+      passes.push(cur);
+      continue;
+    }
+    if (m === "beginComputePass") {
+      cur = null;
+      continue;
+    }
+    if (!cur) {
+      continue;
+    }
+    if (m === "end") {
+      cur = null;
+      continue;
+    }
+    if (DRAW_METHODS.has(m)) {
+      cur.draws++;
+    } else if (m === "setPipeline") {
+      const id = refId(cmd.args && cmd.args[0]);
+      if (id != null && !cur.seen.has(id)) {
+        cur.seen.add(id);
+        const rec = objects[String(id)];
+        const frag = rec && rec.descriptor && rec.descriptor.fragment;
+        if (frag) {
+          if ((frag.targets || []).some((tg) => tg && tg.blend)) {
+            cur.blend = true;
+          }
+          const modId = refId(frag.module);
+          const mod = modId != null ? objects[String(modId)] : null;
+          const code = mod && mod.descriptor && mod.descriptor.code;
+          if (code) {
+            const fc = fragmentComplexity(code);
+            if (COMPLEXITY_RANK[fc.bucket] > COMPLEXITY_RANK[cur.fragment.bucket]) {
+              cur.fragment = fc;
+            }
+          }
+        }
+      }
+    }
+  }
+  return passes.map((p) => {
+    const fillPixels = (p.width && p.height) ? p.width * p.height * p.sampleCount : null;
+    const fillWorkload = (fillPixels != null) ? fillPixels * Math.max(1, p.bytesPerPixel) : null;
+    const out = {
+      pass: p.pass,
+      label: p.label,
+      beginCommand: p.beginCommand,
+      draws: p.draws,
+      target: (p.width && p.height)
+        ? { width: p.width, height: p.height, sampleCount: p.sampleCount,
+            colorTargets: p.colorTargets, bytesPerPixel: p.bytesPerPixel }
+        : null,
+      blend: p.blend,
+      fragmentShader: p.fragment.bucket,
+      textureSamples: p.fragment.textureSamples,
+      fillWorkload
+    };
+    if (p.durationMs != null) {
+      out.durationMs = round3(p.durationMs);
+    }
+    return out;
+  });
+}
+
+// Which resource a pass is most likely limited by, from its static signals.
+function classifyPassBottleneck(p) {
+  if (p.fragmentShader === "heavy") {
+    return "fragment-ALU";
+  }
+  if (p.fillWorkload && p.fillWorkload >= FILL_REF) {
+    // Cheap/moderate shader + lots of pixels + blend/precision/MSAA = ROP/bandwidth.
+    if (p.blend || (p.target && (p.target.bytesPerPixel >= 8 || p.target.sampleCount > 1))) {
+      return "fillrate/ROP";
+    }
+    return "fillrate";
+  }
+  return null;
+}
+
+// CPU- vs GPU- vs vsync-bound from CPU submit time and GPU frame time against the
+// frame budget (display refresh). GPU time is null unless profilePasses was used.
+function classifyBound(cpuMs, gpuMs, budgetMs) {
+  if (!(budgetMs > 0)) {
+    return { verdict: "unknown", reason: "no frame budget (frameStats) in this capture" };
+  }
+  const pct = (x) => Math.round((x / budgetMs) * 100);
+  if (cpuMs > 0 && cpuMs / budgetMs > 0.8) {
+    return { verdict: "CPU", reason: `CPU submit ${round3(cpuMs)}ms is ${pct(cpuMs)}% of the ${round3(budgetMs)}ms budget` };
+  }
+  if (gpuMs != null && gpuMs / budgetMs > 0.8) {
+    return { verdict: "GPU", reason: `GPU work ${round3(gpuMs)}ms is ${pct(gpuMs)}% of the ${round3(budgetMs)}ms budget` };
+  }
+  if (gpuMs == null) {
+    return { verdict: "GPU-or-vsync", reason: "main thread has headroom; re-capture with profilePasses to measure GPU time and confirm" };
+  }
+  return { verdict: "vsync", reason: "both CPU and GPU have headroom under the frame budget" };
+}
+
+function describeFill(p) {
+  const bits = [];
+  if (p.target) {
+    bits.push(`${p.target.width}x${p.target.height}`);
+    if (p.target.sampleCount > 1) bits.push(`${p.target.sampleCount}x MSAA`);
+    if (p.target.colorTargets > 1) bits.push(`${p.target.colorTargets} targets`);
+    if (p.target.bytesPerPixel >= 8) bits.push(`${p.target.bytesPerPixel}B/px`);
+  }
+  if (p.blend) bits.push("blend on");
+  bits.push(`${p.fragmentShader} shader`);
+  return bits.join(", ");
+}
+
+// Concrete, ranked improvement suggestions from the analysis.
+function buildSuggestions(capture, ctx) {
+  const out = [];
+  const { ranked, bound, frameGpuTimeMs } = ctx;
+
+  if (bound && bound.verdict === "CPU") {
+    out.push("CPU/main-thread bound: cut per-frame submission cost — batch draws, use render " +
+      "bundles, remove redundant setPipeline/setBindGroup, and avoid creating GPU objects per frame.");
+  }
+
+  const top = ranked[0];
+  if (frameGpuTimeMs && top && typeof top.durationMs === "number") {
+    const who = `"${top.label || `pass ${top.pass}`}"`;
+    const share = top.gpuPercent != null ? `${top.gpuPercent}% of GPU time` : "the GPU hotspot";
+    if (top.likelyBottleneck && top.likelyBottleneck.indexOf("fillrate") === 0) {
+      out.push(`${who} is ${share} and looks fillrate-bound (${describeFill(top)}). Reduce render-target ` +
+        "resolution, overdraw (depth pre-pass, front-to-back sort, cull), blending, MSAA, or target precision.");
+    } else if (top.likelyBottleneck === "fragment-ALU") {
+      out.push(`${who} is ${share} with a heavy fragment shader — optimize the shader (fewer texture ` +
+        "samples, cheaper math, early-out) or shade fewer pixels.");
+    } else {
+      out.push(`${who} is ${share} — the main GPU hotspot; profile its draws and shaders first.`);
+    }
+  }
+
+  const commands = commandsOf(capture);
+  let pipelineCreates = 0;
+  for (const c of commands) {
+    if (c && c.method && PIPELINE_CREATE_METHODS.has(c.method)) pipelineCreates++;
+  }
+  if (pipelineCreates) {
+    out.push(`${pipelineCreates} pipeline(s) created during the frame — move pipeline creation to load ` +
+      "time to remove hitches.");
+  }
+
+  if (!frameGpuTimeMs) {
+    out.push("Re-capture with profilePasses:true to measure per-pass GPU time and get a CPU-vs-GPU-bound verdict.");
+  }
+  return out;
+}
+
+// Full performance report for a capture: frame budget + bound verdict, GPU timing,
+// passes ranked by cost with per-pass bottleneck classification, heuristic issues,
+// and concrete suggestions. This is the one-call "diagnose performance" entry point.
+export function analyzePerformance(capture) {
+  const passInfos = analyzeRenderPasses(capture);
+  const timed = passInfos.filter((p) => typeof p.durationMs === "number");
+  const frameGpuTimeMs = timed.length
+    ? round3(timed.reduce((s, p) => s + p.durationMs, 0))
+    : null;
+
+  const fs = capture && capture.frameStats;
+  let frameBudget = null;
+  let bound = null;
+  if (fs) {
+    const budget = num(fs.refreshMs) > 0 ? num(fs.refreshMs) : num(fs.avgFrameMs);
+    frameBudget = {
+      avgFrameMs: round3(fs.avgFrameMs),
+      cpuSubmitMs: round3(fs.cpuSubmitMs),
+      gpuTimeMs: frameGpuTimeMs,
+      refreshMs: round3(fs.refreshMs),
+      budgetMs: round3(budget),
+      droppedTotal: fs.skippedTotal ?? null
+    };
+    bound = classifyBound(num(fs.cpuSubmitMs), frameGpuTimeMs, budget);
+  } else if (frameGpuTimeMs != null) {
+    bound = { verdict: "unknown", reason: "capture has GPU timing but no frameStats (CPU/refresh) context" };
+  }
+
+  const ranked = [...passInfos].sort((a, b) =>
+    (num(b.durationMs) - num(a.durationMs)) || (num(b.fillWorkload) - num(a.fillWorkload)));
+  for (const p of ranked) {
+    if (frameGpuTimeMs && typeof p.durationMs === "number") {
+      p.gpuPercent = Math.round((p.durationMs / frameGpuTimeMs) * 1000) / 10;
+    }
+    p.likelyBottleneck = classifyPassBottleneck(p);
+  }
+
+  return {
+    frameBudget,
+    bound,
+    gpuTiming: frameGpuTimeMs != null ? { frameGpuTimeMs, timedPasses: timed.length } : null,
+    passes: ranked.slice(0, 20),
+    issues: findIssues(capture),
+    suggestions: buildSuggestions(capture, { ranked, bound, frameGpuTimeMs })
+  };
 }
 
 // Paginated, base64-stripped command list, optionally filtered by method.

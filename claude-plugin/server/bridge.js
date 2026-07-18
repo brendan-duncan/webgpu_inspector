@@ -267,6 +267,13 @@ export class Bridge {
           this._resolvePending(msg.requestId, msg);
         }
         break;
+      case "frameStatsResult":
+        if (msg.error) {
+          this._rejectPending(msg.requestId, new Error(msg.error));
+        } else {
+          this._resolvePending(msg.requestId, msg);
+        }
+        break;
       default:
         break;
     }
@@ -488,6 +495,51 @@ export class Bridge {
         page.ws.send(JSON.stringify(message));
       } catch (e) {
         this._rejectPending(requestId, new Error(`Failed to send texture read request: ${e.message}`));
+      }
+    });
+  }
+
+  // Ask a page to sample its live frame-health metrics over a window (ms) and
+  // resolve with the aggregates (fps, dropped frames, CPU submit time, bound verdict).
+  requestFrameStats(opts) {
+    opts = opts || {};
+    return new Promise((resolve, reject) => {
+      if (!this._listening) {
+        reject(new Error("Bridge is not listening, so live frame stats are unavailable."));
+        return;
+      }
+      const pages = [...this._pages.values()];
+      if (pages.length === 0) {
+        reject(new Error("No instrumented pages connected."));
+        return;
+      }
+      let page;
+      if (opts.pageId) {
+        page = this._pages.get(opts.pageId);
+        if (!page) {
+          reject(new Error(`No connected page with id "${opts.pageId}".`));
+          return;
+        }
+      } else if (pages.length === 1) {
+        page = pages[0];
+      } else {
+        reject(new Error(`${pages.length} pages connected (${pages.map((p) => p.pageId).join(", ")}). Pass pageId to choose one.`));
+        return;
+      }
+
+      const durationMs = Math.min(Math.max((opts.durationMs | 0) || 1000, 100), 10000);
+      const requestId = randomUUID();
+      // Give the page the sampling window plus slack to reply.
+      const timer = setTimeout(() => {
+        this._rejectPending(requestId, new Error(`Frame stats timed out after ${durationMs + 5000}ms.`));
+      }, durationMs + 5000);
+      this._pending.set(requestId, { resolve, reject, timer, pageId: page.pageId });
+
+      const message = { type: "frameStats", requestId, durationMs };
+      try {
+        page.ws.send(JSON.stringify(message));
+      } catch (e) {
+        this._rejectPending(requestId, new Error(`Failed to send frame stats request: ${e.message}`));
       }
     });
   }
