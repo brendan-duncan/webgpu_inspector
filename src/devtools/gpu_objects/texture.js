@@ -119,7 +119,7 @@ export class Texture extends GPUObject {
             offset += 4;
             break;
           case "32float":
-            value[i] = new Float32Array(imageData.buffer, offset, 1)[0];
+            value[i] = new Float32Array(imageData.buffer, imageData.byteOffset + offset, 1)[0];
             offset += 4;
             break;
         }
@@ -274,7 +274,7 @@ export class Texture extends GPUObject {
         }
 
         case "rg11b10ufloat": {
-          const uintValue = new Uint32Array(imageData.buffer, offset, 1)[0];
+          const uintValue = new Uint32Array(imageData.buffer, imageData.byteOffset + offset, 1)[0];
           const ri = uintValue & 0x7FF;
           const gi = (uintValue & 0x3FF800) >> 11;
           const bi = (uintValue & 0xFFC00000) >> 22;

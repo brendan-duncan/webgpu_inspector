@@ -99,7 +99,8 @@ export class CaptureStatistics {
         if (command.isBufferDataLoaded && command.bufferData) {
           const bufferData = command.bufferData[0];
           if (bufferData) {
-            const u32Array = new Uint32Array(bufferData.buffer);
+            const u32Array = new Uint32Array(bufferData.buffer, bufferData.byteOffset,
+                Math.floor(bufferData.byteLength / 4));
             vertexCount = u32Array[0];
           }
         }

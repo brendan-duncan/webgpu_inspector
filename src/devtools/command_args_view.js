@@ -291,7 +291,8 @@ export function renderCommandSummary(commandInfo, command, hooks) {
       if (command.isBufferDataLoaded && command.bufferData) {
         const bufferData = command.bufferData[0];
         if (bufferData) {
-          vertexCount = new Uint32Array(bufferData.buffer)[0];
+          vertexCount = new Uint32Array(bufferData.buffer, bufferData.byteOffset,
+              Math.floor(bufferData.byteLength / 4))[0];
         }
       }
     } else {
