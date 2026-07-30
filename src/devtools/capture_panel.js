@@ -1246,7 +1246,7 @@ export class CapturePanel {
    * @param {number} offset - Offset into the buffer.
    * @param {number} radix - Radix for number display (10, 16, 8, 2).
    */
-  _showBufferDataType(ui, type, bufferData, offset = 0, radix = 10) {
+  _showBufferDataType(ui, type, bufferData, offset, radix) {
     if (!type) {
       return;
     }
