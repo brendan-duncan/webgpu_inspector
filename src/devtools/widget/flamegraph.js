@@ -8,6 +8,10 @@ import { Div } from "./div.js";
 const rowHeightPx = 18;
 const rowGapPx = 1;
 const minFramePx = 2;
+// Frames narrower than this fraction of the current view are not emitted at
+// all. At a typical panel width this is well under a pixel, so nothing visible
+// is lost, and it keeps the DOM bounded on captures with thousands of frames.
+const minVisiblePct = 0.04;
 
 // Palette keyed by what dominates a frame's cost, so the graph reads as "why is
 // this expensive" and not just "how expensive". Falls back to the neutral ramp
@@ -125,12 +129,22 @@ export class FlameGraph extends Widget {
     // A zero-cost focus would divide by zero, so bail to an empty graph.
     const scale = focus.totalCost > 0 ? 100 / focus.totalCost : 0;
     let maxDepth = 0;
+    let culled = 0;
 
     const emit = (node, depth, offsetCost, ancestors) => {
+      const widthPct = node.totalCost * scale;
+      // Cull subtrees narrower than a pixel or so. A frame graph over a real
+      // capture can hold thousands of nodes, most of them sub-pixel at full
+      // zoom; emitting them costs DOM for something nobody can see. They come
+      // back as soon as the user zooms into an ancestor.
+      if (depth > 0 && widthPct < minVisiblePct) {
+        culled++;
+        return;
+      }
       if (depth > maxDepth) {
         maxDepth = depth;
       }
-      this._emitFrame(node, depth, offsetCost * scale, node.totalCost * scale, ancestors);
+      this._emitFrame(node, depth, offsetCost * scale, widthPct, ancestors);
 
       // Children are laid out left-to-right in their own order, each taking a
       // slice of the parent proportional to its total. Self cost shows up as
@@ -144,6 +158,16 @@ export class FlameGraph extends Widget {
     };
 
     emit(focus, 0, 0, []);
+    this._culled = culled;
+
+    // Say so rather than letting the graph look complete when it isn't. Unlike
+    // a data cap this is only visual — zooming in brings the frames back.
+    if (culled > 0) {
+      const hint = document.createElement("span");
+      hint.textContent = `  (${culled} frames too small to draw — zoom in)`;
+      hint.style.cssText = "color: #777; font-style: italic;";
+      this._breadcrumb.element.appendChild(hint);
+    }
 
     this._canvas.element.style.height = `${(maxDepth + 1) * (rowHeightPx + rowGapPx)}px`;
   }

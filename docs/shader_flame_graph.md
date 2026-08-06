@@ -39,6 +39,8 @@ Three sources feed the graph, and they are not equally trustworthy:
 **Measured.** Pass GPU durations come from timestamp queries, available when the
 capture was taken with **Profile Passes** enabled. Fragment invocation counts
 come from replaying the frame on the GPU (the *Measure fragments* button).
+Per-draw GPU times come from replaying each draw with timestamp queries (the
+*Measure draw times* button) — see [Per-draw timing](#per-draw-timing).
 
 **Exact.** Vertex and compute invocation counts are read straight out of the
 captured draw and dispatch arguments — `draw(vertexCount, instanceCount)`,
@@ -68,6 +70,41 @@ reality is exactly the work early-Z is saving you.
 
 Until you run the measurement, fragment stages appear as zero-width frames
 labelled *invocation count unknown*, rather than being filled in with a guess.
+
+## Per-draw timing
+
+**Measure draw times** replays each draw on its own with timestamp queries, so
+every draw's width becomes a measured number. Without it, a pass's measured
+milliseconds are divided among its draws *by the model*; with it, the model's
+only remaining job is splitting each draw's measured time across that draw's
+shader stages and statements.
+
+Two encodings, picked automatically:
+
+* **inside-passes** — `writeTimestamp()` between draws in a single pass, keeping
+  the pass structure intact. Needs Chrome's
+  `chromium-experimental-timestamp-query-inside-passes`.
+* **split-passes** — one pass per draw. Portable, and measured to agree with the
+  above to **within 1%** on desktop hardware, where an empty pass costs nothing
+  measurable. On a tile-based (mobile) GPU each pass forces a tile flush, so
+  treat those numbers as relative rather than absolute.
+
+Three caveats, all surfaced in the UI:
+
+* **Draws are timed in isolation.** They don't overlap or share state the way
+  they do in a real pass, so the per-draw times **do not sum to the pass's own
+  measured duration** — they overstate it. Compare draws against each other, not
+  against the pass total. The root frame is labelled *isolated draw time* rather
+  than GPU time for exactly this reason.
+* **Depth starts cleared.** Each replayed pass gets fresh attachments, so depth
+  written by earlier passes is absent and draws that the real frame hides behind
+  others will measure more expensive than they are.
+* **Timestamps are quantized** (~1µs on the hardware tested, unchanged by
+  disabling Dawn's quantization — it appears to be the hardware tick). A draw
+  costing a microsecond is indistinguishable from noise in one shot, so cheap
+  draws are automatically re-measured with the draw encoded many times and the
+  total divided. That recovers draws down to ~100ns, at the cost of extra
+  submissions.
 
 ## What the model cannot see
 
@@ -108,11 +145,20 @@ looking at" — not at predicting absolute timings. A reasonable loop:
 2. Open **Shader Flame Graph** and find the widest pass.
 3. Run **Measure fragments** if a render pass looks suspiciously cheap — an
    unweighted fragment stage is invisible until you do.
-4. Zoom into the widest shader stage and look at the color: red says cut texture
+4. Run **Measure draw times** to replace the modeled split between draws with
+   measurement. Tick **Per draw** first if you want individual draws rather than
+   per-pipeline groups.
+5. Zoom into the widest shader stage and look at the color: red says cut texture
    work, purple says cut buffer traffic, orange says a transcendental is in a
    loop.
-5. Cross-check against **Analyze Shaders**, which flags specific patterns
+6. Cross-check against **Analyze Shaders**, which flags specific patterns
    (expensive builtins in loops, loop-invariant expressions) on the same lines.
+
+Note that **Per draw** re-buckets the frame, which invalidates fragment counts
+measured in the other mode (a per-draw bucket is a subset of a pipeline one, so
+old counts can't be re-attributed). The graph clears them and says so; measure
+again in the mode you want. Draw timings are keyed by the command itself and
+survive the toggle.
 
 ## See also
 

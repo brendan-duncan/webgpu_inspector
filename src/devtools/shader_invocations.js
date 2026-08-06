@@ -264,7 +264,14 @@ export function workgroupSizeFor(shaderModule, entryPoint) {
   return [1, 1, 1];
 }
 
+// Captured args pass through JSON, which turns an omitted (undefined) argument
+// into null — and `Number(null)` is a perfectly finite 0. Without the explicit
+// null check, `draw(3)` captured as [3, null, null, null] yields an instance
+// count of 0 and silently weights the whole draw to nothing.
 function numberOr(value, fallback) {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 }

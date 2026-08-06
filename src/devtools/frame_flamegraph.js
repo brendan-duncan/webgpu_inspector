@@ -5,6 +5,7 @@ import { Button } from "./widget/button.js";
 import { FlameGraph } from "./widget/flamegraph.js";
 import { buildFrameCostTree, formatCostValue, MS, OPS } from "./frame_cost_tree.js";
 import { measureFragmentCounts } from "./capture_replay.js";
+import { measureDrawTimings, detectTimingSupport } from "./draw_timing.js";
 import { dominantDimension } from "wgsl_reflect/wgsl_reflect.module.js";
 
 // See frame_cost_tree.js for what the numbers mean and where they come from.
@@ -40,6 +41,7 @@ export function buildFrameFlameGraph(options) {
 
   let perDraw = false;
   let fragmentCounts = null;
+  let drawTimings = null;
   let measuring = false;
   let units = OPS;
   let groups = [];
@@ -50,6 +52,18 @@ export function buildFrameFlameGraph(options) {
     checked: false,
     onChange: (checked) => {
       perDraw = checked;
+      // Fragment counts are measured per bucket, and the buckets change with
+      // the grouping mode — a per-draw bucket is a subset of a pipeline one, so
+      // the old counts can't be re-attributed. Drop them rather than silently
+      // dropping the fragment stages that no longer match a key. Draw timings
+      // are keyed by the command itself, so they survive the toggle.
+      if (fragmentCounts) {
+        fragmentCounts = null;
+        new Div(notes, {
+          class: "flame-note",
+          text: "Fragment counts were cleared because the grouping changed; measure again to weight fragment stages in this view.",
+        });
+      }
       update();
     },
   });
@@ -61,6 +75,14 @@ export function buildFrameFlameGraph(options) {
   });
   measureButton.element.title =
     "Replay the frame on the GPU to count rasterized fragments, so fragment shaders can be weighted by their real invocation count.";
+
+  const timeButton = new Button(controls, {
+    label: "Measure draw times",
+    class: "btn",
+    callback: () => measureTimings(),
+  });
+  timeButton.element.title =
+    "Replay each draw on the GPU with timestamp queries, so every draw's width is measured time rather than a modeled share of its pass.";
 
   const resetButton = new Button(controls, {
     label: "Reset zoom",
@@ -84,8 +106,11 @@ export function buildFrameFlameGraph(options) {
     colorOf,
     tooltipOf: (n) => {
       const lines = [n.name, formatCostValue(n.totalCost, units)];
+      if (n.measuredMs !== undefined && n.measuredMs !== null) {
+        lines.push(`Measured in isolation: ${n.measuredMs.toFixed(4)} ms`);
+      }
       if (n.durationMs !== undefined && n.durationMs !== null) {
-        lines.push(`Measured GPU time: ${n.durationMs.toFixed(3)} ms`);
+        lines.push(`Pass GPU time: ${n.durationMs.toFixed(3)} ms`);
       }
       if (n.confidence) {
         lines.push(`Invocation count: ${n.confidence}`);
@@ -113,6 +138,7 @@ export function buildFrameFlameGraph(options) {
       commands: options.commands,
       getObject: options.getObject,
       fragmentCounts,
+      drawTimings,
       perDraw,
     });
     units = result.units;
@@ -135,6 +161,62 @@ export function buildFrameFlameGraph(options) {
       measureButton.element.title = "Fragment measurement needs a WebGPU device in DevTools.";
     }
     measureButton.disabled = measuring || !canMeasure || groups.length === 0;
+
+    // Timing additionally needs the timestamp-query feature on the DevTools
+    // device; say which of the two is missing rather than just greying out.
+    const timing = canMeasure ? detectTimingSupport(options.getDevice()) : null;
+    if (!canMeasure) {
+      timeButton.element.title = "Draw timing needs a WebGPU device in DevTools.";
+    } else if (!timing.supported) {
+      timeButton.element.title = timing.reason;
+    } else {
+      timeButton.element.title =
+        `Replay each draw with timestamp queries (${timing.method}), so every draw's width is measured time rather than a modeled share of its pass.`;
+    }
+    timeButton.disabled = measuring || !canMeasure || !timing?.supported;
+  }
+
+  async function measureTimings() {
+    if (measuring) {
+      return;
+    }
+    const device = options.getDevice?.();
+    if (!device) {
+      new Div(notes, { class: "flame-note", text: "Draw timing is unavailable: no DevTools GPU device." });
+      return;
+    }
+    measuring = true;
+    timeButton.disabled = true;
+    measureButton.disabled = true;
+
+    const measureNotes = [];
+    let measured = false;
+    try {
+      const result = await measureDrawTimings({
+        device,
+        database: options.database,
+        commands: options.commands,
+        getTextureFromAttachment: options.getTextureFromAttachment,
+        onProgress: (done, total) => {
+          timeButton.text = `Timing ${done}/${total}...`;
+        },
+      });
+      drawTimings = result.timings;
+      measured = true;
+      measureNotes.push(...result.notes);
+      if (result.skipped) {
+        measureNotes.push(`${result.skipped} draw(s) could not be replayed for timing and keep their modeled cost.`);
+      }
+    } catch (e) {
+      measureNotes.push(`Draw timing failed: ${e.message ?? e}`);
+    } finally {
+      measuring = false;
+      timeButton.text = measured ? "Re-measure draw times" : "Measure draw times";
+      update();
+      for (const note of measureNotes) {
+        new Div(notes, { class: "flame-note", text: note });
+      }
+    }
   }
 
   async function measureFragments() {

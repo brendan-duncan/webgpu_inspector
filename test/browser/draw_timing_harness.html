@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<!-- Browser harness for per-draw GPU timing (src/devtools/draw_timing.js).
+     Builds a mock capture whose three draws do 1x / 8x / 32x the fragment work,
+     replays them with timestamp queries on a real GPUDevice, and checks the
+     measured times actually track the known cost ratios. Driven by
+     test/browser/run_draw_timing_harness.mjs; results in window.__results. -->
+<head>
+<script type="importmap">
+{ "imports": { "wgsl_reflect/": "/node_modules/wgsl_reflect/" } }
+</script>
+</head>
+<body>
+<script type="module">
+import { measureDrawTimings, detectTimingSupport } from "../../src/devtools/draw_timing.js";
+
+const results = [];
+window.__results = null;
+
+function check(name, fn) {
+    return Promise.resolve()
+        .then(fn)
+        .then((info) => results.push({ name, ok: true, info }))
+        .catch((e) => results.push({ name, ok: false, failure: e.message ?? String(e) }));
+}
+
+function assert(cond, message) {
+    if (!cond) {
+        throw new Error(message);
+    }
+}
+
+const WIDTH = 512, HEIGHT = 512;
+
+// The fragment loop count comes from a uniform, so three otherwise-identical
+// draws can be made to cost 1x / 8x / 32x.
+const CODE = `
+struct U { iters : u32 }
+@group(0) @binding(0) var<uniform> u : U;
+
+@vertex fn vsMain(@builtin(vertex_index) vi : u32) -> @builtin(position) vec4f {
+  var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  return vec4f(p[vi], 0.0, 1.0);
+}
+
+@fragment fn fsMain() -> @location(0) vec4f {
+  var acc = 0.0;
+  for (var i = 0u; i < u.iters; i = i + 1u) {
+    acc = acc + sqrt(f32(i) + 0.5) * sin(acc + 1.0);
+  }
+  return vec4f(acc * 0.0001, 0.0, 0.0, 1.0);
+}
+`;
+
+const ITERS = [64, 512, 2048];
+
+// A capture database stand-in: the shape CaptureReplay expects.
+function makeDatabase(objects, textures) {
+    const map = new Map(Object.entries(objects).map(([k, v]) => [Number(k), v]));
+    return {
+        getObject: (id) => map.get(id) ?? null,
+        getTextureFromView: (view) => textures.get(view?.__id) ?? null,
+    };
+}
+
+async function main() {
+    const adapter = await navigator.gpu.requestAdapter();
+    const features = ["timestamp-query", "chromium-experimental-timestamp-query-inside-passes"]
+        .filter((f) => adapter.features.has(f));
+    const device = await adapter.requestDevice({ requiredFeatures: features });
+
+    const support = detectTimingSupport(device);
+    results.push({ name: `timing support detected (${support.method ?? support.reason})`, ok: support.supported, info: support });
+    if (!support.supported) {
+        return;
+    }
+
+    // ---- Build a mock capture -------------------------------------------
+    const IDS = { module: 1, target: 2, view: 3, pipeline: 4, layout: 5 };
+    const uniformIds = [10, 11, 12];
+    const bindGroupIds = [20, 21, 22];
+
+    const targetTexture = {
+        id: IDS.target, label: "target", width: WIDTH, height: HEIGHT,
+        depthOrArrayLayers: 1,
+        descriptor: { format: "rgba8unorm", size: [WIDTH, HEIGHT], sampleCount: 1, usage: 0x10 },
+    };
+    const textures = new Map([[IDS.view, targetTexture]]);
+
+    const objects = {
+        [IDS.module]: { id: IDS.module, label: "shader", code: CODE, descriptor: { code: CODE } },
+        [IDS.target]: targetTexture,
+        [IDS.pipeline]: {
+            id: IDS.pipeline, label: "timed",
+            descriptor: {
+                layout: "auto",
+                vertex: { module: { __id: IDS.module }, entryPoint: "vsMain" },
+                fragment: {
+                    module: { __id: IDS.module }, entryPoint: "fsMain",
+                    targets: [{ format: "rgba8unorm" }],
+                },
+                primitive: { topology: "triangle-list" },
+            },
+        },
+    };
+    for (let i = 0; i < 3; ++i) {
+        objects[uniformIds[i]] = {
+            id: uniformIds[i],
+            descriptor: { size: 16, usage: 0x40 | 0x8 },  // UNIFORM | COPY_DST
+        };
+        objects[bindGroupIds[i]] = {
+            id: bindGroupIds[i],
+            descriptor: {
+                layout: { __id: 999 },  // no captured BGL -> auto layout path
+                entries: [{ binding: 0, resource: { buffer: { __id: uniformIds[i] } } }],
+            },
+        };
+    }
+
+    // The capture's per-binding byte payloads: what each draw's uniform holds.
+    function uniformBytes(iters) {
+        return new Uint8Array(new Uint32Array([iters, 0, 0, 0]).buffer);
+    }
+
+    const commands = [
+        { method: "beginRenderPass", object: "enc", id: 100, args: [{
+            colorAttachments: [{ view: { __id: IDS.view }, loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] }],
+        }] },
+        { method: "setPipeline", object: "enc", id: 101, args: [{ __id: IDS.pipeline }] },
+    ];
+    const drawCommands = [];
+    for (let i = 0; i < 3; ++i) {
+        commands.push({
+            method: "setBindGroup", object: "enc", id: 110 + i,
+            args: [0, { __id: bindGroupIds[i] }],
+            // The capture attaches each binding's bytes as command.bufferData,
+            // indexed by bind group entry; replay uploads them before encoding.
+            bufferData: [uniformBytes(ITERS[i])],
+        });
+        const draw = { method: "draw", object: "enc", id: 120 + i, args: [3, 1, 0, 0] };
+        drawCommands.push(draw);
+        commands.push(draw);
+    }
+    commands.push({ method: "end", object: "enc", id: 190 });
+
+    const database = makeDatabase(objects, textures);
+    const getTextureFromAttachment = (attachment) => textures.get(attachment?.view?.__id) ?? null;
+
+    let result = null;
+    await check("measureDrawTimings runs without throwing", async () => {
+        result = await measureDrawTimings({
+            device, database, commands, getTextureFromAttachment,
+        });
+        assert(result, "no result");
+        return { method: result.method, skipped: result.skipped, notes: result.notes };
+    });
+    if (!result) {
+        return;
+    }
+
+    await check("every draw got a timing", () => {
+        assert(result.timings.size === 3,
+            `timed ${result.timings.size} of 3 draws (skipped ${result.skipped}); notes: ${result.notes.join(" | ")}`);
+        for (const draw of drawCommands) {
+            assert(result.timings.has(draw), `draw ${draw.id} has no timing`);
+        }
+    });
+
+    await check("measured times are positive", () => {
+        const ms = drawCommands.map((d) => result.timings.get(d).ms);
+        for (const t of ms) {
+            assert(t > 0, `non-positive timing: ${ms.join(", ")}`);
+        }
+        return { ms };
+    });
+
+    // The real test: does measurement track known relative cost? The draws
+    // differ only in fragment loop count, so times should scale with it.
+    await check("measured times track the 1x/8x/32x cost ratios", () => {
+        const ms = drawCommands.map((d) => result.timings.get(d).ms);
+        assert(ms[1] > ms[0], `8x draw (${ms[1]}ms) not slower than 1x (${ms[0]}ms)`);
+        assert(ms[2] > ms[1], `32x draw (${ms[2]}ms) not slower than 8x (${ms[1]}ms)`);
+        // Generous bounds: this is real hardware with scheduling noise, and the
+        // point is that attribution works, not that it's exact.
+        const r1 = ms[1] / ms[0];
+        const r2 = ms[2] / ms[1];
+        assert(r1 > 3 && r1 < 16, `8x/1x ratio was ${r1.toFixed(2)}, expected roughly 8`);
+        assert(r2 > 2 && r2 < 8, `32x/8x ratio was ${r2.toFixed(2)}, expected roughly 4`);
+        return { ms, ratios: [r1, r2] };
+    });
+
+    await check("the isolation caveat is reported", () => {
+        assert(result.notes.some((n) => /isolation/.test(n)),
+            `notes did not mention isolation: ${result.notes.join(" | ")}`);
+    });
+
+    // Force the portable path even when the device supports inside-passes, so
+    // both encoders are covered on any machine that runs this.
+    await check("split-passes path produces consistent timings", async () => {
+        const originalHas = device.features.has.bind(device.features);
+        const patched = (f) => (f.includes("inside-passes") ? false : originalHas(f));
+        device.features.has = patched;
+        let split;
+        try {
+            split = await measureDrawTimings({ device, database, commands, getTextureFromAttachment });
+        } finally {
+            device.features.has = originalHas;
+        }
+        assert(split.method === "split-passes", `method was ${split.method}`);
+        assert(split.timings.size === 3, `split path timed ${split.timings.size} of 3`);
+        const ms = drawCommands.map((d) => split.timings.get(d).ms);
+        assert(ms[2] > ms[0], `split path lost the ordering: ${ms.join(", ")}`);
+
+        // The two encoders should broadly agree; this is the claim that makes
+        // split-passes an acceptable fallback.
+        const insideMs = drawCommands.map((d) => result.timings.get(d).ms);
+        const worst = Math.max(...ms.map((v, i) => Math.abs(v - insideMs[i]) / Math.max(insideMs[i], 1e-6)));
+        return { splitMs: ms, insideMs, worstRelativeDiff: worst };
+    });
+
+    await check("cheap draws are refined with repetition", async () => {
+        // One trivial draw: a single execution is below timestamp granularity,
+        // so it must come back with repeats > 1 rather than as noise.
+        const cheapCommands = [
+            commands[0],
+            commands[1],
+            { method: "setBindGroup", object: "enc", id: 300, args: [0, { __id: bindGroupIds[0] }],
+              bufferData: [uniformBytes(1)] },
+            { method: "setScissorRect", object: "enc", id: 301, args: [0, 0, 4, 4] },
+            { method: "draw", object: "enc", id: 302, args: [3, 1, 0, 0] },
+            { method: "end", object: "enc", id: 303 },
+        ];
+        const cheap = await measureDrawTimings({
+            device, database, commands: cheapCommands, getTextureFromAttachment,
+        });
+        const timing = cheap.timings.get(cheapCommands[4]);
+        assert(timing, "the cheap draw was not timed");
+        return { ms: timing.ms, repeats: timing.repeats, refined: cheap.refined };
+    });
+}
+
+try {
+    await main();
+} catch (e) {
+    results.push({ name: "harness", ok: false, failure: `${e.stack ?? e}` });
+}
+window.__results = results;
+</script>
+</body>
+</html>

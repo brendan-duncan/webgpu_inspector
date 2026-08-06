@@ -90,19 +90,46 @@ function scaleSubtree(node, factor) {
  *   keyed by `${passIndex}:${bucketKey}`; absent entries stay unknown
  * @param {boolean} [params.perDraw=false] - one frame per draw rather than one
  *   per pipeline
+ * @param {number} [params.maxFramesPerPass=32] - cap on expanded frames per
+ *   pass; the costliest survive and the tail collapses into one frame that
+ *   keeps its cost. Real frames reach thousands of draws, and a flame graph
+ *   with tens of thousands of DOM frames is unusable.
+ * @param {Map<Object,{ms:number,repeats:number}>} [params.drawTimings] - measured
+ *   per-draw GPU time from draw_timing.js, keyed by the capture command record.
+ *   When present, a bucket's width is its *measured* time rather than a share of
+ *   the pass derived from the model — the model then only distributes cost
+ *   within the bucket, across its shader stages and statements.
  * @returns {{root:Object, units:string, warnings:string[], stats:Object,
  *            groups:Array, passes:Array}}
  */
-export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDraw }) {
+export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDraw, maxFramesPerPass = 32, drawTimings }) {
   const { passes, warnings } = collectFrameInvocations(commands, getObject);
   const notes = warnings.slice();
+
+  // Per-draw measurements, when available, outrank pass timestamps: they make
+  // the width of every draw a measured number instead of a modeled share.
+  const timedItems = drawTimings
+    ? passes.reduce((a, p) => a + p.items.filter((i) => drawTimings.has(i.command)).length, 0)
+    : 0;
+  const totalItems = passes.reduce((a, p) => a + p.items.length, 0);
+  const useDrawTimings = timedItems > 0;
 
   // Milliseconds only make sense if *every* pass is measured; a tree mixing
   // measured ms with modeled ops would give a meaningless root total.
   const measuredPasses = passes.filter((p) => p.durationMs !== null && p.durationMs > 0);
   const allMeasured = passes.length > 0 && measuredPasses.length === passes.length;
-  const units = allMeasured ? MS : OPS;
-  if (!allMeasured && measuredPasses.length > 0) {
+  const units = (useDrawTimings || allMeasured) ? MS : OPS;
+
+  if (useDrawTimings) {
+    notes.push(`Draw widths are measured GPU time (${timedItems} of ${totalItems} draws timed by replay). The model only distributes each draw's measured time across its shader stages and statements.`);
+    // Isolated draws don't share state or overlap the way they do in the real
+    // pass, so the sum is an over-estimate of the pass. Saying so is the whole
+    // difference between a useful number and a misleading one.
+    notes.push("Each draw is timed in isolation, so the per-draw times do not add up to the pass's own measured duration — a real pass overlaps consecutive draws and reuses state. Compare draws against each other, not against the pass total.");
+    if (timedItems < totalItems) {
+      notes.push(`${totalItems - timedItems} draw(s) could not be timed and fall back to their modeled cost, which is not comparable to the measured ones.`);
+    }
+  } else if (!allMeasured && measuredPasses.length > 0) {
     notes.push(`Only ${measuredPasses.length} of ${passes.length} passes have GPU timings, so the graph is in modeled op units rather than milliseconds. Re-capture with "Profile Passes" enabled for a timed graph.`);
   } else if (!allMeasured && passes.length > 0) {
     notes.push('No GPU pass timings in this capture, so the graph is in modeled op units. Re-capture with "Profile Passes" enabled to scale it to measured milliseconds.');
@@ -113,6 +140,10 @@ export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDra
     unknownStages: 0,
     totalStages: 0,
     unmeasuredFragmentStages: 0,
+    collapsedBuckets: 0,
+    partiallyTimedBuckets: 0,
+    timedItems,
+    totalItems,
   };
   // Draw groups the fragment measurement can later be run against.
   const groups = [];
@@ -131,7 +162,11 @@ export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDra
       bucket.items.push(item);
     }
 
-    const itemNodes = [];
+    // Resolve every bucket's stages to a *scalar* cost first, without building
+    // any subtrees. Real frames reach thousands of draws, and expanding a
+    // shader subtree per draw would be tens of thousands of frames plus a tree
+    // copy each — so only the buckets that survive the cap get expanded.
+    const resolved = [];
     for (const bucket of buckets.values()) {
       // Accumulate invocations per (stage, module, entryPoint) across the
       // bucket, so one frame represents all of the bucket's work in that stage.
@@ -174,7 +209,8 @@ export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDra
         groups.push({ key: groupKey, draws: fragmentDraws, pass, bucket });
       }
 
-      const stageNodes = [];
+      const stages = [];
+      let bucketCost = 0;
       for (const acc of stageTotals.values()) {
         // Fragment counts only exist once the measurement pass has been run.
         if (acc.stage === "fragment") {
@@ -191,12 +227,69 @@ export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDra
 
         const costTree = getShaderCostTree(acc.module);
         const entry = findCostEntry(costTree, acc.stage, acc.entryPoint);
+        const usable = !!entry && !acc.unknown && acc.invocations > 0;
+        if (!usable) {
+          stats.unknownStages++;
+        }
+        const cost = usable ? entry.costPerInvocation * acc.invocations : 0;
+        bucketCost += cost;
+        stages.push({ acc, costTree, entry, usable, cost });
+      }
+
+      // With per-draw measurements, the bucket's width is its measured time and
+      // the model's only job is splitting that time between the stages inside
+      // it. `scale` converts modeled op units to measured ms for this bucket.
+      let measuredMs = null;
+      if (useDrawTimings) {
+        let sum = 0;
+        let have = 0;
+        for (const item of bucket.items) {
+          const timing = drawTimings.get(item.command);
+          if (timing) {
+            sum += timing.ms;
+            have++;
+          }
+        }
+        measuredMs = have > 0 ? sum : null;
+        if (have > 0 && have < bucket.items.length) {
+          stats.partiallyTimedBuckets++;
+        }
+      }
+      const scale = (measuredMs !== null && bucketCost > 0) ? measuredMs / bucketCost : 1;
+      resolved.push({
+        bucket,
+        stages,
+        // Order and width by the measured time when there is one.
+        cost: measuredMs !== null ? measuredMs : bucketCost,
+        measuredMs,
+        scale,
+      });
+    }
+
+    // Keep the costliest buckets, collapse the tail. Sorting by cost means the
+    // frames that survive are the ones worth looking at.
+    let kept = resolved;
+    let collapsed = null;
+    if (resolved.length > maxFramesPerPass) {
+      const sorted = resolved.slice().sort((a, b) => b.cost - a.cost);
+      kept = sorted.slice(0, maxFramesPerPass);
+      const tail = sorted.slice(maxFramesPerPass);
+      const tailCost = tail.reduce((a, r) => a + r.cost, 0);
+      const tailDraws = tail.reduce((a, r) => a + r.bucket.items.length, 0);
+      collapsed = { count: tail.length, draws: tailDraws, cost: tailCost };
+      stats.collapsedBuckets += tail.length;
+    }
+
+    const itemNodes = [];
+    for (const { bucket, stages, measuredMs, scale } of kept) {
+      const stageNodes = [];
+      for (const { acc, costTree, entry, usable, cost: modeledCost } of stages) {
+        const cost = modeledCost * scale;
         const label = `${acc.stage}: ${acc.entryPoint ?? entry?.name ?? "?"}`;
 
-        if (!entry || acc.unknown || acc.invocations <= 0) {
+        if (!usable) {
           // Carry the frame at zero width rather than dropping it, so the
           // reason it isn't weighted stays visible in the graph.
-          stats.unknownStages++;
           const reason = !entry ? "not analyzable" : "invocation count unknown";
           const node = makeNode("recursive", `${label} — ${reason}`, 0, []);
           node.estimated = true;
@@ -204,14 +297,13 @@ export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDra
           continue;
         }
 
-        const modeled = entry.costPerInvocation * acc.invocations;
-        const scaled = rescaleCostTree(mergeCostTree(entry.root, costTree.weights), modeled);
+        const scaled = rescaleCostTree(mergeCostTree(entry.root, costTree.weights), cost);
         const suffix = acc.confidence === "measured" ? " measured"
           : acc.confidence === "upperBound" ? " max" : "";
         const node = makeNode(
           "function",
           `${label} — ${acc.invocations.toLocaleString()}${suffix} invocations`,
-          modeled,
+          cost,
           scaled.children);
         node.self = scaled.self;
         node.total = scaled.total;
@@ -234,7 +326,26 @@ export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDra
 
       const itemNode = rollup(makeNode("loop", name, 0, stageNodes));
       itemNode.command = bucket.items[0].command;
+      if (measuredMs !== null) {
+        itemNode.measuredMs = measuredMs;
+        // A measured draw whose shaders couldn't be modeled still has a real
+        // width; show it as one opaque frame rather than losing the measurement.
+        if (itemNode.totalCost <= 0) {
+          itemNode.totalCost = measuredMs;
+          itemNode.children = [];
+          itemNode.estimated = true;
+        }
+      }
       itemNodes.push(itemNode);
+    }
+
+    // The collapsed tail keeps its cost so the pass total stays correct — which
+    // matters most in ms mode, where the pass total is a measured number.
+    if (collapsed) {
+      const label = perDraw
+        ? `+ ${collapsed.count} more draws`
+        : `+ ${collapsed.count} more pipelines (${collapsed.draws} draws)`;
+      itemNodes.push(makeNode("branch", label, collapsed.cost, []));
     }
 
     const kindLabel = pass.kind === "render" ? "Render" : "Compute";
@@ -245,10 +356,14 @@ export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDra
     passNode.command = pass.command;
     passNode.durationMs = pass.durationMs;
 
-    // In ms mode the measured duration is authoritative: rescale the modeled
-    // subtree to fill exactly that much time. Children keep their modeled
-    // *proportions*, which is the point — measured totals, modeled split.
-    if (units === MS) {
+    // With per-draw measurements the draws are already in real ms, so the pass
+    // is just their sum — rescaling to the pass timestamp here would throw the
+    // measurements away and re-impose the modeled distribution.
+    //
+    // Otherwise, in ms mode the pass's measured duration is authoritative:
+    // rescale the modeled subtree to fill exactly that much time. Children keep
+    // their modeled *proportions* — measured total, modeled split.
+    if (units === MS && !useDrawTimings) {
       const modeledTotal = passNode.totalCost;
       if (modeledTotal > 0) {
         scaleSubtree(passNode, pass.durationMs / modeledTotal);
@@ -265,12 +380,21 @@ export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDra
   }
 
   const root = rollup(makeNode("entry", "Frame", 0, passNodes));
-  if (units === MS) {
+  if (useDrawTimings) {
+    // Deliberately not called "GPU time": this is the sum of draws measured in
+    // isolation, which overstates a real frame that overlaps them.
+    root.name = `Frame — ${root.totalCost.toFixed(2)} ms of isolated draw time`;
+  } else if (units === MS) {
     root.name = `Frame — ${root.totalCost.toFixed(2)} ms GPU`;
   }
 
   if (stats.unmeasuredFragmentStages > 0) {
     notes.push(`${stats.unmeasuredFragmentStages} fragment stage(s) have no invocation count and are shown unweighted. Fragment counts can only be obtained by replaying the frame — use "Measure fragments" to include them.`);
+  }
+  if (stats.collapsedBuckets > 0) {
+    // Never let a cap be silent: a truncated graph that looks complete is worse
+    // than no graph.
+    notes.push(`${stats.collapsedBuckets} lower-cost ${perDraw ? "draw" : "pipeline"} group(s) are collapsed into "+ more" frames (showing the ${maxFramesPerPass} costliest per pass). Their cost is still counted in the pass totals.`);
   }
 
   return { root, units, warnings: notes, stats, groups, passes };

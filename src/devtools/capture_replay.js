@@ -65,7 +65,7 @@ export function vertexStageBindings(reflection, entryPoint) {
     return bindings;
 }
 
-function isDepthStencilFormat(format) {
+export function isDepthStencilFormat(format) {
     return !!format && (format.includes("depth") || format.includes("stencil"));
 }
 
@@ -216,7 +216,9 @@ export class CaptureReplay {
 
 // Run `create` inside a validation error scope; returns null (with a note) if
 // the created object is invalid.
-async function validated(replay, what, create) {
+// Exported for draw_timing.js, which replays the same captured state with the
+// original (rather than stubbed) pipelines.
+export async function validated(replay, what, create) {
     replay.device.pushErrorScope("validation");
     let result = null;
     try {
@@ -344,7 +346,7 @@ function vertexStageUsesBinding(replay, pipelineInfo, bgObj, groupIndex, binding
 // entries are used verbatim; with an "auto" layout the entries are filtered to
 // the bindings the vertex shader statically uses (matching what the auto
 // layout contains for the replaced-fragment pipeline).
-async function getBindGroupForDraw(replay, pipelineInfo, pipelineId, groupIndex, bgState) {
+export async function getBindGroupForDraw(replay, pipelineInfo, pipelineId, groupIndex, bgState) {
     const bgId = bgState.bgId;
     const bgObj = replay.database.getObject(bgId);
     if (!bgObj?.descriptor?.entries) {
@@ -594,7 +596,7 @@ async function submitDraws(replay, draws, countView, width, height, stats) {
 // Walk one captured render pass's commands, tracking encoder state, and
 // produce a plan per draw carrying the complete state that draw needs (plus
 // the captured-byte uploads the pass requires).
-function walkPassCommands(replay, passCommands, uploads, missing, stats) {
+export function walkPassCommands(replay, passCommands, uploads, missing, stats) {
     const state = {
         pipelineId: null,
         bindGroups: [],
@@ -718,7 +720,7 @@ async function prepareDraw(replay, plan, stubModule, ignoreCull) {
 
 // Upload captured buffer contents (writeBuffer requires 4-byte-aligned sizes;
 // pad the tail when a captured slice isn't).
-function applyUploads(replay, uploads) {
+export function applyUploads(replay, uploads) {
     for (const upload of uploads) {
         const gpuBuffer = replay.getBuffer(upload.bufferId);
         if (!gpuBuffer) {

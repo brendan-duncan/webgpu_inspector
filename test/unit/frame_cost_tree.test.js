@@ -365,6 +365,203 @@ test("measured fragment counts weight the fragment stage", () => {
     assert.equal(measured.stats.unmeasuredFragmentStages, 0);
 });
 
+test("omitted draw args serialized as null fall back to their defaults", () => {
+    // Captured args round-trip through JSON, so `draw(3)` arrives as
+    // [3, null, null, null] — and Number(null) is a finite 0. Reading that as
+    // instanceCount 0 silently weights the whole frame to nothing.
+    const pipeline = {
+        id: 100,
+        descriptor: { vertex: { module: { __id: 10 }, entryPoint: "vsMain" } },
+    };
+    const objects = new Map([[100, pipeline], [10, makeShaderModule(10, VERTEX_FRAGMENT_WGSL)]]);
+    const commands = [
+        { method: "beginRenderPass", object: "e", id: 1, args: [{ colorAttachments: [] }] },
+        { method: "setPipeline", object: "e", args: [{ __id: 100 }] },
+        { method: "draw", object: "e", id: 2, args: [3, null, null, null] },
+        { method: "drawIndexed", object: "e", id: 3, args: [6, null, null, null, null] },
+        { method: "end", object: "e", id: 4 },
+    ];
+    const { passes } = collectFrameInvocations(commands, (id) => objects.get(id) ?? null);
+
+    assert.equal(passes[0].items[0].stages[0].invocations, 3, "draw(3) is 3 invocations, not 0");
+    assert.equal(passes[0].items[1].stages[0].invocations, 6, "drawIndexed(6) is 6 invocations, not 0");
+
+    const tree = buildFrameCostTree({ commands, getObject: (id) => objects.get(id) ?? null });
+    assert.ok(tree.root.totalCost > 0, "a frame of real draws must not weight to zero");
+});
+
+test("dispatch y/z default to 1 when serialized as null", () => {
+    const pipeline = { id: 200, descriptor: { compute: { module: { __id: 20 }, entryPoint: "csMain" } } };
+    const objects = new Map([[200, pipeline], [20, makeShaderModule(20, COMPUTE_WGSL)]]);
+    const commands = [
+        { method: "beginComputePass", object: "e", id: 1, args: [{}] },
+        { method: "setPipeline", object: "e", args: [{ __id: 200 }] },
+        { method: "dispatchWorkgroups", object: "e", id: 2, args: [4, null, null] },
+        { method: "end", object: "e", id: 3 },
+    ];
+    const { passes } = collectFrameInvocations(commands, (id) => objects.get(id) ?? null);
+    // 4 workgroups x @workgroup_size(8,4,1) = 128 threads.
+    assert.equal(passes[0].items[0].stages[0].invocations, 128);
+});
+
+test("maxFramesPerPass collapses the tail without losing its cost", () => {
+    // 12 draws, each its own pipeline-equivalent bucket in per-draw mode.
+    const pipeline = {
+        id: 100,
+        label: "p",
+        descriptor: { vertex: { module: { __id: 10 }, entryPoint: "vsMain" } },
+    };
+    const objects = new Map([[100, pipeline], [10, makeShaderModule(10, VERTEX_FRAGMENT_WGSL)]]);
+    const commands = [{ method: "beginRenderPass", object: "e", id: 0, args: [{ colorAttachments: [] }] },
+        { method: "setPipeline", object: "e", args: [{ __id: 100 }] }];
+    for (let i = 0; i < 12; ++i) {
+        commands.push({ method: "draw", object: "e", id: 100 + i, args: [3 * (i + 1), 1, 0, 0] });
+    }
+    commands.push({ method: "end", object: "e", id: 200 });
+
+    const getObject = (id) => objects.get(id) ?? null;
+    const full = buildFrameCostTree({ commands, getObject, perDraw: true, maxFramesPerPass: 100 });
+    const capped = buildFrameCostTree({ commands, getObject, perDraw: true, maxFramesPerPass: 4 });
+
+    assert.equal(full.root.children[0].children.length, 12);
+    // 4 kept + 1 collapsed frame.
+    assert.equal(capped.root.children[0].children.length, 5);
+    assert.equal(capped.stats.collapsedBuckets, 8);
+    assert.match(capped.root.children[0].children[4].name, /\+ 8 more draws/);
+
+    // The invariant that matters: capping must not change the total, because in
+    // ms mode the pass total is a measured number.
+    assert.ok(Math.abs(full.root.totalCost - capped.root.totalCost) < 1e-6,
+        `capped total ${capped.root.totalCost} != full total ${full.root.totalCost}`);
+    assert.ok(capped.warnings.some((w) => /collapsed/.test(w)), "the cap must be reported");
+});
+
+test("the kept frames are the costliest ones", () => {
+    const pipeline = {
+        id: 100,
+        descriptor: { vertex: { module: { __id: 10 }, entryPoint: "vsMain" } },
+    };
+    const objects = new Map([[100, pipeline], [10, makeShaderModule(10, VERTEX_FRAGMENT_WGSL)]]);
+    const commands = [{ method: "beginRenderPass", object: "e", id: 0, args: [{ colorAttachments: [] }] },
+        { method: "setPipeline", object: "e", args: [{ __id: 100 }] }];
+    // Ascending vertex counts, so the last draws are the expensive ones.
+    for (let i = 0; i < 10; ++i) {
+        commands.push({ method: "draw", object: "e", id: 100 + i, args: [(i + 1) * 100, 1, 0, 0] });
+    }
+    commands.push({ method: "end", object: "e", id: 200 });
+
+    const capped = buildFrameCostTree({
+        commands, getObject: (id) => objects.get(id) ?? null, perDraw: true, maxFramesPerPass: 3,
+    });
+    const frames = capped.root.children[0].children;
+    const kept = frames.slice(0, 3);
+    const collapsed = frames[3];
+
+    for (let i = 1; i < kept.length; ++i) {
+        assert.ok(kept[i - 1].totalCost >= kept[i].totalCost, "kept frames are not cost-ordered");
+    }
+    // Vertex cost is linear in vertex count here, so the three kept draws must
+    // be the 1000/900/800-vertex ones: 2700 of the 5500 total vertices.
+    const keptShare = kept.reduce((a, f) => a + f.totalCost, 0) / capped.root.totalCost;
+    assert.ok(Math.abs(keptShare - 2700 / 5500) < 1e-6,
+        `kept share was ${keptShare}, expected the three costliest draws`);
+    assert.match(collapsed.name, /\+ 7 more draws/);
+    assert.ok(Math.abs(collapsed.totalCost / capped.root.totalCost - 2800 / 5500) < 1e-6,
+        "the collapsed frame does not carry the remaining cost");
+});
+
+// ---------------------------------------------------------------------------
+// Measured per-draw timings (tier 3a)
+// ---------------------------------------------------------------------------
+
+test("measured draw times set the width instead of the modeled share", () => {
+    const { commands, getObject } = makeCapture({ passDurations: [2.5, 1.25] });
+    const drawCmd = commands.find((c) => c.method === "draw");
+    const indexedCmd = commands.find((c) => c.method === "drawIndexed");
+    const dispatchCmd = commands.find((c) => c.method === "dispatchWorkgroups");
+
+    // Deliberately the inverse of the modeled ordering: drawIndexed does 4x the
+    // vertex work of draw, so a modeled split would make it the wider frame.
+    const drawTimings = new Map([
+        [drawCmd, { ms: 0.9, repeats: 1 }],
+        [indexedCmd, { ms: 0.1, repeats: 1 }],
+        [dispatchCmd, { ms: 0.4, repeats: 1 }],
+    ]);
+
+    const tree = buildFrameCostTree({ commands, getObject, drawTimings, perDraw: true });
+    assert.equal(tree.units, MS);
+
+    const render = tree.root.children[0];
+    const byName = new Map(render.children.map((c) => [c.name, c]));
+    assert.ok(Math.abs(byName.get("draw").totalCost - 0.9) < 1e-9);
+    assert.ok(Math.abs(byName.get("drawIndexed").totalCost - 0.1) < 1e-9);
+    // The pass is the sum of its measured draws, NOT the 2.5ms pass timestamp:
+    // rescaling to the pass would discard the measurements.
+    assert.ok(Math.abs(render.totalCost - 1.0) < 1e-9,
+        `render pass total was ${render.totalCost}, expected the 1.0ms sum of measured draws`);
+    assert.ok(Math.abs(tree.root.totalCost - 1.4) < 1e-9);
+});
+
+test("a measured draw still splits its time across stages by the model", () => {
+    const { commands, getObject } = makeCapture();
+    const drawCmd = commands.find((c) => c.method === "draw");
+    const drawTimings = new Map([[drawCmd, { ms: 1.0, repeats: 1 }]]);
+    // Fragment counts are keyed per bucket, so they have to be measured in the
+    // same grouping mode they're consumed in.
+    const bare = buildFrameCostTree({ commands, getObject, perDraw: true });
+    const drawGroup = bare.groups.find((g) => g.draws.has(drawCmd));
+    const fragmentCounts = new Map([[drawGroup.key, 10000]]);
+
+    const tree = buildFrameCostTree({ commands, getObject, drawTimings, fragmentCounts, perDraw: true });
+    const drawNode = tree.root.children[0].children.find((c) => c.name === "draw");
+
+    assert.ok(Math.abs(drawNode.totalCost - 1.0) < 1e-9, "the draw keeps its measured width");
+    const stageSum = drawNode.children.reduce((a, c) => a + c.totalCost, 0);
+    assert.ok(Math.abs(stageSum - 1.0) < 1e-9, "stages must divide the measured time exactly");
+    assert.equal(drawNode.children.length, 2, "vertex and fragment both present");
+    // 10k texture-sampling fragments dwarf 3 vertex invocations.
+    const fragment = drawNode.children.find((c) => /^fragment:/.test(c.name));
+    assert.ok(fragment.totalCost / 1.0 > 0.9);
+});
+
+test("the isolation caveat is always stated when draw timings are used", () => {
+    const { commands, getObject } = makeCapture();
+    const drawCmd = commands.find((c) => c.method === "draw");
+    const tree = buildFrameCostTree({
+        commands, getObject, drawTimings: new Map([[drawCmd, { ms: 0.5, repeats: 1 }]]),
+    });
+    assert.ok(tree.warnings.some((w) => /timed in isolation/.test(w)),
+        "per-draw times overstate a real pass; that must never be silent");
+    assert.match(tree.root.name, /isolated draw time/);
+    assert.ok(tree.warnings.some((w) => /could not be timed/.test(w)),
+        "partially-timed frames must say so");
+});
+
+test("a measured draw with unmodelable shaders keeps its measured width", () => {
+    const pipeline = {
+        id: 100,
+        descriptor: { vertex: { module: { __id: 10 }, entryPoint: "nonexistent" } },
+    };
+    const objects = new Map([[100, pipeline], [10, makeShaderModule(10, VERTEX_FRAGMENT_WGSL)]]);
+    const commands = [
+        { method: "beginRenderPass", object: "e", id: 1, args: [{ colorAttachments: [] }] },
+        { method: "setPipeline", object: "e", args: [{ __id: 100 }] },
+        { method: "draw", object: "e", id: 2, args: [3, 1, 0, 0] },
+        { method: "end", object: "e", id: 3 },
+    ];
+    const drawCmd = commands[2];
+    const tree = buildFrameCostTree({
+        commands,
+        getObject: (id) => objects.get(id) ?? null,
+        drawTimings: new Map([[drawCmd, { ms: 0.75, repeats: 1 }]]),
+        perDraw: true,
+    });
+    // The entry point doesn't resolve, so nothing is modelable — but the
+    // measurement is real and must not be thrown away.
+    assert.ok(Math.abs(tree.root.totalCost - 0.75) < 1e-9,
+        `expected the measured 0.75ms to survive, got ${tree.root.totalCost}`);
+});
+
 test("per-draw mode splits pipeline frames into one frame per draw", () => {
     const { commands, getObject } = makeCapture();
     const grouped = buildFrameCostTree({ commands, getObject });
