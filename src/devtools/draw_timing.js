@@ -90,7 +90,7 @@ export function detectTimingSupport(device) {
  * Slice the command list into passes, keeping each pass's descriptor (needed to
  * rebuild its attachments) alongside its commands.
  */
-function collectPasses(commands) {
+export function collectPasses(commands) {
     const passes = [];
     let current = null;
     let index = 0;
@@ -134,7 +134,7 @@ function collectPasses(commands) {
  * descriptor, which is what the original pipelines were built against — so the
  * pipelines stay valid without inspecting their target state.
  */
-function buildAttachments(replay, pass, getTextureFromAttachment) {
+export function buildAttachments(replay, pass, getTextureFromAttachment) {
     const descriptor = pass.descriptor;
     const colorAttachments = [];
     let width = 0;
@@ -201,7 +201,7 @@ function buildAttachments(replay, pass, getTextureFromAttachment) {
 }
 
 /** A fresh depth-stencil attachment record for one encoded pass. */
-function depthAttachmentFor(attachments) {
+export function depthAttachmentFor(attachments) {
     const ds = attachments.depthStencilAttachment;
     if (!ds) {
         return undefined;
@@ -378,7 +378,7 @@ async function getTimingComputePipeline(replay, pipelineId) {
 // Encoding
 // ---------------------------------------------------------------------------
 
-function setRenderState(pass, replay, item, width, height) {
+export function setRenderState(pass, replay, item, width, height) {
     const { plan, pipelineInfo, bindGroups } = item;
     pass.setPipeline(pipelineInfo.pipeline);
     for (const bg of bindGroups) {
@@ -410,7 +410,7 @@ function setRenderState(pass, replay, item, width, height) {
     pass.setScissorRect(sc?.[0] ?? 0, sc?.[1] ?? 0, sc?.[2] ?? width, sc?.[3] ?? height);
 }
 
-function issueDraw(pass, replay, plan) {
+export function issueDraw(pass, replay, plan) {
     if (plan.method === "draw") {
         pass.draw(plan.args[0], plan.args[1] ?? 1, plan.args[2] ?? 0, plan.args[3] ?? 0);
     } else if (plan.method === "drawIndexed") {
@@ -526,7 +526,7 @@ function encodeRound(replay, encoder, items, context, querySet, method, repeats)
     return slots;
 }
 
-async function readTimestamps(device, querySet, count) {
+export async function readTimestamps(device, querySet, count) {
     const resolve = device.createBuffer({
         size: count * 8,
         usage: BUFFER_QUERY_RESOLVE | BUFFER_COPY_SRC,

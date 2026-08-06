@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+<!-- Integration harness for the frame flame graph panel
+     (src/devtools/frame_flamegraph.js): builds the panel over a mock capture on
+     a real GPUDevice, then drives the actual UI — select a shader stage frame,
+     press "Measure statements", and check the measured per-statement rows come
+     back ranked with the expensive line on top.
+     Driven by test/browser/run_frame_flamegraph_harness.mjs. -->
+<head>
+<script type="importmap">
+{ "imports": { "wgsl_reflect/": "/node_modules/wgsl_reflect/" } }
+</script>
+<style>
+  body { margin: 0; background: #1e1e1e; color: #ddd; font-family: sans-serif; }
+  #host { width: 1000px; }
+</style>
+</head>
+<body>
+<div id="host"></div>
+<script type="module">
+import { Widget } from "../../src/devtools/widget/widget.js";
+import { buildFrameFlameGraph } from "../../src/devtools/frame_flamegraph.js";
+import { WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
+
+const results = [];
+window.__results = null;
+
+async function check(name, fn) {
+    try {
+        const info = await fn();
+        results.push({ name, ok: true, info });
+    } catch (e) {
+        results.push({ name, ok: false, failure: e.message ?? String(e) });
+    }
+}
+
+function assert(cond, message) {
+    if (!cond) {
+        throw new Error(message);
+    }
+}
+
+const WIDTH = 512, HEIGHT = 512;
+const BASE = 64;
+
+const CODE = `
+struct U { base : u32 }
+@group(0) @binding(0) var<uniform> u : U;
+
+fn work(n : u32) -> f32 {
+  var s = 0.0;
+  for (var i = 0u; i < n; i = i + 1u) {
+    s = s + sqrt(f32(i) + 0.5) * sin(s + 1.0);
+  }
+  return s;
+}
+
+@vertex fn vsMain(@builtin(vertex_index) vi : u32) -> @builtin(position) vec4f {
+  var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  return vec4f(p[vi], 0.0, 1.0);
+}
+
+@fragment fn fsMain() -> @location(0) vec4f {
+  var acc = 0.0;
+  acc = acc + work(u.base * 8u);
+  acc = acc + 1.0;
+  acc = acc + work(u.base * 32u);
+  return vec4f(acc * 0.00001, 0.0, 0.0, 1.0);
+}
+`;
+
+// The devtools ShaderModule surface the cost model and replay need.
+function makeShaderModule(id, code) {
+    return {
+        id, label: "shader", code,
+        descriptor: { code },
+        get reflection() {
+            if (this._r === undefined) {
+                try {
+                    this._r = new WgslReflect(this.code);
+                } catch (e) {
+                    this._r = null;
+                }
+            }
+            return this._r;
+        },
+    };
+}
+
+function makeCapture() {
+    const IDS = { module: 1, target: 2, view: 3, pipeline: 4, buffer: 7, bindGroup: 8 };
+    const targetTexture = {
+        id: IDS.target, label: "target", width: WIDTH, height: HEIGHT,
+        depthOrArrayLayers: 1,
+        descriptor: { format: "rgba8unorm", size: [WIDTH, HEIGHT], sampleCount: 1, usage: 0x10 },
+    };
+    const objects = new Map([
+        [IDS.module, makeShaderModule(IDS.module, CODE)],
+        [IDS.target, targetTexture],
+        [IDS.buffer, { id: IDS.buffer, descriptor: { size: 16, usage: 0x40 | 0x8 } }],
+        [IDS.bindGroup, {
+            id: IDS.bindGroup,
+            descriptor: {
+                layout: { __id: 999 },
+                entries: [{ binding: 0, resource: { buffer: { __id: IDS.buffer } } }],
+            },
+        }],
+        [IDS.pipeline, {
+            id: IDS.pipeline, label: "ablated",
+            descriptor: {
+                layout: "auto",
+                vertex: { module: { __id: IDS.module }, entryPoint: "vsMain" },
+                fragment: { module: { __id: IDS.module }, entryPoint: "fsMain", targets: [{ format: "rgba8unorm" }] },
+                primitive: { topology: "triangle-list" },
+            },
+        }],
+    ]);
+
+    const uniformBytes = new Uint8Array(new Uint32Array([BASE, 0, 0, 0]).buffer);
+    const drawCommand = { method: "draw", object: "enc", id: 130, args: [3, 1, 0, 0] };
+    const commands = [
+        { method: "beginRenderPass", object: "enc", id: 100, args: [{
+            label: "main",
+            colorAttachments: [{ view: { __id: IDS.view }, loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] }],
+        }] },
+        { method: "setPipeline", object: "enc", id: 110, args: [{ __id: IDS.pipeline }] },
+        { method: "setBindGroup", object: "enc", id: 120, args: [0, { __id: IDS.bindGroup }], bufferData: [uniformBytes] },
+        drawCommand,
+        { method: "end", object: "enc", id: 140 },
+    ];
+
+    const textures = new Map([[IDS.view, targetTexture]]);
+    return {
+        commands, drawCommand,
+        getObject: (id) => objects.get(id) ?? null,
+        database: {
+            getObject: (id) => objects.get(id) ?? null,
+            getTextureFromView: (view) => textures.get(view?.__id) ?? null,
+        },
+        getTextureFromAttachment: (a) => textures.get(a?.view?.__id) ?? null,
+    };
+}
+
+function frames(panel) {
+    return [...panel.element.querySelectorAll("div")]
+        .filter((el) => el.style.position === "absolute" && el.style.height.endsWith("px"));
+}
+
+function buttonByLabel(panel, text) {
+    return [...panel.element.querySelectorAll("button, .btn")]
+        .find((el) => el.textContent.trim() === text) ?? null;
+}
+
+async function main() {
+    const adapter = await navigator.gpu.requestAdapter();
+    const features = ["timestamp-query"].filter((f) => adapter.features.has(f));
+    const device = await adapter.requestDevice({ requiredFeatures: features });
+
+    const capture = makeCapture();
+    const host = new Widget("div", null);
+    host._element = document.getElementById("host");
+
+    const lineJumps = [];
+    let panel = null;
+
+    await check("the frame flame graph panel builds", () => {
+        panel = buildFrameFlameGraph({
+            commands: capture.commands,
+            getObject: capture.getObject,
+            database: capture.database,
+            getDevice: () => device,
+            getTextureFromAttachment: capture.getTextureFromAttachment,
+            onSelectCommand: () => {},
+            onSelectShaderLine: (module, line) => lineJumps.push({ module: module.id, line }),
+        });
+        host.element.appendChild(panel.element);
+        assert(frames(panel).length >= 3, `expected pass/pipeline/stage frames, got ${frames(panel).length}`);
+        return { frameCount: frames(panel).length, labels: frames(panel).map((f) => f.textContent) };
+    });
+    if (!panel) {
+        return;
+    }
+
+    await check("the unweighted fragment stage is culled, not drawn at zero width", () => {
+        // Before fragment counts are measured the fragment stage has no width,
+        // so the widget culls it. That's why the draw frame has to carry the
+        // ablation targets — otherwise the fragment stage is unreachable.
+        const labels = frames(panel).map((f) => f.title.split("\n")[0]);
+        assert(labels.some((l) => /^vertex:/.test(l)), `no vertex frame: ${labels.join(" | ")}`);
+        assert(!labels.some((l) => /^fragment:/.test(l)),
+            `expected the zero-width fragment frame to be culled: ${labels.join(" | ")}`);
+        return { labels };
+    });
+
+    await check("Measure statements is disabled until something is selected", () => {
+        const button = buttonByLabel(panel, "Measure statements");
+        assert(button, "no Measure statements button");
+        assert(button.disabled, "the button should start disabled");
+    });
+
+    await check("selecting the draw frame targets its fragment stage", () => {
+        const drawFrame = frames(panel).find((f) => /1 draw/.test(f.textContent));
+        assert(drawFrame, `no draw frame: ${frames(panel).map((f) => f.textContent).join(" | ")}`);
+        drawFrame.click();
+        const button = buttonByLabel(panel, "Measure statements");
+        assert(!button.disabled, "the draw frame should be a valid ablation target");
+        assert(/fragment/.test(button.title),
+            `expected the fragment stage to be preferred, got: ${button.title}`);
+        return { title: button.title };
+    });
+
+    await check("measuring the fragment stage recovers the known cost profile", async () => {
+        // The draw frame is selected with the fragment stage preferred. This is
+        // the real payload: the 4x-heavier work() call must come out on top.
+        buttonByLabel(panel, "Measure statements").click();
+        const deadline = Date.now() + 40000;
+        let rows = [];
+        while (Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 200));
+            rows = [...panel.element.querySelectorAll(".flame-statement")];
+            if (rows.length > 0) {
+                break;
+            }
+        }
+        const note = panel.element.querySelector(".flame-statements .flame-note");
+        assert(rows.length > 0, `no rows${note ? `; note: ${note.textContent}` : ""}`);
+
+        const parsed = rows.map((r) => ({
+            src: r.querySelector(".flame-statement-src").textContent,
+            ms: parseFloat(r.querySelector(".flame-statement-cost").textContent),
+        }));
+        const heavy = parsed.find((p) => p.src.includes("work(u.base * 32u)"));
+        const medium = parsed.find((p) => p.src.includes("work(u.base * 8u)"));
+        assert(heavy && medium, `missing work statements: ${parsed.map((p) => p.src).join(" | ")}`);
+        // The heaviest statement must rank first.
+        assert(parsed[0].src.includes("work(u.base * 32u)"),
+            `expected the 32x statement on top, got: ${parsed[0].src}`);
+        const ratio = heavy.ms / medium.ms;
+        assert(ratio > 2.5 && ratio < 6, `heavy/medium ratio ${ratio.toFixed(2)}, expected ~4`);
+        return { ratio: +ratio.toFixed(2), rows: parsed };
+    });
+
+    await check("selecting a visible stage frame targets that stage", () => {
+        const stageFrame = frames(panel).find((f) => /^vertex:/.test(f.title));
+        assert(stageFrame, "no vertex stage frame to select");
+        stageFrame.click();
+        const button = buttonByLabel(panel, "Measure statements");
+        assert(!button.disabled, `the button stayed disabled; title: ${button.title}`);
+        assert(/vertex/.test(button.title), `expected the vertex stage, got: ${button.title}`);
+        return { selected: stageFrame.title.split("\n")[0], title: button.title };
+    });
+
+    await check("vertex ablation stubs the fragment stage", async () => {
+        // With the vertex stage selected, measuring must report that the
+        // fragment stage was replaced — otherwise the fragment cost would be
+        // charged to whichever vertex statement produces the position.
+        const button = buttonByLabel(panel, "Measure statements");
+        button.click();
+        // Wait for the sweep: the rows land in .flame-statements when done.
+        const deadline = Date.now() + 40000;
+        let rows = [];
+        while (Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 200));
+            rows = [...panel.element.querySelectorAll(".flame-statement")];
+            if (rows.length > 0) {
+                break;
+            }
+        }
+        const failureNote = panel.element.querySelector(".flame-statements .flame-note");
+        assert(rows.length > 0,
+            `no statement rows appeared${failureNote ? `; note: ${failureNote.textContent}` : ""}`);
+
+        const header = panel.element.querySelector(".flame-statements-header");
+        assert(header && /ms total/.test(header.textContent), `bad header: ${header?.textContent}`);
+
+        const notes = [...panel.element.querySelectorAll(".flame-statements .flame-note")]
+            .map((n) => n.textContent);
+        assert(notes.some((n) => /fragment stage was replaced/.test(n)),
+            `the fragment stub must be reported: ${notes.join(" | ")}`);
+
+        // Rows are ranked by cost, so the costs must be non-increasing.
+        const costs = rows.map((r) => {
+            const text = r.querySelector(".flame-statement-cost").textContent;
+            const n = parseFloat(text);
+            return Number.isFinite(n) ? n : -1;
+        });
+        for (let i = 1; i < costs.length; ++i) {
+            assert(costs[i - 1] >= costs[i] || costs[i] < 0,
+                `rows are not ranked by cost: ${costs.join(", ")}`);
+        }
+
+        // With the fragment stage stubbed, the vertex shader's total must be a
+        // small fraction of the ~0.49ms the real fragment shader costs. Before
+        // the stub, all of it landed on one vertex statement.
+        const totalMs = parseFloat(header.textContent.match(/([\d.]+) ms total/)[1]);
+        assert(totalMs < 0.1,
+            `vertex total was ${totalMs}ms — fragment work is still leaking into the vertex measurement`);
+
+        return {
+            rowCount: rows.length,
+            header: header.textContent,
+            totalMs,
+            rows: rows.map((r) => ({
+                line: r.querySelector(".perf-line-link, .flame-statement-line").textContent,
+                cost: r.querySelector(".flame-statement-cost").textContent,
+                src: r.querySelector(".flame-statement-src").textContent,
+            })),
+        };
+    });
+
+    await check("a statement's line link jumps to the shader source", () => {
+        const link = panel.element.querySelector(".flame-statement .perf-line-link");
+        assert(link, "no clickable line link on a statement row");
+        link.click();
+        assert(lineJumps.length === 1, `expected one line jump, got ${lineJumps.length}`);
+        assert(lineJumps[0].line > 0, `bad line number: ${lineJumps[0].line}`);
+        return lineJumps[0];
+    });
+
+    await check("the caveats are shown next to the results", () => {
+        const notes = [...panel.element.querySelectorAll(".flame-statements .flame-note")]
+            .map((n) => n.textContent);
+        assert(notes.some((n) => /top-level statements/.test(n)),
+            `the top-level-only limit must be visible: ${notes.join(" | ")}`);
+        return { notes };
+    });
+}
+
+try {
+    await main();
+} catch (e) {
+    results.push({ name: "harness", ok: false, failure: `${e.stack ?? e}` });
+}
+window.__results = results;
+</script>
+</body>
+</html>

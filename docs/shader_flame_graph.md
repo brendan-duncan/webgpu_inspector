@@ -106,6 +106,111 @@ Three caveats, all surfaced in the UI:
   total divided. That recovers draws down to ~100ns, at the cost of extra
   submissions.
 
+## Ablation: measuring individual statements
+
+Per-draw timing says *which draw* is expensive. Ablation says *which line* is,
+by measuring the shader with progressively more of its body executed and
+differencing: `cost(cut = k+1) − cost(cut = k)` is the cost of statement `k`.
+
+`instrumentForAblation()` in
+[shader_ablation.js](../src/devtools/shader_ablation.js) rewrites a shader so
+its entry point can be stopped short at run time:
+
+```wgsl
+struct WGPUInspectorAblation { cut : u32 }
+@group(1) @binding(0) var<uniform> _wgpuInspectorAblation : WGPUInspectorAblation;
+
+@fragment fn fsMain() -> @location(0) vec4f {
+  if (_wgpuInspectorAblation.cut == 0u) { return vec4f(); }
+  var acc = 0.0;
+  if (_wgpuInspectorAblation.cut == 1u) { return vec4f(); }
+  acc = acc + shade(...);
+  ...
+}
+```
+
+The cut point is a **uniform**, not a compile-time constant. That detail is the
+whole design, and it is worth explaining.
+
+### Why not just compile a truncated shader per cut?
+
+Because the driver deletes the work you are trying to measure. Both variants
+were measured on real hardware
+([ablation_harness.html](../test/browser/ablation_harness.html)), against a
+shader whose true cost is 0.49 ms:
+
+| Approach | Cost curve across cuts | Signal |
+| --- | --- | --- |
+| Truncate, return a constant | 0.00205, 0.00205, 0.00205, 0.00205, 0.00205 | **100% lost** |
+| Truncate, return a sink value | 0.00205, 0.00205, 0.10035, 0.10035, 0.49050 | preserved |
+| Uniform guard (this design) | 0.00307, 0.00291, 0.10035, 0.10026, 0.49152 | preserved |
+
+With a constant return, nothing consumes the statements above the cut, so
+dead-code elimination removes them and the curve is perfectly flat — it measures
+nothing at all. Returning a *sink* that consumes the accumulated value keeps the
+work live and does work, but synthesizing that sink means knowing every in-scope
+variable and its type at every cut point.
+
+The uniform guard needs no sink, because for a large `cut` the whole body runs
+and the compiler cannot prove any statement unreachable. It also compiles once
+instead of once per cut. Its early return uses WGSL's zero-value expression
+`T()`, which is valid for any constructible type, so only the return type's
+*name* has to be recovered.
+
+### Accuracy
+
+On the same harness, against statements with a known 4:1 cost ratio:
+
+| Statement | Measured | Expected |
+| --- | --- | --- |
+| `acc = acc + work(u.base * 8u)` | 0.0974 ms | 1× |
+| `acc = acc + work(u.base * 32u)` | 0.3913 ms | 4× → **ratio 4.02** |
+| trivial statements | ±0.0002 ms | ~0 |
+
+Instrumentation overhead measured at **0.2%** of the shader's cost.
+
+### Using it
+
+Select a frame in the frame flame graph and press **Measure statements**.
+Clicking a shader-stage frame targets that stage; clicking a *draw* frame
+targets its fragment stage, which matters because an unmeasured fragment stage
+has zero width and is culled before you can click it.
+
+Results appear below the graph, ranked by cost, with clickable line numbers that
+jump to the shader source. In grouped mode the first draw of the group stands in
+for the rest, and the header says so.
+
+### Vertex ablation stubs the fragment stage
+
+Cutting a vertex shader short makes it return a degenerate position, which
+rasterizes nothing — so with the real fragment shader attached, the *entire*
+fragment cost lands on whichever vertex statement finally produces a valid
+position. Measured on the test shader, that misattributed 0.4915 ms of fragment
+work onto one vertex line.
+
+Vertex ablation therefore swaps in a trivial fragment shader whose outputs match
+the attachment formats. The same shader then measures 0.0012 ms, which is the
+real vertex cost. This is reported as a note whenever it happens.
+
+A side effect worth knowing: stubbing the fragment stage removes bindings only
+the original fragment shader used from an `auto` pipeline layout, so the
+replayed bind groups are filtered to the bindings the vertex stage actually
+reads — the same thing the overdraw replay does for the same reason.
+
+### Limits
+
+* **Top-level statements only.** A `return` is legal inside a loop or branch,
+  but cutting there stops mid-first-iteration, so differencing measures a
+  partial iteration rather than a whole statement. Nested cut points need
+  different arithmetic than plain differencing. This is the main gap: cost
+  inside a hot loop is attributed to the loop's enclosing statement.
+* **Negative costs happen.** A statement cheaper than the measurement noise
+  floor can difference to below zero. Those are reported as *too small to
+  measure* rather than clamped to zero, because clamping would quietly turn
+  noise into a confident-looking figure.
+* **Needs a spare bind group.** The uniform has to live somewhere; a shader
+  already using all four bind groups can't be instrumented, and says so.
+
 ## What the model cannot see
 
 The cost model reads source, not machine code. It does not know about:

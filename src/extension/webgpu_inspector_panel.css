@@ -2856,3 +2856,64 @@ li.tree-item .expandbutton
   color: var(--text-secondary, #aaa);
   font-style: italic;
 }
+
+/* Measured per-statement costs from an ablation sweep. */
+
+.flame-statements {
+  padding: 4px 8px;
+  font-size: 9pt;
+}
+
+.flame-statements-header {
+  padding: 4px 0 6px 0;
+  color: var(--text-primary, #ddd);
+  font-size: 10pt;
+}
+
+.flame-statement {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--bg-tertiary, #2d2d30);
+}
+
+.flame-statement-line {
+  color: var(--text-secondary, #aaa);
+  flex: 0 0 auto;
+  min-width: 60px;
+}
+
+.flame-statement .perf-line-link {
+  flex: 0 0 auto;
+  min-width: 60px;
+}
+
+.flame-statement-bar {
+  flex: 0 0 120px;
+  height: 9px;
+  background: var(--bg-tertiary, #2d2d30);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.flame-statement-fill {
+  height: 100%;
+  background: #c0504d;
+}
+
+.flame-statement-cost {
+  flex: 0 0 auto;
+  min-width: 96px;
+  font-family: monospace;
+  color: var(--text-primary, #ddd);
+}
+
+.flame-statement-src {
+  flex: 1 1 auto;
+  font-family: monospace;
+  color: var(--text-secondary, #aaa);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

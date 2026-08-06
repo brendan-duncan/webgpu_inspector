@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<!-- Browser harness for shader ablation (src/devtools/shader_ablation.js).
+     A fragment shader with statements of known, deliberately unequal cost is
+     instrumented and measured at every cut point; the differences must recover
+     the known cost profile.
+
+     It also runs the naive alternative — a separately compiled shader truncated
+     at each cut — to show why the uniform-guarded design is necessary: the
+     naive variant is dead-code eliminated and its curve goes flat.
+
+     Driven by test/browser/run_ablation_harness.mjs; results in window.__results. -->
+<head>
+<script type="importmap">
+{ "imports": { "wgsl_reflect/": "/node_modules/wgsl_reflect/" } }
+</script>
+</head>
+<body>
+<script type="module">
+import { instrumentForAblation, attributeAblation } from "../../src/devtools/shader_ablation.js";
+
+const results = [];
+window.__results = null;
+
+async function check(name, fn) {
+    try {
+        const info = await fn();
+        results.push({ name, ok: true, info });
+    } catch (e) {
+        results.push({ name, ok: false, failure: e.message ?? String(e) });
+    }
+}
+
+function assert(cond, message) {
+    if (!cond) {
+        throw new Error(message);
+    }
+}
+
+const WIDTH = 512, HEIGHT = 512;
+
+// Five top-level statements with a known cost profile. `heavy` runs a loop
+// whose trip count comes from a uniform, so the compiler can't fold it away and
+// the relative costs are 0 : 8 : 0 : 32 : 0 (plus the trivial statements).
+//
+//   stmt 0: var acc      - trivial
+//   stmt 1: acc += work(8*B)   - medium
+//   stmt 2: acc += 1.0   - trivial
+//   stmt 3: acc += work(32*B)  - heavy, 4x statement 1
+//   stmt 4: return       - trivial
+const CODE = `
+struct U { base : u32 }
+@group(0) @binding(0) var<uniform> u : U;
+
+fn work(n : u32) -> f32 {
+  var s = 0.0;
+  for (var i = 0u; i < n; i = i + 1u) {
+    s = s + sqrt(f32(i) + 0.5) * sin(s + 1.0);
+  }
+  return s;
+}
+
+@vertex fn vsMain(@builtin(vertex_index) vi : u32) -> @builtin(position) vec4f {
+  var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  return vec4f(p[vi], 0.0, 1.0);
+}
+
+@fragment fn fsMain() -> @location(0) vec4f {
+  var acc = 0.0;
+  acc = acc + work(u.base * 8u);
+  acc = acc + 1.0;
+  acc = acc + work(u.base * 32u);
+  return vec4f(acc * 0.00001, 0.0, 0.0, 1.0);
+}
+`;
+
+const BASE = 64;  // work(8*64)=512 iterations, work(32*64)=2048
+
+// ---------------------------------------------------------------------------
+
+let device = null;
+
+async function timePipeline(pipeline, bindGroups, view, repeats) {
+    const querySet = device.createQuerySet({ type: "timestamp", count: 2 });
+    const resolve = device.createBuffer({ size: 16, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
+    const readback = device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    try {
+        const enc = device.createCommandEncoder();
+        const pass = enc.beginRenderPass({
+            colorAttachments: [{ view, loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] }],
+            timestampWrites: { querySet, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1 },
+        });
+        pass.setPipeline(pipeline);
+        for (const [i, bg] of bindGroups.entries()) {
+            if (bg) {
+                pass.setBindGroup(i, bg);
+            }
+        }
+        for (let r = 0; r < repeats; ++r) {
+            pass.draw(3);
+        }
+        pass.end();
+        enc.resolveQuerySet(querySet, 0, 2, resolve, 0);
+        enc.copyBufferToBuffer(resolve, 0, readback, 0, 16);
+        device.queue.submit([enc.finish()]);
+        await readback.mapAsync(GPUMapMode.READ);
+        const t = new BigInt64Array(readback.getMappedRange());
+        const ms = Number(t[1] - t[0]) * 1e-6 / repeats;
+        readback.unmap();
+        return ms;
+    } finally {
+        querySet.destroy();
+        resolve.destroy();
+        readback.destroy();
+    }
+}
+
+function makePipeline(code, format) {
+    const module = device.createShaderModule({ code });
+    return device.createRenderPipeline({
+        layout: "auto",
+        vertex: { module, entryPoint: "vsMain" },
+        fragment: { module, entryPoint: "fsMain", targets: [{ format }] },
+    });
+}
+
+async function main() {
+    const adapter = await navigator.gpu.requestAdapter();
+    const features = ["timestamp-query"].filter((f) => adapter.features.has(f));
+    device = await adapter.requestDevice({ requiredFeatures: features });
+    assert(device.features.has("timestamp-query"), "timestamp-query unavailable; cannot run the ablation spike");
+
+    const format = "rgba8unorm";
+    const target = device.createTexture({
+        size: [WIDTH, HEIGHT], format,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+    const view = target.createView();
+
+    // ---- Instrumentation -------------------------------------------------
+    let instrumented = null;
+    await check("instrumentForAblation produces a cut point per statement", () => {
+        instrumented = instrumentForAblation(CODE, { stage: "fragment", entryPoint: "fsMain" });
+        assert(instrumented.ok, `instrumentation failed: ${instrumented.reason}`);
+        assert(instrumented.cutPoints.length === 5,
+            `expected 5 cut points, got ${instrumented.cutPoints.length}: ` +
+            instrumented.cutPoints.map((c) => c.label).join(" | "));
+        // The uniform must land in a group the shader isn't already using.
+        assert(instrumented.group === 1, `ablation uniform went to group ${instrumented.group}, expected 1`);
+        return {
+            group: instrumented.group,
+            fullCut: instrumented.fullCut,
+            labels: instrumented.cutPoints.map((c) => `L${c.line}: ${c.label}`),
+        };
+    });
+    if (!instrumented?.ok) {
+        return;
+    }
+
+    await check("the instrumented shader compiles", async () => {
+        device.pushErrorScope("validation");
+        makePipeline(instrumented.code, format);
+        const error = await device.popErrorScope();
+        assert(!error, `instrumented shader failed to compile: ${error?.message}\n---\n${instrumented.code}`);
+    });
+
+    // ---- Measurement -----------------------------------------------------
+    const pipeline = makePipeline(instrumented.code, format);
+
+    const uniform = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(uniform, 0, new Uint32Array([BASE, 0, 0, 0]));
+    const cutBuffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+
+    const bg0 = device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [{ binding: 0, resource: { buffer: uniform } }],
+    });
+    const bgAbl = device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(instrumented.group),
+        entries: [{ binding: instrumented.binding, resource: { buffer: cutBuffer } }],
+    });
+    const bindGroups = [];
+    bindGroups[0] = bg0;
+    bindGroups[instrumented.group] = bgAbl;
+
+    async function measureCut(cut) {
+        device.queue.writeBuffer(cutBuffer, 0, new Uint32Array([cut, 0, 0, 0]));
+        // A warm-up submit keeps the first measurement from paying for clocks
+        // spinning up, then take the best of three to suppress scheduling noise.
+        await timePipeline(pipeline, bindGroups, view, 1);
+        let best = Infinity;
+        for (let i = 0; i < 3; ++i) {
+            best = Math.min(best, await timePipeline(pipeline, bindGroups, view, 1));
+        }
+        return best;
+    }
+
+    const measurements = new Map();
+    await check("every cut point measures", async () => {
+        for (let cut = 0; cut <= instrumented.fullCut; ++cut) {
+            measurements.set(cut, await measureCut(cut));
+        }
+        for (const [cut, ms] of measurements) {
+            assert(Number.isFinite(ms) && ms >= 0, `cut ${cut} measured ${ms}`);
+        }
+        return Object.fromEntries([...measurements].map(([k, v]) => [k, +v.toFixed(5)]));
+    });
+
+    await check("the cost curve rises monotonically with the cut point", () => {
+        const values = [...measurements.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+        for (let i = 1; i < values.length; ++i) {
+            // Allow one quantum of slack: trivial statements add nothing.
+            assert(values[i] >= values[i - 1] - 0.002,
+                `cut ${i} (${values[i]}ms) is cheaper than cut ${i - 1} (${values[i - 1]}ms); curve: ${values.join(", ")}`);
+        }
+        return { curve: values.map((v) => +v.toFixed(5)) };
+    });
+
+    let attribution = null;
+    await check("attribution recovers the known cost profile", () => {
+        attribution = attributeAblation(instrumented.cutPoints, measurements, instrumented.fullCut);
+        const byLabel = new Map(attribution.statements.map((s) => [s.label, s.ms]));
+
+        const medium = byLabel.get("acc = acc + work(u.base * 8u);");
+        const heavy = byLabel.get("acc = acc + work(u.base * 32u);");
+        const trivial = byLabel.get("acc = acc + 1.0;");
+        assert(medium != null && heavy != null && trivial != null,
+            `missing statements: ${[...byLabel.keys()].join(" | ")}`);
+
+        // The two work() calls must dominate, and the heavy one must be ~4x the
+        // medium one (2048 vs 512 loop iterations).
+        assert(heavy > medium, `heavy (${heavy}ms) not above medium (${medium}ms)`);
+        assert(trivial < medium * 0.25, `trivial statement (${trivial}ms) is not clearly cheap vs ${medium}ms`);
+        const ratio = heavy / medium;
+        assert(ratio > 2.5 && ratio < 6,
+            `heavy/medium ratio was ${ratio.toFixed(2)}, expected roughly 4`);
+        return {
+            perStatement: attribution.statements.map((s) => ({ line: s.line, ms: s.ms == null ? null : +s.ms.toFixed(5), label: s.label })),
+            baselineMs: +attribution.baselineMs.toFixed(5),
+            totalMs: +attribution.totalMs.toFixed(5),
+            ratio: +ratio.toFixed(2),
+            notes: attribution.notes,
+        };
+    });
+
+    await check("instrumentation overhead is small", async () => {
+        // The guards themselves cost something; if they cost a lot, every
+        // attribution is skewed. Compare the uncut instrumented shader against
+        // the original.
+        const plain = makePipeline(CODE, format);
+        const plainBg = device.createBindGroup({
+            layout: plain.getBindGroupLayout(0),
+            entries: [{ binding: 0, resource: { buffer: uniform } }],
+        });
+        await timePipeline(plain, [plainBg], view, 1);
+        let plainMs = Infinity;
+        for (let i = 0; i < 3; ++i) {
+            plainMs = Math.min(plainMs, await timePipeline(plain, [plainBg], view, 1));
+        }
+        const instrumentedMs = measurements.get(instrumented.fullCut);
+        const overhead = (instrumentedMs - plainMs) / plainMs;
+        assert(overhead < 0.25,
+            `instrumentation added ${(overhead * 100).toFixed(1)}% (plain ${plainMs.toFixed(5)}ms vs instrumented ${instrumentedMs.toFixed(5)}ms)`);
+        return { plainMs: +plainMs.toFixed(5), instrumentedMs: +instrumentedMs.toFixed(5), overheadPct: +(overhead * 100).toFixed(1) };
+    });
+
+    // ---- Why the uniform guard is the right design -----------------------
+    //
+    // The alternative is compiling a separate shader per cut with the body
+    // physically truncated. Whether that works turns entirely on whether the
+    // truncated shader still *consumes* the work above the cut:
+    //
+    //   constant return -> everything above the cut is dead, DCE removes it,
+    //                      and the curve goes flat. Measures nothing.
+    //   sink return     -> the work stays live and the curve is real, but
+    //                      synthesizing the sink means knowing every in-scope
+    //                      variable and its type at each cut point.
+    //
+    // The uniform guard needs no sink and compiles once. Both variants are run
+    // here so the claim rests on measurement rather than assertion.
+    const body = [
+        "  var acc = 0.0;",
+        "  acc = acc + work(u.base * 8u);",
+        "  acc = acc + 1.0;",
+        "  acc = acc + work(u.base * 32u);",
+    ];
+    const prefix = CODE.slice(0, CODE.indexOf("@fragment"));
+
+    // `sink` decides what the truncated shader returns. Every variant keeps a
+    // static reference to `u` so the auto bind group layout always has binding
+    // 0 — otherwise cut 0 fails validation and reads as a bogus 0ms.
+    async function naiveCurve(sink) {
+        const curve = [];
+        for (let cut = 0; cut <= body.length; ++cut) {
+            const truncated =
+                `${prefix}@fragment fn fsMain() -> @location(0) vec4f {\n` +
+                `  let keep = f32(u.base) * 0.0;\n` +
+                body.slice(0, cut).join("\n") + "\n" +
+                `  return vec4f(${sink(cut)} + keep, 0.0, 0.0, 1.0);\n}\n`;
+            device.pushErrorScope("validation");
+            const p = makePipeline(truncated, format);
+            const bg = device.createBindGroup({
+                layout: p.getBindGroupLayout(0),
+                entries: [{ binding: 0, resource: { buffer: uniform } }],
+            });
+            const error = await device.popErrorScope();
+            assert(!error, `truncated shader at cut ${cut} was invalid: ${error?.message}`);
+            await timePipeline(p, [bg], view, 1);
+            let best = Infinity;
+            for (let i = 0; i < 3; ++i) {
+                best = Math.min(best, await timePipeline(p, [bg], view, 1));
+            }
+            curve.push(+best.toFixed(5));
+        }
+        return curve;
+    }
+
+    const real = measurements.get(instrumented.fullCut);
+
+    await check("naive truncation with a constant return is dead-code eliminated", async () => {
+        // Nothing consumes acc, so every statement above the cut is dead.
+        const curve = await naiveCurve(() => "0.0");
+        const spread = Math.max(...curve) - Math.min(...curve);
+        assert(spread < real * 0.25,
+            `expected DCE to flatten the curve, but it spread ${spread.toFixed(5)}ms against a real cost of ${real.toFixed(5)}ms`);
+        return {
+            curve,
+            spread: +spread.toFixed(5),
+            realCost: +real.toFixed(5),
+            signalLostPct: +(100 - (spread / real) * 100).toFixed(1),
+        };
+    });
+
+    await check("naive truncation with a sink survives DCE but needs type knowledge", async () => {
+        // Returning acc keeps the work live, so this variant does measure — the
+        // problem is that producing `acc` requires knowing what is in scope and
+        // what type it has at every cut point, which the guard design avoids.
+        const curve = await naiveCurve((cut) => (cut >= 1 ? "acc * 0.00001" : "0.0"));
+        const spread = Math.max(...curve) - Math.min(...curve);
+        assert(spread > real * 0.5,
+            `expected the sink variant to preserve the signal, but it spread only ${spread.toFixed(5)}ms of ${real.toFixed(5)}ms`);
+        return { curve, spread: +spread.toFixed(5), realCost: +real.toFixed(5) };
+    });
+}
+
+try {
+    await main();
+} catch (e) {
+    results.push({ name: "harness", ok: false, failure: `${e.stack ?? e}` });
+}
+window.__results = results;
+</script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import { FlameGraph } from "./widget/flamegraph.js";
 import { buildFrameCostTree, formatCostValue, MS, OPS } from "./frame_cost_tree.js";
 import { measureFragmentCounts } from "./capture_replay.js";
 import { measureDrawTimings, detectTimingSupport } from "./draw_timing.js";
+import { measureStatementCosts } from "./ablation_measure.js";
 import { dominantDimension } from "wgsl_reflect/wgsl_reflect.module.js";
 
 // See frame_cost_tree.js for what the numbers mean and where they come from.
@@ -84,6 +85,15 @@ export function buildFrameFlameGraph(options) {
   timeButton.element.title =
     "Replay each draw on the GPU with timestamp queries, so every draw's width is measured time rather than a modeled share of its pass.";
 
+  const ablateButton = new Button(controls, {
+    label: "Measure statements",
+    class: "btn",
+    callback: () => measureStatements(),
+  });
+  ablateButton.disabled = true;
+  ablateButton.element.title =
+    "Select a shader stage frame first, then measure the cost of its individual statements by replaying the draw with the shader progressively cut short.";
+
   const resetButton = new Button(controls, {
     label: "Reset zoom",
     class: "btn",
@@ -124,6 +134,16 @@ export function buildFrameFlameGraph(options) {
       return lines.join("\n");
     },
     onSelect: (n) => {
+      // A shader-stage frame is an ablation target directly. A draw frame
+      // carries its stages too, because an unweighted stage frame has zero
+      // width and gets culled before it can be clicked — fragment stages start
+      // out that way, and they're the interesting ones.
+      if (n.module && n.stage) {
+        setAblationTarget(n);
+      } else if (n.ablationTargets?.length) {
+        setAblationTarget(
+          n.ablationTargets.find((t) => t.stage === "fragment") ?? n.ablationTargets[0]);
+      }
       if (n.command && options.onSelectCommand) {
         options.onSelectCommand(n.command);
       }
@@ -131,6 +151,7 @@ export function buildFrameFlameGraph(options) {
   });
   graph.element.style.minHeight = "260px";
 
+  const statementPanel = new Div(panel, { class: "flame-statements" });
   const notes = new Div(panel, { class: "flame-notes" });
 
   function update() {
@@ -174,6 +195,117 @@ export function buildFrameFlameGraph(options) {
         `Replay each draw with timestamp queries (${timing.method}), so every draw's width is measured time rather than a modeled share of its pass.`;
     }
     timeButton.disabled = measuring || !canMeasure || !timing?.supported;
+
+    // Ablation needs a selected stage frame as well as a capable device.
+    const canAblate = canMeasure && timing?.supported && ablationTarget &&
+      (ablationTarget.stage === "vertex" || ablationTarget.stage === "fragment");
+    ablateButton.disabled = measuring || !canAblate;
+  }
+
+  // The shader-stage frame most recently clicked, if any. Ablation is per-draw
+  // and fairly expensive, so it's an explicit action on a chosen target rather
+  // than something run across the frame.
+  let ablationTarget = null;
+
+  function setAblationTarget(node) {
+    ablationTarget = node;
+    const canAblate = !!(options.getDevice && options.database && options.getTextureFromAttachment) &&
+      (node.stage === "vertex" || node.stage === "fragment");
+    ablateButton.disabled = measuring || !canAblate;
+    if (node.stage === "compute") {
+      ablateButton.element.title = "Statement measurement currently covers vertex and fragment stages only.";
+    } else if (canAblate) {
+      const which = node.drawCount > 1
+        ? ` (the first of ${node.drawCount} draws in this group)`
+        : "";
+      ablateButton.element.title =
+        `Measure per-statement cost of ${node.stage} "${node.entryPoint ?? "?"}"${which}.`;
+    }
+  }
+
+  function renderStatements(target, result) {
+    statementPanel.element.innerHTML = "";
+    if (!result.ok) {
+      new Div(statementPanel, { class: "flame-note", text: `Statement measurement failed: ${result.reason}` });
+      return;
+    }
+
+    const header = new Div(statementPanel, { class: "flame-statements-header" });
+    const which = target.drawCount > 1 ? ` — first of ${target.drawCount} draws` : "";
+    header.element.textContent =
+      `${target.stage} "${target.entryPoint ?? "?"}"${which}: ${result.totalMs.toFixed(4)} ms total, ` +
+      `${result.baselineMs.toFixed(4)} ms before the first statement` +
+      (result.repeats > 1 ? `, ${result.repeats}x repeated` : "");
+
+    // Ranked by cost: the point is finding the expensive line.
+    const ranked = result.statements.slice().sort((a, b) => (b.ms ?? -Infinity) - (a.ms ?? -Infinity));
+    const maxMs = Math.max(...ranked.map((s) => s.ms ?? 0), 0);
+
+    for (const statement of ranked) {
+      const row = new Div(statementPanel, { class: "flame-statement" });
+
+      const lineText = `line ${statement.line}`;
+      if (options.onSelectShaderLine && target.module) {
+        const link = new Span(row, { class: "perf-line-link", text: lineText });
+        link.element.onclick = () => options.onSelectShaderLine(target.module, statement.line);
+      } else {
+        new Span(row, { class: "flame-statement-line", text: lineText });
+      }
+
+      // A share bar, so the ranking reads at a glance.
+      const barWrap = new Div(row, { class: "flame-statement-bar" });
+      const width = maxMs > 0 && statement.ms > 0 ? (statement.ms / maxMs) * 100 : 0;
+      new Div(barWrap, { class: "flame-statement-fill", style: `width: ${width}%;` });
+
+      const cost = statement.ms === null
+        ? "not measured"
+        : statement.negative
+          ? "too small to measure"
+          : `${statement.ms.toFixed(4)} ms`;
+      new Span(row, { class: "flame-statement-cost", text: cost });
+      new Span(row, { class: "flame-statement-src", text: statement.label });
+    }
+  }
+
+  async function measureStatements() {
+    if (measuring || !ablationTarget) {
+      return;
+    }
+    const device = options.getDevice?.();
+    if (!device) {
+      new Div(notes, { class: "flame-note", text: "Statement measurement is unavailable: no DevTools GPU device." });
+      return;
+    }
+    const target = ablationTarget;
+    measuring = true;
+    ablateButton.disabled = true;
+    statementPanel.element.innerHTML = "";
+
+    try {
+      const result = await measureStatementCosts({
+        device,
+        database: options.database,
+        commands: options.commands,
+        getTextureFromAttachment: options.getTextureFromAttachment,
+        drawCommand: target.command,
+        stage: target.stage,
+        entryPoint: target.entryPoint,
+        onProgress: (done, total) => {
+          ablateButton.text = `Cut ${done}/${total}...`;
+        },
+      });
+      renderStatements(target, result);
+      for (const note of result.notes ?? []) {
+        new Div(statementPanel, { class: "flame-note", text: note });
+      }
+    } catch (e) {
+      new Div(statementPanel, { class: "flame-note", text: `Statement measurement failed: ${e.message ?? e}` });
+    } finally {
+      measuring = false;
+      ablateButton.text = "Measure statements";
+      setAblationTarget(target);
+      update();
+    }
   }
 
   async function measureTimings() {

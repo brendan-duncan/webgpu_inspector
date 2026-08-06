@@ -312,6 +312,13 @@ export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDra
         node.invocations = acc.invocations;
         node.confidence = acc.confidence;
         node.module = acc.module;
+        // Enough context for an ablation sweep to be launched from this frame.
+        // In grouped mode the bucket holds several draws, so the first stands in
+        // for the group; `drawCount` lets the UI say so.
+        node.stage = acc.stage;
+        node.entryPoint = acc.entryPoint;
+        node.command = bucket.items[0].command;
+        node.drawCount = bucket.items.length;
         stageNodes.push(node);
       }
 
@@ -326,6 +333,18 @@ export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDra
 
       const itemNode = rollup(makeNode("loop", name, 0, stageNodes));
       itemNode.command = bucket.items[0].command;
+      // A stage with no measured invocation count has zero width, so its frame
+      // is culled and can't be clicked. Carry the ablation targets on the draw
+      // frame too, which is always visible.
+      itemNode.ablationTargets = stages
+        .filter((s) => s.acc.stage === "vertex" || s.acc.stage === "fragment")
+        .map((s) => ({
+          stage: s.acc.stage,
+          entryPoint: s.acc.entryPoint,
+          module: s.acc.module,
+          command: bucket.items[0].command,
+          drawCount: bucket.items.length,
+        }));
       if (measuredMs !== null) {
         itemNode.measuredMs = measuredMs;
         // A measured draw whose shaders couldn't be modeled still has a real

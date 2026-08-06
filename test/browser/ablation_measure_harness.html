@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+<!-- End-to-end harness for ablation through the capture replay path
+     (src/devtools/ablation_measure.js). Where ablation_harness.html proves the
+     measurement technique on a hand-built pipeline, this proves the plumbing:
+     a mock capture goes in, and per-statement costs come out — including the
+     bind-group injection that has to work for both auto and explicit pipeline
+     layouts. Driven by test/browser/run_ablation_measure_harness.mjs. -->
+<head>
+<script type="importmap">
+{ "imports": { "wgsl_reflect/": "/node_modules/wgsl_reflect/" } }
+</script>
+</head>
+<body>
+<script type="module">
+import { measureStatementCosts } from "../../src/devtools/ablation_measure.js";
+
+const results = [];
+window.__results = null;
+
+async function check(name, fn) {
+    try {
+        const info = await fn();
+        results.push({ name, ok: true, info });
+    } catch (e) {
+        results.push({ name, ok: false, failure: e.message ?? String(e) });
+    }
+}
+
+function assert(cond, message) {
+    if (!cond) {
+        throw new Error(message);
+    }
+}
+
+const WIDTH = 512, HEIGHT = 512;
+
+// Same known cost profile as the technique harness: statement 3 does 4x the
+// work of statement 1, with trivial statements between them.
+const CODE = `
+struct U { base : u32 }
+@group(0) @binding(0) var<uniform> u : U;
+
+fn work(n : u32) -> f32 {
+  var s = 0.0;
+  for (var i = 0u; i < n; i = i + 1u) {
+    s = s + sqrt(f32(i) + 0.5) * sin(s + 1.0);
+  }
+  return s;
+}
+
+@vertex fn vsMain(@builtin(vertex_index) vi : u32) -> @builtin(position) vec4f {
+  var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  return vec4f(p[vi], 0.0, 1.0);
+}
+
+@fragment fn fsMain() -> @location(0) vec4f {
+  var acc = 0.0;
+  acc = acc + work(u.base * 8u);
+  acc = acc + 1.0;
+  acc = acc + work(u.base * 32u);
+  return vec4f(acc * 0.00001, 0.0, 0.0, 1.0);
+}
+`;
+
+const BASE = 64;
+
+function makeDatabase(objects, textures) {
+    const map = new Map(Object.entries(objects).map(([k, v]) => [Number(k), v]));
+    return {
+        getObject: (id) => map.get(id) ?? null,
+        getTextureFromView: (view) => textures.get(view?.__id) ?? null,
+    };
+}
+
+// Build a mock capture. `explicitLayout` switches the pipeline between an
+// "auto" layout and a captured explicit one — the two bind-group injection
+// paths that have to work.
+function makeCapture(explicitLayout) {
+    const IDS = { module: 1, target: 2, view: 3, pipeline: 4, layout: 5, bgl: 6, buffer: 7, bindGroup: 8 };
+
+    const targetTexture = {
+        id: IDS.target, label: "target", width: WIDTH, height: HEIGHT,
+        depthOrArrayLayers: 1,
+        descriptor: { format: "rgba8unorm", size: [WIDTH, HEIGHT], sampleCount: 1, usage: 0x10 },
+    };
+    const textures = new Map([[IDS.view, targetTexture]]);
+
+    const bglDescriptor = {
+        entries: [{ binding: 0, visibility: 3, buffer: { type: "uniform" } }],
+    };
+
+    const objects = {
+        [IDS.module]: { id: IDS.module, label: "shader", code: CODE, descriptor: { code: CODE } },
+        [IDS.target]: targetTexture,
+        [IDS.bgl]: { id: IDS.bgl, descriptor: bglDescriptor },
+        [IDS.layout]: { id: IDS.layout, descriptor: { bindGroupLayouts: [{ __id: IDS.bgl }] } },
+        [IDS.buffer]: { id: IDS.buffer, descriptor: { size: 16, usage: 0x40 | 0x8 } },
+        [IDS.bindGroup]: {
+            id: IDS.bindGroup,
+            descriptor: {
+                layout: explicitLayout ? { __id: IDS.bgl } : { __id: 999 },
+                entries: [{ binding: 0, resource: { buffer: { __id: IDS.buffer } } }],
+            },
+        },
+        [IDS.pipeline]: {
+            id: IDS.pipeline, label: "ablated",
+            descriptor: {
+                layout: explicitLayout ? { __id: IDS.layout } : "auto",
+                vertex: { module: { __id: IDS.module }, entryPoint: "vsMain" },
+                fragment: {
+                    module: { __id: IDS.module }, entryPoint: "fsMain",
+                    targets: [{ format: "rgba8unorm" }],
+                },
+                primitive: { topology: "triangle-list" },
+            },
+        },
+    };
+
+    const uniformBytes = new Uint8Array(new Uint32Array([BASE, 0, 0, 0]).buffer);
+    const drawCommand = { method: "draw", object: "enc", id: 130, args: [3, 1, 0, 0] };
+    const commands = [
+        { method: "beginRenderPass", object: "enc", id: 100, args: [{
+            colorAttachments: [{ view: { __id: IDS.view }, loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] }],
+        }] },
+        { method: "setPipeline", object: "enc", id: 110, args: [{ __id: IDS.pipeline }] },
+        { method: "setBindGroup", object: "enc", id: 120, args: [0, { __id: IDS.bindGroup }], bufferData: [uniformBytes] },
+        drawCommand,
+        { method: "end", object: "enc", id: 140 },
+    ];
+
+    return {
+        commands,
+        drawCommand,
+        database: makeDatabase(objects, textures),
+        getTextureFromAttachment: (attachment) => textures.get(attachment?.view?.__id) ?? null,
+    };
+}
+
+function verifyProfile(result, label) {
+    assert(result.ok, `${label}: ${result.reason}`);
+    const byLabel = new Map(result.statements.map((s) => [s.label, s.ms]));
+    const medium = byLabel.get("acc = acc + work(u.base * 8u);");
+    const heavy = byLabel.get("acc = acc + work(u.base * 32u);");
+    const trivial = byLabel.get("acc = acc + 1.0;");
+    assert(medium != null && heavy != null && trivial != null,
+        `${label}: missing statements: ${[...byLabel.keys()].join(" | ")}`);
+    assert(heavy > medium, `${label}: heavy (${heavy}) not above medium (${medium})`);
+    const ratio = heavy / medium;
+    assert(ratio > 2.5 && ratio < 6, `${label}: heavy/medium ratio ${ratio.toFixed(2)}, expected ~4`);
+    assert(Math.abs(trivial) < medium * 0.25, `${label}: trivial statement cost ${trivial} is not near zero`);
+    return {
+        ratio: +ratio.toFixed(2),
+        repeats: result.repeats,
+        baselineMs: +result.baselineMs.toFixed(5),
+        totalMs: +result.totalMs.toFixed(5),
+        perStatement: result.statements.map((s) => ({
+            line: s.line, ms: s.ms == null ? null : +s.ms.toFixed(5), label: s.label,
+        })),
+    };
+}
+
+async function main() {
+    const adapter = await navigator.gpu.requestAdapter();
+    const features = ["timestamp-query"].filter((f) => adapter.features.has(f));
+    const device = await adapter.requestDevice({ requiredFeatures: features });
+    assert(device.features.has("timestamp-query"), "timestamp-query unavailable");
+
+    await check("ablation through the replay path, auto pipeline layout", async () => {
+        const capture = makeCapture(false);
+        const result = await measureStatementCosts({
+            device,
+            database: capture.database,
+            commands: capture.commands,
+            getTextureFromAttachment: capture.getTextureFromAttachment,
+            drawCommand: capture.drawCommand,
+            stage: "fragment",
+        });
+        return verifyProfile(result, "auto");
+    });
+
+    await check("ablation through the replay path, explicit pipeline layout", async () => {
+        // The interesting path: the pipeline layout must be rebuilt with the
+        // ablation group appended, since bindGroupLayouts is positional.
+        const capture = makeCapture(true);
+        const result = await measureStatementCosts({
+            device,
+            database: capture.database,
+            commands: capture.commands,
+            getTextureFromAttachment: capture.getTextureFromAttachment,
+            drawCommand: capture.drawCommand,
+            stage: "fragment",
+        });
+        return verifyProfile(result, "explicit");
+    });
+
+    await check("the caveats are reported", async () => {
+        const capture = makeCapture(false);
+        const result = await measureStatementCosts({
+            device,
+            database: capture.database,
+            commands: capture.commands,
+            getTextureFromAttachment: capture.getTextureFromAttachment,
+            drawCommand: capture.drawCommand,
+            stage: "fragment",
+        });
+        assert(result.notes.some((n) => /top-level statements/.test(n)),
+            "the top-level-only limit must be stated");
+        assert(result.notes.some((n) => /isolation/.test(n)),
+            "the isolation caveat must be stated");
+        return { notes: result.notes };
+    });
+
+    await check("a draw that isn't in the capture fails cleanly", async () => {
+        const capture = makeCapture(false);
+        const result = await measureStatementCosts({
+            device,
+            database: capture.database,
+            commands: capture.commands,
+            getTextureFromAttachment: capture.getTextureFromAttachment,
+            drawCommand: { method: "draw", object: "enc", id: 999, args: [3] },
+            stage: "fragment",
+        });
+        assert(result.ok === false, "expected failure");
+        assert(/not found/.test(result.reason), `unexpected reason: ${result.reason}`);
+        return { reason: result.reason };
+    });
+
+    await check("progress is reported across the sweep", async () => {
+        const capture = makeCapture(false);
+        const seen = [];
+        await measureStatementCosts({
+            device,
+            database: capture.database,
+            commands: capture.commands,
+            getTextureFromAttachment: capture.getTextureFromAttachment,
+            drawCommand: capture.drawCommand,
+            stage: "fragment",
+            onProgress: (done, total) => seen.push(`${done}/${total}`),
+        });
+        assert(seen.length >= 5, `expected progress callbacks, got ${seen.length}`);
+        return { first: seen[0], last: seen[seen.length - 1] };
+    });
+}
+
+try {
+    await main();
+} catch (e) {
+    results.push({ name: "harness", ok: false, failure: `${e.stack ?? e}` });
+}
+window.__results = results;
+</script>
+</body>
+</html>

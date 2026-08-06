@@ -2350,6 +2350,11 @@ export class CapturePanel {
       getDevice: () => self.window?.device ?? null,
       getTextureFromAttachment: (attachment) => self._getTextureFromAttachment(attachment),
       onSelectCommand: (command) => self._jumpToCommand(command),
+      onSelectShaderLine: (module, line) => {
+        // ShaderEditor honors __line and scrolls to it on construction.
+        module.__line = line;
+        self.window.inspectObject(module);
+      },
     });
     this._captureTab.addTab("Shader Flame Graph", panel);
     this._captureTab.setActivePanel(panel);
