@@ -1,0 +1,64 @@
+// Drives test/browser/flamegraph_harness.html in headless Chrome and reports
+// the results. Uses the MCP plugin server's puppeteer-core.
+// Run with: node test/browser/run_flamegraph_harness.mjs
+import http from "node:http";
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const { createRequire } = await import("node:module");
+const puppeteer = createRequire(path.join(root, "claude-plugin/server/index.js"))("puppeteer-core");
+
+const MIME = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css" };
+
+const server = http.createServer((req, res) => {
+    const file = path.join(root, decodeURIComponent(new URL(req.url, "http://x").pathname));
+    if (!file.startsWith(root) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+        res.writeHead(404).end();
+        return;
+    }
+    res.writeHead(200, { "content-type": MIME[path.extname(file)] ?? "application/octet-stream" });
+    res.end(fs.readFileSync(file));
+});
+await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+const port = server.address().port;
+
+const chromePaths = [
+    "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+    process.env.LOCALAPPDATA + "/Google/Chrome/Application/chrome.exe",
+];
+const executablePath = chromePaths.find((p) => p && fs.existsSync(p));
+if (!executablePath) {
+    console.error("Chrome not found");
+    process.exit(1);
+}
+
+// No WebGPU needed: this harness exercises DOM layout, not the GPU.
+const browser = await puppeteer.launch({ executablePath, headless: true, args: ["--no-sandbox"] });
+try {
+    const page = await browser.newPage();
+    page.on("console", (msg) => console.log("[page]", msg.type(), msg.text()));
+    page.on("pageerror", (e) => console.log("[pageerror]", e.message));
+    await page.goto(`http://127.0.0.1:${port}/test/browser/flamegraph_harness.html`);
+    // Check for an array, not just non-null: a module that fails to load never
+    // runs the script that declares __results, leaving it undefined.
+    await page.waitForFunction("Array.isArray(window.__results)", { timeout: 30000 });
+    const results = await page.evaluate("window.__results");
+    let failed = 0;
+    for (const r of results) {
+        if (!r.ok) {
+            failed++;
+        }
+        console.log(`${r.ok ? "PASS" : "FAIL"}: ${r.name}`);
+        if (!r.ok) {
+            console.log(`  failure: ${r.failure}`);
+        }
+    }
+    process.exitCode = failed ? 1 : 0;
+    console.log(failed ? `${failed} case(s) FAILED` : `All ${results.length} cases passed`);
+} finally {
+    await browser.close();
+    server.close();
+}

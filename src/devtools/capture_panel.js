@@ -26,6 +26,7 @@ import { CaptureData } from "./capture_data.js";
 import { ShaderDebugger } from "./shader_debugger.js";
 import { CaptureTextureViewer } from "./capture_texture_viewer.js";
 import { addShaderAnalysisView, buildFrameShaderAnalysis } from "./shader_analysis_view.js";
+import { buildFrameFlameGraph } from "./frame_flamegraph.js";
 import { captureToText, downloadCapture } from "./capture_export.js";
 import { isCaptureBinary, decodeCaptureBinary } from "../utils/capture_binary.js";
 import { importCaptureJson, parseCaptureText } from "./capture_import.js";
@@ -604,6 +605,12 @@ export class CapturePanel {
       class: "btn",
       title: "Run static performance analysis on the shaders used in this frame",
       callback: () => self._analyzeAllShaders(commands)
+    });
+    new Button(filterArea, {
+      label: "Shader Flame Graph",
+      class: "btn",
+      title: "Break the frame's GPU cost down by pass, pipeline and shader statement",
+      callback: () => self._showFrameFlameGraph(commands)
     });
 
     // GPU pass timeline. Stays at 0 height until timestamp data arrives, so captures
@@ -2322,6 +2329,53 @@ export class CapturePanel {
         }
       }
     }
+  }
+
+  /**
+   * Opens the frame's shader flame graph as a capture tab: the frame's GPU cost
+   * broken down by pass, pipeline, shader entry point and statement.
+   *
+   * Pass durations come from timestamp queries when the capture was taken with
+   * "Profile Passes" enabled, in which case the graph is in real milliseconds
+   * and only the split within a pass is modeled. Otherwise it falls back to
+   * modeled op units.
+   * @param {Array<Object>} commands - The frame's command records.
+   */
+  _showFrameFlameGraph(commands) {
+    const self = this;
+    const panel = buildFrameFlameGraph({
+      commands,
+      getObject: (id) => self._getObject(id),
+      database: this.database,
+      getDevice: () => self.window?.device ?? null,
+      getTextureFromAttachment: (attachment) => self._getTextureFromAttachment(attachment),
+      onSelectCommand: (command) => self._jumpToCommand(command),
+    });
+    this._captureTab.addTab("Shader Flame Graph", panel);
+    this._captureTab.setActivePanel(panel);
+  }
+
+  /**
+   * Expand and scroll a command's row in the command tree into view. Mirrors
+   * TimelineWidget's jump behavior, which navigates from the same kind of
+   * pass/draw record.
+   * @param {Object} command
+   */
+  _jumpToCommand(command) {
+    const headerSpan = command?.header;
+    const element = headerSpan?.element ?? command?.widget?.element;
+    if (!element) {
+      return;
+    }
+    const row = headerSpan?.element ? element.parentElement : element;
+    if (!row) {
+      return;
+    }
+    const block = row.nextElementSibling;
+    if (block && block.classList.contains("collapsed")) {
+      row.click();
+    }
+    row.scrollIntoView({ block: "center", behavior: "smooth" });
   }
 
   /**

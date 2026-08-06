@@ -30,6 +30,7 @@ import { Plot } from "./widget/plot.js";
 import { Split } from "./widget/split.js";
 import { ShaderEditor } from "./shader_editor.js";
 import { addShaderAnalysisView } from "./shader_analysis_view.js";
+import { addShaderFlameGraphView } from "./shader_flamegraph.js";
 import { StacktraceViewer } from './stacktrace_viewer.js';
 import { TextureViewer } from "./texture_viewer.js";
 
@@ -1365,6 +1366,14 @@ export class InspectPanel {
       // the info box tall enough to squeeze the shader editor below. Sized to fit
       // about 3 findings before scrolling.
       perfGrp.body.style.maxHeight = "225px";
+
+      addShaderFlameGraphView(infoBox, object, {
+        collapsed: true,
+        onLineClick: (line) => {
+          object.__line = line;
+          self._inspectObject(object);
+        },
+      });
     }
 
     // The info box (above) has a natural height that grows as its collapsibles

@@ -744,10 +744,16 @@ function applyUploads(replay, uploads) {
 // Replay one captured render pass into the count target: walk its commands,
 // materialize each draw's pipeline/bind groups, upload the captured buffer
 // bytes, then encode and submit with failure isolation.
-async function replayPass(replay, passCommands, countView, width, height, stubModule, stats) {
+// `drawFilter`, when given, selects which of the pass's draws to encode; the
+// command walk still processes every command, because encoder state (pipeline,
+// bind groups, vertex buffers) accumulates across the draws that are skipped.
+async function replayPass(replay, passCommands, countView, width, height, stubModule, stats, drawFilter) {
     const uploads = [];
     const missing = new Set();
-    const plans = walkPassCommands(replay, passCommands, uploads, missing, stats);
+    let plans = walkPassCommands(replay, passCommands, uploads, missing, stats);
+    if (drawFilter) {
+        plans = plans.filter((plan) => drawFilter(plan.command));
+    }
     for (const note of missing) {
         replay.notes.add(note);
     }
@@ -865,41 +871,8 @@ export async function replayOverdraw({ device, database, commands, targetTexture
             size: bytesPerRow * height,
             usage: BUFFER_COPY_DST | BUFFER_MAP_READ,
         });
-        const encoder = device.createCommandEncoder();
-        encoder.copyTextureToBuffer(
-            { texture: countTexture },
-            { buffer: readback, bytesPerRow },
-            [width, height]);
-        device.queue.submit([encoder.finish()]);
-        await readback.mapAsync(GPUMapMode.READ);
-
-        const mapped = new Uint16Array(readback.getMappedRange());
-        const counts = new Uint32Array(width * height);
-        let maxCount = 0;
-        let saturated = false;
-        const halfsPerRow = bytesPerRow / 2;
-        for (let y = 0; y < height; ++y) {
-            const row = y * halfsPerRow;
-            for (let x = 0; x < width; ++x) {
-                let value = halfToFloat(mapped[row + x]);
-                if (!Number.isFinite(value)) {
-                    value = F16_MAX;
-                    saturated = true;
-                }
-                const count = Math.max(0, Math.round(value));
-                counts[y * width + x] = count;
-                if (count > maxCount) {
-                    maxCount = count;
-                }
-            }
-        }
-        readback.unmap();
-        if (saturated) {
-            replay.notes.add(`Some counts exceeded ${F16_MAX} and are clamped.`);
-        }
-        if (maxCount > 2048) {
-            replay.notes.add("Counts above 2048 are approximate (16-bit float accumulation).");
-        }
+        const { counts, maxCount } = await readbackCounts(
+            device, countTexture, readback, bytesPerRow, width, height, replay);
 
         return {
             width,
@@ -910,6 +883,144 @@ export async function replayOverdraw({ device, database, commands, targetTexture
             skippedDraws: stats.skippedDraws,
             gpu: true,
         };
+    } finally {
+        try {
+            readback?.destroy();
+        } catch (_) { /* ignore */ }
+        try {
+            countTexture?.destroy();
+        } catch (_) { /* ignore */ }
+        replay.destroy();
+    }
+}
+
+// Copy the f16 count target back to the CPU and decode it to integer counts.
+// Shared by the overdraw heatmap and the fragment-count measurement, which
+// differ only in what they do with the numbers.
+async function readbackCounts(device, countTexture, readback, bytesPerRow, width, height, replay) {
+    const encoder = device.createCommandEncoder();
+    encoder.copyTextureToBuffer(
+        { texture: countTexture },
+        { buffer: readback, bytesPerRow },
+        [width, height]);
+    device.queue.submit([encoder.finish()]);
+    await readback.mapAsync(GPUMapMode.READ);
+
+    const mapped = new Uint16Array(readback.getMappedRange());
+    const counts = new Uint32Array(width * height);
+    let maxCount = 0;
+    let total = 0;
+    let saturated = false;
+    const halfsPerRow = bytesPerRow / 2;
+    for (let y = 0; y < height; ++y) {
+        const row = y * halfsPerRow;
+        for (let x = 0; x < width; ++x) {
+            let value = halfToFloat(mapped[row + x]);
+            if (!Number.isFinite(value)) {
+                value = F16_MAX;
+                saturated = true;
+            }
+            const count = Math.max(0, Math.round(value));
+            counts[y * width + x] = count;
+            total += count;
+            if (count > maxCount) {
+                maxCount = count;
+            }
+        }
+    }
+    readback.unmap();
+    if (saturated) {
+        replay.notes.add(`Some counts exceeded ${F16_MAX} and are clamped.`);
+    }
+    if (maxCount > 2048) {
+        replay.notes.add("Counts above 2048 are approximate (16-bit float accumulation).");
+    }
+    return { counts, maxCount, total };
+}
+
+// ---------------------------------------------------------------------------
+// Fragment invocation counts
+// ---------------------------------------------------------------------------
+
+/**
+ * Count rasterized fragments per group of draws, by GPU replay.
+ *
+ * This is the measured input the shader cost model needs to weight a fragment
+ * stage: modeled ops-per-invocation times a real invocation count. Each group
+ * is replayed separately (the count target accumulates, so groups can't share a
+ * pass), reusing one materialized replay so pipelines and buffers are only
+ * rebuilt once.
+ *
+ * Counts are fragments that reach rasterization: after culling, viewport,
+ * scissor and depth-clip, but *before* the depth test and before the real
+ * fragment shader runs. Early-Z rejection therefore isn't reflected — this is
+ * an upper bound on fragment shader invocations, and the gap between it and
+ * reality is exactly the win early-Z is giving you.
+ *
+ * @param {Object} params
+ * @param {GPUDevice} params.device
+ * @param {Object} params.database
+ * @param {Object[]} params.commands - the frame's command list
+ * @param {Object} params.targetTexture - the render target to count against
+ * @param {Function} params.getTextureFromAttachment
+ * @param {{key:string, draws:Set}[]} params.groups - draw commands per group
+ * @returns {Promise<{results: Map<string,{fragments:number, maxCount:number}>,
+ *                    notes: string[], skippedDraws: number}>}
+ */
+export async function measureFragmentCounts({ device, database, commands, targetTexture, getTextureFromAttachment, groups }) {
+    if (!device) {
+        throw new Error("The DevTools GPU device is not available.");
+    }
+    const width = targetTexture.width;
+    const height = targetTexture.height;
+    if (!width || !height) {
+        throw new Error("The target texture has no size.");
+    }
+
+    const replay = new CaptureReplay(device, database);
+    const stats = { skippedDraws: 0 };
+    const { passes, msaa } = collectTargetPasses(commands, targetTexture, getTextureFromAttachment);
+    if (msaa) {
+        replay.notes.add("A multisampled attachment is counted at one sample per pixel.");
+    }
+
+    const bytesPerRow = align(width * 2, 256);
+    const results = new Map();
+    let countTexture = null;
+    let readback = null;
+    try {
+        countTexture = device.createTexture({
+            label: "fragment counts",
+            size: [width, height],
+            format: COUNT_FORMAT,
+            usage: TEXTURE_RENDER_ATTACHMENT | TEXTURE_COPY_SRC,
+        });
+        const countView = countTexture.createView();
+        const stubModule = device.createShaderModule({ code: STUB_FRAGMENT });
+        readback = device.createBuffer({
+            size: bytesPerRow * height,
+            usage: BUFFER_COPY_DST | BUFFER_MAP_READ,
+        });
+
+        for (const group of groups) {
+            // Reset the accumulator so this group's count starts from zero.
+            {
+                const encoder = device.createCommandEncoder();
+                encoder.beginRenderPass({
+                    colorAttachments: [{ view: countView, loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 0] }],
+                }).end();
+                device.queue.submit([encoder.finish()]);
+            }
+            const filter = (command) => group.draws.has(command);
+            for (const passCommands of passes) {
+                await replayPass(replay, passCommands, countView, width, height, stubModule, stats, filter);
+            }
+            const { maxCount, total } = await readbackCounts(
+                device, countTexture, readback, bytesPerRow, width, height, replay);
+            results.set(group.key, { fragments: total, maxCount });
+        }
+
+        return { results, notes: Array.from(replay.notes), skippedDraws: stats.skippedDraws };
     } finally {
         try {
             readback?.destroy();

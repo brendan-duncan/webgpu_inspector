@@ -2772,3 +2772,87 @@ li.tree-item .expandbutton
   font-size: 13px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
+
+/* ---------------------------------------------------------------------------
+   Shader flame graph
+   --------------------------------------------------------------------------- */
+
+.flame-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  /* The command view sets white-space: nowrap on ancestors; restore wrapping so
+     summaries and notes don't run off to the right. */
+  white-space: normal;
+}
+
+/* The frame-level graph is a full capture tab, so it owns the height. */
+.flame-frame-panel {
+  height: 100%;
+  overflow: auto;
+}
+
+.flame-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  flex-wrap: wrap;
+}
+
+.flame-summary {
+  padding: 2px 8px 6px 8px;
+  color: var(--text-primary, #ddd);
+  font-size: 10pt;
+}
+
+.flame-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px 6px 8px;
+  flex-wrap: wrap;
+  font-size: 9pt;
+  color: var(--text-secondary, #aaa);
+}
+
+.flame-legend-label {
+  color: var(--text-secondary, #aaa);
+}
+
+.flame-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.flame-legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.flame-notes {
+  padding: 6px 8px;
+  font-size: 9pt;
+  color: var(--text-secondary, #aaa);
+}
+
+.flame-note {
+  padding: 2px 0;
+  /* Assumptions and caveats are advisory, not findings; keep them quieter than
+     the graph itself but still readable. */
+  line-height: 1.35;
+}
+
+.flame-note::before {
+  content: "· ";
+  color: var(--accent-warning, #e0b050);
+}
+
+.flame-empty {
+  padding: 10px 8px;
+  color: var(--text-secondary, #aaa);
+  font-style: italic;
+}

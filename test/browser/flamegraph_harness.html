@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<!-- Browser harness for the shader flame graph UI (src/devtools/widget/flamegraph.js
+     and shader_flamegraph.js). The unit tests cover the cost math; this covers
+     what only a DOM can: that the panel builds without throwing, that frame
+     geometry is laid out correctly (children fit inside their parent, depth
+     rows stack), and that click-to-zoom works. Driven by
+     test/browser/run_flamegraph_harness.mjs; results land in window.__results. -->
+<head>
+<!-- The devtools sources import wgsl_reflect by bare specifier, which the
+     bundler resolves at build time; map it for the raw-module harness. -->
+<script type="importmap">
+{ "imports": { "wgsl_reflect/": "/node_modules/wgsl_reflect/" } }
+</script>
+<style>
+  body { margin: 0; background: #1e1e1e; color: #ddd; font-family: sans-serif; }
+  #host { width: 900px; }
+</style>
+</head>
+<body>
+<div id="host"></div>
+<script type="module">
+import { Widget } from "../../src/devtools/widget/widget.js";
+import { FlameGraph } from "../../src/devtools/widget/flamegraph.js";
+import { addShaderFlameGraphPanel } from "../../src/devtools/shader_flamegraph.js";
+
+const results = [];
+window.__results = null;
+
+function check(name, fn) {
+    try {
+        fn();
+        results.push({ name, ok: true });
+    } catch (e) {
+        results.push({ name, ok: false, failure: e.message ?? String(e) });
+    }
+}
+
+function assert(cond, message) {
+    if (!cond) {
+        throw new Error(message);
+    }
+}
+
+const WGSL = `
+@group(0) @binding(0) var<uniform> mvp : mat4x4f;
+@group(0) @binding(1) var<storage, read> lights : array<vec4f, 8>;
+@group(0) @binding(2) var tex : texture_2d<f32>;
+@group(0) @binding(3) var samp : sampler;
+
+fn attenuate(d : f32) -> f32 {
+  return 1.0 / (1.0 + d * d);
+}
+
+@vertex
+fn vsMain(@location(0) pos : vec3f) -> @builtin(position) vec4f {
+  return mvp * vec4f(pos, 1.0);
+}
+
+@fragment
+fn fsMain(@location(0) uv : vec2f, @location(1) wpos : vec3f) -> @location(0) vec4f {
+  var acc = vec3f(0.0);
+  for (var i = 0; i < 8; i = i + 1) {
+    let l = lights[i].xyz - wpos;
+    acc = acc + normalize(l) * attenuate(length(l));
+  }
+  let albedo = textureSample(tex, samp, uv);
+  if (uv.x > 0.5) {
+    acc = pow(acc, vec3f(2.2));
+  }
+  return vec4f(acc * albedo.rgb, 1.0);
+}
+`;
+
+// The panel only needs the ShaderModule's `code` getter.
+const shaderModule = { id: 1, code: WGSL };
+
+const host = new Widget("div", null);
+host._element = document.getElementById("host");
+
+// ---------------------------------------------------------------------------
+
+let panel = null;
+check("shader flame graph panel builds", () => {
+    panel = addShaderFlameGraphPanel(host, shaderModule, { height: 240 });
+    assert(panel, "no panel returned");
+    assert(!panel.element.querySelector(".flame-empty"),
+        `panel is empty: ${panel.element.querySelector(".flame-empty")?.textContent}`);
+});
+
+function frames() {
+    // The graph canvas is the element holding absolutely-positioned frames.
+    return [...panel.element.querySelectorAll("div")]
+        .filter((el) => el.style.position === "absolute" && el.style.height.endsWith("px"));
+}
+
+check("the entry point selector lists both stages", () => {
+    const select = panel.element.querySelector("select");
+    assert(select, "no entry point selector");
+    const labels = [...select.options].map((o) => o.text);
+    assert(labels.includes("vertex: vsMain"), `missing vertex entry: ${labels.join(",")}`);
+    assert(labels.includes("fragment: fsMain"), `missing fragment entry: ${labels.join(",")}`);
+});
+
+check("the default (vertex) entry point renders", () => {
+    const f = frames();
+    assert(f.length >= 2, `expected frames for vsMain, got ${f.length}`);
+    assert(f[0].textContent === "vsMain", `root frame is "${f[0].textContent}"`);
+});
+
+// Switch to the fragment entry point, which is the one with interesting depth.
+check("switching entry point rebuilds the graph", () => {
+    const select = panel.element.querySelector("select");
+    select.selectedIndex = [...select.options].findIndex((o) => o.text === "fragment: fsMain");
+    select.dispatchEvent(new Event("change"));
+    const f = frames();
+    assert(f[0].textContent === "fsMain", `root frame is "${f[0].textContent}" after switching`);
+});
+
+check("frames are rendered", () => {
+    const f = frames();
+    assert(f.length >= 5, `expected several frames, got ${f.length}`);
+});
+
+check("the root frame spans the full width", () => {
+    const f = frames();
+    const root = f[0];
+    assert(root.style.left === "0%", `root left = ${root.style.left}`);
+    assert(root.style.width === "100%", `root width = ${root.style.width}`);
+});
+
+check("frames stack into depth rows", () => {
+    const tops = new Set(frames().map((el) => el.style.top));
+    assert(tops.size >= 3, `expected at least 3 depth rows, got ${[...tops].join(",")}`);
+});
+
+check("children never overflow their parent's extent", () => {
+    // Group frames by row, then verify each row's frames are non-overlapping
+    // and stay within [0, 100]%.
+    const byTop = new Map();
+    for (const el of frames()) {
+        const top = el.style.top;
+        if (!byTop.has(top)) {
+            byTop.set(top, []);
+        }
+        byTop.get(top).push({
+            left: parseFloat(el.style.left),
+            width: parseFloat(el.style.width),
+        });
+    }
+    // The browser serializes percentages at limited precision, so reading
+    // left/width back and re-accumulating them drifts by ~1e-4 per frame. The
+    // tolerance only needs to be below a visually meaningful overlap.
+    const EPS = 0.01;
+    for (const [top, row] of byTop) {
+        row.sort((a, b) => a.left - b.left);
+        let prevEnd = -EPS;
+        for (const r of row) {
+            assert(r.left >= -EPS, `row ${top}: negative left ${r.left}`);
+            assert(r.left + r.width <= 100 + EPS,
+                `row ${top}: frame runs past 100% (${r.left} + ${r.width})`);
+            assert(r.left >= prevEnd - EPS,
+                `row ${top}: frames overlap (${r.left} < ${prevEnd})`);
+            prevEnd = r.left + r.width;
+        }
+    }
+});
+
+check("wide frames are labelled and every frame has a tooltip", () => {
+    const f = frames();
+    assert(f[0].textContent.length > 0, "root frame has no label");
+    for (const el of f) {
+        assert(el.title.length > 0, "a frame has no tooltip");
+    }
+});
+
+check("clicking a frame zooms it to full width", () => {
+    // The loop frame is the one guaranteed to have children to zoom into; a
+    // leaf statement deliberately doesn't zoom.
+    const candidates = frames().filter((el) => /iterations/.test(el.textContent));
+    assert(candidates.length > 0, "no zoomable loop frame found");
+    const label = candidates[0].textContent;
+    candidates[0].click();
+
+    const after = frames();
+    assert(after.length > 0, "zoom produced no frames");
+    assert(after[0].style.width === "100%", `zoomed root width = ${after[0].style.width}`);
+    assert(after[0].textContent === label,
+        `zoomed root is "${after[0].textContent}", expected "${label}"`);
+
+    // The breadcrumb should now offer a way back.
+    const crumbs = panel.element.querySelectorAll("span");
+    const hasCrumb = [...crumbs].some((c) => c.style.cursor === "pointer");
+    assert(hasCrumb, "no clickable breadcrumb after zooming");
+});
+
+check("the loop body dominates this shader's cost", () => {
+    // fsMain's 8-iteration loop does normalize + length + a division per
+    // iteration; it must outweigh the single texture sample and the branch.
+    // This is a sanity check that weighting reaches the UI, not a cost assertion.
+    const f = frames();
+    const loop = [...f].find((el) => /iterations/.test(el.textContent));
+    assert(loop, "no loop frame rendered");
+    assert(parseFloat(loop.style.width) > 20,
+        `loop frame is only ${loop.style.width} of the entry point`);
+});
+
+check("an unparsable shader degrades to a message, not a crash", () => {
+    const bad = { id: 2, code: "this is not wgsl {{{" };
+    const p = addShaderFlameGraphPanel(host, bad, {});
+    assert(p.element.querySelector(".flame-empty"), "expected an empty-state message");
+});
+
+check("FlameGraph handles an empty tree", () => {
+    const g = new FlameGraph(host, {});
+    g.setData(null);
+    g.clear();
+    g.setData({ name: "zero", totalCost: 0, selfCost: 0, children: [] });
+});
+
+window.__results = results;
+document.title = results.every((r) => r.ok) ? "PASS" : "FAIL";
+</script>
+</body>
+</html>

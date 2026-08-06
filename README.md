@@ -1,6 +1,6 @@
 # WebGPU Inspector
 
-[Inspect](docs/inspect.md) . [Capture](docs/capture.md) . [Record](docs/record.md) . [Shader Debugger](docs/shader_debugger.md)
+[Inspect](docs/inspect.md) . [Capture](docs/capture.md) . [Record](docs/record.md) . [Shader Debugger](docs/shader_debugger.md) . [Shader Flame Graph](docs/shader_flame_graph.md)
 
 * [Introduction](#introduction)
 * [Developer Tools Window](#developer-tools-window)
