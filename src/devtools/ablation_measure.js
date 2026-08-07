@@ -198,6 +198,56 @@ async function timedPass(replay, repeats, encodePass) {
     }
 }
 
+/**
+ * Instrument a shader and compile it, falling back to top-level-only cut points
+ * if the nested version won't compile.
+ *
+ * Cutting inside a loop body puts a conditional `return` where the original had
+ * straight-line code, and that can run into rules the flat version never
+ * touches — WGSL's uniformity analysis around barriers, most obviously. Rather
+ * than predict which shaders those are, try the better instrumentation and take
+ * the coarser one if the driver rejects it.
+ *
+ * @returns {Promise<{ok:boolean, reason?:string, instrumented?:Object,
+ *                    module?:GPUShaderModule, notes:string[]}>}
+ */
+async function instrumentAndCompile(replay, code, options) {
+    const device = replay.device;
+    const notes = [];
+    for (const nested of options.nested === false ? [false] : [true, false]) {
+        const instrumented = instrumentForAblation(code, { ...options, nested });
+        if (!instrumented.ok) {
+            return { ok: false, reason: instrumented.reason, notes };
+        }
+        if (nested && !instrumented.nested) {
+            // Nothing to nest into (or the instrumenter declined); the flat
+            // attempt would produce the identical shader, so don't repeat it.
+            const module = await validated(replay, "The instrumented shader failed to compile", () =>
+                device.createShaderModule({ code: instrumented.code }));
+            return module
+                ? { ok: true, instrumented, module, notes: notes.concat(instrumented.notes ?? []) }
+                : { ok: false, reason: "The instrumented shader failed to compile.", notes };
+        }
+        // The nested attempt is allowed to fail, so swallow its notes: a
+        // validation message about a shader the user never sees is just noise.
+        const before = replay.notes.size;
+        const module = await validated(replay, "The instrumented shader failed to compile", () =>
+            device.createShaderModule({ code: instrumented.code }));
+        if (module) {
+            return { ok: true, instrumented, module, notes: notes.concat(instrumented.notes ?? []) };
+        }
+        if (nested) {
+            while (replay.notes.size > before) {
+                replay.notes.delete(Array.from(replay.notes).pop());
+            }
+            notes.push("Cutting inside the loop bodies produced a shader this device rejected, so only top-level statements were measured.");
+            continue;
+        }
+        return { ok: false, reason: "The instrumented shader failed to compile.", notes };
+    }
+    return { ok: false, reason: "The instrumented shader failed to compile.", notes };
+}
+
 /** Bind everything a compute pass needs, ablation group included. */
 function setComputeState(pass, pipeline, bindGroups) {
     pass.setPipeline(pipeline);
@@ -217,7 +267,7 @@ function setComputeState(pass, pipeline, bindGroups) {
  * @returns {Promise<{ok:boolean, reason?:string, instrumented?:Object,
  *                    cutBuffer?:GPUBuffer, timeOnce?:Function, notes?:string[]}>}
  */
-async function prepareRenderAblation(replay, { pass, plan, desc, stage, entryPoint, getTextureFromAttachment }) {
+async function prepareRenderAblation(replay, { pass, plan, desc, stage, entryPoint, nested, getTextureFromAttachment }) {
     const device = replay.device;
     if (!desc?.vertex || !desc?.fragment?.module) {
         return { ok: false, reason: "The draw's pipeline was not fully captured (it needs both stages)." };
@@ -235,14 +285,16 @@ async function prepareRenderAblation(replay, { pass, plan, desc, stage, entryPoi
         ? replay.getPipelineLayout(desc.layout.__id)
         : null;
 
-    const instrumented = instrumentForAblation(code, {
+    const compiled = await instrumentAndCompile(replay, code, {
         stage,
         entryPoint: stageDesc.entryPoint ?? entryPoint,
         avoidGroups: occupiedGroups(explicitLayout),
+        nested,
     });
-    if (!instrumented.ok) {
-        return { ok: false, reason: instrumented.reason };
+    if (!compiled.ok) {
+        return { ok: false, reason: compiled.reason };
     }
+    const { instrumented, module: instrumentedModule } = compiled;
 
     const attachments = buildAttachments(replay, pass, getTextureFromAttachment);
     if (attachments.error) {
@@ -256,12 +308,6 @@ async function prepareRenderAblation(replay, { pass, plan, desc, stage, entryPoi
     });
 
     // --- build the instrumented pipeline ----------------------------------
-    const instrumentedModule = await validated(replay, "The instrumented shader failed to compile", () =>
-        device.createShaderModule({ code: instrumented.code }));
-    if (!instrumentedModule) {
-        return { ok: false, reason: "The instrumented shader failed to compile." };
-    }
-
     const otherStageDesc = stage === "vertex" ? desc.fragment : desc.vertex;
     const otherModule = replay.getShaderModule(otherStageDesc.module?.__id);
     if (!otherModule) {
@@ -414,7 +460,9 @@ async function prepareRenderAblation(replay, { pass, plan, desc, stage, entryPoi
         instrumented,
         cutBuffer: cut.cutBuffer,
         timeOnce,
-        notes: ["The draw is replayed in isolation against freshly cleared attachments, so depth contents from earlier passes are absent."],
+        notes: compiled.notes.concat([
+            "The draw is replayed in isolation against freshly cleared attachments, so depth contents from earlier passes are absent.",
+        ]),
     };
 }
 
@@ -427,7 +475,7 @@ async function prepareRenderAblation(replay, { pass, plan, desc, stage, entryPoi
  *                    cutBuffer?:GPUBuffer, timeOnce?:Function,
  *                    beforeCut?:Function, notes?:string[]}>}
  */
-async function prepareComputeAblation(replay, { plan, desc, entryPoint, uploads }) {
+async function prepareComputeAblation(replay, { plan, desc, entryPoint, nested, uploads }) {
     const device = replay.device;
     if (!desc?.compute?.module) {
         return { ok: false, reason: "The dispatch's compute pipeline was not captured." };
@@ -445,20 +493,16 @@ async function prepareComputeAblation(replay, { plan, desc, entryPoint, uploads 
         ? replay.getPipelineLayout(desc.layout.__id)
         : null;
 
-    const instrumented = instrumentForAblation(code, {
+    const compiled = await instrumentAndCompile(replay, code, {
         stage: "compute",
         entryPoint: desc.compute.entryPoint ?? entryPoint,
         avoidGroups: occupiedGroups(explicitLayout),
+        nested,
     });
-    if (!instrumented.ok) {
-        return { ok: false, reason: instrumented.reason };
+    if (!compiled.ok) {
+        return { ok: false, reason: compiled.reason };
     }
-
-    const instrumentedModule = await validated(replay, "The instrumented shader failed to compile", () =>
-        device.createShaderModule({ code: instrumented.code }));
-    if (!instrumentedModule) {
-        return { ok: false, reason: "The instrumented shader failed to compile." };
-    }
+    const { instrumented, module: instrumentedModule } = compiled;
 
     const ablationBGL = device.createBindGroupLayout({
         entries: [{
@@ -513,9 +557,9 @@ async function prepareComputeAblation(replay, { plan, desc, entryPoint, uploads 
         computePass.end();
     });
 
-    const notes = [
+    const notes = compiled.notes.concat([
         "The dispatch is replayed in isolation, so buffers written by earlier passes in the frame hold their captured contents rather than what those passes would have produced.",
-    ];
+    ]);
     if (plan.method === "dispatchWorkgroupsIndirect") {
         notes.push("The workgroup count comes from the captured indirect buffer, so it is whatever those bytes held when the frame was captured.");
     }
@@ -559,6 +603,7 @@ export async function measureStatementCosts({
     drawCommand,
     stage = "fragment",
     entryPoint,
+    nested = true,
     onProgress,
 }) {
     const support = detectTimingSupport(device);
@@ -603,8 +648,8 @@ export async function measureStatementCosts({
         const desc = replay.database.getObject(plan.pipelineId)?.descriptor;
 
         const prepared = isCompute
-            ? await prepareComputeAblation(replay, { plan, desc, entryPoint, uploads })
-            : await prepareRenderAblation(replay, { pass, plan, desc, stage, entryPoint, getTextureFromAttachment });
+            ? await prepareComputeAblation(replay, { plan, desc, entryPoint, nested, uploads })
+            : await prepareRenderAblation(replay, { pass, plan, desc, stage, entryPoint, nested, getTextureFromAttachment });
         if (!prepared.ok) {
             return { ok: false, reason: prepared.reason, notes: Array.from(replay.notes) };
         }
@@ -659,7 +704,9 @@ export async function measureStatementCosts({
                 notes.push("Those repeats run back to back without restoring buffer contents between them, so a shader whose cost depends on the data it writes will read differently than it does in the frame.");
             }
         }
-        notes.push("Only the entry point's top-level statements are cut points. A statement inside a loop or branch is attributed to the enclosing top-level statement, not measured on its own.");
+        notes.push(instrumented.nested
+            ? "Cut points cover the entry point's top-level statements and the bodies of its loops. A statement inside an `if` or `switch` is still attributed to the enclosing statement rather than measured on its own."
+            : "Only the entry point's top-level statements are cut points. A statement inside a loop or branch is attributed to the enclosing top-level statement, not measured on its own.");
         notes.push(...(prepared.notes ?? []));
 
         return {

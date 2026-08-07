@@ -24,10 +24,14 @@
  * zero-value expression `T()` is valid for any constructible type, including
  * structs, so the return type only has to be renderable as a type name.
  *
+ * Cut points cover the entry point's top-level statements and the bodies of its
+ * loops; the two levels measure different things, which collectCutPoints
+ * explains.
+ *
  * This module is pure source-to-source; measurement lives in the caller.
  */
 
-import { WgslParser, WgslReflect } from "wgsl_reflect/wgsl_reflect.module.js";
+import { WgslParser, WgslReflect, For, While, Loop } from "wgsl_reflect/wgsl_reflect.module.js";
 
 /** Name of the injected uniform struct and variable. */
 const ABLATION_STRUCT = "WGPUInspectorAblation";
@@ -35,6 +39,27 @@ const ABLATION_VAR = "_wgpuInspectorAblation";
 
 /** WebGPU guarantees at least 4 bind groups. */
 const MAX_BIND_GROUPS = 4;
+
+/**
+ * Cut points past this many make the sweep take longer than it is worth (each
+ * one is four timed submissions). Loop bodies are dropped before top-level
+ * statements when the budget is blown.
+ */
+const MAX_CUT_POINTS = 64;
+
+/**
+ * A loop body is only safe to break down if control cannot leave it by any
+ * route other than falling off the end — see collectCutPoints.
+ *
+ * This is a source-text test rather than an AST walk on purpose: it cannot miss
+ * a node type, and over-excluding (a loop whose comment says "return") costs
+ * nothing but a coarser breakdown for that loop.
+ */
+const ESCAPE_RE = /\b(break|continue|return|discard)\b/;
+
+function isLoop(node) {
+    return node instanceof For || node instanceof While || node instanceof Loop;
+}
 
 /**
  * Render an AST type node back to WGSL source text. Only needs to handle what
@@ -98,6 +123,84 @@ function findEntryFunction(ast, stage, entryPoint) {
 }
 
 /**
+ * Assign cut points to a block's statements, in source order, descending into
+ * loop bodies.
+ *
+ * Nesting works because of what a cut *means*. A cut inside a loop body stops
+ * during the first iteration, so differencing two cuts in the same body gives
+ * the cost of one statement for **one execution** — not its total. A cut
+ * anywhere outside the loop, on the other hand, lets every iteration run,
+ * because the guards inside the body never match. So the two levels measure
+ * different things and neither disturbs the other: top-level differencing still
+ * yields the loop's whole cost, and the body's differencing yields a
+ * per-iteration breakdown of it.
+ *
+ * Two structural requirements fall out of that:
+ *
+ *  * The last statement in a body has no following sibling to difference
+ *    against — the next cut in source order sits *after* the loop, and
+ *    measuring against it would compare one partial iteration with all of them.
+ *    A synthetic cut is injected at the end of every body to give it a partner.
+ *  * `break`, `continue` and `return` can skip that terminator, which would let
+ *    the loop keep running and destroy the arithmetic. Bodies containing any of
+ *    them are left whole.
+ *
+ * Only loop bodies are descended into. An `if` body would be sound to cut the
+ * same way, but the invocations that don't take the branch run the *entire*
+ * shader in every one of those measurements, so the statement's cost is a small
+ * difference between two large numbers and drowns.
+ */
+function collectCutPoints(statements, ctx, depth, parent) {
+  const siblings = [];
+
+  for (const statement of statements) {
+    if (!statement?.hasSpan) {
+      continue;
+    }
+    const point = {
+      cut: ctx.next++,
+      line: statement.line,
+      start: statement.start,
+      end: statement.end,
+      label: ctx.code.slice(statement.start, statement.end).split("\n")[0].trim().slice(0, 80),
+      depth,
+      parentCut: parent ? parent.cut : null,
+      // Filled in below, once the following sibling's index is known.
+      nextCut: null,
+    };
+    ctx.points.push(point);
+    ctx.inserts.push({ offset: statement.start, text: `${ctx.guard(point.cut)}\n  ` });
+    siblings.push(point);
+
+    if (!ctx.nested || !isLoop(statement)) {
+      continue;
+    }
+    const body = (statement.body ?? []).filter((s) => s?.hasSpan);
+    if (!body.length) {
+      continue;
+    }
+    if (ESCAPE_RE.test(ctx.code.slice(statement.start, statement.end))) {
+      ctx.skippedLoops++;
+      continue;
+    }
+    const inner = collectCutPoints(body, ctx, depth + 1, point);
+    if (!inner.length) {
+      continue;
+    }
+    // The synthetic block terminator: with this cut the first iteration runs to
+    // completion and then returns, so the body's last statement has a partner.
+    const endCut = ctx.next++;
+    ctx.inserts.push({ offset: body[body.length - 1].end, text: `\n  ${ctx.guard(endCut)}` });
+    inner[inner.length - 1].nextCut = endCut;
+  }
+
+  for (let i = 0; i < siblings.length - 1; ++i) {
+    siblings[i].nextCut = siblings[i + 1].cut;
+  }
+  return siblings;
+}
+
+/**
  * Instrument a shader so its entry point can be cut short at run time.
  *
  * @param {string} code - the original WGSL
@@ -108,21 +211,28 @@ function findEntryFunction(ast, stage, entryPoint) {
  *   are already taken. Reflection only sees the groups the *shader* reads; an
  *   explicit pipeline layout can declare more, and the ablation uniform must
  *   not collide with those either.
+ * @param {boolean} [options.nested=true] - also cut inside loop bodies. Callers
+ *   retry with this off when the nested shader fails to compile.
  * @returns {{
  *   ok: boolean,
  *   reason?: string,
  *   code?: string,
  *   group?: number,
  *   binding?: number,
- *   cutPoints?: Array<{cut:number, line:number, start:number, end:number, label:string}>,
+ *   cutPoints?: Array<{cut:number, nextCut:number, line:number, start:number,
+ *                      end:number, label:string, depth:number,
+ *                      parentCut:number|null}>,
  *   fullCut?: number,
+ *   nested?: boolean,
+ *   notes?: string[],
  * }}
  *   `cutPoints[i].cut` is the uniform value that stops execution *before* that
- *   statement; `fullCut` runs the whole body. Differencing consecutive cut
- *   measurements attributes cost to the statement between them.
+ *   statement, and `nextCut` the one that stops after it; `fullCut` runs the
+ *   whole body. Differencing that pair attributes cost to the statement — its
+ *   total cost at depth 0, the cost of one execution deeper in.
  */
 export function instrumentForAblation(code, options = {}) {
-  const { stage, entryPoint, avoidGroups } = options;
+  const { stage, entryPoint, avoidGroups, nested = true } = options;
   if (!stage) {
     return { ok: false, reason: "No shader stage was given." };
   }
@@ -157,12 +267,7 @@ export function instrumentForAblation(code, options = {}) {
     returnExpr = ` ${typeName}()`;
   }
 
-  const body = fn.body ?? [];
-  // Only top-level statements of the entry point are cut points. A `return` is
-  // legal inside a loop or branch too, but cutting there measures a partial
-  // first iteration rather than a whole statement, which needs different
-  // arithmetic than simple differencing.
-  const statements = body.filter((s) => s && s.hasSpan);
+  const statements = (fn.body ?? []).filter((s) => s && s.hasSpan);
   if (!statements.length) {
     return { ok: false, reason: "The entry point has no statements with source spans to cut at." };
   }
@@ -182,24 +287,30 @@ export function instrumentForAblation(code, options = {}) {
     return { ok: false, reason: `The shader already uses all ${MAX_BIND_GROUPS} bind groups, leaving nowhere to put the ablation uniform.` };
   }
 
-  // Build the instrumented source by splicing guards in at statement starts,
-  // walking back-to-front so earlier offsets stay valid.
-  const cutPoints = [];
-  const inserts = [];
-  statements.forEach((statement, i) => {
-    cutPoints.push({
-      cut: i,
-      line: statement.line,
-      start: statement.start,
-      end: statement.end,
-      label: code.slice(statement.start, statement.end).split("\n")[0].trim().slice(0, 80),
-    });
-    inserts.push({
-      offset: statement.start,
-      text: `if (${ABLATION_VAR}.cut == ${i}u) { return${returnExpr}; }\n  `,
-    });
-  });
+  // Collect the cut points, retrying without loop bodies if nesting produces
+  // more of them than a sweep can afford.
+  const guard = (cut) => `if (${ABLATION_VAR}.cut == ${cut}u) { return${returnExpr}; }`;
+  const notes = [];
+  const walk = (withNesting) => {
+    const ctx = { next: 0, points: [], inserts: [], code, guard, nested: withNesting, skippedLoops: 0 };
+    const top = collectCutPoints(statements, ctx, 0, null);
+    if (top.length) {
+      // Any cut past the last one runs the whole body.
+      top[top.length - 1].nextCut = ctx.next;
+    }
+    return ctx;
+  };
 
+  let ctx = walk(nested);
+  if (nested && ctx.points.length > MAX_CUT_POINTS) {
+    notes.push(`Breaking the loops down would have taken ${ctx.points.length} measurements, past the ${MAX_CUT_POINTS} this sweep allows, so only top-level statements were measured.`);
+    ctx = walk(false);
+  } else if (ctx.skippedLoops > 0) {
+    notes.push(`${ctx.skippedLoops} loop(s) were not broken down statement by statement, because their bodies can break, continue or return — control could then skip the injected end-of-body marker and the differencing would be measuring the wrong thing.`);
+  }
+
+  // Splice the guards in back-to-front so earlier offsets stay valid.
+  const inserts = ctx.inserts.slice().sort((a, b) => a.offset - b.offset);
   let out = code;
   for (let i = inserts.length - 1; i >= 0; --i) {
     const { offset, text } = inserts[i];
@@ -216,22 +327,30 @@ export function instrumentForAblation(code, options = {}) {
     code: prelude + out,
     group,
     binding,
-    cutPoints,
+    cutPoints: ctx.points,
     // Any value past the last cut runs the whole body.
-    fullCut: statements.length,
+    fullCut: ctx.next,
+    nested: ctx.points.some((p) => p.depth > 0),
+    notes,
   };
 }
 
 /**
  * Turn a set of cut measurements into a per-statement cost.
  *
- * @param {Array<{cut:number, line:number, label:string}>} cutPoints
+ * @param {Array<{cut:number, nextCut:number, line:number, label:string,
+ *                depth:number, parentCut:number|null}>} cutPoints
  * @param {Map<number, number>} measurements - cut value -> measured ms
  * @param {number} fullCut
  * @returns {{statements: Array, baselineMs: number, totalMs: number, notes: string[]}}
  *   Each statement gets `ms` (its own cost) and `negative` when differencing
  *   produced a value below zero — a sign the measurement is at the noise floor,
  *   reported rather than clamped away silently.
+ *
+ *   Statements inside a loop body (`depth > 0`) additionally get
+ *   `perExecutionMs`: what one execution of that statement costs, which is what
+ *   the raw difference measures there. Their `ms` is that scaled up to a share
+ *   of the loop's own measured total, so a body's statements sum to their loop.
  */
 export function attributeAblation(cutPoints, measurements, fullCut) {
   const notes = [];
@@ -239,24 +358,66 @@ export function attributeAblation(cutPoints, measurements, fullCut) {
   const totalMs = measurements.get(fullCut) ?? 0;
 
   const statements = [];
+  const byCut = new Map();
   let negatives = 0;
   for (const point of cutPoints) {
     const before = measurements.get(point.cut);
-    const nextCut = point.cut + 1 <= fullCut ? point.cut + 1 : null;
-    const after = nextCut === null ? undefined : measurements.get(nextCut);
+    const after = point.nextCut === null || point.nextCut === undefined
+      ? undefined
+      : measurements.get(point.nextCut);
+    const entry = { ...point };
     if (before === undefined || after === undefined) {
-      statements.push({ ...point, ms: null, negative: false });
+      entry.ms = null;
+      entry.negative = false;
+    } else {
+      const ms = after - before;
+      if (ms < 0) {
+        negatives++;
+      }
+      entry.ms = ms;
+      entry.negative = ms < 0;
+    }
+    if (point.depth > 0) {
+      // At depth the difference is one execution of the statement, because the
+      // cut stops the loop during its first iteration.
+      entry.perExecutionMs = entry.ms;
+    }
+    statements.push(entry);
+    byCut.set(entry.cut, entry);
+  }
+
+  // Scale each loop body's per-execution costs into a share of the loop's own
+  // measured cost. Shallowest first, so a nested loop's total is already
+  // resolved before its body is distributed across it.
+  const children = new Map();
+  for (const entry of statements) {
+    if (entry.depth > 0) {
+      const list = children.get(entry.parentCut) ?? [];
+      list.push(entry);
+      children.set(entry.parentCut, list);
+    }
+  }
+  for (const entry of statements.slice().sort((a, b) => a.depth - b.depth)) {
+    const list = children.get(entry.cut);
+    if (!list?.length) {
       continue;
     }
-    const ms = after - before;
-    if (ms < 0) {
-      negatives++;
-    }
-    statements.push({ ...point, ms, negative: ms < 0 });
+    // Negative differences are noise, not savings; they get no share rather
+    // than eating into their siblings'.
+    const weights = list.map((c) => Math.max(c.perExecutionMs ?? 0, 0));
+    const sum = weights.reduce((a, w) => a + w, 0);
+    const loopMs = entry.ms;
+    list.forEach((child, i) => {
+      child.share = sum > 0 ? weights[i] / sum : null;
+      child.ms = (sum > 0 && loopMs !== null && loopMs > 0) ? loopMs * weights[i] / sum : null;
+    });
   }
 
   if (negatives > 0) {
     notes.push(`${negatives} statement(s) measured as negative cost, which means those differences are below the measurement noise floor. Treat their cost as "too small to measure", not as a saving.`);
+  }
+  if (statements.some((s) => s.depth > 0)) {
+    notes.push("Statements inside a loop are measured one execution at a time — a cut there stops the loop during its first iteration — and then scaled to their share of the loop's own measured cost. The share is what the loop's time is spent on; it does not account for the loop's own condition and increment.");
   }
   // The prologue is whatever the shader costs before its first statement runs:
   // the branch guards, plus fixed per-invocation setup.

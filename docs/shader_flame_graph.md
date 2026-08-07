@@ -112,7 +112,8 @@ Three caveats, all surfaced in the UI:
 
 Per-draw timing says *which draw* is expensive. Ablation says *which line* is,
 by measuring the shader with progressively more of its body executed and
-differencing: `cost(cut = k+1) − cost(cut = k)` is the cost of statement `k`.
+differencing: the gap between the cut that stops before a statement and the one
+that stops after it is that statement's cost.
 
 `instrumentForAblation()` in
 [shader_ablation.js](../src/devtools/shader_ablation.js) rewrites a shader so
@@ -126,10 +127,19 @@ struct WGPUInspectorAblation { cut : u32 }
   if (_wgpuInspectorAblation.cut == 0u) { return vec4f(); }
   var acc = 0.0;
   if (_wgpuInspectorAblation.cut == 1u) { return vec4f(); }
-  acc = acc + shade(...);
+  for (var i = 0u; i < n; i = i + 1u) {
+    if (_wgpuInspectorAblation.cut == 2u) { return vec4f(); }
+    acc = acc + shade(i);
+    if (_wgpuInspectorAblation.cut == 3u) { return vec4f(); }   // end of body
+  }
+  if (_wgpuInspectorAblation.cut == 4u) { return vec4f(); }
   ...
 }
 ```
+
+Cut 1 and cut 4 bracket the *whole* loop — the guards inside the body don't
+match while `cut` is 4, so every iteration runs. Cuts 2 and 3 bracket one
+statement of one iteration. See [Inside a loop](#inside-a-loop).
 
 The cut point is a **uniform**, not a compile-time constant. That detail is the
 whole design, and it is worth explaining.
@@ -235,19 +245,68 @@ case, through both auto and explicit pipeline layouts and an indirect dispatch:
 | `acc = acc + work(u.base * 32u)` | 0.0658 ms | 4× → **ratio 3.95** |
 | trivial statements | ±0.0003 ms | ~0 |
 
+### Inside a loop
+
+A loop's own row tells you the loop is expensive, not which line in it is. Cut
+points therefore go inside loop bodies too, and the results panel indents them
+under their loop.
+
+This works because a cut means different things at the two levels. A cut inside
+a body stops execution during the **first iteration**, so differencing two cuts
+in the same body gives the cost of one statement for **one execution**. A cut
+outside the loop lets every iteration run, because the guards inside the body
+never match — so the loop's own row still measures all of it. Neither level
+disturbs the other.
+
+Two things follow from that:
+
+* **The last statement in a body needs a partner.** The next cut in source order
+  sits *after* the loop, and differencing against it would compare one partial
+  iteration against all of them. A synthetic cut is injected at the end of every
+  body to difference against instead.
+* **Bodies that can `break`, `continue` or `return` are left whole,** because
+  control could skip that end-of-body marker, let the loop keep running, and
+  turn the difference into nonsense. This is reported when it happens.
+
+Per-execution costs are then scaled to a share of the loop's own measured time,
+so a body's rows sum to their loop rather than double-counting against it. The
+raw per-execution figure and the share are in each row's tooltip.
+
+Measured against a loop running 16 times whose first body statement does 4× the
+work of its second:
+
+| | Per execution | Share of the loop | Distributed |
+| --- | --- | --- | --- |
+| `acc = acc + work(u.base * 2u)` | 0.024576 ms | 80% | 0.3932 ms |
+| `acc = acc + work(u.base / 2u)` | 0.006144 ms | 20% | 0.0983 ms |
+| the loop itself | | | 0.4915 ms |
+
+The guards inside the body run every iteration, which is the price of the finer
+breakdown. On the harness shader it did not move the total at all — the uniform
+load hoists out of the loop and the compare costs nothing next to the body — but
+a loop with a trivial body will pay proportionally more.
+
+Only loop bodies are descended into. An `if` body would be sound to cut the same
+way, but the invocations that *don't* take the branch run the entire shader in
+every one of those measurements, so the statement's cost becomes a small
+difference between two large numbers and drowns in the noise.
+
 ### Limits
 
-* **Top-level statements only.** A `return` is legal inside a loop or branch,
-  but cutting there stops mid-first-iteration, so differencing measures a
-  partial iteration rather than a whole statement. Nested cut points need
-  different arithmetic than plain differencing. This is the main gap: cost
-  inside a hot loop is attributed to the loop's enclosing statement.
+* **Branches are not broken down.** A statement inside an `if` or `switch` is
+  attributed to the enclosing statement, for the reason just given.
 * **Negative costs happen.** A statement cheaper than the measurement noise
   floor can difference to below zero. Those are reported as *too small to
   measure* rather than clamped to zero, because clamping would quietly turn
-  noise into a confident-looking figure.
+  noise into a confident-looking figure. A nested statement that measures
+  negative gets no share of its loop rather than eating into its siblings'.
 * **Needs a spare bind group.** The uniform has to live somewhere; a shader
   already using all four bind groups can't be instrumented, and says so.
+* **Nesting backs off when it has to.** Past 64 cut points the sweep costs more
+  than the detail is worth, and a nested shader the driver rejects (WGSL's
+  uniformity rules around barriers are the likely cause) falls back to the
+  top-level-only instrumentation. Both cases are reported rather than silently
+  changing what you are looking at.
 
 ## What the model cannot see
 

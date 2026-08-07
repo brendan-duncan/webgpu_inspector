@@ -249,34 +249,66 @@ export function buildFrameFlameGraph(options) {
       `${result.baselineMs.toFixed(4)} ms before the first statement` +
       (result.repeats > 1 ? `, ${result.repeats}x repeated` : "");
 
-    // Ranked by cost: the point is finding the expensive line.
-    const ranked = result.statements.slice().sort((a, b) => (b.ms ?? -Infinity) - (a.ms ?? -Infinity));
-    const maxMs = Math.max(...ranked.map((s) => s.ms ?? 0), 0);
-
-    for (const statement of ranked) {
-      const row = new Div(statementPanel, { class: "flame-statement" });
-
-      const lineText = `line ${statement.line}`;
-      if (options.onSelectShaderLine && target.module) {
-        const link = new Span(row, { class: "perf-line-link", text: lineText });
-        link.element.onclick = () => options.onSelectShaderLine(target.module, statement.line);
-      } else {
-        new Span(row, { class: "flame-statement-line", text: lineText });
-      }
-
-      // A share bar, so the ranking reads at a glance.
-      const barWrap = new Div(row, { class: "flame-statement-bar" });
-      const width = maxMs > 0 && statement.ms > 0 ? (statement.ms / maxMs) * 100 : 0;
-      new Div(barWrap, { class: "flame-statement-fill", style: `width: ${width}%;` });
-
-      const cost = statement.ms === null
-        ? "not measured"
-        : statement.negative
-          ? "too small to measure"
-          : `${statement.ms.toFixed(4)} ms`;
-      new Span(row, { class: "flame-statement-cost", text: cost });
-      new Span(row, { class: "flame-statement-src", text: statement.label });
+    // A loop's own row already carries the cost of everything inside it, so the
+    // list can't be flat — the body's statements would double-count against
+    // their loop. Each level is ranked among its siblings and indented under
+    // its loop instead.
+    const byParent = new Map();
+    for (const statement of result.statements) {
+      const key = statement.depth > 0 ? statement.parentCut : null;
+      const list = byParent.get(key) ?? [];
+      list.push(statement);
+      byParent.set(key, list);
     }
+    const rank = (list) => list.slice().sort((a, b) => (b.ms ?? -Infinity) - (a.ms ?? -Infinity));
+    const top = rank(byParent.get(null) ?? []);
+    const maxMs = Math.max(...top.map((s) => s.ms ?? 0), 0);
+
+    const addRows = (list, depth) => {
+      for (const statement of rank(list)) {
+        const row = new Div(statementPanel, { class: "flame-statement" });
+        if (depth > 0) {
+          row.element.classList.add("flame-statement-nested");
+          row.element.style.paddingLeft = `${depth * 18}px`;
+        }
+
+        const lineText = `line ${statement.line}`;
+        if (options.onSelectShaderLine && target.module) {
+          const link = new Span(row, { class: "perf-line-link", text: lineText });
+          link.element.onclick = () => options.onSelectShaderLine(target.module, statement.line);
+        } else {
+          new Span(row, { class: "flame-statement-line", text: lineText });
+        }
+
+        // A share bar, so the ranking reads at a glance. Nested rows scale
+        // against the whole shader too, so a hot line inside a loop reads as
+        // hot rather than as full-width within its own level.
+        const barWrap = new Div(row, { class: "flame-statement-bar" });
+        const width = maxMs > 0 && statement.ms > 0 ? (statement.ms / maxMs) * 100 : 0;
+        new Div(barWrap, { class: "flame-statement-fill", style: `width: ${width}%;` });
+
+        const cost = statement.ms === null
+          ? "not measured"
+          : statement.negative && statement.depth === 0
+            ? "too small to measure"
+            : `${statement.ms.toFixed(4)} ms`;
+        const costSpan = new Span(row, { class: "flame-statement-cost", text: cost });
+        if (statement.perExecutionMs !== undefined && statement.perExecutionMs !== null) {
+          costSpan.element.title =
+            `${statement.perExecutionMs.toFixed(6)} ms per execution` +
+            (statement.share !== null && statement.share !== undefined
+              ? `, ${(statement.share * 100).toFixed(0)}% of the loop`
+              : "");
+        }
+        new Span(row, { class: "flame-statement-src", text: statement.label });
+
+        const children = byParent.get(statement.cut);
+        if (children?.length) {
+          addRows(children, depth + 1);
+        }
+      }
+    };
+    addRows(top, 0);
   }
 
   async function measureStatements() {

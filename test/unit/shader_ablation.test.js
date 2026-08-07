@@ -201,15 +201,18 @@ test("a shader using all four bind groups reports that it can't be instrumented"
 // Attribution
 // ---------------------------------------------------------------------------
 
+// A flat run of top-level statements, the shape the instrumenter emits for a
+// shader with no loops: each cut differences against the next.
+function flatCutPoints(count) {
+    return Array.from({ length: count }, (_, i) => ({
+        cut: i, nextCut: i + 1, line: i + 1, label: String.fromCharCode(97 + i), depth: 0, parentCut: null,
+    }));
+}
+
 test("attribution differences consecutive cuts into per-statement cost", () => {
-    const cutPoints = [
-        { cut: 0, line: 1, label: "a" },
-        { cut: 1, line: 2, label: "b" },
-        { cut: 2, line: 3, label: "c" },
-    ];
     // Cumulative: 0.01, 0.02, 0.50, 0.51 -> per statement 0.01, 0.48, 0.01
     const measurements = new Map([[0, 0.01], [1, 0.02], [2, 0.50], [3, 0.51]]);
-    const result = attributeAblation(cutPoints, measurements, 3);
+    const result = attributeAblation(flatCutPoints(3), measurements, 3);
 
     assert.ok(Math.abs(result.statements[0].ms - 0.01) < 1e-9);
     assert.ok(Math.abs(result.statements[1].ms - 0.48) < 1e-9);
@@ -219,10 +222,9 @@ test("attribution differences consecutive cuts into per-statement cost", () => {
 });
 
 test("negative differences are reported as noise, not silently clamped", () => {
-    const cutPoints = [{ cut: 0, line: 1, label: "a" }, { cut: 1, line: 2, label: "b" }];
     // Statement `a` measures cheaper than nothing: pure noise.
     const measurements = new Map([[0, 0.05], [1, 0.048], [2, 0.30]]);
-    const result = attributeAblation(cutPoints, measurements, 2);
+    const result = attributeAblation(flatCutPoints(2), measurements, 2);
 
     assert.ok(result.statements[0].ms < 0, "the negative value must survive, not be clamped to 0");
     assert.equal(result.statements[0].negative, true);
@@ -231,18 +233,164 @@ test("negative differences are reported as noise, not silently clamped", () => {
 });
 
 test("a dominant instrumentation baseline is called out", () => {
-    const cutPoints = [{ cut: 0, line: 1, label: "a" }];
     // Half the total cost is spent before the first statement runs.
     const measurements = new Map([[0, 0.5], [1, 1.0]]);
-    const result = attributeAblation(cutPoints, measurements, 1);
+    const result = attributeAblation(flatCutPoints(1), measurements, 1);
     assert.ok(result.notes.some((n) => /fixed overhead/.test(n)),
         `expected a baseline warning, got: ${result.notes.join(" | ")}`);
 });
 
 test("missing measurements yield a null cost rather than a wrong one", () => {
-    const cutPoints = [{ cut: 0, line: 1, label: "a" }, { cut: 1, line: 2, label: "b" }];
     const measurements = new Map([[0, 0.01]]);  // cut 1 and 2 never measured
-    const result = attributeAblation(cutPoints, measurements, 2);
+    const result = attributeAblation(flatCutPoints(2), measurements, 2);
     assert.equal(result.statements[0].ms, null);
     assert.equal(result.statements[1].ms, null);
+});
+
+// ---------------------------------------------------------------------------
+// Nested cut points
+// ---------------------------------------------------------------------------
+
+const LOOP_WGSL = `
+struct U { n : u32 }
+@group(0) @binding(0) var<uniform> u : U;
+
+@fragment fn fsMain() -> @location(0) vec4f {
+  var acc = 0.0;
+  for (var i = 0u; i < u.n; i = i + 1u) {
+    acc = acc + sqrt(f32(i));
+    acc = acc * 1.5;
+  }
+  return vec4f(acc);
+}
+`;
+
+test("a loop body gets its own cut points", () => {
+    const result = instrumentForAblation(LOOP_WGSL, { stage: "fragment", entryPoint: "fsMain" });
+    assert.equal(result.ok, true, result.reason);
+    assert.equal(result.nested, true);
+
+    const top = result.cutPoints.filter((p) => p.depth === 0);
+    const inner = result.cutPoints.filter((p) => p.depth === 1);
+    assert.deepEqual(top.map((p) => p.label), [
+        "var acc = 0.0;",
+        "for (var i = 0u; i < u.n; i = i + 1u) {",
+        "return vec4f(acc);",
+    ]);
+    assert.deepEqual(inner.map((p) => p.label), [
+        "acc = acc + sqrt(f32(i));",
+        "acc = acc * 1.5;",
+    ]);
+    for (const p of inner) {
+        assert.equal(p.parentCut, top[1].cut, "inner statements belong to the loop");
+    }
+});
+
+test("the loop's own cut skips over its body's cuts", () => {
+    // The whole point: differencing the loop statement must span every nested
+    // cut, so it still measures all iterations rather than one.
+    const result = instrumentForAblation(LOOP_WGSL, { stage: "fragment", entryPoint: "fsMain" });
+    const loop = result.cutPoints.find((p) => p.label.startsWith("for"));
+    const after = result.cutPoints.find((p) => p.label.startsWith("return"));
+    assert.equal(loop.nextCut, after.cut);
+    assert.ok(after.cut > loop.cut + 1, "nested cuts must sit between the loop and its successor");
+});
+
+test("the last statement in a loop body differences against a block terminator", () => {
+    const result = instrumentForAblation(LOOP_WGSL, { stage: "fragment", entryPoint: "fsMain" });
+    const inner = result.cutPoints.filter((p) => p.depth === 1);
+    const last = inner[inner.length - 1];
+    const successor = result.cutPoints.find((p) => p.cut === last.nextCut);
+    // The terminator is a cut with no statement of its own, injected at the end
+    // of the body — so nothing in cutPoints claims that index.
+    assert.equal(successor, undefined, "the terminator must not be a statement");
+    assert.ok(last.nextCut > last.cut);
+    // And it must be emitted inside the loop, before the loop's successor.
+    const after = result.cutPoints.find((p) => p.label.startsWith("return"));
+    assert.ok(last.nextCut < after.cut);
+    assert.match(result.code, /acc = acc \* 1\.5;\s*\n\s*if \(_wgpuInspectorAblation\.cut == \d+u\) \{ return vec4f\(\); \}\s*\n\s*\}/);
+});
+
+test("a loop body that can break out is left whole", () => {
+    const code = LOOP_WGSL.replace("acc = acc * 1.5;", "if (acc > 10.0) { break; }");
+    const result = instrumentForAblation(code, { stage: "fragment", entryPoint: "fsMain" });
+    assert.equal(result.ok, true, result.reason);
+    assert.equal(result.nested, false, "a body with a break must not be broken down");
+    assert.ok(result.notes.some((n) => /break, continue or return/.test(n)),
+        `the skip must be explained: ${result.notes.join(" | ")}`);
+});
+
+test("nesting can be turned off, reproducing the top-level-only sweep", () => {
+    const nestedResult = instrumentForAblation(LOOP_WGSL, { stage: "fragment", entryPoint: "fsMain" });
+    const flat = instrumentForAblation(LOOP_WGSL, { stage: "fragment", entryPoint: "fsMain", nested: false });
+    assert.equal(flat.ok, true, flat.reason);
+    assert.equal(flat.nested, false);
+    assert.equal(flat.cutPoints.length, 3);
+    assert.equal(flat.fullCut, 3);
+    // Consecutive cuts, exactly as before nesting existed.
+    assert.deepEqual(flat.cutPoints.map((p) => [p.cut, p.nextCut]), [[0, 1], [1, 2], [2, 3]]);
+    assert.ok(nestedResult.fullCut > flat.fullCut);
+});
+
+test("nested statements are scaled to a share of their loop's measured cost", () => {
+    // Loop total 0.40 ms; inside it one execution of `a` costs 3x one of `b`.
+    const cutPoints = [
+        { cut: 0, nextCut: 4, line: 1, label: "loop", depth: 0, parentCut: null },
+        { cut: 1, nextCut: 2, line: 2, label: "a", depth: 1, parentCut: 0 },
+        { cut: 2, nextCut: 3, line: 3, label: "b", depth: 1, parentCut: 0 },
+    ];
+    const measurements = new Map([
+        [0, 0.00], [4, 0.40],   // the loop, all iterations
+        [1, 0.01], [2, 0.04], [3, 0.05],  // one iteration: a = 0.03, b = 0.01
+    ]);
+    const result = attributeAblation(cutPoints, measurements, 4);
+    const [loop, a, b] = result.statements;
+
+    assert.ok(Math.abs(loop.ms - 0.40) < 1e-9, "the loop keeps its whole measured cost");
+    assert.ok(Math.abs(a.perExecutionMs - 0.03) < 1e-9);
+    assert.ok(Math.abs(b.perExecutionMs - 0.01) < 1e-9);
+    // 3:1 split of the loop's 0.40 ms.
+    assert.ok(Math.abs(a.ms - 0.30) < 1e-9, `a got ${a.ms}`);
+    assert.ok(Math.abs(b.ms - 0.10) < 1e-9, `b got ${b.ms}`);
+    assert.ok(Math.abs(a.ms + b.ms - loop.ms) < 1e-9, "the body must sum to its loop");
+    assert.ok(result.notes.some((n) => /one execution at a time/.test(n)));
+});
+
+test("a nested statement measuring as noise gets no share of its loop", () => {
+    const cutPoints = [
+        { cut: 0, nextCut: 4, line: 1, label: "loop", depth: 0, parentCut: null },
+        { cut: 1, nextCut: 2, line: 2, label: "real", depth: 1, parentCut: 0 },
+        { cut: 2, nextCut: 3, line: 3, label: "noise", depth: 1, parentCut: 0 },
+    ];
+    // `noise` differences to below zero.
+    const measurements = new Map([[0, 0.0], [4, 0.40], [1, 0.01], [2, 0.05], [3, 0.049]]);
+    const result = attributeAblation(cutPoints, measurements, 4);
+    const [, real, noise] = result.statements;
+
+    assert.ok(noise.perExecutionMs < 0, "the raw negative must survive");
+    assert.equal(noise.ms, 0, "noise must not eat into its siblings' share");
+    assert.ok(Math.abs(real.ms - 0.40) < 1e-9, "the whole loop goes to the statement that measured");
+});
+
+test("nested loops distribute recursively", () => {
+    const cutPoints = [
+        { cut: 0, nextCut: 6, line: 1, label: "outer", depth: 0, parentCut: null },
+        { cut: 1, nextCut: 5, line: 2, label: "inner", depth: 1, parentCut: 0 },
+        { cut: 2, nextCut: 3, line: 3, label: "x", depth: 2, parentCut: 1 },
+        { cut: 3, nextCut: 4, line: 4, label: "y", depth: 2, parentCut: 1 },
+    ];
+    const measurements = new Map([
+        [0, 0.0], [6, 1.00],    // outer loop: 1 ms total
+        [1, 0.0], [5, 0.80],    // one outer iteration: the inner loop costs 0.8
+        [2, 0.00], [3, 0.06], [4, 0.08],  // one inner iteration: x = 0.06, y = 0.02
+    ]);
+    const result = attributeAblation(cutPoints, measurements, 6);
+    const [outer, inner, x, y] = result.statements;
+
+    assert.ok(Math.abs(outer.ms - 1.00) < 1e-9);
+    // The inner loop is the outer body's only statement, so it takes all of it.
+    assert.ok(Math.abs(inner.ms - 1.00) < 1e-9, `inner got ${inner.ms}`);
+    // ...and its own body splits that 3:1.
+    assert.ok(Math.abs(x.ms - 0.75) < 1e-9, `x got ${x.ms}`);
+    assert.ok(Math.abs(y.ms - 0.25) < 1e-9, `y got ${y.ms}`);
 });

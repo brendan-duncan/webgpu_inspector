@@ -12,12 +12,13 @@
 </script>
 <style>
   body { margin: 0; background: #1e1e1e; color: #ddd; font-family: sans-serif; }
-  #host, #computeHost { width: 1000px; }
+  #host, #computeHost, #nestedHost { width: 1000px; }
 </style>
 </head>
 <body>
 <div id="host"></div>
 <div id="computeHost"></div>
+<div id="nestedHost"></div>
 <script type="module">
 import { Widget } from "../../src/devtools/widget/widget.js";
 import { buildFrameFlameGraph } from "../../src/devtools/frame_flamegraph.js";
@@ -88,7 +89,7 @@ function makeShaderModule(id, code) {
     };
 }
 
-function makeCapture() {
+function makeCapture(code = CODE) {
     const IDS = { module: 1, target: 2, view: 3, pipeline: 4, buffer: 7, bindGroup: 8 };
     const targetTexture = {
         id: IDS.target, label: "target", width: WIDTH, height: HEIGHT,
@@ -96,7 +97,7 @@ function makeCapture() {
         descriptor: { format: "rgba8unorm", size: [WIDTH, HEIGHT], sampleCount: 1, usage: 0x10 },
     };
     const objects = new Map([
-        [IDS.module, makeShaderModule(IDS.module, CODE)],
+        [IDS.module, makeShaderModule(IDS.module, code)],
         [IDS.target, targetTexture],
         [IDS.buffer, { id: IDS.buffer, descriptor: { size: 16, usage: 0x40 | 0x8 } }],
         [IDS.bindGroup, {
@@ -141,6 +142,25 @@ function makeCapture() {
         getTextureFromAttachment: (a) => textures.get(a?.view?.__id) ?? null,
     };
 }
+
+// A loop written inline in the entry point, so its body statements become
+// nested cut points and the results panel has to render a tree.
+const NESTED_CODE = CODE.replace(
+    `@fragment fn fsMain() -> @location(0) vec4f {
+  var acc = 0.0;
+  acc = acc + work(u.base * 8u);
+  acc = acc + 1.0;
+  acc = acc + work(u.base * 32u);
+  return vec4f(acc * 0.00001, 0.0, 0.0, 1.0);
+}`,
+    `@fragment fn fsMain() -> @location(0) vec4f {
+  var acc = 0.0;
+  for (var j = 0u; j < 16u; j = j + 1u) {
+    acc = acc + work(u.base * 2u);
+    acc = acc + work(u.base / 2u);
+  }
+  return vec4f(acc * 0.00001, 0.0, 0.0, 1.0);
+}`);
 
 const WORKGROUPS = 512;
 const INVOCATIONS = WORKGROUPS * 64;
@@ -470,6 +490,73 @@ async function main() {
         assert(notes.some((n) => /replayed in isolation/.test(n)),
             `the compute isolation caveat must be visible: ${notes.join(" | ")}`);
         return { ratio: +ratio.toFixed(2), rows: parsed };
+    });
+
+    // --- nested statements --------------------------------------------------
+
+    await check("a loop body renders as indented rows under its loop", async () => {
+        assert(NESTED_CODE !== CODE, "the nested shader variant was not substituted");
+        const nestedCapture = makeCapture(NESTED_CODE);
+        const nestedPanel = buildFrameFlameGraph({
+            commands: nestedCapture.commands,
+            getObject: nestedCapture.getObject,
+            database: nestedCapture.database,
+            getDevice: () => device,
+            getTextureFromAttachment: nestedCapture.getTextureFromAttachment,
+            onSelectCommand: () => {},
+            onSelectShaderLine: () => {},
+        });
+        document.getElementById("nestedHost").appendChild(nestedPanel.element);
+
+        const drawFrame = frames(nestedPanel).find((f) => /1 draw/.test(f.textContent));
+        assert(drawFrame, "no draw frame on the nested panel");
+        drawFrame.click();
+        buttonByLabel(nestedPanel, "Measure statements").click();
+
+        const deadline = Date.now() + 40000;
+        let rows = [];
+        while (Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 200));
+            rows = [...nestedPanel.element.querySelectorAll(".flame-statement")];
+            if (rows.length > 0) {
+                break;
+            }
+        }
+        const note = nestedPanel.element.querySelector(".flame-statements .flame-note");
+        assert(rows.length > 0, `no rows${note ? `; note: ${note.textContent}` : ""}`);
+
+        const parsed = rows.map((r) => ({
+            src: r.querySelector(".flame-statement-src").textContent,
+            ms: parseFloat(r.querySelector(".flame-statement-cost").textContent),
+            nested: r.classList.contains("flame-statement-nested"),
+            indent: parseInt(r.style.paddingLeft) || 0,
+            perExecution: r.querySelector(".flame-statement-cost").title,
+        }));
+
+        const loopIndex = parsed.findIndex((p) => p.src.startsWith("for (var j"));
+        assert(loopIndex >= 0, `no loop row: ${parsed.map((p) => p.src).join(" | ")}`);
+        assert(!parsed[loopIndex].nested, "the loop itself is a top-level row");
+
+        // Its body must follow it immediately, indented, in cost order.
+        const heavy = parsed[loopIndex + 1];
+        const light = parsed[loopIndex + 2];
+        assert(heavy?.nested && light?.nested,
+            `the loop's body must be indented under it: ${parsed.map((p) => `${p.indent}:${p.src}`).join(" | ")}`);
+        assert(heavy.src.includes("u.base * 2u"), `expected the 4x body statement first, got: ${heavy.src}`);
+        assert(heavy.indent > 0 && heavy.indent === light.indent, "body rows share one indent level");
+
+        // The loop's row still carries the whole loop, so the body rows must not
+        // be added on top of it — they subdivide it.
+        assert(Math.abs((heavy.ms + light.ms) - parsed[loopIndex].ms) < parsed[loopIndex].ms * 0.02,
+            `body rows (${heavy.ms} + ${light.ms}) must sum to the loop row (${parsed[loopIndex].ms})`);
+        assert(/per execution/.test(heavy.perExecution),
+            `a nested row must show its per-execution cost: ${heavy.perExecution}`);
+
+        const notes = [...nestedPanel.element.querySelectorAll(".flame-statements .flame-note")]
+            .map((n) => n.textContent);
+        assert(notes.some((n) => /one execution at a time/.test(n)),
+            `the nested-measurement caveat must be visible: ${notes.join(" | ")}`);
+        return { rows: parsed };
     });
 }
 

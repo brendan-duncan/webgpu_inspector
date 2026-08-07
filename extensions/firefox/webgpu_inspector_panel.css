@@ -2917,3 +2917,16 @@ li.tree-item .expandbutton
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.flame-statement-nested {
+  border-bottom-color: transparent;
+}
+
+.flame-statement-nested .flame-statement-fill {
+  background: #a4726f;
+}
+
+.flame-statement-nested .flame-statement-src::before {
+  content: "\21B3\00a0";
+  color: var(--text-secondary, #888);
+}

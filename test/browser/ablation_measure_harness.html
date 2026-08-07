@@ -63,6 +63,38 @@ fn work(n : u32) -> f32 {
 }
 `;
 
+// A loop written inline in the entry point, so its body statements are nested
+// cut points rather than top-level ones. One execution of the first body
+// statement costs 4x the second (128 vs 32 iterations of work), and the outer
+// loop runs 16 times — the same 2560 units of total work as CODE, so the two
+// cases are directly comparable.
+const NESTED_CODE = `
+struct U { base : u32 }
+@group(0) @binding(0) var<uniform> u : U;
+
+fn work(n : u32) -> f32 {
+  var s = 0.0;
+  for (var i = 0u; i < n; i = i + 1u) {
+    s = s + sqrt(f32(i) + 0.5) * sin(s + 1.0);
+  }
+  return s;
+}
+
+@vertex fn vsMain(@builtin(vertex_index) vi : u32) -> @builtin(position) vec4f {
+  var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  return vec4f(p[vi], 0.0, 1.0);
+}
+
+@fragment fn fsMain() -> @location(0) vec4f {
+  var acc = 0.0;
+  for (var j = 0u; j < 16u; j = j + 1u) {
+    acc = acc + work(u.base * 2u);
+    acc = acc + work(u.base / 2u);
+  }
+  return vec4f(acc * 0.00001, 0.0, 0.0, 1.0);
+}
+`;
+
 // The same cost profile in a compute entry point. The store at the end is what
 // keeps the accumulator live: without a consumer the driver would delete the
 // work regardless of the uniform guard.
@@ -106,7 +138,7 @@ function makeDatabase(objects, textures) {
 // Build a mock capture. `explicitLayout` switches the pipeline between an
 // "auto" layout and a captured explicit one — the two bind-group injection
 // paths that have to work.
-function makeCapture(explicitLayout) {
+function makeCapture(explicitLayout, code = CODE) {
     const IDS = { module: 1, target: 2, view: 3, pipeline: 4, layout: 5, bgl: 6, buffer: 7, bindGroup: 8 };
 
     const targetTexture = {
@@ -121,7 +153,7 @@ function makeCapture(explicitLayout) {
     };
 
     const objects = {
-        [IDS.module]: { id: IDS.module, label: "shader", code: CODE, descriptor: { code: CODE } },
+        [IDS.module]: { id: IDS.module, label: "shader", code, descriptor: { code } },
         [IDS.target]: targetTexture,
         [IDS.bgl]: { id: IDS.bgl, descriptor: bglDescriptor },
         [IDS.layout]: { id: IDS.layout, descriptor: { bindGroupLayouts: [{ __id: IDS.bgl }] } },
@@ -318,6 +350,80 @@ async function main() {
         assert(result.ok === false, "expected failure");
         assert(/not found/.test(result.reason), `unexpected reason: ${result.reason}`);
         return { reason: result.reason };
+    });
+
+    await check("a loop body is broken down statement by statement", async () => {
+        const capture = makeCapture(false, NESTED_CODE);
+        const result = await measureStatementCosts({
+            device,
+            database: capture.database,
+            commands: capture.commands,
+            getTextureFromAttachment: capture.getTextureFromAttachment,
+            drawCommand: capture.drawCommand,
+            stage: "fragment",
+        });
+        assert(result.ok, `nested: ${result.reason}`);
+
+        const loop = result.statements.find((s) => s.label.startsWith("for (var j"));
+        const heavy = result.statements.find((s) => s.label.includes("u.base * 2u"));
+        const light = result.statements.find((s) => s.label.includes("u.base / 2u"));
+        assert(loop && heavy && light,
+            `missing statements: ${result.statements.map((s) => s.label).join(" | ")}`);
+        assert(heavy.depth === 1 && light.depth === 1, "the body statements must be nested");
+        assert(heavy.parentCut === loop.cut && light.parentCut === loop.cut,
+            "the body statements must belong to the loop");
+
+        // The loop's own row still measures every iteration: it should account
+        // for essentially the whole shader.
+        assert(loop.ms > result.totalMs * 0.9,
+            `the loop measured ${loop.ms} of a ${result.totalMs} ms shader — nested cuts must not truncate it`);
+
+        // One execution of the first body statement does 4x the work of the second.
+        const perRatio = heavy.perExecutionMs / light.perExecutionMs;
+        assert(perRatio > 2.5 && perRatio < 6,
+            `per-execution ratio ${perRatio.toFixed(2)}, expected ~4`);
+
+        // ...and the distributed totals must add back up to their loop.
+        const sum = heavy.ms + light.ms;
+        assert(Math.abs(sum - loop.ms) < loop.ms * 0.01,
+            `body statements sum to ${sum}, loop measured ${loop.ms}`);
+        assert(Math.abs(heavy.share - 0.8) < 0.1, `heavy share ${heavy.share}, expected ~0.8`);
+
+        return {
+            perRatio: +perRatio.toFixed(2),
+            loopMs: +loop.ms.toFixed(5),
+            totalMs: +result.totalMs.toFixed(5),
+            heavy: { perExecutionMs: +heavy.perExecutionMs.toFixed(6), ms: +heavy.ms.toFixed(5), share: +heavy.share.toFixed(3) },
+            light: { perExecutionMs: +light.perExecutionMs.toFixed(6), ms: +light.ms.toFixed(5), share: +light.share.toFixed(3) },
+        };
+    });
+
+    await check("nesting costs little against the top-level-only sweep", async () => {
+        // Guards inside a hot loop body run every iteration, so the price of the
+        // finer breakdown is a slower shader. Compare the same frame measured
+        // both ways.
+        const capture = makeCapture(false, NESTED_CODE);
+        const args = {
+            device,
+            database: capture.database,
+            commands: capture.commands,
+            getTextureFromAttachment: capture.getTextureFromAttachment,
+            drawCommand: capture.drawCommand,
+            stage: "fragment",
+        };
+        const nested = await measureStatementCosts(args);
+        const flat = await measureStatementCosts({ ...args, nested: false });
+        assert(nested.ok && flat.ok, `${nested.reason ?? ""} ${flat.reason ?? ""}`);
+        assert(flat.statements.every((s) => s.depth === 0), "the flat sweep must have no nested rows");
+
+        const overhead = (nested.totalMs - flat.totalMs) / flat.totalMs;
+        assert(overhead < 0.15,
+            `in-loop guards cost ${(overhead * 100).toFixed(1)}% of the shader, which is too much to ignore`);
+        return {
+            nestedMs: +nested.totalMs.toFixed(5),
+            flatMs: +flat.totalMs.toFixed(5),
+            overheadPercent: +(overhead * 100).toFixed(2),
+        };
     });
 
     await check("compute ablation, auto pipeline layout", async () => {
