@@ -7,8 +7,11 @@ There are two views:
 
 * **Shader Cost (modeled)** — in the Inspect panel, under a shader module. One
   entry point at a time, showing the cost of a *single invocation*.
+![Shader Cost](images/shader_cost.png)
+
 * **Shader Flame Graph** — a Capture tab (the button next to *Analyze Shaders*).
   The whole frame: pass → pipeline → shader stage → statement.
+  ![Shader Flame Graph](images/shader_flamegraph.png)
 
 ## Reading the graph
 
