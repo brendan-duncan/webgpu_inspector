@@ -1929,7 +1929,7 @@ export let webgpuInspector = null;
     }
 
     // Update the frame rate overlay. Called for DeltaTime messages forwarded from worker
-    // and iframe contexts, so the page HUD aggregates their dropped frames too — matching
+    // and iframe contexts, so the reported skip total aggregates them too — matching
     // the devtools panel, which sums skips across every context (the worker usually does
     // the actual rendering, so its drops dominate).
     _updateFrameRate(deltaTime, skipped) {
@@ -1970,15 +1970,6 @@ export let webgpuInspector = null;
         const frameRate = this._frameRate.average;
         if (frameRate !== 0) {
           statusMessage += ` : ${frameRate.toFixed(2)}ms`;
-        }
-        // Bound tag: CPU submit time filling most of the frame => main-thread bound.
-        // Otherwise the main thread has headroom (GPU- or vsync-bound; the panel
-        // disambiguates GPU vs vsync using capture timestamps).
-        if (this._lastCpuTime > 0 && frameRate > 0) {
-          statusMessage += this._lastCpuTime / frameRate > 0.8 ? " [CPU]" : " [GPU/vsync]";
-        }
-        if (this._skippedFrameTotal > 0) {
-          statusMessage += ` ⚠ ${this._skippedFrameTotal} dropped`;
         }
         this._inspectingStatusFrame.textContent = statusMessage;
       }
