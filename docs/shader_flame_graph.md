@@ -73,11 +73,11 @@ labelled *invocation count unknown*, rather than being filled in with a guess.
 
 ## Per-draw timing
 
-**Measure draw times** replays each draw on its own with timestamp queries, so
-every draw's width becomes a measured number. Without it, a pass's measured
-milliseconds are divided among its draws *by the model*; with it, the model's
-only remaining job is splitting each draw's measured time across that draw's
-shader stages and statements.
+**Measure draw times** replays each draw — and each compute dispatch — on its
+own with timestamp queries, so every item's width becomes a measured number.
+Without it, a pass's measured milliseconds are divided among its draws *by the
+model*; with it, the model's only remaining job is splitting each draw's
+measured time across that draw's shader stages and statements.
 
 Two encodings, picked automatically:
 
@@ -91,14 +91,16 @@ Two encodings, picked automatically:
 
 Three caveats, all surfaced in the UI:
 
-* **Draws are timed in isolation.** They don't overlap or share state the way
+* **Items are timed in isolation.** They don't overlap or share state the way
   they do in a real pass, so the per-draw times **do not sum to the pass's own
   measured duration** — they overstate it. Compare draws against each other, not
   against the pass total. The root frame is labelled *isolated draw time* rather
   than GPU time for exactly this reason.
-* **Depth starts cleared.** Each replayed pass gets fresh attachments, so depth
-  written by earlier passes is absent and draws that the real frame hides behind
-  others will measure more expensive than they are.
+* **Depth starts cleared.** Each replayed render pass gets fresh attachments, so
+  depth written by earlier passes is absent and draws that the real frame hides
+  behind others will measure more expensive than they are. The compute
+  equivalent: a dispatch's buffers hold their *captured* contents, not what
+  earlier passes in the frame would have written into them.
 * **Timestamps are quantized** (~1µs on the hardware tested, unchanged by
   disabling Dawn's quantization — it appears to be the hardware tick). A draw
   costing a microsecond is indistinguishable from noise in one shot, so cheap
@@ -174,7 +176,9 @@ Instrumentation overhead measured at **0.2%** of the shader's cost.
 Select a frame in the frame flame graph and press **Measure statements**.
 Clicking a shader-stage frame targets that stage; clicking a *draw* frame
 targets its fragment stage, which matters because an unmeasured fragment stage
-has zero width and is culled before you can click it.
+has zero width and is culled before you can click it. Compute stages are
+selected the same way — a dispatch's invocation count is exact, so its stage
+frame always has width.
 
 Results appear below the graph, ranked by cost, with clickable line numbers that
 jump to the shader source. In grouped mode the first draw of the group stands in
@@ -196,6 +200,40 @@ A side effect worth knowing: stubbing the fragment stage removes bindings only
 the original fragment shader used from an `auto` pipeline layout, so the
 replayed bind groups are filtered to the bindings the vertex stage actually
 reads — the same thing the overdraw replay does for the same reason.
+
+### Compute ablation
+
+Dispatches ablate the same way, and the compute path is the simpler one: no
+attachments to rebuild, no second stage to stub, and a compute entry point
+returns void, so the injected early return is a bare `return` rather than a
+synthesized zero value.
+
+Two things are specific to compute:
+
+* **Buffer state is restored before every cut.** A compute shader writes to the
+  buffers it reads, so without a reset each cut would start from whatever the
+  previous cut left behind — a data-dependent loop would take a different trip
+  count at every cut and the differences would be meaningless. The captured
+  bytes are re-uploaded before each measurement. Within a single measurement the
+  repeats still run back to back, which is reported as a note when the dispatch
+  is cheap enough to need them.
+* **Indirect dispatches work,** with the workgroup count coming from the
+  captured argument buffer — so it is whatever those bytes held at capture time,
+  not what the frame's earlier passes would have computed into them.
+
+Barriers are safe to cut across. The cut point is a uniform, so the guard's
+condition is the same for every invocation in the workgroup: either they all
+return before the barrier or none of them do.
+
+Measured on [ablation_measure_harness.html](../test/browser/ablation_measure_harness.html)
+against a compute shader with the same known 4:1 statement ratio as the render
+case, through both auto and explicit pipeline layouts and an indirect dispatch:
+
+| Statement | Measured | Expected |
+| --- | --- | --- |
+| `acc = acc + work(u.base * 8u)` | 0.0166 ms | 1× |
+| `acc = acc + work(u.base * 32u)` | 0.0658 ms | 4× → **ratio 3.95** |
+| trivial statements | ±0.0003 ms | ~0 |
 
 ### Limits
 
@@ -250,13 +288,15 @@ looking at" — not at predicting absolute timings. A reasonable loop:
 2. Open **Shader Flame Graph** and find the widest pass.
 3. Run **Measure fragments** if a render pass looks suspiciously cheap — an
    unweighted fragment stage is invisible until you do.
-4. Run **Measure draw times** to replace the modeled split between draws with
-   measurement. Tick **Per draw** first if you want individual draws rather than
-   per-pipeline groups.
+4. Run **Measure draw times** to replace the modeled split between draws and
+   dispatches with measurement. Tick **Per draw** first if you want individual
+   items rather than per-pipeline groups.
 5. Zoom into the widest shader stage and look at the color: red says cut texture
    work, purple says cut buffer traffic, orange says a transcendental is in a
    loop.
-6. Cross-check against **Analyze Shaders**, which flags specific patterns
+6. Press **Measure statements** on that stage to find the line inside it. This
+   works for vertex, fragment and compute stages.
+7. Cross-check against **Analyze Shaders**, which flags specific patterns
    (expensive builtins in loops, loop-invariant expressions) on the same lines.
 
 Note that **Per draw** re-buckets the frame, which invalidates fragment counts

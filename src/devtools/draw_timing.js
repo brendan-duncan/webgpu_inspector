@@ -422,7 +422,7 @@ export function issueDraw(pass, replay, plan) {
     }
 }
 
-function issueDispatch(pass, replay, plan) {
+export function issueDispatch(pass, replay, plan) {
     if (plan.method === "dispatchWorkgroups") {
         pass.dispatchWorkgroups(plan.args[0] ?? 1, plan.args[1] ?? 1, plan.args[2] ?? 1);
     } else {
@@ -629,9 +629,13 @@ export async function measureDrawTimings({
     let cappedItems = 0;
 
     if (method === "split-passes") {
-        replay.notes.add("Per-draw timing used one render pass per draw, because this device does not expose timestamp queries inside passes. On desktop GPUs an empty pass costs nothing measurable; on a tile-based (mobile) GPU each pass forces a tile flush, so treat those numbers as relative rather than absolute.");
+        replay.notes.add("Per-item timing used one pass per draw or dispatch, because this device does not expose timestamp queries inside passes. On desktop GPUs an empty pass costs nothing measurable; on a tile-based (mobile) GPU each pass forces a tile flush, so treat those numbers as relative rather than absolute.");
     }
-    replay.notes.add("Draws are re-timed in isolation against freshly cleared attachments, so depth contents from earlier passes are absent — draws that the real frame hides behind others will measure more expensive here.");
+    // The isolation caveat differs by pass kind, so it's added once the frame's
+    // passes are known rather than up front — a compute-only frame has no
+    // attachments to be talking about.
+    let timedRender = false;
+    let timedCompute = false;
 
     try {
         const passes = collectPasses(commands);
@@ -731,6 +735,11 @@ export async function measureDrawTimings({
             if (!items.length) {
                 continue;
             }
+            if (pass.kind === "render") {
+                timedRender = true;
+            } else {
+                timedCompute = true;
+            }
             applyUploads(replay, uploads);
 
             let timed = items;
@@ -792,11 +801,17 @@ export async function measureDrawTimings({
         }
         onProgress?.(total, total);
 
+        if (timedRender) {
+            replay.notes.add("Draws are re-timed in isolation against freshly cleared attachments, so depth contents from earlier passes are absent — draws that the real frame hides behind others will measure more expensive here.");
+        }
+        if (timedCompute) {
+            replay.notes.add("Dispatches are re-timed in isolation, so the buffers they read hold their captured contents rather than what earlier passes in the frame would have written.");
+        }
         if (cappedItems > 0) {
-            replay.notes.add(`${cappedItems} draw(s) beyond the ${maxItemsPerPass}-per-pass limit were not timed.`);
+            replay.notes.add(`${cappedItems} item(s) beyond the ${maxItemsPerPass}-per-pass limit were not timed.`);
         }
         if (refined > 0) {
-            replay.notes.add(`${refined} cheap draw(s) were re-timed with repetition, because a single execution is below the GPU's timestamp granularity.`);
+            replay.notes.add(`${refined} cheap draw(s) or dispatch(es) were re-timed with repetition, because a single execution is below the GPU's timestamp granularity.`);
         }
 
         return { timings, method, notes: Array.from(replay.notes), skipped, refined };

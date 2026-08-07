@@ -63,7 +63,37 @@ fn work(n : u32) -> f32 {
 }
 `;
 
+// The same cost profile in a compute entry point. The store at the end is what
+// keeps the accumulator live: without a consumer the driver would delete the
+// work regardless of the uniform guard.
+const COMPUTE_CODE = `
+struct U { base : u32 }
+@group(0) @binding(0) var<uniform> u : U;
+@group(0) @binding(1) var<storage, read_write> out : array<f32>;
+
+fn work(n : u32) -> f32 {
+  var s = 0.0;
+  for (var i = 0u; i < n; i = i + 1u) {
+    s = s + sqrt(f32(i) + 0.5) * sin(s + 1.0);
+  }
+  return s;
+}
+
+@compute @workgroup_size(64)
+fn csMain(@builtin(global_invocation_id) gid : vec3u) {
+  var acc = 0.0;
+  acc = acc + work(u.base * 8u);
+  acc = acc + 1.0;
+  acc = acc + work(u.base * 32u);
+  out[gid.x] = acc;
+}
+`;
+
 const BASE = 64;
+// Enough invocations that the dispatch clears the timestamp quantum in one
+// shot; at 64 workgroups the whole sweep lands near the noise floor.
+const WORKGROUPS = 512;
+const INVOCATIONS = WORKGROUPS * 64;
 
 function makeDatabase(objects, textures) {
     const map = new Map(Object.entries(objects).map(([k, v]) => [Number(k), v]));
@@ -134,6 +164,70 @@ function makeCapture(explicitLayout) {
         drawCommand,
         database: makeDatabase(objects, textures),
         getTextureFromAttachment: (attachment) => textures.get(attachment?.view?.__id) ?? null,
+    };
+}
+
+// A mock compute capture. `indirect` swaps dispatchWorkgroups for
+// dispatchWorkgroupsIndirect, whose workgroup count is read from a captured
+// buffer at execution time.
+function makeComputeCapture(explicitLayout, indirect) {
+    const IDS = { module: 1, pipeline: 4, layout: 5, bgl: 6, uniform: 7, bindGroup: 8, storage: 9, args: 10 };
+
+    const bglDescriptor = {
+        entries: [
+            { binding: 0, visibility: 4, buffer: { type: "uniform" } },
+            { binding: 1, visibility: 4, buffer: { type: "storage" } },
+        ],
+    };
+
+    const objects = {
+        [IDS.module]: { id: IDS.module, label: "compute shader", code: COMPUTE_CODE, descriptor: { code: COMPUTE_CODE } },
+        [IDS.bgl]: { id: IDS.bgl, descriptor: bglDescriptor },
+        [IDS.layout]: { id: IDS.layout, descriptor: { bindGroupLayouts: [{ __id: IDS.bgl }] } },
+        [IDS.uniform]: { id: IDS.uniform, label: "params", descriptor: { size: 16, usage: 0x40 | 0x8 } },
+        [IDS.storage]: { id: IDS.storage, label: "out", descriptor: { size: INVOCATIONS * 4, usage: 0x80 | 0x8 } },
+        // INDIRECT | COPY_DST, holding one workgroup count triple.
+        [IDS.args]: { id: IDS.args, label: "dispatch args", descriptor: { size: 12, usage: 0x100 | 0x8 } },
+        [IDS.bindGroup]: {
+            id: IDS.bindGroup,
+            descriptor: {
+                layout: explicitLayout ? { __id: IDS.bgl } : { __id: 999 },
+                entries: [
+                    { binding: 0, resource: { buffer: { __id: IDS.uniform } } },
+                    { binding: 1, resource: { buffer: { __id: IDS.storage } } },
+                ],
+            },
+        },
+        [IDS.pipeline]: {
+            id: IDS.pipeline, label: "ablated compute",
+            descriptor: {
+                layout: explicitLayout ? { __id: IDS.layout } : "auto",
+                compute: { module: { __id: IDS.module }, entryPoint: "csMain" },
+            },
+        },
+    };
+
+    const uniformBytes = new Uint8Array(new Uint32Array([BASE, 0, 0, 0]).buffer);
+    const storageBytes = new Uint8Array(INVOCATIONS * 4);
+    const argBytes = new Uint8Array(new Uint32Array([WORKGROUPS, 1, 1]).buffer);
+
+    const dispatchCommand = indirect
+        ? { method: "dispatchWorkgroupsIndirect", object: "enc", id: 130, args: [{ __id: IDS.args }, 0], bufferData: [argBytes] }
+        : { method: "dispatchWorkgroups", object: "enc", id: 130, args: [WORKGROUPS, 1, 1] };
+
+    const commands = [
+        { method: "beginComputePass", object: "enc", id: 100, args: [{}] },
+        { method: "setPipeline", object: "enc", id: 110, args: [{ __id: IDS.pipeline }] },
+        { method: "setBindGroup", object: "enc", id: 120, args: [0, { __id: IDS.bindGroup }], bufferData: [uniformBytes, storageBytes] },
+        dispatchCommand,
+        { method: "end", object: "enc", id: 140 },
+    ];
+
+    return {
+        commands,
+        drawCommand: dispatchCommand,
+        database: makeDatabase(objects, new Map()),
+        getTextureFromAttachment: () => null,
     };
 }
 
@@ -223,6 +317,65 @@ async function main() {
         });
         assert(result.ok === false, "expected failure");
         assert(/not found/.test(result.reason), `unexpected reason: ${result.reason}`);
+        return { reason: result.reason };
+    });
+
+    await check("compute ablation, auto pipeline layout", async () => {
+        const capture = makeComputeCapture(false, false);
+        const result = await measureStatementCosts({
+            device,
+            database: capture.database,
+            commands: capture.commands,
+            getTextureFromAttachment: capture.getTextureFromAttachment,
+            drawCommand: capture.drawCommand,
+            stage: "compute",
+        });
+        return verifyProfile(result, "compute auto");
+    });
+
+    await check("compute ablation, explicit pipeline layout", async () => {
+        const capture = makeComputeCapture(true, false);
+        const result = await measureStatementCosts({
+            device,
+            database: capture.database,
+            commands: capture.commands,
+            getTextureFromAttachment: capture.getTextureFromAttachment,
+            drawCommand: capture.drawCommand,
+            stage: "compute",
+        });
+        return verifyProfile(result, "compute explicit");
+    });
+
+    await check("compute ablation, indirect dispatch", async () => {
+        // The workgroup count comes from the captured argument buffer, so the
+        // sweep has to upload those bytes before it can time anything.
+        const capture = makeComputeCapture(false, true);
+        const result = await measureStatementCosts({
+            device,
+            database: capture.database,
+            commands: capture.commands,
+            getTextureFromAttachment: capture.getTextureFromAttachment,
+            drawCommand: capture.drawCommand,
+            stage: "compute",
+        });
+        const info = verifyProfile(result, "compute indirect");
+        assert(result.notes.some((n) => /indirect buffer/.test(n)),
+            "the indirect workgroup-count caveat must be stated");
+        return info;
+    });
+
+    await check("a dispatch ablated as a fragment stage fails cleanly", async () => {
+        const capture = makeComputeCapture(false, false);
+        const result = await measureStatementCosts({
+            device,
+            database: capture.database,
+            commands: capture.commands,
+            getTextureFromAttachment: capture.getTextureFromAttachment,
+            drawCommand: capture.drawCommand,
+            stage: "fragment",
+        });
+        assert(result.ok === false, "expected failure");
+        assert(/render pass/.test(result.reason), `unexpected reason: ${result.reason}`);
         return { reason: result.reason };
     });
 

@@ -12,11 +12,12 @@
 </script>
 <style>
   body { margin: 0; background: #1e1e1e; color: #ddd; font-family: sans-serif; }
-  #host { width: 1000px; }
+  #host, #computeHost { width: 1000px; }
 </style>
 </head>
 <body>
 <div id="host"></div>
+<div id="computeHost"></div>
 <script type="module">
 import { Widget } from "../../src/devtools/widget/widget.js";
 import { buildFrameFlameGraph } from "../../src/devtools/frame_flamegraph.js";
@@ -138,6 +139,82 @@ function makeCapture() {
             getTextureFromView: (view) => textures.get(view?.__id) ?? null,
         },
         getTextureFromAttachment: (a) => textures.get(a?.view?.__id) ?? null,
+    };
+}
+
+const WORKGROUPS = 512;
+const INVOCATIONS = WORKGROUPS * 64;
+
+const COMPUTE_CODE = `
+struct U { base : u32 }
+@group(0) @binding(0) var<uniform> u : U;
+@group(0) @binding(1) var<storage, read_write> out : array<f32>;
+
+fn work(n : u32) -> f32 {
+  var s = 0.0;
+  for (var i = 0u; i < n; i = i + 1u) {
+    s = s + sqrt(f32(i) + 0.5) * sin(s + 1.0);
+  }
+  return s;
+}
+
+@compute @workgroup_size(64)
+fn csMain(@builtin(global_invocation_id) gid : vec3u) {
+  var acc = 0.0;
+  acc = acc + work(u.base * 8u);
+  acc = acc + 1.0;
+  acc = acc + work(u.base * 32u);
+  out[gid.x] = acc;
+}
+`;
+
+// A compute-only capture, kept separate from the render one: a heavy dispatch
+// in the same frame would shrink the render pass's frames below the widget's
+// cull threshold and the render assertions above would stop finding them.
+function makeComputeCapture() {
+    const IDS = { module: 1, pipeline: 4, uniform: 7, bindGroup: 8, storage: 9 };
+    const objects = new Map([
+        [IDS.module, makeShaderModule(IDS.module, COMPUTE_CODE)],
+        [IDS.uniform, { id: IDS.uniform, label: "params", descriptor: { size: 16, usage: 0x40 | 0x8 } }],
+        [IDS.storage, { id: IDS.storage, label: "out", descriptor: { size: INVOCATIONS * 4, usage: 0x80 | 0x8 } }],
+        [IDS.bindGroup, {
+            id: IDS.bindGroup,
+            descriptor: {
+                layout: { __id: 999 },
+                entries: [
+                    { binding: 0, resource: { buffer: { __id: IDS.uniform } } },
+                    { binding: 1, resource: { buffer: { __id: IDS.storage } } },
+                ],
+            },
+        }],
+        [IDS.pipeline, {
+            id: IDS.pipeline, label: "ablated compute",
+            descriptor: {
+                layout: "auto",
+                compute: { module: { __id: IDS.module }, entryPoint: "csMain" },
+            },
+        }],
+    ]);
+
+    const uniformBytes = new Uint8Array(new Uint32Array([BASE, 0, 0, 0]).buffer);
+    const storageBytes = new Uint8Array(INVOCATIONS * 4);
+    const dispatchCommand = { method: "dispatchWorkgroups", object: "enc", id: 230, args: [WORKGROUPS, 1, 1] };
+    const commands = [
+        { method: "beginComputePass", object: "enc", id: 200, args: [{ label: "sim" }] },
+        { method: "setPipeline", object: "enc", id: 210, args: [{ __id: IDS.pipeline }] },
+        { method: "setBindGroup", object: "enc", id: 220, args: [0, { __id: IDS.bindGroup }], bufferData: [uniformBytes, storageBytes] },
+        dispatchCommand,
+        { method: "end", object: "enc", id: 240 },
+    ];
+
+    return {
+        commands, dispatchCommand,
+        getObject: (id) => objects.get(id) ?? null,
+        database: {
+            getObject: (id) => objects.get(id) ?? null,
+            getTextureFromView: () => null,
+        },
+        getTextureFromAttachment: () => null,
     };
 }
 
@@ -323,6 +400,76 @@ async function main() {
         assert(notes.some((n) => /top-level statements/.test(n)),
             `the top-level-only limit must be visible: ${notes.join(" | ")}`);
         return { notes };
+    });
+
+    // --- compute ----------------------------------------------------------
+
+    const computeCapture = makeComputeCapture();
+    let computePanel = null;
+
+    await check("a compute pass gets a weighted dispatch frame", () => {
+        computePanel = buildFrameFlameGraph({
+            commands: computeCapture.commands,
+            getObject: computeCapture.getObject,
+            database: computeCapture.database,
+            getDevice: () => device,
+            getTextureFromAttachment: computeCapture.getTextureFromAttachment,
+            onSelectCommand: () => {},
+            onSelectShaderLine: () => {},
+        });
+        document.getElementById("computeHost").appendChild(computePanel.element);
+        const titles = frames(computePanel).map((f) => f.title.split("\n")[0]);
+        // Compute invocation counts are exact (dispatch args x workgroup size),
+        // so the stage frame has real width without any measurement.
+        assert(titles.some((t) => /^compute: csMain/.test(t)),
+            `no compute stage frame: ${titles.join(" | ")}`);
+        return { titles };
+    });
+    if (!computePanel) {
+        return;
+    }
+
+    await check("selecting a compute stage frame enables statement measurement", () => {
+        const stageFrame = frames(computePanel).find((f) => /^compute:/.test(f.title));
+        stageFrame.click();
+        const button = buttonByLabel(computePanel, "Measure statements");
+        assert(button, "no Measure statements button on the compute panel");
+        assert(!button.disabled, `the compute stage should be ablatable; title: ${button.title}`);
+        assert(/compute/.test(button.title), `expected the compute stage, got: ${button.title}`);
+        return { title: button.title };
+    });
+
+    await check("measuring a compute stage recovers the known cost profile", async () => {
+        buttonByLabel(computePanel, "Measure statements").click();
+        const deadline = Date.now() + 40000;
+        let rows = [];
+        while (Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 200));
+            rows = [...computePanel.element.querySelectorAll(".flame-statement")];
+            if (rows.length > 0) {
+                break;
+            }
+        }
+        const note = computePanel.element.querySelector(".flame-statements .flame-note");
+        assert(rows.length > 0, `no rows${note ? `; note: ${note.textContent}` : ""}`);
+
+        const parsed = rows.map((r) => ({
+            src: r.querySelector(".flame-statement-src").textContent,
+            ms: parseFloat(r.querySelector(".flame-statement-cost").textContent),
+        }));
+        const heavy = parsed.find((p) => p.src.includes("work(u.base * 32u)"));
+        const medium = parsed.find((p) => p.src.includes("work(u.base * 8u)"));
+        assert(heavy && medium, `missing work statements: ${parsed.map((p) => p.src).join(" | ")}`);
+        assert(parsed[0].src.includes("work(u.base * 32u)"),
+            `expected the 32x statement on top, got: ${parsed[0].src}`);
+        const ratio = heavy.ms / medium.ms;
+        assert(ratio > 2.5 && ratio < 6, `heavy/medium ratio ${ratio.toFixed(2)}, expected ~4`);
+
+        const notes = [...computePanel.element.querySelectorAll(".flame-statements .flame-note")]
+            .map((n) => n.textContent);
+        assert(notes.some((n) => /replayed in isolation/.test(n)),
+            `the compute isolation caveat must be visible: ${notes.join(" | ")}`);
+        return { ratio: +ratio.toFixed(2), rows: parsed };
     });
 }
 

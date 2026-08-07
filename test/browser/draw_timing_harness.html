@@ -218,6 +218,90 @@ async function main() {
         return { splitMs: ms, insideMs, worstRelativeDiff: worst };
     });
 
+    await check("dispatches in a compute pass are timed too", async () => {
+        // Compute passes go through the same walk as render ones. The two
+        // dispatches differ in per-invocation loop count rather than workgroup
+        // count: at a fixed 32768 invocations both saturate the GPU, so the
+        // measured ratio reflects shader cost instead of occupancy.
+        const COMPUTE_CODE = `
+struct U { iters : u32 }
+@group(0) @binding(0) var<uniform> u : U;
+@group(0) @binding(1) var<storage, read_write> out : array<f32>;
+
+@compute @workgroup_size(64)
+fn csMain(@builtin(global_invocation_id) gid : vec3u) {
+  var acc = 0.0;
+  for (var i = 0u; i < u.iters; i = i + 1u) {
+    acc = acc + sqrt(f32(i) + 0.5) * sin(acc + 1.0);
+  }
+  out[gid.x] = acc;
+}
+`;
+        const C = { module: 40, pipeline: 41, storage: 43 };
+        const cheapIds = { uniform: 44, bindGroup: 45 };
+        const heavyIds = { uniform: 46, bindGroup: 47 };
+        const WORKGROUPS = 512;
+        const SIZE = WORKGROUPS * 64 * 4;
+        const bindGroupFor = (uniformId) => ({
+            layout: { __id: 999 },
+            entries: [
+                { binding: 0, resource: { buffer: { __id: uniformId } } },
+                { binding: 1, resource: { buffer: { __id: C.storage } } },
+            ],
+        });
+        const computeObjects = {
+            ...objects,
+            [C.module]: { id: C.module, label: "compute", code: COMPUTE_CODE, descriptor: { code: COMPUTE_CODE } },
+            [C.storage]: { id: C.storage, descriptor: { size: SIZE, usage: 0x80 | 0x8 } },
+            [cheapIds.uniform]: { id: cheapIds.uniform, descriptor: { size: 16, usage: 0x40 | 0x8 } },
+            [heavyIds.uniform]: { id: heavyIds.uniform, descriptor: { size: 16, usage: 0x40 | 0x8 } },
+            [cheapIds.bindGroup]: { id: cheapIds.bindGroup, descriptor: bindGroupFor(cheapIds.uniform) },
+            [heavyIds.bindGroup]: { id: heavyIds.bindGroup, descriptor: bindGroupFor(heavyIds.uniform) },
+            [C.pipeline]: {
+                id: C.pipeline, label: "timed compute",
+                descriptor: {
+                    layout: "auto",
+                    compute: { module: { __id: C.module }, entryPoint: "csMain" },
+                },
+            },
+        };
+        const storageBytes = new Uint8Array(SIZE);
+        const small = { method: "dispatchWorkgroups", object: "enc", id: 402, args: [WORKGROUPS, 1, 1] };
+        const large = { method: "dispatchWorkgroups", object: "enc", id: 403, args: [WORKGROUPS, 1, 1] };
+        const computeCommands = [
+            { method: "beginComputePass", object: "enc", id: 400, args: [{}] },
+            { method: "setPipeline", object: "enc", id: 401, args: [{ __id: C.pipeline }] },
+            { method: "setBindGroup", object: "enc", id: 404, args: [0, { __id: cheapIds.bindGroup }],
+              bufferData: [uniformBytes(128), storageBytes] },
+            small,
+            { method: "setBindGroup", object: "enc", id: 406, args: [0, { __id: heavyIds.bindGroup }],
+              bufferData: [uniformBytes(512), storageBytes] },
+            large,
+            { method: "end", object: "enc", id: 405 },
+        ];
+        const timed = await measureDrawTimings({
+            device,
+            database: makeDatabase(computeObjects, textures),
+            commands: computeCommands,
+            getTextureFromAttachment,
+        });
+        assert(timed.timings.size === 2,
+            `timed ${timed.timings.size} of 2 dispatches (skipped ${timed.skipped}); notes: ${timed.notes.join(" | ")}`);
+        const smallMs = timed.timings.get(small).ms;
+        const largeMs = timed.timings.get(large).ms;
+        assert(smallMs > 0 && largeMs > 0, `non-positive timings: ${smallMs}, ${largeMs}`);
+        const ratio = largeMs / smallMs;
+        assert(ratio > 2 && ratio < 8, `4x dispatch ratio was ${ratio.toFixed(2)}, expected roughly 4`);
+
+        // The caveat has to match the pass kind: a compute-only frame has no
+        // attachments, so the depth-contents warning would be nonsense here.
+        assert(timed.notes.some((n) => /Dispatches are re-timed in isolation/.test(n)),
+            `the dispatch isolation caveat is missing: ${timed.notes.join(" | ")}`);
+        assert(!timed.notes.some((n) => /freshly cleared attachments/.test(n)),
+            `a compute-only frame must not claim anything about attachments: ${timed.notes.join(" | ")}`);
+        return { smallMs, largeMs, ratio: +ratio.toFixed(2), method: timed.method, notes: timed.notes };
+    });
+
     await check("cheap draws are refined with repetition", async () => {
         // One trivial draw: a single execution is below timestamp granularity,
         // so it must come back with repeats > 1 rather than as noise.

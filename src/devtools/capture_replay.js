@@ -593,9 +593,9 @@ async function submitDraws(replay, draws, countView, width, height, stats) {
     await submitDraws(replay, draws.slice(mid), countView, width, height, stats);
 }
 
-// Walk one captured render pass's commands, tracking encoder state, and
-// produce a plan per draw carrying the complete state that draw needs (plus
-// the captured-byte uploads the pass requires).
+// Walk one captured render or compute pass's commands, tracking encoder state,
+// and produce a plan per draw or dispatch carrying the complete state that item
+// needs (plus the captured-byte uploads the pass requires).
 export function walkPassCommands(replay, passCommands, uploads, missing, stats) {
     const state = {
         pipelineId: null,
@@ -661,6 +661,31 @@ export function walkPassCommands(replay, passCommands, uploads, missing, stats) 
                     scissor: state.scissor,
                 };
                 if (command.method === "drawIndirect" || command.method === "drawIndexedIndirect") {
+                    const bufferObj = replay.database.getObject(args[0]?.__id);
+                    plan.indirect = { bufferId: args[0]?.__id, offset: args[1] ?? 0 };
+                    addUpload(replay, command, 0, args[0]?.__id, 0, bufferObj?.descriptor?.size ?? 0, uploads, missing);
+                }
+                drawPlans.push(plan);
+                break;
+            }
+            case "dispatchWorkgroups":
+            case "dispatchWorkgroupsIndirect": {
+                // Dispatches carry the same plan shape as draws, minus the
+                // vertex/index/raster state a compute pass has no concept of.
+                // Callers that only replay render passes never see these,
+                // because a dispatch cannot appear inside one.
+                const plan = {
+                    command,
+                    method: command.method,
+                    args,
+                    pipelineId: state.pipelineId,
+                    bindGroups: state.bindGroups.slice(),
+                    vertexBuffers: [],
+                    indexBuffer: null,
+                    viewport: null,
+                    scissor: null,
+                };
+                if (command.method === "dispatchWorkgroupsIndirect") {
                     const bufferObj = replay.database.getObject(args[0]?.__id);
                     plan.indirect = { bufferId: args[0]?.__id, offset: args[1] ?? 0 };
                     addUpload(replay, command, 0, args[0]?.__id, 0, bufferObj?.descriptor?.size ?? 0, uploads, missing);

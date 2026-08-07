@@ -6,7 +6,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { halfToFloat, vertexStageBindings, collectTargetPasses } from "../../src/devtools/capture_replay.js";
+import {
+    halfToFloat,
+    vertexStageBindings,
+    collectTargetPasses,
+    walkPassCommands,
+} from "../../src/devtools/capture_replay.js";
 
 // ---------------------------------------------------------------------------
 // halfToFloat
@@ -137,4 +142,98 @@ test("collectTargetPasses: flags multisampled attachments", () => {
     assert.equal(passes.length, 1);
     assert.equal(msaa, true);
     assert.equal(collectTargetPasses(makeCommands(), { id: 100 }, lookup).msaa, false);
+});
+
+// ---------------------------------------------------------------------------
+// walkPassCommands
+// ---------------------------------------------------------------------------
+
+// Only the database lookup and the note sink are reached by the pure paths;
+// anything touching the GPU is exercised in the browser harnesses.
+function makeReplay(objects = {}) {
+    return {
+        database: { getObject: (id) => objects[id] ?? null },
+        notes: new Set(),
+    };
+}
+
+function walk(replay, commands) {
+    const uploads = [];
+    const missing = new Set();
+    const stats = { skippedDraws: 0 };
+    const plans = walkPassCommands(replay, commands, uploads, missing, stats);
+    return { plans, uploads, missing, stats };
+}
+
+test("walkPassCommands: a dispatch carries the bound pipeline and bind groups", () => {
+    const { plans } = walk(makeReplay(), [
+        { method: "setPipeline", args: [{ __id: 7 }] },
+        { method: "setBindGroup", args: [0, { __id: 11 }, null] },
+        { method: "setBindGroup", args: [1, { __id: 12 }, [256]] },
+        { method: "dispatchWorkgroups", args: [8, 4, 2] },
+    ]);
+    assert.equal(plans.length, 1);
+    const plan = plans[0];
+    assert.equal(plan.method, "dispatchWorkgroups");
+    assert.equal(plan.pipelineId, 7);
+    assert.deepEqual(plan.args, [8, 4, 2]);
+    assert.deepEqual(plan.bindGroups[0], { bgId: 11, dynamicOffsets: null });
+    assert.deepEqual(plan.bindGroups[1], { bgId: 12, dynamicOffsets: [256] });
+    // A compute pass has no raster state to carry.
+    assert.deepEqual(plan.vertexBuffers, []);
+    assert.equal(plan.indexBuffer, null);
+    assert.equal(plan.viewport, null);
+});
+
+test("walkPassCommands: each dispatch snapshots the state current at that point", () => {
+    const { plans } = walk(makeReplay(), [
+        { method: "setPipeline", args: [{ __id: 1 }] },
+        { method: "dispatchWorkgroups", args: [1] },
+        { method: "setPipeline", args: [{ __id: 2 }] },
+        { method: "setBindGroup", args: [0, { __id: 9 }, null] },
+        { method: "dispatchWorkgroups", args: [64] },
+    ]);
+    assert.equal(plans.length, 2);
+    assert.equal(plans[0].pipelineId, 1);
+    assert.equal(plans[0].bindGroups.length, 0);
+    assert.equal(plans[1].pipelineId, 2);
+    assert.deepEqual(plans[1].bindGroups[0], { bgId: 9, dynamicOffsets: null });
+});
+
+test("walkPassCommands: an indirect dispatch records its argument buffer and bytes", () => {
+    const replay = makeReplay({ 5: { label: "args", descriptor: { size: 16 } } });
+    const data = new Uint8Array(16);
+    const { plans, uploads, missing } = walk(replay, [
+        { method: "setPipeline", args: [{ __id: 3 }] },
+        { method: "dispatchWorkgroupsIndirect", args: [{ __id: 5 }, 4], bufferData: [data] },
+    ]);
+    assert.equal(plans.length, 1);
+    assert.deepEqual(plans[0].indirect, { bufferId: 5, offset: 4 });
+    assert.deepEqual(uploads, [{ bufferId: 5, offset: 0, data }]);
+    assert.equal(missing.size, 0);
+});
+
+test("walkPassCommands: an indirect dispatch without captured bytes is noted", () => {
+    const replay = makeReplay({ 5: { label: "args", descriptor: { size: 16 } } });
+    const { uploads, missing } = walk(replay, [
+        { method: "dispatchWorkgroupsIndirect", args: [{ __id: 5 }, 0] },
+    ]);
+    assert.equal(uploads.length, 0);
+    assert.deepEqual(Array.from(missing), ["args: no captured bytes — its contents replay as zeros."]);
+});
+
+test("walkPassCommands: draws still carry their raster state", () => {
+    const replay = makeReplay({ 20: { descriptor: { size: 48 } } });
+    const { plans } = walk(replay, [
+        { method: "setPipeline", args: [{ __id: 4 }] },
+        { method: "setVertexBuffer", args: [0, { __id: 20 }, 0, 48] },
+        { method: "setViewport", args: [0, 0, 100, 50, 0, 1] },
+        { method: "setScissorRect", args: [1, 2, 3, 4] },
+        { method: "draw", args: [3, 1, 0, 0] },
+    ]);
+    assert.equal(plans.length, 1);
+    assert.equal(plans[0].method, "draw");
+    assert.deepEqual(plans[0].vertexBuffers[0], { bufferId: 20, offset: 0, size: 48 });
+    assert.deepEqual(plans[0].viewport, [0, 0, 100, 50, 0, 1]);
+    assert.deepEqual(plans[0].scissor, [1, 2, 3, 4]);
 });

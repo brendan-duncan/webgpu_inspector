@@ -337,7 +337,7 @@ export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDra
       // is culled and can't be clicked. Carry the ablation targets on the draw
       // frame too, which is always visible.
       itemNode.ablationTargets = stages
-        .filter((s) => s.acc.stage === "vertex" || s.acc.stage === "fragment")
+        .filter((s) => s.acc.stage === "vertex" || s.acc.stage === "fragment" || s.acc.stage === "compute")
         .map((s) => ({
           stage: s.acc.stage,
           entryPoint: s.acc.entryPoint,

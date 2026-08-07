@@ -18,6 +18,14 @@ const LEGEND = [
   ["memory", "Memory"],
 ];
 
+// Every stage ablation_measure.js can sweep.
+const ABLATABLE_STAGES = new Set(["vertex", "fragment", "compute"]);
+
+/** What a bucket of this stage's work is called, for the UI's wording. */
+function itemNoun(stage) {
+  return stage === "compute" ? "dispatches" : "draws";
+}
+
 function colorOf(node) {
   if (node.total) {
     return FlameGraph.dimensionColors[dominantDimension(node.total)] ?? "#4a8db8";
@@ -92,7 +100,7 @@ export function buildFrameFlameGraph(options) {
   });
   ablateButton.disabled = true;
   ablateButton.element.title =
-    "Select a shader stage frame first, then measure the cost of its individual statements by replaying the draw with the shader progressively cut short.";
+    "Select a shader stage frame first, then measure the cost of its individual statements by replaying the draw or dispatch with the shader progressively cut short.";
 
   const resetButton = new Button(controls, {
     label: "Reset zoom",
@@ -198,7 +206,7 @@ export function buildFrameFlameGraph(options) {
 
     // Ablation needs a selected stage frame as well as a capable device.
     const canAblate = canMeasure && timing?.supported && ablationTarget &&
-      (ablationTarget.stage === "vertex" || ablationTarget.stage === "fragment");
+      ABLATABLE_STAGES.has(ablationTarget.stage);
     ablateButton.disabled = measuring || !canAblate;
   }
 
@@ -210,16 +218,20 @@ export function buildFrameFlameGraph(options) {
   function setAblationTarget(node) {
     ablationTarget = node;
     const canAblate = !!(options.getDevice && options.database && options.getTextureFromAttachment) &&
-      (node.stage === "vertex" || node.stage === "fragment");
+      ABLATABLE_STAGES.has(node.stage);
     ablateButton.disabled = measuring || !canAblate;
-    if (node.stage === "compute") {
-      ablateButton.element.title = "Statement measurement currently covers vertex and fragment stages only.";
-    } else if (canAblate) {
+    if (canAblate) {
       const which = node.drawCount > 1
-        ? ` (the first of ${node.drawCount} draws in this group)`
+        ? ` (the first of ${node.drawCount} ${itemNoun(node.stage)} in this group)`
         : "";
       ablateButton.element.title =
         `Measure per-statement cost of ${node.stage} "${node.entryPoint ?? "?"}"${which}.`;
+    } else {
+      // Don't leave the previous target's tooltip in place on a frame that
+      // can't be measured.
+      ablateButton.element.title = ABLATABLE_STAGES.has(node.stage)
+        ? "Statement measurement needs a WebGPU device in DevTools."
+        : `Statement measurement doesn't cover ${node.stage} stages.`;
     }
   }
 
@@ -231,7 +243,7 @@ export function buildFrameFlameGraph(options) {
     }
 
     const header = new Div(statementPanel, { class: "flame-statements-header" });
-    const which = target.drawCount > 1 ? ` — first of ${target.drawCount} draws` : "";
+    const which = target.drawCount > 1 ? ` — first of ${target.drawCount} ${itemNoun(target.stage)}` : "";
     header.element.textContent =
       `${target.stage} "${target.entryPoint ?? "?"}"${which}: ${result.totalMs.toFixed(4)} ms total, ` +
       `${result.baselineMs.toFixed(4)} ms before the first statement` +
