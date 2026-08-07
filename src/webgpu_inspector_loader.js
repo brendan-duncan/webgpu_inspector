@@ -6,6 +6,10 @@ const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 // Set by content_script.js from the DevTools panel's "Inspect Workers"
 // setting. Tells the inspector whether to inject itself into Web Workers.
 const webgpuInspectorWorkersKey = "WEBGPU_INSPECTOR_WORKERS";
+// Set by content_script.js from the DevTools panel's "Object Stacktraces"
+// setting. Tells the inspector whether to record where each GPU object was
+// created. Off by default: each capture costs ~16us.
+const webgpuInspectorStacktracesKey = "WEBGPU_INSPECTOR_STACKTRACES";
 
 // The Inspector doesn't start listening for WebGPU calls until it is instructed
 // to do so. Otherwise we would be adding ovearhead to all WebGPU applications
@@ -31,6 +35,7 @@ if (inspectMessage) {
   window.addEventListener("load", () => {
     sessionStorage.removeItem(webgpuInspectorLoadedKey);
     sessionStorage.removeItem(webgpuInspectorWorkersKey);
+    sessionStorage.removeItem(webgpuInspectorStacktracesKey);
   }, { once: true });
 
   if (inspectMessage !== "true") {
@@ -43,6 +48,13 @@ if (inspectMessage) {
   // worker injection stays off for manual injection.
   self.__webgpuInspectorInspectWorkers =
     sessionStorage.getItem(webgpuInspectorWorkersKey) === "true";
+
+  // webgpu_inspector.js reads this global to decide whether to record a
+  // creation stacktrace for every GPU object. Manual <script>-tag injection
+  // never runs this loader, so it stays off there unless the page sets
+  // webgpuInspector.recordStacktraces itself.
+  self.__webgpuInspectorRecordStacktraces =
+    sessionStorage.getItem(webgpuInspectorStacktracesKey) === "true";
 
   self.__webgpu_src = coreLoader;
   self.__webgpu_src();
@@ -59,6 +71,7 @@ if (window) {
     if (message.action === "webgpu_inspector_start_inspection") {
       if (!self.__webgpu_src) {
         self.__webgpuInspectorInspectWorkers = !!message.inspectWorkers;
+        self.__webgpuInspectorRecordStacktraces = !!message.objectStacktraces;
         self.__webgpu_src = coreLoader;
         self.__webgpu_src();
       }

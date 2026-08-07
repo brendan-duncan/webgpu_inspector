@@ -16,6 +16,10 @@ const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 // Tells the injected inspector whether to inject itself into Web Workers.
 // Driven by the DevTools panel's "Inspect Workers" setting; off by default.
 const webgpuInspectorWorkersKey = "WEBGPU_INSPECTOR_WORKERS";
+// Tells the injected inspector whether to record a creation stacktrace for every
+// GPU object. Driven by the DevTools panel's "Object Stacktraces" setting; off by
+// default because each capture costs ~16us.
+const webgpuInspectorStacktracesKey = "WEBGPU_INSPECTOR_STACKTRACES";
 
 /** Reload delay in milliseconds */
 const RELOAD_DELAY_MS = 50;
@@ -191,6 +195,12 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
       sessionStorage.setItem(webgpuInspectorWorkersKey, "true");
     } else {
       sessionStorage.removeItem(webgpuInspectorWorkersKey);
+    }
+    // Same for the panel's "Object Stacktraces" choice.
+    if (message.objectStacktraces) {
+      sessionStorage.setItem(webgpuInspectorStacktracesKey, "true");
+    } else {
+      sessionStorage.removeItem(webgpuInspectorStacktracesKey);
     }
     reloadFromTopFrame();
   }

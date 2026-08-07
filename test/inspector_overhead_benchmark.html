@@ -1,0 +1,253 @@
+<html>
+  <head>
+    <title>WebGPU Inspector Overhead Benchmark</title>
+    <style>
+      body { font-family: sans-serif; background: #1e1e1e; color: #ddd; margin: 16px; }
+      canvas { border: 1px solid #444; display: block; margin-bottom: 12px; }
+      .row { margin-bottom: 8px; }
+      label { margin-right: 12px; }
+      table { border-collapse: collapse; margin-top: 12px; }
+      th, td { border: 1px solid #444; padding: 4px 10px; text-align: right; font-variant-numeric: tabular-nums; }
+      th { background: #2a2a2a; text-align: left; }
+      td:first-child { text-align: left; }
+      .note { color: #999; font-size: 12px; max-width: 900px; line-height: 1.5; }
+      button { background: #333; color: #ddd; border: 1px solid #555; padding: 4px 12px; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <canvas id="webgpu_canvas" width="320" height="200"></canvas>
+
+    <div class="row">
+      <b>Inspector:</b> <span id="inspectorState">off</span>
+      &nbsp;|&nbsp; <b>Object stacktraces:</b> <span id="stackState">off</span>
+    </div>
+
+    <div class="row">
+      <label>Workload:
+        <select id="workload">
+          <option value="draws">draws — setBindGroup + draw per iteration (no object creation)</option>
+          <option value="views">views — texture.createView() per iteration</option>
+          <option value="bindgroups">bindgroups — device.createBindGroup() per iteration</option>
+          <option value="bundles">bundles — rebuild a render bundle per frame</option>
+        </select>
+      </label>
+      <label>Iterations/frame: <input id="count" type="number" value="500" min="1" max="20000" style="width: 80px"></label>
+      <button id="reset">Reset stats</button>
+    </div>
+
+    <table>
+      <tr><th>Metric</th><th>Value</th></tr>
+      <tr><td>Frames measured</td><td id="frames">0</td></tr>
+      <tr><td>CPU per frame (median)</td><td id="median">-</td></tr>
+      <tr><td>CPU per frame (p95)</td><td id="p95">-</td></tr>
+      <tr><td>CPU per iteration (median)</td><td id="perOp">-</td></tr>
+    </table>
+
+    <p class="note">
+      Measures the main-thread cost of the page's own WebGPU calls, which is what the
+      inspector's per-call instrumentation adds to. GPU work is deliberately trivial so
+      the number reflects CPU overhead, not rendering.
+      <br><br>
+      Query parameters:
+      <code>?inspect=1</code> loads the built inspector from
+      <code>extensions/chrome/webgpu_inspector.js</code> before any WebGPU call;
+      <code>?stacks=1</code> also turns on object creation stacktraces.
+      Load without parameters for the uninstrumented baseline.
+      <br><br>
+      Stats reset automatically when the workload or iteration count changes, and the
+      first 30 frames of each run are discarded as warm-up.
+    </p>
+
+    <script>
+const params = new URLSearchParams(location.search);
+const useInspector = params.get("inspect") === "1";
+const useStacks = params.get("stacks") === "1";
+
+function loadInspector() {
+  // Must run before any WebGPU object is created so the prototypes are patched.
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "../extensions/chrome/webgpu_inspector.js";
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("failed to load webgpu_inspector.js — run `npm run build` first"));
+    document.head.appendChild(script);
+  });
+}
+
+// Sliding window of per-frame CPU times.
+const samples = [];
+const warmupFrames = 30;
+let warmup = 0;
+
+function resetStats() {
+  samples.length = 0;
+  warmup = 0;
+}
+
+function percentile(sorted, p) {
+  if (sorted.length === 0) {
+    return 0;
+  }
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
+}
+
+function updateStats(count) {
+  const sorted = samples.slice().sort((a, b) => a - b);
+  const median = percentile(sorted, 0.5);
+  document.getElementById("frames").textContent = samples.length;
+  document.getElementById("median").textContent = median.toFixed(3) + " ms";
+  document.getElementById("p95").textContent = percentile(sorted, 0.95).toFixed(3) + " ms";
+  document.getElementById("perOp").textContent = (median * 1000 / count).toFixed(3) + " us";
+}
+
+async function main() {
+  if (!navigator.gpu) {
+    document.body.insertAdjacentHTML("beforeend", "<p>WebGPU not available.</p>");
+    return;
+  }
+
+  if (useInspector) {
+    await loadInspector();
+    document.getElementById("inspectorState").textContent = "on";
+    if (useStacks && self.webgpuInspector) {
+      self.webgpuInspector.recordStacktraces = true;
+      document.getElementById("stackState").textContent = "on";
+    }
+  }
+
+  const canvas = document.getElementById("webgpu_canvas");
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) {
+    return;
+  }
+  const device = await adapter.requestDevice();
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  const context = canvas.getContext("webgpu");
+  context.configure({ device, format });
+
+  const shader = device.createShaderModule({
+    code: `
+      struct U { color: vec4f };
+      @group(0) @binding(0) var<uniform> u: U;
+      @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+        var pos = array<vec2f, 3>(vec2f(0.0, 0.5), vec2f(-0.5, -0.5), vec2f(0.5, -0.5));
+        // Tiny triangles: the point is CPU-side call overhead, not fill rate.
+        return vec4f(pos[i % 3u] * 0.01, 0.0, 1.0);
+      }
+      @fragment fn fs() -> @location(0) vec4f { return u.color; }`
+  });
+
+  const pipeline = device.createRenderPipeline({
+    layout: "auto",
+    vertex: { module: shader, entryPoint: "vs" },
+    fragment: { module: shader, entryPoint: "fs", targets: [{ format }] },
+    primitive: { topology: "triangle-list" }
+  });
+
+  const bindGroupLayout = pipeline.getBindGroupLayout(0);
+
+  const uniformBuffer = device.createBuffer({
+    size: 16,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+  device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([1, 0.4, 0.1, 1]));
+
+  // Source texture for the createView() workload.
+  const sourceTexture = device.createTexture({
+    size: [64, 64],
+    format: "rgba8unorm",
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
+  });
+
+  // Pre-built bind groups for the draw workload, so it measures per-call
+  // overhead without any object creation mixed in.
+  const preBuiltBindGroups = [];
+  for (let i = 0; i < 64; ++i) {
+    preBuiltBindGroups.push(device.createBindGroup({
+      layout: bindGroupLayout,
+      entries: [{ binding: 0, resource: { buffer: uniformBuffer } }]
+    }));
+  }
+
+  const workloadSelect = document.getElementById("workload");
+  const countInput = document.getElementById("count");
+  document.getElementById("reset").onclick = resetStats;
+  workloadSelect.onchange = resetStats;
+  countInput.onchange = resetStats;
+
+  function frame() {
+    const workload = workloadSelect.value;
+    const count = Math.max(1, Math.min(20000, countInput.value | 0));
+
+    const start = performance.now();
+
+    const encoder = device.createCommandEncoder();
+    const view = context.getCurrentTexture().createView();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{
+        view,
+        clearValue: { r: 0.1, g: 0.1, b: 0.12, a: 1 },
+        loadOp: "clear",
+        storeOp: "store"
+      }]
+    });
+    pass.setPipeline(pipeline);
+
+    if (workload === "draws") {
+      for (let i = 0; i < count; ++i) {
+        pass.setBindGroup(0, preBuiltBindGroups[i & 63]);
+        pass.draw(3);
+      }
+    } else if (workload === "views") {
+      for (let i = 0; i < count; ++i) {
+        sourceTexture.createView();
+      }
+      pass.setBindGroup(0, preBuiltBindGroups[0]);
+      pass.draw(3);
+    } else if (workload === "bindgroups") {
+      for (let i = 0; i < count; ++i) {
+        const bg = device.createBindGroup({
+          layout: bindGroupLayout,
+          entries: [{ binding: 0, resource: { buffer: uniformBuffer } }]
+        });
+        pass.setBindGroup(0, bg);
+        pass.draw(3);
+      }
+    } else if (workload === "bundles") {
+      const bundleEncoder = device.createRenderBundleEncoder({ colorFormats: [format] });
+      bundleEncoder.setPipeline(pipeline);
+      for (let i = 0; i < count; ++i) {
+        bundleEncoder.setBindGroup(0, preBuiltBindGroups[i & 63]);
+        bundleEncoder.draw(3);
+      }
+      pass.executeBundles([bundleEncoder.finish()]);
+    }
+
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+
+    const elapsed = performance.now() - start;
+
+    if (warmup < warmupFrames) {
+      warmup++;
+    } else {
+      samples.push(elapsed);
+      // Keep the window bounded so the stats track the current settings.
+      if (samples.length > 300) {
+        samples.shift();
+      }
+      if (samples.length % 10 === 0) {
+        updateStats(count);
+      }
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(frame);
+}
+
+main();
+    </script>
+  </body>
+</html>

@@ -25,7 +25,7 @@ import {
   ValidationError } from "./gpu_objects/index.js";
 import { getFlagString } from "../utils/flags.js";
 import { PanelActions } from "../utils/actions.js";
-import { getInspectWorkers, setInspectWorkers } from "../utils/inspector_settings.js";
+import { getInspectWorkers, setInspectWorkers, getObjectStacktraces, setObjectStacktraces } from "../utils/inspector_settings.js";
 import { Plot } from "./widget/plot.js";
 import { Split } from "./widget/split.js";
 import { ShaderEditor } from "./shader_editor.js";
@@ -60,7 +60,8 @@ export class InspectPanel {
         self._reset();
         self.port.postMessage({
           action: PanelActions.InitializeInspector,
-          inspectWorkers: self._inspectWorkers
+          inspectWorkers: self._inspectWorkers,
+          objectStacktraces: self._objectStacktraces
         });
       } catch (e) {}
     } });
@@ -83,6 +84,23 @@ export class InspectPanel {
     // its input to type="checkbox" after options are applied, so a `checked`
     // option passed to the constructor would not stick.
     inspectWorkersCheckbox.checked = this._inspectWorkers;
+
+    // Recording where each GPU object was created costs a stacktrace capture per
+    // creation (~16us), which is the largest single cost the inspector adds to a
+    // page that creates views or bind groups per frame. Off by default; the
+    // object's "Stacktrace" field is empty while it is off.
+    this._objectStacktraces = getObjectStacktraces();
+    const objectStacktracesCheckbox = new Checkbox(controlBar, {
+      label: "Object Stacktraces",
+      tooltip: "Record where each GPU object was created. Off by default: capturing a stacktrace per object creation noticeably slows pages that create objects every frame.",
+      class: "ml-sm mr-sm",
+      onChange: (checked) => {
+        self._objectStacktraces = !!checked;
+        setObjectStacktraces(self._objectStacktraces);
+      }
+    });
+    // See the note above on inspectWorkersCheckbox for why this is set after construction.
+    objectStacktracesCheckbox.checked = this._objectStacktraces;
 
     const stats = new Span(controlBar, { class: "control-bar-stats" });
     this.uiFrameTime = new Span(stats, { style: "width: 140px; overflow: hidden;" });

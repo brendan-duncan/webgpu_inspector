@@ -10,6 +10,7 @@
  */
 
 const INSPECT_WORKERS_KEY = "webgpu_inspector_inspect_workers";
+const OBJECT_STACKTRACES_KEY = "webgpu_inspector_object_stacktraces";
 
 /**
  * Whether the inspector should inject itself into Web Workers.
@@ -32,6 +33,35 @@ export function getInspectWorkers() {
 export function setInspectWorkers(enabled) {
   try {
     localStorage.setItem(INSPECT_WORKERS_KEY, enabled ? "true" : "false");
+  } catch (e) {
+    // localStorage may be unavailable; the setting just won't persist.
+  }
+}
+
+/**
+ * Whether the inspector should record a creation stacktrace for every GPU
+ * object. Defaults to false: capturing a stacktrace costs roughly 16us, so on a
+ * page that creates views or bind groups per frame this is the single largest
+ * source of inspection overhead. Turn it on when you need to know where an
+ * object was created.
+ * @returns {boolean} True if object creation stacktraces are enabled
+ */
+export function getObjectStacktraces() {
+  try {
+    // Default off: only an explicit "true" enables it.
+    return localStorage.getItem(OBJECT_STACKTRACES_KEY) === "true";
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Persist whether the inspector should record object creation stacktraces.
+ * @param {boolean} enabled - True to enable object creation stacktraces
+ */
+export function setObjectStacktraces(enabled) {
+  try {
+    localStorage.setItem(OBJECT_STACKTRACES_KEY, enabled ? "true" : "false");
   } catch (e) {
     // localStorage may be unavailable; the setting just won't persist.
   }

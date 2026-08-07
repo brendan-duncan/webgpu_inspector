@@ -136,6 +136,9 @@ export let webgpuInspector = null;
       this._captureFrameCount = 0;
       this._pendingMapCount = 0; // Number of pending async map requests
       this._hasPendingDeviceDestroy = false;
+      // Baseline for GPUObjectWrapper.recordStacktraces; see the accessor below.
+      // Set from the loader's global once the wrapper exists.
+      this._recordObjectStacktraces = false;
 
       // Coalescing buffer for high-frequency notification messages (see _batchableActions).
       // Filled by _postMessage and drained by _flushPendingMessages on the next microtask, or
@@ -270,10 +273,18 @@ export let webgpuInspector = null;
       }
 
       this._gpuWrapper = new GPUObjectWrapper(this);
+      // Recording where each GPU object was created costs a stacktrace capture
+      // per creation (~16us, see stacktrace.js), so it is opt-in via the panel's
+      // "Object Stacktraces" setting, forwarded here by the loader. A frame
+      // capture can raise the wrapper's flag temporarily for per-command
+      // stacktraces; this is the baseline it returns to afterwards.
+      this._recordObjectStacktraces = !!_self.__webgpuInspectorRecordStacktraces;
+      this._gpuWrapper.recordStacktraces = this._recordObjectStacktraces;
       this._gpuWrapper.onPromise.addListener(this._onAsyncPromise, this);
       this._gpuWrapper.onPromiseResolve.addListener(this._onAsyncResolve, this);
-      this._gpuWrapper.onPreCall.addListener(this._preMethodCall, this);
-      this._gpuWrapper.onPostCall.addListener(this._postMethodCall, this);
+      // Direct callbacks, not Signal listeners: these run on every WebGPU call.
+      this._gpuWrapper.onPreCall = this._preMethodCall.bind(this);
+      this._gpuWrapper.onPostCall = this._postMethodCall.bind(this);
 
       this._garbageCollectectedObjects = [];
 
@@ -584,6 +595,25 @@ export let webgpuInspector = null;
         return;
       }
       this._localCapture = new LocalCaptureStore();
+    }
+
+    // Whether a creation stacktrace is recorded for every GPU object. Off by
+    // default: capturing a stacktrace costs ~16us (see stacktrace.js), so on a
+    // page that creates views or bind groups every frame this is the largest
+    // cost the inspector adds. Manual-injection users can set it directly:
+    //   webgpuInspector.recordStacktraces = true;
+    // The DevTools panel drives it with its "Object Stacktraces" setting.
+    get recordStacktraces() {
+      return this._recordObjectStacktraces;
+    }
+
+    set recordStacktraces(enabled) {
+      this._recordObjectStacktraces = !!enabled;
+      // No wrapper when the page has no WebGPU support; nothing to apply to.
+      // Don't clear a capture's temporarily-raised flag while one is running.
+      if (this._gpuWrapper && (!this._captureFrameRequest || this._recordObjectStacktraces)) {
+        this._gpuWrapper.recordStacktraces = this._recordObjectStacktraces;
+      }
     }
 
     // Opt-in live bridge mode for the WebGPU Inspector Claude Code plugin.
@@ -1100,12 +1130,13 @@ export let webgpuInspector = null;
         // If a shader has been recompiled, that means the pipelines that
         // used that shader were also re-created. Patch in the replacement
         // pipeline so the new version of the shader is used.
-        let pipeline = args[0];
-        const objectRef = this._objectReplacementMap.get(pipeline.__id);
-        if (objectRef) {
-          if (objectRef.replacement) {
-            args[0] = objectRef.replacement;
-          }
+        // The record is read off the object rather than looked up in
+        // _objectReplacementMap: this runs on every setPipeline, and a property
+        // read is ~1ns against ~15ns for a Map lookup. It is the same record
+        // object the map holds, so a live shader edit is visible immediately.
+        const objectRef = args[0].__replacementRef;
+        if (objectRef !== undefined && objectRef.replacement) {
+          args[0] = objectRef.replacement;
         }
       }
 
@@ -1114,12 +1145,10 @@ export let webgpuInspector = null;
         // used that shader were also re-created. Any BindGroups created
         // with a layout from pipeline.getBindGroupLayout(#) also need
         // to be re-created. Patch in the replacement BindGroup if there is one.
-        let bindGroup = args[1];
-        const objectRef = this._objectReplacementMap.get(bindGroup.__id);
-        if (objectRef) {
-          if (objectRef.replacement) {
-            args[1] = objectRef.replacement;
-          }
+        // Read from the object for the same reason as setPipeline above.
+        const objectRef = args[1].__replacementRef;
+        if (objectRef !== undefined && objectRef.replacement) {
+          args[1] = objectRef.replacement;
         }
       }
 
@@ -1410,7 +1439,7 @@ export let webgpuInspector = null;
             method === "createRenderPipeline") {
           Object.defineProperty(result, "__descriptor", { value: args[0], enumerable: false, writable: true });
           Object.defineProperty(result, "__device", { value: object, enumerable: false, writable: true });
-          this._objectReplacementMap.set(result.__id, { id: result.__id, object: new WeakRef(result), replacement: null });
+          this._trackReplaceableObject(result);
         } else if (method === "createRenderBundleEncoder") {
           Object.defineProperty(result, "__descriptor", { value: args[0], enumerable: false, writable: true });
           Object.defineProperty(result, "__device", { value: object, enumerable: false, writable: true });
@@ -1431,7 +1460,7 @@ export let webgpuInspector = null;
         } else if (method === "createBindGroup") {
           this._trackObject(result.__id, result);
           Object.defineProperty(result, "__descriptor", { value: args[0], enumerable: false, writable: true });
-          this._objectReplacementMap.set(result.__id, { id: result.__id, object: new WeakRef(result), replacement: null });
+          this._trackReplaceableObject(result);
         } else if (method === "setBindGroup") {
           const descriptor = args[1].__descriptor;
           if (descriptor) {
@@ -1986,10 +2015,14 @@ export let webgpuInspector = null;
           : -1;
         this._captureFrameCount = this._captureData.captureFrameCount || captureFrameCount;
         this._captureFrameRequest = true;
-        // Stacktraces during frame capture are opt-in: they're cheap individually but
-        // a few thousand per frame dominates the CaptureFrameCommands payload size.
-        // Create-method stacktraces (in GPUObjectWrapper) are unaffected and still fire.
-        this._gpuWrapper.recordStacktraces = !!this._captureData.captureStacktraces;
+        // Stacktraces during frame capture are opt-in: each costs ~16us to capture
+        // (see stacktrace.js) and a few thousand per frame also dominates the
+        // CaptureFrameCommands payload size.
+        // Object creation stacktraces follow the separate "Object Stacktraces"
+        // setting, so a capture turns per-command stacktraces on without turning
+        // that baseline off.
+        this._gpuWrapper.recordStacktraces =
+          this._recordObjectStacktraces || !!this._captureData.captureStacktraces;
         // Profile Passes is opt-in from the panel. The actual per-pass timestampWrites
         // injection happens in _preMethodCall on beginRenderPass/beginComputePass; the
         // device must have been requested with "timestamp-query", which only happens
@@ -2125,7 +2158,7 @@ export let webgpuInspector = null;
 
       this._commandId = 0;
       this._captureFrameRequest = false;
-      this._gpuWrapper.recordStacktraces = false;
+      this._gpuWrapper.recordStacktraces = this._recordObjectStacktraces;
       this._updateStatusMessage();
     }
 
@@ -2166,6 +2199,19 @@ export let webgpuInspector = null;
     _trackObject(id, object) {
       this._trackedObjects.set(id, new WeakRef(object));
       this._trackedObjectInfo.set(id, object.constructor);
+    }
+
+    // Register an object that live shader editing may later swap out (shader
+    // modules, pipelines, bind groups). The record lives in
+    // _objectReplacementMap, which _compileShader/_revertShader iterate by id,
+    // and the same record is stashed on the object so the setPipeline /
+    // setBindGroup hot paths can find it with a property read instead of a Map
+    // lookup. Both see the same record, so mutating `replacement` through
+    // either route is immediately visible to the other.
+    _trackReplaceableObject(object) {
+      const ref = { id: object.__id, object: new WeakRef(object), replacement: null };
+      this._objectReplacementMap.set(object.__id, ref);
+      Object.defineProperty(object, "__replacementRef", { value: ref, enumerable: false, writable: true });
     }
 
     _wrapCanvas(canvas) {
@@ -2305,6 +2351,12 @@ export let webgpuInspector = null;
           this._trackedObjects.delete(id);
           this._trackedObjectInfo.delete(id);
           this._objectReplacementMap.delete(id);
+          // Drop the object's own copy of the record too, so a destroyed object
+          // stops resolving to a replacement exactly as it did back when the hot
+          // paths looked the record up in the map.
+          if (object.__replacementRef !== undefined) {
+            object.__replacementRef = undefined;
+          }
         }
         if (object instanceof GPUBindGroup) {
           this._bindGroupCount--;

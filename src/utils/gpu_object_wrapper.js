@@ -47,8 +47,15 @@ export const GPUCreateMethods = new Set([
 export class GPUObjectWrapper {
   constructor(idGenerator) {
     this._idGenerator = idGenerator;
-    this.onPreCall = new Signal();
-    this.onPostCall = new Signal();
+    // Called before and after every wrapped method. Plain callbacks rather than
+    // Signals: these fire on every WebGPU call, and Signal.emit costs a
+    // rest-parameter array plus a Map iterator per emit (~10ns, against ~5ns for
+    // a direct call) for what is always a single listener — the inspector.
+    // onPreCall returning true suppresses the underlying call.
+    this.onPreCall = null;
+    this.onPostCall = null;
+    // The promise signals fire only on the async entry points (requestAdapter,
+    // requestDevice, createPipelineAsync, mapAsync), so they stay Signals.
     this.onPromise = new Signal();
     this.onPromiseResolve = new Signal();
     this.recordStacktraces = false;
@@ -180,15 +187,32 @@ export class GPUObjectWrapper {
     return function () {
       const object = this;
 
-      const args = [...arguments];
+      // Copying `arguments` dominated the inspector's per-call cost: the
+      // `[...arguments]` this used to do goes through the iterator protocol and
+      // measured ~208ns, against ~24ns for slice and ~6ns for an indexed copy.
+      // A real, mutable Array is required — _preMethodCall rewrites entries and
+      // the capture path treats it as an array — so build one directly and fall
+      // back to slice for the rare longer argument lists.
+      const argCount = arguments.length;
+      let args;
+      switch (argCount) {
+        case 0: args = []; break;
+        case 1: args = [arguments[0]]; break;
+        case 2: args = [arguments[0], arguments[1]]; break;
+        case 3: args = [arguments[0], arguments[1], arguments[2]]; break;
+        case 4: args = [arguments[0], arguments[1], arguments[2], arguments[3]]; break;
+        case 5: args = [arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]]; break;
+        // 6 covers setViewport, the widest signature in the API.
+        case 6: args = [arguments[0], arguments[1], arguments[2], arguments[3], arguments[4], arguments[5]]; break;
+        default: args = Array.prototype.slice.call(arguments); break;
+      }
 
       if (self._skipRecord > 0) {
-        return origMethod.call(object, ...args);
+        return origMethod.apply(object, args);
       }
 
       // Allow the arguments to be modified before the method is called.
-      const res = self.onPreCall.emit(object, method, args);
-      if (res) {
+      if (self.onPreCall !== null && self.onPreCall(object, method, args)) {
         return undefined;
       }
 
@@ -196,18 +220,23 @@ export class GPUObjectWrapper {
       // destroy() on a buffer with pending mapAsync throws AbortError — suppress it.
       let result;
       try {
-        result = origMethod.call(object, ...args);
+        result = origMethod.apply(object, args);
       } catch (e) {
         if (method === "destroy") {
-          self.onPostCall.emit(object, method, args, undefined, undefined);
+          if (self.onPostCall !== null) {
+            self.onPostCall(object, method, args, undefined, undefined);
+          }
           return undefined;
         }
         throw e;
       }
 
-      const isCreate = GPUCreateMethods.has(method) || (self instanceof GPURenderBundleEncoder && method === "finish");
-
-      const stacktrace = self.recordStacktraces || isCreate ? getStacktrace() : undefined;
+      // Stacktraces are opt-in. Capturing one costs ~16us (see stacktrace.js),
+      // which dominates the inspector's overhead on pages that create views or
+      // bind groups per frame — this used to fire unconditionally for every
+      // create method. Enabled by the panel's "Object Stacktraces" setting, and
+      // by captures that ask for per-command stacktraces.
+      const stacktrace = self.recordStacktraces ? getStacktrace() : undefined;
 
       // If it was an async method it will have returned a Promise
       if (result instanceof Promise) {
@@ -224,7 +253,9 @@ export class GPUObjectWrapper {
       }
 
       // Otherwise it's a synchronous method
-      self.onPostCall.emit(object, method, args, result, stacktrace);
+      if (self.onPostCall !== null) {
+        self.onPostCall(object, method, args, result, stacktrace);
+      }
 
       return result;
     };

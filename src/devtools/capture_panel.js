@@ -31,7 +31,7 @@ import { captureToText, downloadCapture } from "./capture_export.js";
 import { isCaptureBinary, decodeCaptureBinary } from "../utils/capture_binary.js";
 import { importCaptureJson, parseCaptureText } from "./capture_import.js";
 import { putCaptureHandoff } from "../utils/capture_handoff.js";
-import { getInspectWorkers } from "../utils/inspector_settings.js";
+import { getInspectWorkers, getObjectStacktraces } from "../utils/inspector_settings.js";
 import { commandArgs, processCommandArgs, renderArgumentsSection, renderCommandSummary } from "./command_args_view.js";
 import { renderCommandList } from "./command_list_view.js";
 
@@ -213,6 +213,7 @@ export class CapturePanel {
           captureStacktraces: self.captureStacktraces,
           captureTimestamps: self.captureTimestamps,
           inspectWorkers: getInspectWorkers(),
+          objectStacktraces: getObjectStacktraces(),
         });
       } catch (e) {
         console.error(e.message);
