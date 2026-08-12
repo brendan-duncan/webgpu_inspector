@@ -8,6 +8,13 @@ export class GPUObject {
     this._deletionTime = 0;
     this._referenceCount = 1;
     this.dependencies = [];
+    // Reverse edges of 'dependencies': the objects created from this one. WebGPU has no destroy() for
+    // texture views or bind groups, so when a texture is destroyed these are the only way to know that its
+    // views are gone and that bind groups holding them can no longer be used. A Set, so that removing one
+    // of a texture's or buffer's many dependents stays O(1) (see ObjectDatabase._deleteObject).
+    this.dependents = new Set();
+    // Set when a resource this object references was destroyed, e.g. a bind group whose texture is gone.
+    this.invalidReason = null;
   }
 
   get name() {
@@ -30,9 +37,14 @@ export class GPUObject {
     return this._referenceCount;
   }
 
+  get isInvalid() {
+    return this.invalidReason !== null;
+  }
+
   addDependency(dependency) {
     if (dependency) {
       this.dependencies.push(dependency);
+      dependency.dependents.add(this);
     }
   }
 

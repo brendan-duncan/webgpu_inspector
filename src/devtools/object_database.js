@@ -39,6 +39,8 @@ export class ObjectDatabase {
     this.onAdapterInfo = new Signal();
     this.onObjectLabelChanged = new Signal();
     this.onValidationError = new Signal();
+    // Emitted with (id, object, reason) when a resource an object references was destroyed.
+    this.onObjectInvalidated = new Signal();
     this.onCapturedObjectsChanged = new Signal();
 
     this.totalTextureMemory = 0;
@@ -378,7 +380,9 @@ export class ObjectDatabase {
       this.textures.set(id, object);
     } else if (object instanceof GPU.TextureView) {
       this.textureViews.set(id, object);
-      object.addDependency(this.getObject(object.texture.__id));
+      // TextureView.texture is the parent texture's id, not a {__id} reference like the ids inside a
+      // descriptor, so this dependency was never being established.
+      object.addDependency(this.getObject(object.texture));
       object.incrementDepenencyReferenceCount();
     } else if (object instanceof GPU.Buffer) {
       this.buffers.set(id, object);
@@ -512,8 +516,44 @@ export class ObjectDatabase {
     }
 
     if (doDelete) {
+      // Remove this object from allObjects before reaching its dependents: deleting a dependent
+      // decrements this object's reference count again, and the early-out above is what stops that from
+      // deleting it a second time.
       this.allObjects.delete(id);
+      this._deleteDependents(object);
       this.onDeleteObject.emit(id, object);
     }
+  }
+
+  // Nothing reports the destruction of a texture view or a bind group: WebGPU has no destroy() for them,
+  // so the page only sees them collected some time later, if at all. Their parent's destruction is
+  // observable though, so propagate it: a view cannot outlive its texture, and a bind group holding a
+  // destroyed resource still exists but can no longer be used, so that one is flagged rather than deleted.
+  _deleteDependents(object) {
+    for (const dependency of object.dependencies) {
+      dependency.dependents.delete(object);
+    }
+
+    if (object.dependents.size === 0) {
+      return;
+    }
+
+    const reason = `references destroyed ${object.constructor.className} ${object.idName}`;
+
+    // Snapshot: deleting a dependent mutates this set.
+    for (const dependent of [...object.dependents]) {
+      if (dependent.isDeleted) {
+        continue;
+      }
+
+      if (dependent instanceof GPU.TextureView) {
+        this._deleteObject(dependent.id, true);
+      } else if (!dependent.isInvalid) {
+        dependent.invalidReason = reason;
+        this.onObjectInvalidated.emit(dependent.id, dependent, reason);
+      }
+    }
+
+    object.dependents.clear();
   }
 }

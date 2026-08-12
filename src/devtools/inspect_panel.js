@@ -165,6 +165,7 @@ export class InspectPanel {
     this.database.onDeleteObject.addListener(this._deleteObject, this);
     this.database.onDeltaFrameTime.addListener(this._updateFrameStats, this);
     this.database.onValidationError.addListener(this._validationError, this);
+    this.database.onObjectInvalidated.addListener(this._objectInvalidated, this);
     this.database.onResolvePendingObject.addListener(this._resolvePendingObject, this);
     this.database.onCapturedObjectsChanged.addListener(this._capturedObjectsChanged, this);
 
@@ -362,6 +363,22 @@ export class InspectPanel {
       for (const child of object.widget.children) {
         child.tooltip = error.message;
       }
+    }
+  }
+
+  // A resource this object references was destroyed, so it can no longer be used even though it still
+  // exists. Mark it in the object list the same way a validation error does, but don't add it to the
+  // validation error list: a destroyed render target can invalidate hundreds of bind groups at once.
+  _objectInvalidated(id, object, reason) {
+    if (object.widget) {
+      object.widget.element.classList.add("error");
+      object.widget.tooltip = reason;
+      for (const child of object.widget.children) {
+        child.tooltip = reason;
+      }
+    }
+    if (id === this.inspectedObject?.id) {
+      this._inspectObject(this.inspectedObject);
     }
   }
 
@@ -1173,6 +1190,10 @@ export class InspectPanel {
       const gpuSize = object.getGpuSize();
       const sizeStr = gpuSize < 0 ? "<unknown>" : gpuSize.toLocaleString("en-US");
       new Div(infoBox, { text: `GPU Size: ${sizeStr} Bytes`, style: "font-size: 10pt; margin-top: 5px;" });
+    }
+
+    if (object.isInvalid) {
+      new Div(infoBox, { text: `Invalid: ${object.invalidReason}`, class: "inspect_info_error" });
     }
 
     const dependencies = this.database.getObjectDependencies(object);
