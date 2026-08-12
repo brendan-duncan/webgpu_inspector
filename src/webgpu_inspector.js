@@ -316,8 +316,12 @@ export let webgpuInspector = null;
           }
 
           if (self._garbageCollectectedObjects.length > 100) {
-            self._postMessage({ "action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects });
-            self._garbageCollectectedObjects.length = 0;
+            // Hand the array off rather than clearing it: DeleteObjects is batched by _postMessage and
+            // not serialized until a later microtask, so truncating the array the message points at
+            // would deliver an empty idList.
+            const idList = self._garbageCollectectedObjects;
+            self._garbageCollectectedObjects = [];
+            self._postMessage({ "action": Actions.DeleteObjects, "idList": idList });
           }
         }
 
@@ -335,8 +339,10 @@ export let webgpuInspector = null;
       const garbageCollectionInterval = 200;
       setInterval(() => {
         if (self._garbageCollectectedObjects.length > 0) {
-          self._postMessage({ "action": Actions.DeleteObjects, "idList": self._garbageCollectectedObjects });
-          self._garbageCollectectedObjects.length = 0;
+          // Hand the array off rather than clearing it; see the batching note above.
+          const idList = self._garbageCollectectedObjects;
+          self._garbageCollectectedObjects = [];
+          self._postMessage({ "action": Actions.DeleteObjects, "idList": idList });
         }
       }, garbageCollectionInterval);
 
