@@ -77,13 +77,19 @@ export class ObjectDatabase {
           self.onValidationError.emit(errorObj);
           break;
         }
+        // Sent when the page calls destroy(), so the GPU resource really is gone and anything
+        // referencing it is now unusable.
         case Actions.DeleteObject:
-          self._deleteObject(message.id, true);
+          self._deleteObject(message.id, true, true);
           break;
+        // Sent when the page's wrapper object was garbage collected. That says nothing about the
+        // underlying GPU resource: a pipeline keeps its layout and shader modules alive internally,
+        // and a bind group keeps its layout and resources alive, long after the page drops its own
+        // references. So drop the object from the database, but don't invalidate its dependents.
         case Actions.DeleteObjects: {
           const objects = message.idList;
           for (const id of objects) {
-            self._deleteObject(id, true);
+            self._deleteObject(id, true, false);
           }
           break;
         }
@@ -454,7 +460,10 @@ export class ObjectDatabase {
     }
   }
 
-  _deleteObject(id, force) {
+  // 'destroyed' means the page explicitly destroyed this object, as opposed to the database dropping it
+  // because it was garbage collected or its last reference went away. Only an explicit destroy tells us
+  // anything about the objects built from this one; see _deleteDependents.
+  _deleteObject(id, force, destroyed) {
     const object = this.allObjects.get(id);
     if (!object) {
       return;
@@ -520,7 +529,7 @@ export class ObjectDatabase {
       // decrements this object's reference count again, and the early-out above is what stops that from
       // deleting it a second time.
       this.allObjects.delete(id);
-      this._deleteDependents(object);
+      this._deleteDependents(object, destroyed);
       this.onDeleteObject.emit(id, object);
     }
   }
@@ -529,12 +538,22 @@ export class ObjectDatabase {
   // so the page only sees them collected some time later, if at all. Their parent's destruction is
   // observable though, so propagate it: a view cannot outlive its texture, and a bind group holding a
   // destroyed resource still exists but can no longer be used, so that one is flagged rather than deleted.
-  _deleteDependents(object) {
+  _deleteDependents(object, destroyed) {
     for (const dependency of object.dependencies) {
       dependency.dependents.delete(object);
     }
 
     if (object.dependents.size === 0) {
+      return;
+    }
+
+    // Only an explicit destroy() invalidates dependents. Without it, this object is leaving the database
+    // for a reason that says nothing about whether the GPU resource behind it is still alive: garbage
+    // collection of the page's wrapper, or its reference count hitting zero here. Layouts and shader
+    // modules in particular are routinely dropped by the page right after the pipeline is created, and
+    // the pipeline goes on working fine.
+    if (!destroyed) {
+      object.dependents.clear();
       return;
     }
 
@@ -547,7 +566,9 @@ export class ObjectDatabase {
       }
 
       if (dependent instanceof GPU.TextureView) {
-        this._deleteObject(dependent.id, true);
+        // The texture is gone, so the view is genuinely gone with it, and whatever holds the view
+        // (bind groups, render bundles) is invalid in turn.
+        this._deleteObject(dependent.id, true, true);
       } else if (!dependent.isInvalid) {
         dependent.invalidReason = reason;
         this.onObjectInvalidated.emit(dependent.id, dependent, reason);
