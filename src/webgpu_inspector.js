@@ -282,6 +282,7 @@ export let webgpuInspector = null;
       }
 
       this._gpuWrapper = new GPUObjectWrapper(this);
+      this._wrapLabelAccessors();
       // Recording where each GPU object was created costs a stacktrace capture
       // per creation (~16us, see stacktrace.js), so it is opt-in via the panel's
       // "Object Stacktraces" setting, forwarded here by the loader. A frame
@@ -2320,31 +2321,58 @@ export let webgpuInspector = null;
       // Track garbage collected objects
       this._garbageCollectionRegistry.register(object, object.__id);
 
-      if (object.label !== undefined) {
-        // Capture chaning of the GPUObjectBase label
-        const l = object.label;
-        object._label = l;
-        const self = this;
-        Object.defineProperty(object, "label", {
-         enumerable: true,
-          configurable: true,
-          get() {
-            return this._label;
-          },
-          set(label) {
-            if (label !== this._label) {
-              this._label = label;
-              const id = this.__id;
-              self._postMessage({ "action": Actions.ObjectSetLabel, id, label });
-            }
-          }
-        });
-      }
+      // Label changes are observed by the prototype accessors installed in
+      // _wrapLabelAccessors, so nothing per-object is needed here.
 
       if (object instanceof GPUDevice) {
         // Automatically wrap the device's queue
         if (object.queue.__id === undefined) {
           this._wrapObject(object.queue);
+        }
+      }
+    }
+
+    // Observe GPUObjectBase.label changes so the panel can show the current label.
+    // Done once per GPU interface prototype rather than per object: the previous
+    // per-instance accessor cost a defineProperty and two closure allocations for
+    // every wrapped object, which on a page creating views or bind groups each
+    // frame was a measurable share of the inspector's per-object overhead. The
+    // native accessor keeps storing the value; the setter only adds a
+    // notification for objects the inspector has assigned an id to.
+    _wrapLabelAccessors() {
+      const self = this;
+      for (const type of GPUObjectTypes) {
+        const proto = type?.prototype;
+        if (!proto) {
+          continue;
+        }
+        const desc = Object.getOwnPropertyDescriptor(proto, "label");
+        if (!desc || typeof desc.get !== "function" || typeof desc.set !== "function") {
+          continue; // No label on this interface (GPUAdapter, GPUCanvasContext).
+        }
+        const nativeGet = desc.get;
+        const nativeSet = desc.set;
+        try {
+          Object.defineProperty(proto, "label", {
+            enumerable: desc.enumerable,
+            configurable: true,
+            get: nativeGet,
+            set(label) {
+              const id = this.__id;
+              if (id === undefined) {
+                nativeSet.call(this, label);
+                return;
+              }
+              const previous = nativeGet.call(this);
+              nativeSet.call(this, label);
+              const current = nativeGet.call(this);
+              if (current !== previous) {
+                self._postMessage({ "action": Actions.ObjectSetLabel, id, "label": current });
+              }
+            }
+          });
+        } catch (e) {
+          // Non-configurable in this runtime; labels set after creation just won't be reported.
         }
       }
     }
