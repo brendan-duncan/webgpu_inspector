@@ -22,6 +22,13 @@ export let webgpuInspector = null;
   const _postMessage = self.postMessage;
   const _dispatchEvent = self.dispatchEvent;
 
+  // Whether the browser extension is present to receive messages. Its loader installs
+  // __webgpu_src before running this script (and the Worker proxy propagates it into
+  // injected workers). Manual <script> injection and the Claude Code plugin's CDP
+  // injection never set it: there, messages only feed the local capture store, and
+  // the heavy binary payload chunks can skip base64 encoding and dispatch entirely.
+  const _hasExtension = typeof _self.__webgpu_src === "function";
+
   const webgpuInspectorCaptureFrameKey = "WEBGPU_INSPECTOR_CAPTURE_FRAME";
 
   // How much data should we send to the panel via message as a chunk. Each chunk becomes its
@@ -1037,14 +1044,7 @@ export let webgpuInspector = null;
 
     // Send a message to the devtools panel.
     _postMessage(message) {
-      message.__webgpuInspector = true;
-      message.__webgpuInspectorPage = true;
-      message.__webgpuInspectorWorker = !_window;
-
-      if (this._iframeOrigin !== null) {
-        message.__webgpuInspectorFrame = true;
-        message.__webgpuInspectorFrameOrigin = this._iframeOrigin;
-      }
+      this._tagMessage(message);
 
       // Feed the local capture store (manual-injection use case). Same
       // payload the devtools panel consumes, so the resulting JSON is
@@ -1054,6 +1054,41 @@ export let webgpuInspector = null;
         this._localCapture.processMessage(message);
       }
 
+      this._sendToPanel(message);
+    }
+
+    // Send a binary payload chunk (CaptureBufferData / CaptureTextureData). `bytes` is the
+    // chunk's raw data. The local store takes the bytes directly, copying them into its own
+    // buffer; only the extension's JSON-only message pipe needs the base64 string, so the
+    // ~1.33x encode (and a CustomEvent carrying a multi-megabyte string) is skipped when no
+    // extension is present — the plugin/bridge and manual-injection paths.
+    _postPayloadChunk(message, bytes) {
+      this._tagMessage(message);
+
+      if (this._localCapture) {
+        this._localCapture.processMessage({ ...message, chunk: bytes });
+      }
+
+      if (!_hasExtension) {
+        return;
+      }
+      message.chunk = encodeBase64(bytes);
+      this._sendToPanel(message);
+    }
+
+    _tagMessage(message) {
+      message.__webgpuInspector = true;
+      message.__webgpuInspectorPage = true;
+      message.__webgpuInspectorWorker = !_window;
+
+      if (this._iframeOrigin !== null) {
+        message.__webgpuInspectorFrame = true;
+        message.__webgpuInspectorFrameOrigin = this._iframeOrigin;
+      }
+    }
+
+    // Queue or dispatch a tagged message toward the devtools panel.
+    _sendToPanel(message) {
       // High-frequency notification? Queue it for coalescing instead of sending immediately.
       if (_batchableActions.has(message.action)) {
         this._pendingMessages.push(message);
@@ -2896,7 +2931,7 @@ export let webgpuInspector = null;
         const offset = i * maxDataChunkSize;
         const chunkSize = Math.min(maxDataChunkSize, size - offset);
         const chunk = data.subarray(offset, offset + chunkSize);
-        this._postMessage({
+        this._postPayloadChunk({
           "action": Actions.CaptureTextureData,
           id,
           passId,
@@ -2904,9 +2939,8 @@ export let webgpuInspector = null;
           offset,
           size,
           index: i,
-          count: numChunks,
-          chunk: encodeBase64(chunk)
-        });
+          count: numChunks
+        }, chunk);
       }
     }
 
@@ -2937,7 +2971,7 @@ export let webgpuInspector = null;
         // encodeBase64 reads bytes synchronously into a fresh string, so the chunk view's
         // lifetime is bounded by this call.
         const chunk = data.subarray(offset, offset + chunkSize);
-        this._postMessage({
+        this._postPayloadChunk({
           "action": Actions.CaptureBufferData,
           commandId,
           entryIndex,
@@ -2945,9 +2979,8 @@ export let webgpuInspector = null;
           size,
           originalSize: originalSize || 0,
           index: i,
-          count: numChunks,
-          chunk: encodeBase64(chunk)
-        });
+          count: numChunks
+        }, chunk);
       }
     }
 

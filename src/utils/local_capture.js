@@ -51,6 +51,21 @@ class PayloadCollector {
   }
 }
 
+// A payload chunk arrives either as raw bytes (the inspector feeding this store
+// directly, with no extension present) or as the base64 string the extension's
+// message pipe requires. Returns a Uint8Array, or null if the chunk is unusable.
+function _chunkBytes(message) {
+  const chunk = message.chunk;
+  if (chunk instanceof Uint8Array) {
+    return chunk;
+  }
+  try {
+    return decodeBase64(chunk);
+  } catch (e) {
+    return null;
+  }
+}
+
 export class LocalCaptureStore {
   constructor() {
     // id -> record { id, type, label, descriptor, stacktrace, pending, parent,
@@ -287,10 +302,8 @@ export class LocalCaptureStore {
       cmd.bufferData[entryIndex] = new Uint8Array(message.size);
       cmd._loadedChunks[entryIndex] = new Array(message.count);
     }
-    let chunk;
-    try {
-      chunk = decodeBase64(message.chunk);
-    } catch (e) {
+    const chunk = _chunkBytes(message);
+    if (!chunk) {
       return;
     }
     cmd.bufferData[entryIndex].set(chunk, message.offset);
@@ -316,10 +329,8 @@ export class LocalCaptureStore {
       this._timestampBytes = new Uint8Array(message.size);
       this._timestampChunksRemaining = message.count;
     }
-    let chunk;
-    try {
-      chunk = decodeBase64(message.chunk);
-    } catch (e) {
+    const chunk = _chunkBytes(message);
+    if (!chunk) {
       return;
     }
     this._timestampBytes.set(chunk, message.offset);
@@ -357,10 +368,8 @@ export class LocalCaptureStore {
       obj.imageData[mipLevel] = new Uint8Array(message.size);
       obj._loadedImageChunks[mipLevel] = new Array(message.count);
     }
-    let chunk;
-    try {
-      chunk = decodeBase64(message.chunk);
-    } catch (e) {
+    const chunk = _chunkBytes(message);
+    if (!chunk) {
       return;
     }
     obj.imageData[mipLevel].set(chunk, message.offset);
