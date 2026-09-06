@@ -86,7 +86,10 @@ export let webgpuInspector = null;
       this._captureFrameCommands = []; // Commands for the current frame that have been captured
       this._frameCaptureCommands = []; // Commands for all captured frames.
       this._commandId = 0;
-      this._frameData = [];
+      // Counter behind the `@<id> <Type> <bytes>` placeholders that stand in for large
+      // array arguments in captured commands (see _addCommandData). Only the ids are
+      // emitted; the arrays themselves are not retained.
+      this._commandDataCount = 0;
       this._frameRenderPassCount = 0; // Count of render passes in the current frame
       this._captureTexturedBuffers = [];
       this._currentFrame = null;
@@ -2181,7 +2184,7 @@ export let webgpuInspector = null;
       }
 
       if (this._captureFrameCount <= 0) {
-        this._frameData.length = 0;
+        this._commandDataCount = 0;
         this._captureFrameCommands.length = 0;
         this._frameRenderPassCount = 0;
         this._frameIndex++;
@@ -2759,15 +2762,12 @@ export let webgpuInspector = null;
           const captureTextureView = attachment.resolveTarget ?? attachment.view;
           result.__captureRenderPassTextures.add(captureTextureView);
         }
-        this._inComputePass = false;
         result.__commandEncoder = object;
       } else if (method === "beginComputePass") {
         result.__commandEncoder = object;
         result.__passType = "compute";
         result.__passLabel = args[0]?.label || "";
-        this._inComputePass = true;
       } else if (method === "end") {
-        this._inComputePass = false;
         const commandEncoder = object.__commandEncoder;
         // Scoped capture: when a pass is filtered out, skip its heavy texture
         // payloads too. Buffer payloads were already gated at queue time.
@@ -3358,11 +3358,14 @@ export let webgpuInspector = null;
       }
     }
 
+    // Assign an id to a large array argument for its `@<id> <Type> <bytes>` placeholder.
+    // Nothing is stored: the previous implementation kept every such array in a
+    // per-frame list that was never read, pinning the page's typed arrays for the
+    // duration of a capture. Consumers of the placeholder only read the type and
+    // byte length.
     _addCommandData(data) {
       if (this._captureFrameRequest) {
-        const id = this._frameData.length;
-        this._frameData.push(data);
-        return id;
+        return this._commandDataCount++;
       }
       return -1;
     }
