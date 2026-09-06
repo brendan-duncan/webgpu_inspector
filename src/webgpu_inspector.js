@@ -2960,13 +2960,16 @@ export let webgpuInspector = null;
           self._mappedTextureBufferCount--;
           self._updateStatusMessage();
           self.disableRecording();
-          const range = tempBuffer.getMappedRange();
-          let data = new Uint8Array(range);
-          if (format === "stencil8") {
-            data = self._stencilBufferToFloatData(data, width, height, depthOrArrayLayers);
-          }
-          // Own the data so we can destroy the temp buffer before encoding chunks.
-          const owned = new Uint8Array(data).slice();
+          const mapped = new Uint8Array(tempBuffer.getMappedRange());
+          // Own the data so the temp buffer can be destroyed before the chunks are
+          // encoded. The stencil conversion already writes into a fresh array, so it
+          // needs no further copy; everything else takes exactly one copy out of the
+          // mapped range. (This used to be two copies for every texture — the typed
+          // array constructor copies, and then slice() copied again — and three for
+          // stencil textures.)
+          const owned = format === "stencil8"
+            ? self._stencilBufferToFloatData(mapped, width, height, depthOrArrayLayers)
+            : mapped.slice();
           tempBuffer.destroy();
           self._sendTextureData(id, passId, owned, mipLevel);
           self.enableRecording();
