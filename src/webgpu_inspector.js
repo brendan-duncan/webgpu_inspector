@@ -741,16 +741,7 @@ export let webgpuInspector = null;
         return;
       }
       const maxFrameCount = 2000;
-      let commands;
-      if (this._frameCaptureCommands.length === 1) {
-        commands = this._frameCaptureCommands[0];
-      } else {
-        commands = [];
-        for (const frameCommands of this._frameCaptureCommands) {
-          commands.push(...frameCommands);
-        }
-      }
-      this._frameCaptureCommands = [];
+      const commands = this._takeFrameCaptureCommands();
 
       const batches = Math.ceil(commands.length / maxFrameCount);
       this._postMessage({
@@ -2202,20 +2193,36 @@ export let webgpuInspector = null;
       }
     }
 
+    // Hand off the captured frames' command lists as one flat array and reset the
+    // per-frame list. Concatenated with a plain loop: `push(...frameCommands)` passes
+    // every command as a call argument, and a large frame (tens of thousands of
+    // commands) can exceed the engine's argument limit and throw a RangeError,
+    // losing the capture.
+    _takeFrameCaptureCommands() {
+      const frames = this._frameCaptureCommands;
+      this._frameCaptureCommands = [];
+      if (frames.length === 1) {
+        return frames[0];
+      }
+      let total = 0;
+      for (let i = 0; i < frames.length; ++i) {
+        total += frames[i].length;
+      }
+      const commands = new Array(total);
+      let n = 0;
+      for (let i = 0; i < frames.length; ++i) {
+        const frameCommands = frames[i];
+        for (let j = 0; j < frameCommands.length; ++j) {
+          commands[n++] = frameCommands[j];
+        }
+      }
+      return commands;
+    }
+
     // Send all captured frame commands to the devtools panel.
     _sendCapturedCommands() {
       const maxFrameCount = 2000;
-
-      let commands = null;
-      if (this._frameCaptureCommands.length === 1) {
-        commands = this._frameCaptureCommands[0];
-      } else {
-        commands = [];
-        for (const frameCommands of this._frameCaptureCommands) {
-          commands.push(...frameCommands);
-        }
-      }
-      this._frameCaptureCommands = [];
+      const commands = this._takeFrameCaptureCommands();
 
       const batches = Math.ceil(commands.length / maxFrameCount);
       this._postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": commands.length, "batches": batches });
