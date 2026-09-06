@@ -3559,14 +3559,24 @@ __wgiQueuedMessages.length = 0;`;
       const backing = new target(...args);
       backing.__webgpuInspector = true;
 
-      window.addEventListener("__WebGPUInspector", (event) => {
-        // Forward messages from the page to the worker, if the worker hasn't been terminated,
-        // the message is from the inspector, and the message is not from the worker.
-        if (backing.__webgpuInspector && event.detail.__webgpuInspector &&
-          !event.detail.__webgpuInspectorPage) {
-          backing.postMessage({ __WebGPUInspector: event.detail });
-       }
-      });
+      // Forward inspector messages from the page to the worker. The listener holds the
+      // worker only weakly and unregisters itself once the worker is terminated or
+      // collected; a strong reference here would pin every Worker the page ever created
+      // (and this closure) to the window for the life of the page.
+      const backingRef = new WeakRef(backing);
+      const forwardToWorker = (event) => {
+        const worker = backingRef.deref();
+        if (worker === undefined || !worker.__webgpuInspector) {
+          window.removeEventListener("__WebGPUInspector", forwardToWorker);
+          return;
+        }
+        // Only forward messages from the inspector that did not come from a worker.
+        const detail = event.detail;
+        if (detail.__webgpuInspector && !detail.__webgpuInspectorPage) {
+          worker.postMessage({ __WebGPUInspector: detail });
+        }
+      };
+      window.addEventListener("__WebGPUInspector", forwardToWorker);
 
       backing.addEventListener("message", (event) => {
         let message = event.data;
@@ -3580,40 +3590,78 @@ __wgiQueuedMessages.length = 0;`;
         }
       });
 
+      // The proxy's get trap runs on every property access (worker.postMessage(...) is
+      // one per call), so anything it hands out is created once per worker and reused
+      // rather than re-bound on each access.
+      const boundMethods = new Map();
+
+      // The page's "message" handlers are wrapped to hide the inspector's own traffic.
+      // Remember each wrapper so removeEventListener(handler) still finds the listener
+      // that was actually registered.
+      const handlerWrappers = new WeakMap();
+      const wrapMessageHandler = (handler) => {
+        if (typeof handler !== "function") {
+          return handler;
+        }
+        let wrapper = handlerWrappers.get(handler);
+        if (wrapper === undefined) {
+          wrapper = function (event) {
+            const data = event.data;
+            if (!data || (!data.__webgpuInspector && !data.__WebGPUInspector)) {
+              return handler.call(this, event);
+            }
+          };
+          handlerWrappers.set(handler, wrapper);
+        }
+        return wrapper;
+      };
+
+      const addEventListener = function (type, handler, ...rest) {
+        if (type === "message") {
+          handler = wrapMessageHandler(handler);
+        }
+        return backing.addEventListener(type, handler, ...rest);
+      };
+
+      const removeEventListener = function (type, handler, ...rest) {
+        if (type === "message") {
+          handler = handlerWrappers.get(handler) ?? handler;
+        }
+        return backing.removeEventListener(type, handler, ...rest);
+      };
+
+      // Mark the worker terminated so no further inspector messages are forwarded to it,
+      // and drop the page-side forwarding listener right away.
+      const terminate = function (...args) {
+        const result = backing.terminate(...args);
+        backing.__webgpuInspector = false;
+        window.removeEventListener("__WebGPUInspector", forwardToWorker);
+        return result;
+      };
+
       return new Proxy(backing, {
         get(target, prop, receiver) {
-          // Intercept event handlers to hide the inspectors messages
           if (prop === "addEventListener") {
-            return function (...args) {
-              if (args[0] === "message") {
-                const origHandler = args[1];
-                args[1] = function (...args) {
-                  if (!args[0].data.__webgpuInspector && !args[0].data.__WebGPUInspector) {
-                    origHandler(...args);
-                  }
-                };
-              }
-
-              return target.addEventListener(...args);
-            };
+            return addEventListener;
           }
-
-          // Intercept worker termination and remove it from list so we don't send
-          // messages to a terminated worker.
+          if (prop === "removeEventListener") {
+            return removeEventListener;
+          }
           if (prop === "terminate") {
-            return function (...args) {
-              const result = target.terminate(...args);
-              target.__webgpuInspector = false;
-              return result;
-            };
+            return terminate;
           }
 
           if (prop in target) {
-            if (typeof target[prop] === "function") {
-              return target[prop].bind(target);
-            } else {
-              return target[prop];
+            const value = target[prop];
+            if (typeof value === "function") {
+              let bound = boundMethods.get(prop);
+              if (bound === undefined) {
+                bound = value.bind(target);
+                boundMethods.set(prop, bound);
+              }
+              return bound;
             }
+            return value;
           }
         },
         set(target, prop, newValue, receiver) {
