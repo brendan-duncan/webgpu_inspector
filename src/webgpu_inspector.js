@@ -52,6 +52,9 @@ export let webgpuInspector = null;
   const maxColorAttachments = 10;
   const captureFrameCount = 1;
 
+  // Resolved once: the type checks below run for every argument of every captured command.
+  const _SharedArrayBuffer = typeof SharedArrayBuffer === "function" ? SharedArrayBuffer : null;
+
   // Build a scoped-capture filter from capture options. Returns null when no
   // scoping is requested (capture everything). `passLabel` may be a string
   // (treated as a RegExp source) or a RegExp; `passType` is "render"/"compute".
@@ -1656,15 +1659,13 @@ export let webgpuInspector = null;
     }
 
     _isArrayBuffer(obj) {
-      if (typeof SharedArrayBuffer === 'function') {
-        return obj && (obj instanceof ArrayBuffer || obj instanceof SharedArrayBuffer);
-      }
-      return obj && obj instanceof ArrayBuffer;
+      return !!obj && (obj instanceof ArrayBuffer ||
+        (_SharedArrayBuffer !== null && obj instanceof _SharedArrayBuffer));
     }
 
-    // Is the object a typed array?
+    // Is the object a typed array (or DataView), or an ArrayBuffer?
     _isTypedArray(obj) {
-      return obj && (obj instanceof ArrayBuffer || this._isArrayBuffer(obj.buffer));
+      return !!obj && (obj instanceof ArrayBuffer || ArrayBuffer.isView(obj));
     }
 
     // Is the object a regular array?
@@ -3389,8 +3390,11 @@ export let webgpuInspector = null;
           const id = this._addCommandData(object);
           return `@${id} ${object.constructor.name} ${object.byteLength}`;
         }
-        const newArray = [];
-        for (const i in object) {
+        // Indexed loop, not for...in: for...in materializes a string key per element and
+        // walks the prototype chain, and this runs for every captured command's arguments.
+        const length = object.length || 0;
+        const newArray = new Array(length);
+        for (let i = 0; i < length; ++i) {
           newArray[i] = this._processCommandArgs(object[i]);
         }
         return newArray;
