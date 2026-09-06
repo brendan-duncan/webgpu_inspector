@@ -843,14 +843,12 @@ export let webgpuInspector = null;
     // queued during `submit`) to complete and their data messages to land
     // in the store. Returns once `_pendingMapCount` settles at 0.
     async _waitForCapturedReadbacks() {
-      // Poll on rAF where available, otherwise setTimeout; ~16ms cadence.
-      const sleep = () => new Promise((resolve) => {
-        if (typeof requestAnimationFrame === "function") {
-          requestAnimationFrame(() => resolve());
-        } else {
-          setTimeout(resolve, 16);
-        }
-      });
+      // Poll on a timer, ~16ms cadence. Not requestAnimationFrame: the global is the
+      // inspector's own wrapper, so each poll tick used to run _frameStart/_frameEnd
+      // and advance the frame counter (and post DeltaTime) while nothing was being
+      // rendered. rAF also stops firing in a hidden tab, which would stall a
+      // saveCaptureData() driven from the plugin until the deadline below.
+      const sleep = () => new Promise((resolve) => setTimeout(resolve, 16));
       // Bound the wait so a stuck mapAsync (lost device, destroyed buffer)
       // doesn't hang `saveCaptureData()` forever.
       const deadline = Date.now() + 30000;
