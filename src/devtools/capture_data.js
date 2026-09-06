@@ -19,6 +19,9 @@ import { Signal } from "../utils/signal.js";
     index: number;
     count: number;
     commands: Object[];
+    // Distinct stacktraces of this batch. A command whose `stacktrace` is a number
+    // refers to an entry here (see WebGPUInspector._encodeCommandBatch).
+    stacktraces?: string[];
 }*/
 
 /*interface CaptureBuffersMessage {
@@ -41,6 +44,25 @@ import { Signal } from "../utils/signal.js";
     method: string;
     args: any[];
 }*/
+
+/**
+ * Replace per-batch stacktrace table indices on command records with the strings
+ * they refer to. The page sends each distinct stacktrace once per batch; commands
+ * carry an index into that table (or a literal string / nothing).
+ * @param {Object[]} commands
+ * @param {string[]|undefined} stacktraces
+ */
+export function resolveCommandStacktraces(commands, stacktraces) {
+  if (!Array.isArray(stacktraces) || !commands) {
+    return;
+  }
+  for (let i = 0, l = commands.length; i < l; ++i) {
+    const cmd = commands[i];
+    if (cmd && typeof cmd.stacktrace === "number") {
+      cmd.stacktrace = stacktraces[cmd.stacktrace] ?? "";
+    }
+  }
+}
 
 export class CaptureData {
   /**
@@ -135,6 +157,7 @@ export class CaptureData {
     const index = message.index;
     const count = message.count;
     const frame = message.frame;
+    resolveCommandStacktraces(commands, message.stacktraces);
     const pendingCommandBuffers = this._pendingCommandBufferData;
     for (const ci in pendingCommandBuffers) {
       const cmdData = pendingCommandBuffers[ci];

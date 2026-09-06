@@ -784,15 +784,58 @@ export let webgpuInspector = null;
       });
       for (let i = 0; i < commands.length; i += maxFrameCount) {
         const length = Math.min(maxFrameCount, commands.length - i);
-        const commandsSlice = commands.slice(i, i + length);
+        const batch = this._encodeCommandBatch(commands.slice(i, i + length));
         this._postMessage({
           "action": Actions.CaptureFrameCommands,
           "frame": this._frameIndex,
-          "commands": commandsSlice,
+          "commands": batch.commands,
+          "stacktraces": batch.stacktraces,
           "index": i,
           "count": length
         });
       }
+    }
+
+    // Wire form of one CaptureFrameCommands batch. Captured commands from the same
+    // call site share a stacktrace string (stacktrace.js already dedups them in
+    // memory), but serializing each record repeats the full text, and with per-command
+    // stacktraces on a frame of a few thousand commands that text dominates the
+    // payload. Each distinct stacktrace is sent once in a `stacktraces` table and the
+    // records carry its index instead. Records without a stacktrace pass through
+    // untouched, and a batch with no stacktraces at all is sent as-is with no table,
+    // so the common case copies nothing. Receivers (the panel's CaptureData and
+    // LocalCaptureStore) resolve the indices back to strings.
+    _encodeCommandBatch(commands) {
+      let hasStacktrace = false;
+      for (let i = 0; i < commands.length; ++i) {
+        const st = commands[i].stacktrace;
+        if (typeof st === "string" && st.length > 0) {
+          hasStacktrace = true;
+          break;
+        }
+      }
+      if (!hasStacktrace) {
+        return { commands, stacktraces: undefined };
+      }
+      const stacktraces = [];
+      const indexOf = new Map();
+      const out = new Array(commands.length);
+      for (let i = 0; i < commands.length; ++i) {
+        const cmd = commands[i];
+        const st = cmd.stacktrace;
+        if (typeof st === "string" && st.length > 0) {
+          let index = indexOf.get(st);
+          if (index === undefined) {
+            index = stacktraces.length;
+            stacktraces.push(st);
+            indexOf.set(st, index);
+          }
+          out[i] = { ...cmd, stacktrace: index };
+        } else {
+          out[i] = cmd;
+        }
+      }
+      return { commands: out, stacktraces };
     }
 
     // Wait for all outstanding texture/buffer readbacks (`mapAsync`s
@@ -2289,11 +2332,12 @@ export let webgpuInspector = null;
 
       for (let i = 0; i < commands.length; i += maxFrameCount) {
         const length = Math.min(maxFrameCount, commands.length - i);
-        const commandsSlice = commands.slice(i, i + length);
+        const batch = this._encodeCommandBatch(commands.slice(i, i + length));
         this._postMessage({
             "action": Actions.CaptureFrameCommands,
             "frame": this._frameIndex - 1,
-            "commands": commandsSlice,
+            "commands": batch.commands,
+            "stacktraces": batch.stacktraces,
             "index": i,
             "count": length
           });

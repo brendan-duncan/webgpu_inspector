@@ -237,8 +237,15 @@ export class LocalCaptureStore {
     }
     const base = slot.start + (message.index | 0);
     const commands = message.commands || [];
+    // Per-batch stacktrace table (see WebGPUInspector._encodeCommandBatch). The
+    // inspector hands this store the same message object it dispatches to the
+    // extension, so resolve into a copy rather than rewriting the wire record.
+    const stacktraces = Array.isArray(message.stacktraces) ? message.stacktraces : null;
     for (let i = 0; i < message.count; ++i) {
-      const cmd = commands[i];
+      let cmd = commands[i];
+      if (stacktraces && cmd && typeof cmd.stacktrace === "number") {
+        cmd = { ...cmd, stacktrace: stacktraces[cmd.stacktrace] ?? "" };
+      }
       this._commands[base + i] = cmd;
       if (cmd && cmd.commandId !== undefined) {
         this._commandsById.set(cmd.commandId, cmd);
