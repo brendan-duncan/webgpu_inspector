@@ -181,6 +181,15 @@ export let webgpuInspector = null;
       const self = this;
 
       this._statusElementsCreated = false;
+      // The status overlay is written at most once per frame, and only when its text
+      // changed. _updateStatusMessage / _updateFrameStatus are called from many hot spots
+      // (every captured setBindGroup / setVertexBuffer, every readback completion), so they
+      // only mark the overlay dirty and schedule a flush; _flushStatusOverlay does the DOM work.
+      this._statusDirty = false;
+      this._statusFlushScheduled = false;
+      this._lastFrameStatusText = "";
+      this._lastStatusText = "";
+      this._lastStatusTitle = "";
 
       if (_document) {
         this.scheduleStatusElements();
@@ -381,6 +390,10 @@ export let webgpuInspector = null;
       // Wrap requestAnimationFrame so it can keep track of framerates and frame captures.
       // This requires that the page uses requestAnimationFrame to drive the rendering loop.
       const __requestAnimationFrame = requestAnimationFrame;
+      // Kept for the inspector's own scheduling (status overlay flush) so it doesn't go
+      // through the wrapper below and get counted as a page frame. Bound to the global:
+      // calling a native function as a method of another object is an "Illegal invocation".
+      this._nativeRequestAnimationFrame = __requestAnimationFrame.bind(_self);
       this._currentFrameTime = 0.0;
 
       requestAnimationFrame = function (cb) {
@@ -555,6 +568,7 @@ export let webgpuInspector = null;
       this._inspectingStatusFrame = _document.createElement("div");
       this._inspectingStatusFrame.style = "display: inline-block; cursor: pointer;";
       this._inspectingStatusFrame.textContent = "Frame: 0";
+      this._lastFrameStatusText = "Frame: 0";
       statusContainer.appendChild(this._inspectingStatusFrame);
 
       this._inspectingStatusText = _document.createElement("div");
@@ -570,6 +584,9 @@ export let webgpuInspector = null;
           self._sendCapturedCommands();
         }
       });
+
+      // Show the current state right away rather than waiting for the next update.
+      this._updateStatusMessage();
     }
 
     ///  Disable recording of WebGPU calls.
@@ -1937,10 +1954,50 @@ export let webgpuInspector = null;
       }
     }
 
-    // Update the status overlay message.
+    // Request a status overlay refresh. Cheap: sets a flag and schedules one flush for the
+    // next animation frame, so any number of calls within a frame produce one DOM write.
     _updateStatusMessage() {
       if (!this._inspectingStatusFrame) {
         return;
+      }
+      this._statusDirty = true;
+      this._scheduleStatusFlush();
+    }
+
+    _scheduleStatusFlush() {
+      if (this._statusFlushScheduled) {
+        return;
+      }
+      this._statusFlushScheduled = true;
+      const self = this;
+      const flush = () => {
+        self._statusFlushScheduled = false;
+        self._flushStatusOverlay();
+      };
+      if (typeof this._nativeRequestAnimationFrame === "function") {
+        this._nativeRequestAnimationFrame(flush);
+      } else {
+        setTimeout(flush, 16);
+      }
+    }
+
+    // Write the overlay text. Only touches the DOM for parts whose text actually changed,
+    // since assigning textContent replaces the text node and invalidates layout even when
+    // the string is identical.
+    _flushStatusOverlay() {
+      if (!this._inspectingStatusFrame || !this._statusDirty) {
+        return;
+      }
+      this._statusDirty = false;
+
+      let frameStatus = `Frame: ${this._frameIndex}`;
+      const frameRate = this._frameRate.average;
+      if (frameRate !== 0) {
+        frameStatus += ` : ${frameRate.toFixed(2)}ms`;
+      }
+      if (frameStatus !== this._lastFrameStatusText) {
+        this._lastFrameStatusText = frameStatus;
+        this._inspectingStatusFrame.textContent = frameStatus;
       }
 
       let status = "";
@@ -1965,14 +2022,20 @@ export let webgpuInspector = null;
         status = `Capturing: ${status} `;
       }
 
+      let title = "";
       if (this._captureFrameRequest) {
         status = `Recording (click to stop): ${status}`;
-        this._inspectingStatusText.title = "Click to stop recording";
-      } else {
-        this._inspectingStatusText.title = "";
+        title = "Click to stop recording";
       }
 
-      this._inspectingStatusText.textContent = status;
+      if (title !== this._lastStatusTitle) {
+        this._lastStatusTitle = title;
+        this._inspectingStatusText.title = title;
+      }
+      if (status !== this._lastStatusText) {
+        this._lastStatusText = status;
+        this._inspectingStatusText.textContent = status;
+      }
     }
 
     // Update the frame rate overlay. Called for DeltaTime messages forwarded from worker
@@ -2010,16 +2073,9 @@ export let webgpuInspector = null;
       };
     }
 
-    // Update the frame status overlay.
+    // Request a frame counter refresh; same coalescing as _updateStatusMessage.
     _updateFrameStatus() {
-      if (this._inspectingStatusFrame) {
-        let statusMessage = `Frame: ${this._frameIndex}`;
-        const frameRate = this._frameRate.average;
-        if (frameRate !== 0) {
-          statusMessage += ` : ${frameRate.toFixed(2)}ms`;
-        }
-        this._inspectingStatusFrame.textContent = statusMessage;
-      }
+      this._updateStatusMessage();
     }
 
     // Begin capturing frame data based on the settings passed in _captureData from the devtools panel.
