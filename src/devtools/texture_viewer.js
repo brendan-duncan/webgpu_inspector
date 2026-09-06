@@ -126,7 +126,10 @@ export class TextureViewer extends Div {
   _updateLayerTitle(texture, layer) {
     const layerTitle = this.layerTitles[layer];
     if (layerTitle) {
-      let text = `Layer ${layer}`;
+      // Resolution of the mip level on screen, since it changes with the Mip Level control.
+      const mipLevel = Math.max(Math.min(texture.display?.mipLevel || 0, texture.mipLevelCount - 1), 0);
+      const [mipWidth, mipHeight] = texture.getMipSize(mipLevel);
+      let text = `Layer ${layer} Mip ${mipLevel} ${Math.max(1, mipWidth)}x${Math.max(1, mipHeight)}`;
       if (texture.layerRanges && texture.layerRanges[layer] && texture.layerRanges[layer].min !== undefined && texture.layerRanges[layer].max !== undefined) {
         const ranges = texture.layerRanges[layer];
         text += ` Min Value: ${ranges.min} Max Value: ${ranges.max}`;
@@ -150,7 +153,9 @@ export class TextureViewer extends Div {
     canvas.style.height = `${height * zoom}px`;
 
     this._setupCanvasEvents(canvas, texture, layer, displayChanged, zoomControl);
-    this._createCopyButton(canvasContainer, canvas);
+    // The copy button lives in the layer's title row, not over the canvas: an overlay
+    // covered most of a small texture (and its pixels under the mouse).
+    this._createCopyButton(layerInfo, canvas);
 
     canvas.element.width = width;
     canvas.element.height = height;
@@ -163,11 +168,11 @@ export class TextureViewer extends Div {
   _createCopyButton(parent, canvas) {
     const button = new Widget("button", parent, {
       title: "Copy image as PNG",
-      style: "position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; padding: 3px; border: 1px solid rgba(255,255,255,0.4); border-radius: 3px; background: rgba(20,20,20,0.72); color: #fff; cursor: pointer; line-height: 0; z-index: 1;"
+      style: "display: inline-block; vertical-align: middle; margin-left: 8px; width: 20px; height: 20px; padding: 2px; border: 1px solid rgba(255,255,255,0.4); border-radius: 3px; background: rgba(20,20,20,0.72); color: #fff; cursor: pointer; line-height: 0;"
     });
     button.element.type = "button";
     button.element.innerHTML = `
-      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
         <rect x="9" y="9" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"></rect>
         <path d="M5 15V6.5C5 5.7 5.7 5 6.5 5H15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
       </svg>`;
@@ -295,6 +300,7 @@ export class TextureViewer extends Div {
 
     canvas.element.width = width;
     canvas.element.height = height;
+    this._updateLayerTitle(texture, layer);
 
     const context = canvas.element.getContext("webgpu");
     const format = navigator.gpu.getPreferredCanvasFormat();

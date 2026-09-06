@@ -1,5 +1,6 @@
 import { CaptureStatistics } from "./capture_statistics.js";
 import { StacktraceViewer } from "./stacktrace_viewer.js";
+import { formatBytes } from "../utils/format.js";
 import {
   Sampler,
   Texture,
@@ -59,13 +60,7 @@ function _prettifyStatKey(key) {
 
 const _byteStatKeys = new Set(["bufferBytesWritten", "totalBytesWritten"]);
 
-function _formatBytes(bytes) {
-  if (bytes === 0) return "0 B";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
+const _formatBytes = formatBytes;
 
 function _formatStatValue(key, value) {
   if (_byteStatKeys.has(key)) {

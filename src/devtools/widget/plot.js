@@ -90,6 +90,9 @@ export class Plot extends Div {
     this.context = this.canvas.element.getContext("2d");
 
     this.data = new Map();
+    // Marker series (see addMarkers): per-sample flags drawn as ticks along the top edge,
+    // excluded from the value scale. Used for dropped frames on the frame-time plot.
+    this.markers = [];
 
     this.suffix = options.suffix ?? "";
     this.precision = options.precision ?? 0;
@@ -122,6 +125,9 @@ export class Plot extends Div {
     for (const data of this.data.values()) {
       data.reset();
     }
+    for (const marker of this.markers) {
+      marker.reset();
+    }
   }
 
   onResize() {
@@ -135,6 +141,9 @@ export class Plot extends Div {
       for (const data of this.data.values()) {
         data.size = this.width;
       }
+      for (const marker of this.markers) {
+        marker.size = this.width;
+      }
       // Setting canvas.width clears it; redraw so the plot isn't blank until the next
       // data tick (matters for plots that only update on a running render loop).
       this.draw();
@@ -145,6 +154,15 @@ export class Plot extends Div {
     const data = new PlotData(name, this.width);
     data.color = color ?? "#999";
     this.data.set(name, data);
+    return data;
+  }
+
+  // Add a marker series. Samples are added in lockstep with the value series (one per
+  // frame); a sample > 0 draws a tick at the top of that column, taller for larger values.
+  addMarkers(name, color) {
+    const data = new PlotData(name, this.width);
+    data.color = color ?? "#e06060";
+    this.markers.push(data);
     return data;
   }
 
@@ -235,10 +253,46 @@ export class Plot extends Div {
       this._drawData(data, min, max);
     }
 
+    this._drawMarkers();
+
     const format = (v) => `${v.toFixed(this.precision)}${this.suffix}`;
+    this._drawLabel(format(max), 2, 1);
+    this._drawLabel(format(min), 2, h - 12);
+  }
+
+  // Red ticks along the top edge for marker samples > 0 (e.g. frames with dropped
+  // vsyncs). Drawn over the series so they stay visible where a spike is clipped.
+  _drawMarkers() {
+    const ctx = this.context;
+    const h = this.height;
+    for (const marker of this.markers) {
+      const count = marker.count;
+      if (count === 0) {
+        continue;
+      }
+      ctx.fillStyle = marker.color;
+      for (let i = 0; i < count; ++i) {
+        const v = marker.get(i);
+        if (v > 0) {
+          // One dropped frame: a short tick. More: taller, up to half the plot.
+          const tick = Math.min(h * 0.5, 4 + 3 * (v - 1));
+          ctx.fillRect(i, 0, 1, tick);
+        }
+      }
+    }
+  }
+
+  // Scale label on a translucent backing so it stays readable where the series cross it.
+  _drawLabel(text, x, y) {
+    const ctx = this.context;
+    ctx.font = "9px sans-serif";
+    ctx.textBaseline = "top";
+    const w = ctx.measureText(text).width;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    ctx.fillRect(x - 1, y, w + 4, 11);
     ctx.fillStyle = "#fff";
-    ctx.fillText(format(max), 2, 10);
-    ctx.fillText(format(min), 2, h - 1);
+    ctx.fillText(text, x + 1, y + 1);
+    ctx.textBaseline = "alphabetic";
   }
 
   _drawData(data, sharedMin, sharedMax) {

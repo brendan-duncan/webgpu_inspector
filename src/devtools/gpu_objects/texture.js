@@ -389,6 +389,14 @@ export class Texture extends GPUObject {
         this.depthOrArrayLayers === 6;
   }
 
+  get sampleCount() {
+    return this.descriptor?.sampleCount ?? 1;
+  }
+
+  // Estimated GPU memory of the texture in bytes: every mip level of every layer (or
+  // depth slice, for 3d), times the sample count. Block-compressed formats count whole
+  // blocks. Returns -1 when the format is unknown. Drivers may pad or add metadata, so
+  // treat this as a lower bound.
   getGpuSize() {
     const format = this.descriptor?.format;
     const formatInfo = TextureFormatInfo[format];
@@ -397,14 +405,20 @@ export class Texture extends GPUObject {
       return -1;
     }
 
-    const height = this.height;
-    const depthOrArrayLayers = this.depthOrArrayLayers;
     const dimension = this.dimension;
-    const blockWidth = width / formatInfo.blockWidth;
-    const blockHeight = dimension === "1d" ? 1 : height / formatInfo.blockHeight;
+    const blockWidth = formatInfo.blockWidth || 1;
+    const blockHeight = formatInfo.blockHeight || 1;
     const bytesPerBlock = formatInfo.bytesPerBlock;
+    const mipLevelCount = this.mipLevelCount;
 
-    return blockWidth * blockHeight * bytesPerBlock * depthOrArrayLayers;
+    let bytes = 0;
+    for (let level = 0; level < mipLevelCount; ++level) {
+      const [mipWidth, mipHeight, mipDepth] = this.getMipSize(level);
+      const blocksX = Math.ceil(Math.max(1, mipWidth) / blockWidth);
+      const blocksY = dimension === "1d" ? 1 : Math.ceil(Math.max(1, mipHeight) / blockHeight);
+      bytes += blocksX * blocksY * bytesPerBlock * Math.max(1, mipDepth);
+    }
+    return bytes * this.sampleCount;
   }
 }
 Texture.className = "Texture";

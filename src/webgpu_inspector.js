@@ -102,7 +102,14 @@ export let webgpuInspector = null;
       this._currentFrame = null;
       this._frameIndex = 0; // The current frame index based on requestAnimationFrame
       this._gpuFrameIndex = 0; // The frame index based on frames that have GPU work submitted
-      this._frameGpuCommandCount = 0; // The number of GPU commands in the current frame
+      this._frameSubmitCount = 0; // queue.submit calls inside the current rAF callback
+      // rAF timestamps: the latest distinct one seen and the one before it. Every callback
+      // in a display frame shares a timestamp, and the page's rAF fires every vsync whether
+      // or not it renders, so consecutive distinct timestamps are consecutive vsyncs (unless
+      // the main thread was blocked, which is exactly what dropped-frame detection looks for).
+      this._rafTimestamp = 0;
+      this._previousRafTimestamp = 0;
+      this._rafFrameRendered = false; // a callback in the current display frame submitted
       this._initialized = true;
       this._objectID = 1;
       this._lastFrameTime = 0;
@@ -1215,11 +1222,6 @@ export let webgpuInspector = null;
     // Called before a GPU method is called, allowing the inspector to modify
     // the arguments or the object before the method is called.
     _preMethodCall(object, method, args) {
-      // Don't include requestAdapter and requestDevice in the command count.
-      if (method !== "requestAdapter" && method !== "requestDevice") {
-        this._frameGpuCommandCount++;
-      }
-
       if (method === "destroy") {
         if (object === this._device?.deref()) {
           if (this._pendingMapCount) {
@@ -1390,6 +1392,7 @@ export let webgpuInspector = null;
       }
 
       if (method === "submit") {
+        this._frameSubmitCount++;
         this.disableRecording();
 
         let timestampDstBuffer = null;
@@ -2231,38 +2234,21 @@ export let webgpuInspector = null;
       return sorted[Math.floor(len * 0.2)];
     }
 
-    // Called at the start of each frame, before the requestAnimationFrame callback is invoked.
+    // Called before every requestAnimationFrame callback the page registered. A page
+    // commonly has several per frame (an engine loop plus a UI or stats loop), so this
+    // only prepares per-callback state; frame timing and the frame counter are handled
+    // in _frameEnd, and only for callbacks that submitted GPU work.
     _frameStart(time) {
-      this._frameGpuCommandCount = 0;
+      this._frameSubmitCount = 0;
       // Wall-clock at the top of the app's frame callback. _frameEnd subtracts this to
       // get main-thread submit time (CPU cost of building + issuing the frame's work).
       this._frameCpuStart = performance.now();
 
-      let deltaTime = 0;
-      if (this._lastFrameTime == 0) {
-        this._lastFrameTime = time;
-      } else {
-        deltaTime = time - this._lastFrameTime;
-        this._lastFrameTime = time;
-        this._frameRate.add(deltaTime);
-
-        // rAF fires once per vsync, so a kept frame lands ~1 refresh period apart and each
-        // extra whole period is a dropped frame. The refresh period is estimated as a low
-        // percentile of a sliding window of recent deltas (see _estimateRefreshPeriod) —
-        // NOT the all-time minimum, which a single sub-period frame (a VRR display, an
-        // early light frame) would poison permanently, making every later frame read as a
-        // drop. The 2ms floor ignores double-fired rAFs that share a timestamp.
-        let skipped = 0;
-        if (deltaTime > 2) {
-          this._recordFrameDelta(deltaTime);
-          if (this._refreshPeriod > 0) {
-            skipped = Math.max(0, Math.round(deltaTime / this._refreshPeriod) - 1);
-            this._skippedFrameTotal += skipped;
-          }
-        }
-
-        this._postMessage({ "action": Actions.DeltaTime, deltaTime, skipped,
-          "refresh": this._refreshPeriod, "cpuTime": this._lastCpuTime });
+      if (time !== this._rafTimestamp) {
+        // First callback of a new display frame.
+        this._previousRafTimestamp = this._rafTimestamp;
+        this._rafTimestamp = time;
+        this._rafFrameRendered = false;
       }
 
       if (_sessionStorage) {
@@ -2286,12 +2272,6 @@ export let webgpuInspector = null;
         this._commandDataCount = 0;
         this._captureFrameCommands.length = 0;
         this._frameRenderPassCount = 0;
-        this._frameIndex++;
-      }
-
-      if (this._inspectingStatusFrame) {
-        this._updateFrameStatus();
-        this._updateStatusMessage();
       }
     }
 
@@ -2348,29 +2328,79 @@ export let webgpuInspector = null;
       this._updateStatusMessage();
     }
 
-    // Called at the end of each frame, after the requestAnimationFrame callback have been invoked.
+    // Called after each requestAnimationFrame callback has returned (or, if it returned a
+    // Promise, resolved). A callback counts as a rendered frame only if it submitted GPU
+    // work: a UI/stats loop that never submits neither contributes a frame-time sample
+    // nor closes a captured frame — its commands (e.g. a bind group it created) fold into
+    // the frame of the callback that does render. Callbacks that share a rAF timestamp are
+    // the same display frame, so only the first submitting one is timed.
+    //
+    // The frame-time sample is the interval since the previous rAF tick, not since the
+    // previous *rendered* frame. A page that renders on demand (or throttles itself) runs
+    // its rAF callback every vsync and only sometimes submits; the vsyncs it idled through
+    // are not dropped frames and shouldn't read as one huge frame. What does show up is a
+    // callback that blocked the main thread across several vsyncs: rAF can't fire while it
+    // runs, so the tick interval grows and the excess periods count as dropped.
     _frameEnd(time) {
       // Main-thread time inside the app's frame callback (build + submit). On the
       // async-callback path (cb returns a Promise) this includes awaited time, so read
-      // it as callback wall time. Stashed for the next frame's DeltaTime message.
-      if (this._frameCpuStart) {
-        this._lastCpuTime = performance.now() - this._frameCpuStart;
+      // it as callback wall time.
+      const cpuTime = this._frameCpuStart ? performance.now() - this._frameCpuStart : 0;
+      const rendered = this._frameSubmitCount > 0;
+      if (!rendered) {
+        this._updateStatusMessage();
+        return;
       }
-      if (this._frameGpuCommandCount > 0) {
-        this._gpuFrameIndex++;
-        this._frameGpuCommandCount = 0;
-      }
+      this._frameSubmitCount = 0;
+      this._lastCpuTime = cpuTime;
 
-      // If we're captureing frames, and some commands have been recorded, send them to the devtools panel.
-      if (this._captureFrameCommands.length) {
-        this._frameCaptureCommands.push(this._captureFrameCommands);
-        if (this._captureFrameCommands.length === 1) {
-          if (this._captureFrameCommands[0].method === "requestAdapter" ||
-              this._captureFrameCommands[0].method === "requestDevice") {
-            // Don't count requestAdapter and requestDevice as frames.
-            this._captureFrameCount++;
+      if (!this._rafFrameRendered) {
+        this._rafFrameRendered = true;
+        let deltaTime = 0;
+        if (time === this._rafTimestamp) {
+          deltaTime = time - this._previousRafTimestamp;
+        } else if (this._lastFrameTime !== 0) {
+          // An async callback from an earlier frame resolving after a newer frame started;
+          // fall back to the interval between rendered frames.
+          deltaTime = time - this._lastFrameTime;
+        }
+        if (this._previousRafTimestamp !== 0 && deltaTime > 0) {
+          this._frameRate.add(deltaTime);
+
+          // A kept frame lands ~1 refresh period after the previous tick and each extra
+          // whole period is a dropped frame. The refresh period is estimated as a low
+          // percentile of a sliding window of recent deltas (see _estimateRefreshPeriod) —
+          // NOT the all-time minimum, which a single sub-period frame (a VRR display, an
+          // early light frame) would poison permanently, making every later frame read as a
+          // drop. The 2ms floor guards against near-duplicate timestamps.
+          let skipped = 0;
+          if (deltaTime > 2) {
+            this._recordFrameDelta(deltaTime);
+            if (this._refreshPeriod > 0) {
+              skipped = Math.max(0, Math.round(deltaTime / this._refreshPeriod) - 1);
+              this._skippedFrameTotal += skipped;
+            }
+          }
+
+          this._postMessage({ "action": Actions.DeltaTime, deltaTime, skipped,
+            "refresh": this._refreshPeriod, cpuTime });
+
+          // Frame numbering is frozen while a capture is in progress (the capture's
+          // frame number refers to the frame it started on).
+          if (this._captureFrameCount <= 0) {
+            this._frameIndex++;
           }
         }
+        this._lastFrameTime = time;
+        this._gpuFrameIndex++;
+        if (this._inspectingStatusFrame) {
+          this._updateFrameStatus();
+        }
+      }
+
+      // If we're capturing frames, and some commands have been recorded, send them to the devtools panel.
+      if (this._captureFrameCommands.length) {
+        this._frameCaptureCommands.push(this._captureFrameCommands);
         this._captureFrameCommands = [];
         this._captureFrameCount--;
         // If we're capturing multiple frames, wait until all frames have been captured.

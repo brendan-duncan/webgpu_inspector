@@ -27,6 +27,7 @@ import { getFlagString } from "../utils/flags.js";
 import { PanelActions } from "../utils/actions.js";
 import { getInspectWorkers, setInspectWorkers, getObjectStacktraces, setObjectStacktraces } from "../utils/inspector_settings.js";
 import { Plot } from "./widget/plot.js";
+import { formatBytes } from "../utils/format.js";
 import { Split } from "./widget/split.js";
 import { ShaderEditor } from "./shader_editor.js";
 import { addShaderAnalysisView } from "./shader_analysis_view.js";
@@ -104,10 +105,10 @@ export class InspectPanel {
 
     const stats = new Span(controlBar, { class: "control-bar-stats" });
     this.uiFrameTime = new Span(stats, { style: "width: 140px; overflow: hidden;" });
-    // Live CPU/GPU-bound verdict + dropped-frame counter live in the control bar so the
-    // plot row's two meters stay balanced.
+    // Live CPU/GPU-bound verdict lives in the control bar so the plot row's two meters
+    // stay balanced. Dropped frames are marked on the frame-time plot itself (red ticks),
+    // with the running total in the plot's tooltip.
     this.uiBoundBadge = new Span(stats, { text: "", style: "font-size: 9pt; padding: 1px 6px; border-radius: 8px; color: #fff; background: #555; margin-right: 8px;" });
-    this.uiDroppedBadge = new Span(stats, { text: "", style: "font-size: 9pt; color: #e06060; margin-right: 8px;" });
     this.uiTotalTextureMemory = new Span(stats, { class: "control-bar-stat" });
     this.uiTotalBufferMemory = new Span(stats, { class: "control-bar-stat" });
 
@@ -142,6 +143,9 @@ export class InspectPanel {
     this.frameRateData = this.frameRatePlot.addData("Frame Time", "#cccccc");
     this.cpuTimeData = this.frameRatePlot.addData("CPU", "#5fd08a");
     this.gpuTimeData = this.frameRatePlot.addData("GPU", "#4a8db8");
+    // Red tick at the top of the plot for each frame that dropped one or more vsyncs.
+    this.skippedData = this.frameRatePlot.addMarkers("Dropped", "#e06060");
+    this._frameRatePlotTitle = "";
 
     this._objectCountType = null;
     this._objectCountObject = null;
@@ -406,6 +410,13 @@ export class InspectPanel {
     this.frameRateData.add(db.deltaFrameTime);
     this.cpuTimeData.add(db.cpuFrameTime >= 0 ? db.cpuFrameTime : 0);
     this.gpuTimeData.add(db.gpuFrameTime >= 0 ? db.gpuFrameTime : 0);
+    this.skippedData.add(db.skippedFrames);
+    const plotTitle = (db.refreshPeriod > 0 ? `Refresh ${db.refreshPeriod.toFixed(2)}ms (dashed). ` : "") +
+      (db.totalSkippedFrames > 0 ? `${db.totalSkippedFrames} dropped frames (red ticks).` : "No dropped frames.");
+    if (plotTitle !== this._frameRatePlotTitle) {
+      this._frameRatePlotTitle = plotTitle;
+      this.frameRatePlot.element.title = plotTitle;
+    }
     if (db.refreshPeriod > 0) {
       this.frameRatePlot.setThreshold(db.refreshPeriod);
       // Clip at ~4 refreshes so a single long stall doesn't flatten the whole plot;
@@ -450,10 +461,6 @@ export class InspectPanel {
       `CPU ${db.cpuFrameTime >= 0 ? db.cpuFrameTime.toFixed(2) : "?"}ms · ` +
       `GPU ${db.gpuFrameTime >= 0 ? db.gpuFrameTime.toFixed(2) : "?"}ms · ` +
       `frame ${frame.toFixed(2)}ms`;
-
-    if (db.totalSkippedFrames > 0) {
-      this.uiDroppedBadge.text = `⚠ ${db.totalSkippedFrames} dropped`;
-    }
   }
 
   _objectLabelChanged(id, object, label) {
@@ -634,6 +641,20 @@ export class InspectPanel {
     this._forwardButton.disabled = this._inspectedObjectForward.length === 0;
   }
 
+  // "5.24 MB" for a texture's estimated GPU memory, or "" if the format is unknown.
+  _textureSizeLabel(texture) {
+    const size = texture.getGpuSize();
+    return size >= 0 ? formatBytes(size) : "";
+  }
+
+  // List-entry summary for a texture: format, resolution, mip count when it has a mip
+  // chain, and estimated GPU memory (which includes every mip level and MSAA samples).
+  _textureSummaryLabel(texture) {
+    const mipLevelCount = texture.mipLevelCount;
+    const mips = mipLevelCount > 1 ? ` ${mipLevelCount} mips` : "";
+    return `${texture.descriptor.format} ${texture.resolutionString}${mips} ${this._textureSizeLabel(texture)}`;
+  }
+
   // Adds an object to the Objects list.
   _addObjectToUI(object, ui) {
     let name = `${object.name}`;
@@ -649,14 +670,14 @@ export class InspectPanel {
         type += " COMPUTE";
       }
     } else if (object instanceof Texture) {
-      type += ` ${object.descriptor.format} ${object.resolutionString}`;
+      type += ` ${this._textureSummaryLabel(object)}`;
     } else if (object instanceof TextureView) {
       const texture = this.database.getTextureFromView(object);
       if (texture) {
         if (!object.label) {
           name = texture.name;
         }
-        type += ` Texture:${texture.idName} ${texture.descriptor.format} ${texture.resolutionString}`;
+        type += ` Texture:${texture.idName} ${this._textureSummaryLabel(texture)}`;
       }
     } else if (object instanceof CanvasContext) {
       const d = object.descriptor;
@@ -1188,8 +1209,8 @@ export class InspectPanel {
 
     if (object instanceof Texture) {
       const gpuSize = object.getGpuSize();
-      const sizeStr = gpuSize < 0 ? "<unknown>" : gpuSize.toLocaleString("en-US");
-      new Div(infoBox, { text: `GPU Size: ${sizeStr} Bytes`, style: "font-size: 10pt; margin-top: 5px;" });
+      const sizeStr = gpuSize < 0 ? "<unknown>" : `${formatBytes(gpuSize)} (${gpuSize.toLocaleString("en-US")} Bytes)`;
+      new Div(infoBox, { text: `GPU Size: ${sizeStr}`, style: "font-size: 10pt; margin-top: 5px;" });
     }
 
     if (object.isInvalid) {
@@ -1470,7 +1491,7 @@ export class InspectPanel {
     } else if (object instanceof TextureView) {
       const texture = this.database.getTextureFromView(object);
       if (texture) {
-        const textureGrp = this._getcollapsibleWithState(descriptionBox, object, "textureCollapsed", `Texture ID: ${texture.idName} ${texture.dimension} ${texture.format} ${texture.resolutionString}`, false);
+        const textureGrp = this._getcollapsibleWithState(descriptionBox, object, "textureCollapsed", `Texture ID: ${texture.idName} ${texture.dimension} ${texture.format} ${texture.resolutionString} ${this._textureSizeLabel(texture)}`, false);
         textureGrp.body.style.maxHeight = "unset";
 
         const desc = this._getDescriptorInfo(texture, texture.descriptor);
