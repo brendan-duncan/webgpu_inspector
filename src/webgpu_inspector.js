@@ -111,7 +111,6 @@ export let webgpuInspector = null;
       // See the bindGroupErrorScopes accessor. Off by default.
       this._bindGroupErrorScopes = false;
       this._trackedObjects = new Map();
-      this._trackedObjectInfo = new Map();
       this._bindGroupCount = 0;
       this._captureTextureRequest = new Map();
       this._toDestroy = []; // Defer deleting temp objects until after finish
@@ -313,14 +312,17 @@ export let webgpuInspector = null;
 
       this._garbageCollectectedObjects = [];
 
-      // Track garbage collected WebGPU objects
-      this._garbageCollectionRegistry = new FinalizationRegistry((id) => {
+      // Track garbage collected WebGPU objects. The held value is the object's id, or
+      // `{ id, ctor }` for the few classes the callback needs to know the class of
+      // (see _wrapObject). Explicitly destroyed objects are unregistered, so this
+      // only fires for objects that went away without destroy().
+      this._garbageCollectionRegistry = new FinalizationRegistry((held) => {
+        const id = typeof held === "number" ? held : held.id;
         if (id > 0) {
           // It's too slow to send a message for every object that gets garbage collected,
           // so we'll batch them up and send them every so often.
           self._garbageCollectectedObjects.push(id);
-          const objectClass = self._trackedObjectInfo.get(id);
-          //const object = self._trackedObjects.get(id)?.deref();
+          const objectClass = typeof held === "number" ? null : held.ctor;
 
           if (objectClass) {
             if (objectClass === GPUBindGroup) {
@@ -352,7 +354,6 @@ export let webgpuInspector = null;
 
         if (id > 0) {
           self._trackedObjects.delete(id);
-          self._trackedObjectInfo.delete(id);
           self._captureTextureRequest.delete(id);
           self._objectReplacementMap.delete(id);
         }
@@ -2385,7 +2386,6 @@ export let webgpuInspector = null;
 
     _trackObject(id, object) {
       this._trackedObjects.set(id, new WeakRef(object));
-      this._trackedObjectInfo.set(id, object.constructor);
     }
 
     // Register an object that live shader editing may later swap out (shader
@@ -2430,8 +2430,17 @@ export let webgpuInspector = null;
 
       Object.defineProperty(object, "__id", { value: id ?? this.getNextId(object), enumerable: false, writable: true });
 
-      // Track garbage collected objects
-      this._garbageCollectionRegistry.register(object, object.__id);
+      // Track garbage collected objects. The finalizer needs the class only for the
+      // types that warn about leaks or are counted, so only those carry it; every other
+      // object holds just its id. This replaced a second per-object Map (id -> class)
+      // that existed only to serve the finalizer. The object is its own unregister
+      // token so destroy() can drop the registration.
+      const objectId = object.__id;
+      const ctor = object.constructor;
+      const held = (ctor === GPUBuffer || ctor === GPUTexture || ctor === GPUDevice || ctor === GPUBindGroup)
+        ? { id: objectId, ctor }
+        : objectId;
+      this._garbageCollectionRegistry.register(object, held, object);
 
       // Label changes are observed by the prototype accessors installed in
       // _wrapLabelAccessors, so nothing per-object is needed here.
@@ -2536,7 +2545,6 @@ export let webgpuInspector = null;
         // These are frequently created and destroyed via getCurrentTexture.
         if (id > 0) {
           this._trackedObjects.delete(id);
-          this._trackedObjectInfo.delete(id);
           this._objectReplacementMap.delete(id);
         }
         if (object instanceof GPUBindGroup) {
@@ -2563,8 +2571,11 @@ export let webgpuInspector = null;
         // These are frequently created and destroyed via getCurrentTexture.
         if (id > 0) {
           this._trackedObjects.delete(id);
-          this._trackedObjectInfo.delete(id);
           this._objectReplacementMap.delete(id);
+          // Explicitly destroyed: the maps are cleaned up here and DeleteObject is sent
+          // below, so the finalizer has nothing left to do (and must not emit a leak
+          // warning) when the JS wrapper is eventually collected.
+          this._garbageCollectionRegistry.unregister(object);
           // Drop the object's own copy of the record too, so a destroyed object
           // stops resolving to a replacement exactly as it did back when the hot
           // paths looked the record up in the map.
