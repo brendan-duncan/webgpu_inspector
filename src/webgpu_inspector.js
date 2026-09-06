@@ -108,6 +108,8 @@ export let webgpuInspector = null;
       this._lastFrameTime = 0;
       this._captureFrameRequest = false;
       this._errorChecking = 1;
+      // See the bindGroupErrorScopes accessor. Off by default.
+      this._bindGroupErrorScopes = false;
       this._trackedObjects = new Map();
       this._trackedObjectInfo = new Map();
       this._bindGroupCount = 0;
@@ -651,6 +653,26 @@ export let webgpuInspector = null;
       if (this._gpuWrapper && (!this._captureFrameRequest || this._recordObjectStacktraces)) {
         this._gpuWrapper.recordStacktraces = this._recordObjectStacktraces;
       }
+    }
+
+    // Whether every createBindGroup is wrapped in its own validation error scope so
+    // a creation error can be attributed to the bind group's id in the panel.
+    //
+    // Off by default. Shader modules and pipelines keep per-object scopes (they are
+    // created rarely), but engines commonly create hundreds of bind groups per frame,
+    // and each scope costs two GPU-process commands plus a promise and closure for
+    // popErrorScope — measured at ~1.3us of the ~3.3us the inspector added per
+    // createBindGroup, and most of the frame-time jitter. Without the scope a bind
+    // group creation error still reaches the panel through the device's
+    // "uncapturederror" listener (with the descriptor label in Dawn's message text,
+    // but no object id), and the page's own uncapturederror handler sees it too.
+    //   webgpuInspector.bindGroupErrorScopes = true;
+    get bindGroupErrorScopes() {
+      return this._bindGroupErrorScopes;
+    }
+
+    set bindGroupErrorScopes(enabled) {
+      this._bindGroupErrorScopes = !!enabled;
     }
 
     // Opt-in live bridge mode for the WebGPU Inspector Claude Code plugin.
@@ -1223,7 +1245,7 @@ export let webgpuInspector = null;
       if (method === "createShaderModule" ||
           method === "createRenderPipeline" ||
           method === "createComputePipeline" ||
-          method === "createBindGroup") {
+          (method === "createBindGroup" && this._bindGroupErrorScopes)) {
         if (this._errorChecking > 0) {
           this._gpuWrapper.disableRecording();
           object.pushErrorScope("validation");
@@ -1419,7 +1441,7 @@ export let webgpuInspector = null;
       if (method === "createShaderModule" ||
           method === "createRenderPipeline" ||
           method === "createComputePipeline" ||
-          method === "createBindGroup") {
+          (method === "createBindGroup" && this._bindGroupErrorScopes)) {
         if (this._errorChecking > 0) {
           this.disableRecording();
           const self = this;
