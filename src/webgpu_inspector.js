@@ -1321,35 +1321,47 @@ export let webgpuInspector = null;
           });
         }
 
-        const captureBuffers = [...this._captureTempBuffers];
-        this._captureTempBuffers.length = 0;
+        // Only wait on the GPU when this submit actually has readbacks or temp objects to
+        // collect. That is the exception: most submits happen with no capture in flight, and
+        // onSubmittedWorkDone costs a GPU-process round trip plus a promise and closure per
+        // call, on every submit of every frame. Hand the arrays off rather than copying them
+        // so the common path allocates nothing.
+        const hasWork = this._captureTempBuffers.length > 0 ||
+          this._captureTexturedBuffers.length > 0 ||
+          this._toDestroy.length > 0 ||
+          timestampDstBuffer !== null;
 
-        const captureTextures = [...this._captureTexturedBuffers];
-        this._captureTexturedBuffers.length = 0;
+        if (hasWork) {
+          const captureBuffers = this._captureTempBuffers;
+          this._captureTempBuffers = [];
 
-        const toDestroy = [...this._toDestroy];
-        this._toDestroy.length = 0;
+          const captureTextures = this._captureTexturedBuffers;
+          this._captureTexturedBuffers = [];
 
-        this._pendingMapCount += captureBuffers.length + captureTextures.length;
+          const toDestroy = this._toDestroy;
+          this._toDestroy = [];
 
-        object.onSubmittedWorkDone().then( async () => {
-          self.disableRecording();
+          this._pendingMapCount += captureBuffers.length + captureTextures.length;
 
-          if (timestampDstBuffer) {
-            self._sendTimestampBuffer(timestampDstBuffer.__count, timestampDstBuffer);
-          }
+          object.onSubmittedWorkDone().then(() => {
+            self.disableRecording();
 
-          if (captureBuffers.length) {
-            self._sendCapturedBuffers(captureBuffers);
-          }
-          if (captureTextures.length) {
-            self._sendCaptureTextureBuffers(captureTextures);
-          }
-          for (const obj of toDestroy) {
-            obj.destroy();
-          }
-          self.enableRecording();
-        });
+            if (timestampDstBuffer) {
+              self._sendTimestampBuffer(timestampDstBuffer.__count, timestampDstBuffer);
+            }
+
+            if (captureBuffers.length) {
+              self._sendCapturedBuffers(captureBuffers);
+            }
+            if (captureTextures.length) {
+              self._sendCaptureTextureBuffers(captureTextures);
+            }
+            for (const obj of toDestroy) {
+              obj.destroy();
+            }
+            self.enableRecording();
+          });
+        }
 
         this.enableRecording();
       }
