@@ -1,0 +1,130 @@
+<html>
+<body>
+<!--
+  Repro for issue #46: pipeline layouts that the page only passes to createComputePipeline,
+  without keeping a reference of their own, used to appear in the inspector's Pipeline Layouts
+  list and then disappear a moment later when their JS wrappers were garbage collected, even
+  though the compute pipelines using them were still listed.
+
+  The two layouts here are deliberately equivalent (same bind group layouts), which is what
+  made it look like the inspector was deduplicating them. Open the inspector, run the page,
+  press "Allocate garbage" a few times to provoke a collection, and confirm both
+  "Life Compute pipeline layout" and "Life Paint pipeline layout" stay in the list.
+-->
+<button id="garbage">Allocate garbage</button>
+<script type="module">
+  async function main() {
+    const adapter = await navigator.gpu?.requestAdapter();
+    const device = await adapter?.requestDevice();
+    if (!device) {
+      alert('need a browser that supports WebGPU');
+      return;
+    }
+
+    const sharedLayout = device.createBindGroupLayout({
+      label: 'Shared bind group layout',
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }
+      ]
+    });
+
+    const stateLayout = device.createBindGroupLayout({
+      label: 'State bind group layout',
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }
+      ]
+    });
+
+    const module = device.createShaderModule({
+      label: 'Life shader',
+      code: `
+        @group(0) @binding(0) var<uniform> grid: vec2f;
+        @group(1) @binding(0) var<storage, read_write> state: array<u32>;
+
+        @compute @workgroup_size(8) fn main(@builtin(global_invocation_id) id: vec3u) {
+          if (id.x < arrayLength(&state)) {
+            state[id.x] = state[id.x] + u32(grid.x);
+          }
+        }
+      `
+    });
+
+    // Neither pipeline layout is stored in a variable that outlives this function: they exist
+    // only as arguments to createComputePipeline, which is exactly the case the fix covers.
+    const computePipeline = device.createComputePipeline({
+      label: 'Life Compute pipeline',
+      layout: device.createPipelineLayout({
+        label: 'Life Compute pipeline layout',
+        bindGroupLayouts: [sharedLayout, stateLayout]
+      }),
+      compute: { module }
+    });
+
+    const paintPipeline = device.createComputePipeline({
+      label: 'Life Paint pipeline',
+      layout: device.createPipelineLayout({
+        label: 'Life Paint pipeline layout',
+        bindGroupLayouts: [sharedLayout, stateLayout]
+      }),
+      compute: { module }
+    });
+
+    const gridBuffer = device.createBuffer({
+      label: 'Grid uniforms',
+      size: 8,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(gridBuffer, 0, new Float32Array([32, 32]));
+
+    const stateBuffer = device.createBuffer({
+      label: 'Cell state',
+      size: 1024 * 4,
+      usage: GPUBufferUsage.STORAGE
+    });
+
+    const sharedBindGroup = device.createBindGroup({
+      label: 'Shared bind group',
+      layout: sharedLayout,
+      entries: [{ binding: 0, resource: { buffer: gridBuffer } }]
+    });
+
+    const stateBindGroup = device.createBindGroup({
+      label: 'State bind group',
+      layout: stateLayout,
+      entries: [{ binding: 0, resource: { buffer: stateBuffer } }]
+    });
+
+    // Keep dispatching so the page stays alive and the objects remain in use while the
+    // inspector's object list is being watched.
+    function frame() {
+      const encoder = device.createCommandEncoder({ label: 'Life encoder' });
+      const pass = encoder.beginComputePass({ label: 'Life pass' });
+      for (const pipeline of [computePipeline, paintPipeline]) {
+        pass.setPipeline(pipeline);
+        pass.setBindGroup(0, sharedBindGroup);
+        pass.setBindGroup(1, stateBindGroup);
+        pass.dispatchWorkgroups(128);
+      }
+      pass.end();
+      device.queue.submit([encoder.finish()]);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    // Allocating a lot of short lived garbage is the most reliable way to provoke a major
+    // collection from script, which is what makes the finalizers for dropped GPU object
+    // wrappers run.
+    document.getElementById('garbage').addEventListener('click', () => {
+      for (let i = 0; i < 200; ++i) {
+        const junk = new Array(100000);
+        for (let j = 0; j < junk.length; ++j) {
+          junk[j] = { value: j };
+        }
+      }
+    });
+  }
+
+  main();
+</script>
+</body>
+</html>

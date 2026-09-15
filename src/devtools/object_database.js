@@ -421,6 +421,7 @@ export class ObjectDatabase {
       object.incrementDepenencyReferenceCount();
     } else if (object instanceof GPU.ComputePipeline) {
       this.computePipelines.set(id, object);
+      object.addDependency(this.getObject(object.descriptor.layout?.__id));
       object.addDependency(this.getObject(object.descriptor.compute?.module?.__id));
       object.incrementDepenencyReferenceCount();
     } else if (object instanceof GPU.RenderBundle) {

@@ -1646,7 +1646,33 @@ export let webgpuInspector = null;
         }
       } else if (result) {
         this._wrapObject(result, id);
+        if (method === "createRenderPipelineAsync" || method === "createComputePipelineAsync") {
+          this._retainPipelineReferences(result, args[0]);
+        }
         this._postMessage({ action: Actions.ResolveAsyncObject, id: result.__id });
+      }
+    }
+
+    // Attach pipeline layout and shader modules to the pipeline so they are kept alive for the
+    // lifetime of the pipeline. Otherwise the page dropping its own references to them would
+    // collect their wrappers, and the inspector would report them deleted while the pipeline
+    // using them is still listed.
+    _retainPipelineReferences(pipeline, descriptor) {
+      if (!pipeline || !descriptor) {
+        return;
+      }
+      // layout is the string "auto" rather than a GPUPipelineLayout for auto-layout pipelines.
+      if (descriptor.layout instanceof GPUPipelineLayout) {
+        pipeline.__pipelineLayout = descriptor.layout;
+      }
+      if (descriptor.vertex?.module) {
+        pipeline.__vertexModule = descriptor.vertex.module;
+      }
+      if (descriptor.fragment?.module) {
+        pipeline.__fragmentModule = descriptor.fragment.module;
+      }
+      if (descriptor.compute?.module) {
+        pipeline.__computeModule = descriptor.compute.module;
       }
     }
 
@@ -2691,27 +2717,21 @@ export let webgpuInspector = null;
         this._sendAddObjectMessage(id, parent, "BindGroupLayout", this._stringifyDescriptor(args[0]), stacktrace);
       } else if (method === "createPipelineLayout") {
         const id = result.__id;
+        // Hang on to the descriptor so the bind group layouts it references stay alive as long
+        // as the pipeline layout does.
+        Object.defineProperty(result, "__descriptor", { value: args[0], enumerable: false, writable: true });
         this._sendAddObjectMessage(id, parent, "PipelineLayout", this._stringifyDescriptor(args[0]), stacktrace);
       } else if (method === "createRenderPipeline") {
         const id = result.__id;
         if (!args[0].__replacement) {
           this._sendAddObjectMessage(id, parent, "RenderPipeline", this._stringifyDescriptor(args[0]), stacktrace);
-          // There are cases when the shader modules used by the render pipeline will be garbage collected, and we won't be able to inspect them after that.
-          // Hang on to the shader modules used in the descriptor by attaching them to the pipeline.
-          if (args[0].vertex?.module) {
-            result.__vertexModule = args[0].vertex?.module;
-          }
-          if (args[0].fragment?.module) {
-            result.__fragmentModule = args[0].fragment?.module;
-          }
+          this._retainPipelineReferences(result, args[0]);
         }
       } else if (method === "createComputePipeline") {
         const id = result.__id;
         if (!args[0].__replacement) {
           this._sendAddObjectMessage(id, parent, "ComputePipeline", this._stringifyDescriptor(args[0]), stacktrace);
-          if (args[0].compute?.module) {
-            result.__computeModule = args[0].compute?.module;
-          }
+          this._retainPipelineReferences(result, args[0]);
         }
       } else if (method === "createCommandEncoder") {
         // We'll need the CommandEncoder's device for capturing textures
