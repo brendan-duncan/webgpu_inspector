@@ -5,7 +5,7 @@ import * as common from './common';
  */
 export declare class Address4 {
     address: string;
-    addressMinusSuffix?: string;
+    addressMinusSuffix: string;
     groups: number;
     parsedAddress: string[];
     parsedSubnet: string;
@@ -91,11 +91,14 @@ export declare class Address4 {
      */
     static fromInteger(integer: number): Address4;
     /**
-     * Return an address from in-addr.arpa form
+     * Return an address from in-addr.arpa form: the four octets reversed, with
+     * or without the `.in-addr.arpa` suffix and root dot, in any case. Throws
+     * `AddressError` unless the reversed labels form a valid IPv4 address, so
+     * `fromArpa(x.reverseForm())` round-trips {@link reverseForm}.
      * @param {string} arpaFormAddress - an 'in-addr.arpa' form ipv4 address
      * @returns {Adress4}
      * @example
-     * var address = Address4.fromArpa(42.2.0.192.in-addr.arpa.)
+     * var address = Address4.fromArpa('42.2.0.192.in-addr.arpa.')
      * address.correctForm(); // '192.0.2.42'
      */
     static fromArpa(arpaFormAddress: string): Address4;
@@ -138,6 +141,27 @@ export declare class Address4 {
      * @returns {Address4}
      */
     startAddressExclusive(): Address4;
+    /**
+     * Returns the address `n` addresses after this one (or before, when `n` is
+     * negative), keeping this address's subnet mask. Throws `AddressError` when
+     * the result would fall outside the IPv4 address space or `n` is not an
+     * integer.
+     * @param {number | bigint} n
+     * @returns {Address4}
+     * @example
+     * new Address4('10.0.0.0/24').offset(1).correctForm(); // '10.0.0.1'
+     */
+    offset(n: number | bigint): Address4;
+    /**
+     * Returns the network that follows this address's network: the address after
+     * {@link endAddress}, with the same subnet mask. Throws `AddressError` when
+     * this network is the last one in the address space.
+     * @returns {Address4}
+     * @example
+     * new Address4('10.0.0.0/24').nextNetwork().networkForm(); // '10.0.1.0/24'
+     */
+    nextNetwork(): Address4;
+    private withSubnetMask;
     /**
      * Helper function getting end address.
      * @returns {bigint}
@@ -183,7 +207,10 @@ export declare class Address4 {
      */
     static fromBigInt(bigInt: bigint): Address4;
     /**
-     * Convert a byte array to an Address4 object.
+     * Convert a byte array to an Address4 object. Throws `AddressError` unless
+     * given exactly 4 integers from 0 to 255. Signed bytes are rejected, so
+     * this differs from `Address6.fromByteArray`, which folds them; the two
+     * contracts converge on this stricter form in the next major version.
      *
      * To convert from a Node.js `Buffer`, spread it: `Address4.fromByteArray([...buf])`.
      * @param {Array<number>} bytes - an array of 4 bytes (0-255)
@@ -191,7 +218,12 @@ export declare class Address4 {
      */
     static fromByteArray(bytes: Array<number>): Address4;
     /**
-     * Convert an unsigned byte array to an Address4 object
+     * Convert an unsigned byte array to an Address4 object. Throws
+     * `AddressError` unless given exactly 4 bytes, and rejects values outside
+     * 0 to 255 when parsing the resulting address.
+     *
+     * To convert from a Node.js `Buffer`, spread it:
+     * `Address4.fromUnsignedByteArray([...buf])`.
      * @param {Array<number>} bytes - an array of 4 unsigned bytes (0-255)
      * @returns {Address4}
      */
@@ -208,17 +240,31 @@ export declare class Address4 {
      */
     getBitsBase2(start: number, end: number): string;
     /**
-     * Return the reversed ip6.arpa form of the address
+     * Return the reversed in-addr.arpa form of the address, e.g.
+     * `42.2.0.192.in-addr.arpa.` for `192.0.2.42`.
      * @param {Object} options
      * @param {boolean} options.omitSuffix - omit the "in-addr.arpa" suffix
      * @returns {String}
      */
     reverseForm(options?: common.ReverseFormOptions): string;
     /**
-     * Returns true if the given address is in the subnet of the current address
+     * Returns true if the given address is in the subnet of the current address.
+     * An `Address6` is never in the subnet of an `Address4`; convert with
+     * `to4()` or `Address6.fromAddress4()` to compare across families.
      * @returns {boolean}
      */
     isInSubnet: typeof common.isInSubnet;
+    /**
+     * Returns true if this address's host bits fall inside the given subnet,
+     * ignoring this address's own subnet mask. Prefer this over `isInSubnet`
+     * when classifying a single address, so the answer doesn't change with the
+     * CIDR suffix the caller happened to write — notably when the address came
+     * from untrusted input and the result backs a trust-boundary decision.
+     * An `Address6` is never in the subnet of an `Address4`; convert with
+     * `to4()` or `Address6.fromAddress4()` to compare across families.
+     * @returns {boolean}
+     */
+    isHostInSubnet: typeof common.isHostInSubnet;
     /**
      * Returns true if the given address is a multicast address
      * @returns {boolean}
@@ -255,12 +301,46 @@ export declare class Address4 {
      */
     isCGNAT(): boolean;
     /**
+     * Returns true if the address is in one of the documentation ranges
+     * `192.0.2.0/24`, `198.51.100.0/24`, or `203.0.113.0/24` ([RFC 5737](https://datatracker.ietf.org/doc/html/rfc5737)).
+     * @returns {boolean}
+     */
+    isDocumentation(): boolean;
+    /**
+     * Returns true if the address is in the benchmarking range `198.18.0.0/15` ([RFC 2544](https://datatracker.ietf.org/doc/html/rfc2544)).
+     * @returns {boolean}
+     */
+    isBenchmarking(): boolean;
+    /**
+     * Returns true if the address is in the reserved range `240.0.0.0/4` ([RFC 1112](https://datatracker.ietf.org/doc/html/rfc1112)),
+     * which includes the limited broadcast address.
+     * @returns {boolean}
+     */
+    isReserved(): boolean;
+    /**
+     * Returns true if the address is globally reachable: not multicast, and not
+     * in any block the [IANA IPv4 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv4-special-registry/)
+     * marks as not globally reachable. That covers everything the individual
+     * classifiers name (private, loopback, link-local, CGNAT, unspecified,
+     * broadcast, documentation, benchmarking, reserved) and the blocks they do
+     * not, such as `0.0.0.0/8` and the IETF protocol assignments in
+     * `192.0.0.0/24`. This is the single predicate to use where a request must
+     * not reach an internal or special-purpose destination; see SECURITY.md.
+     * @returns {boolean}
+     */
+    isGlobal(): boolean;
+    /**
      * Returns a zero-padded base-2 string representation of the address
      * @returns {string}
      */
     binaryZeroPad(): string;
     /**
-     * Groups an IPv4 address for inclusion at the end of an IPv6 address
+     * Groups an IPv4 address for inclusion at the end of an IPv6 address.
+     *
+     * Returns an HTML fragment: each half of the address is wrapped in a
+     * `<span>` carrying the group classes an address-inspector UI hovers on.
+     * The address content is HTML-escaped; anything you concatenate around it
+     * is your responsibility.
      * @returns {String}
      */
     groupForV6(): string;
