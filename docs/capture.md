@@ -239,6 +239,10 @@ The view decodes the captured vertex and index buffer bytes, and reads indirect 
 
 The **☰ Reports** menu at the right of the capture's filter bar opens the frame-wide reports: [Frame Stats](#frame-stats), [Frame Issues](#frame-issues), [Render Graph](#render-graph), [Shader Flame Graph](shader_flame_graph.md) and Analyze Shaders. When the frame has [issues](#frame-issues), a badge on the menu button shows how many, in the color of the most severe.
 
+### Exporting Reports
+
+To share a report or attach it to a bug, right-click the tab of a report (Frame Issues, Render Graph, Shader Flame Graph, Shader Analysis, Timing, Shader Edit, or a Mesh View) and choose **Export to HTML**. Frame Stats, which opens in the frame's details pane, has an **Export to HTML** button at its top. The report is saved as a single self-contained HTML file, as it currently appears: expanded sections, filters and selections included, with charts and images embedded as pictures. The exported file is a snapshot, so its links and buttons don't do anything.
+
 ## Pixel History
 ###### [Back to top](#capture)
 

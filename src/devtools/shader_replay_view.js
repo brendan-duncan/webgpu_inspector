@@ -114,7 +114,10 @@ function blitCanvas(device, textureUtils, gpuTexture, format, texture) {
         context.configure({ device, format: dstFormat, alphaMode: "opaque" });
         const srcView = gpuTexture.createView({ dimension: "2d", baseMipLevel: 0, mipLevelCount: 1, baseArrayLayer: 0, arrayLayerCount: 1 });
         const display = { exposure: 1, channels: 0, autoRange: false, minRange: 0, maxRange: 1, zoom: 100 };
-        textureUtils.blitTexture(srcView, format, 1, context.getCurrentTexture().createView(), dstFormat, display, "2d", 0);
+        const draw = () => textureUtils.blitTexture(srcView, format, 1, context.getCurrentTexture().createView(), dstFormat, display, "2d", 0);
+        draw();
+        // Redraw on export: a presented WebGPU canvas has nothing to read back.
+        canvas.__exportSnapshot = draw;
     } catch (e) {
         console.error("Compile & Replay: could not display a texture:", e);
     }

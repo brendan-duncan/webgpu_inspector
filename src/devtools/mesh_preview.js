@@ -153,6 +153,9 @@ export class MeshPreview {
         this.canvas = document.createElement("canvas");
         this.canvas.style.cssText = "width: 100%; height: 100%; display: block; cursor: grab;";
         container.appendChild(this.canvas);
+        // Redraw on export (report_export.js): a presented WebGPU canvas has
+        // nothing to read back.
+        this.canvas.__exportSnapshot = () => this._renderNow();
         this.context = this.canvas.getContext("webgpu");
         this.format = navigator.gpu.getPreferredCanvasFormat();
         this.context.configure({ device, format: this.format, alphaMode: "opaque" });
@@ -314,6 +317,10 @@ export class MeshPreview {
     }
 
     render() {
+        this._renderNow();
+    }
+
+    _renderNow() {
         if (!this._uniform) {
             return;
         }

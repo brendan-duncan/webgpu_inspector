@@ -39,6 +39,7 @@ import { compileAndReplay } from "./frame_replay.js";
 import { buildShaderReplayView } from "./shader_replay_view.js";
 import { TimingRecorder } from "./timing_capture.js";
 import { buildTimingView } from "./timing_view.js";
+import { downloadReportHtml } from "./report_export.js";
 import { captureToText, downloadCapture } from "./capture_export.js";
 import { isCaptureBinary, decodeCaptureBinary } from "../utils/capture_binary.js";
 import { importCaptureJson, parseCaptureText } from "./capture_import.js";
@@ -879,7 +880,7 @@ export class CapturePanel {
       this._timingButton.element.classList.remove("btn-danger");
       const panel = buildTimingView({ recorder });
       const hitches = recorder.hitches.length;
-      this._captureTab.addTab(`Timing (${recorder.frames.length} frames${hitches ? `, ${hitches} hitch${hitches === 1 ? "" : "es"}` : ""})`, panel);
+      this._addReportTab(`Timing (${recorder.frames.length} frames${hitches ? `, ${hitches} hitch${hitches === 1 ? "" : "es"}` : ""})`, panel);
       this._captureTab.setActivePanel(panel);
       return;
     }
@@ -998,7 +999,7 @@ export class CapturePanel {
       textureUtils: this.textureUtils,
       onInspect: (object) => this.window.inspectObject(object),
     });
-    this._captureTab.addTab(`Shader Edit: ${moduleLabel}`, panel);
+    this._addReportTab(`Shader Edit: ${moduleLabel}`, panel);
     this._captureTab.setActivePanel(panel);
     return null;
   }
@@ -1063,6 +1064,37 @@ export class CapturePanel {
    * @param {TabHandle} handle
    * @param {Object} state - The per-tab state stored on captureContents._captureState.
    */
+  /**
+   * Add a report (Frame Issues, Render Graph, Timing, ...) as a capture tab,
+   * with a right-click menu offering Export to HTML.
+   * @param {string} label
+   * @param {Widget} panel
+   * @returns {TabHandle}
+   */
+  _addReportTab(label, panel) {
+    const handle = this._captureTab.addTab(label, panel);
+    handle?.element?.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this._showCaptureTabContextMenu(e.clientX, e.clientY, null, [
+        ["Export to HTML", () => this._exportReport(panel, label)],
+      ]);
+    });
+    if (handle?.element) {
+      handle.element.title = "Right-click to export this report to HTML";
+    }
+    return handle;
+  }
+
+  /** Download a report view as a standalone HTML snapshot. */
+  _exportReport(panel, title) {
+    const source = this._activeTabState?.source;
+    downloadReportHtml(panel.element ?? panel, {
+      title,
+      subtitle: source && source !== "live" ? `Capture: ${source}` : `Frame ${this._activeTabState?.frame ?? ""}`.trim(),
+    });
+  }
+
   _installCaptureTabContextMenu(handle, state) {
     if (!handle || !handle.element) {
       return;
@@ -1080,7 +1112,7 @@ export class CapturePanel {
    * The menu is anchored to document.body so it can escape its containing
    * scroll/overflow regions, and is dismissed on any click or Escape.
    */
-  _showCaptureTabContextMenu(x, y, state) {
+  _showCaptureTabContextMenu(x, y, state, items) {
     this._closeCaptureTabContextMenu();
 
     const self = this;
@@ -1106,8 +1138,14 @@ export class CapturePanel {
       menu.appendChild(item);
     };
 
-    addItem("Open in New Tab", () => self._reopenCaptureInNewTab(state));
-    addItem("Open in New Window", () => self._reopenCaptureInNewWindow(state));
+    if (items) {
+      for (const [label, onClick] of items) {
+        addItem(label, onClick);
+      }
+    } else {
+      addItem("Open in New Tab", () => self._reopenCaptureInNewTab(state));
+      addItem("Open in New Window", () => self._reopenCaptureInNewWindow(state));
+    }
 
     document.body.appendChild(menu);
     this._activeContextMenu = menu;
@@ -2691,7 +2729,7 @@ export class CapturePanel {
         self.window.inspectObject(module);
       },
     });
-    this._captureTab.addTab("Shader Flame Graph", panel);
+    this._addReportTab("Shader Flame Graph", panel);
     this._captureTab.setActivePanel(panel);
   }
 
@@ -2707,7 +2745,7 @@ export class CapturePanel {
       onSelectCommand: (command) => self._selectCommand(state, command),
       onInspect: (object) => self.window.inspectObject(object),
     });
-    this._captureTab.addTab("Render Graph", panel);
+    this._addReportTab("Render Graph", panel);
     this._captureTab.setActivePanel(panel);
   }
 
@@ -2771,7 +2809,7 @@ export class CapturePanel {
     const panel = buildFrameIssuesView(state.frameIssues, {
       onSelectCommand: (command) => this._selectCommand(state, command),
     });
-    this._captureTab.addTab("Frame Issues", panel);
+    this._addReportTab("Frame Issues", panel);
     this._captureTab.setActivePanel(panel);
   }
 
@@ -2864,7 +2902,7 @@ export class CapturePanel {
         self.window.inspectObject(module);
       },
     });
-    this._captureTab.addTab("Shader Analysis", panel);
+    this._addReportTab("Shader Analysis", panel);
     this._captureTab.setActivePanel(panel);
   }
 
@@ -3708,7 +3746,7 @@ export class CapturePanel {
       indexBufferCommand: state.indexBuffer,
       onShowCommand: (cmd) => tabState ? this._selectCommand(tabState, cmd) : this._jumpToCommand(cmd),
     });
-    this._captureTab.addTab(`Mesh: ${label}`, panel);
+    this._addReportTab(`Mesh: ${label}`, panel);
     this._captureTab.setActivePanel(panel);
   }
 
@@ -3959,8 +3997,16 @@ export class CapturePanel {
       "padding: 16px; overflow-y: auto; height: 100%; box-sizing: border-box; " +
       "color: var(--fg-primary); font-family: var(--font-family);" });
 
-    new Div(root, { text: "Frame Statistics", style:
-      "font-size: 14pt; font-weight: bold; margin-bottom: 12px; color: var(--fg-primary);" });
+    const titleRow = new Div(root, { style: "display: flex; align-items: center; gap: 12px; margin-bottom: 12px;" });
+    new Div(titleRow, { text: "Frame Statistics", style:
+      "font-size: 14pt; font-weight: bold; color: var(--fg-primary);" });
+    const exportButton = new Button(titleRow, {
+      label: "Export to HTML",
+      class: "btn",
+      title: "Save these statistics as a standalone HTML file",
+      callback: () => this._exportReport(root, "Frame Stats"),
+    });
+    exportButton.element.classList.add("report-export-hide");
 
     // Pass Timings section: only when at least one pass has timestamp data.
     const timed = [];
