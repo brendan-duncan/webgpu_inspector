@@ -1,3 +1,5 @@
+# Changelog
+
 ## v1.7.0
 
 * Inspection optimizations to reduce overhead of inspecting a page.
