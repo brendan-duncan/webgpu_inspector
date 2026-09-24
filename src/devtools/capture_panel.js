@@ -192,22 +192,39 @@ export class CapturePanel {
       }
     });
 
-    new Button(_controlBar, { label: "Capture", class: "btn btn-success", callback: () => this._startCapture() });
+    this._captureButton = new Button(_controlBar, { label: "Capture", class: "btn btn-success", callback: () => this._onCaptureButton() });
 
+    // Capture modes: 0 Immediate, 1 Specific Frame (reloads the page), 2 After
+    // Delay (a countdown, then an immediate capture).
     this.captureMode = 0;
+    const modes = { "Immediate": 0, "After Delay": 2, "Specific Frame": 1 };
 
     new Select(_controlBar, {
-      options: ["Immediate", "Specific Frame"],
+      options: Object.keys(modes),
       class: "mr-sm",
-      onChange: (_, index) => {
-        self.captureMode = index;
-        if (self.captureMode === 0) {
-          self.captureFrameEdit.style.display = "none";
-        } else {
-          self.captureFrameEdit.style.display = "inline-block";
-        }
+      onChange: (value) => {
+        self.captureMode = modes[value] ?? 0;
+        self.captureFrameEdit.style.display = self.captureMode === 1 ? "inline-block" : "none";
+        self.captureDelayEdit.style.display = self.captureMode === 2 ? "inline-block" : "none";
+        self.captureDelayUnits.style.display = self.captureMode === 2 ? "" : "none";
       }
     });
+
+    this.captureDelaySeconds = 3;
+    this.captureDelayEdit = new NumberInput(_controlBar, {
+      value: this.captureDelaySeconds,
+      min: 0,
+      step: 0.5,
+      precision: 1,
+      style: "max-width: 60px; flex: 0 0 auto;",
+      tooltip: "Seconds to wait after pressing Capture, to set up the page (hover a menu, start an animation) first",
+      onChange: (value) => {
+        self.captureDelaySeconds = Math.max(parseFloat(value) || 0, 0);
+      }
+    });
+    this.captureDelayEdit.style.display = "none";
+    this.captureDelayUnits = new Span(_controlBar, { text: "s", class: "text-secondary mr-sm", style: "margin-left: 3px;" });
+    this.captureDelayUnits.style.display = "none";
 
     this.captureSpecificFrame = 0;
     // Cap the width like the Frames input below; NumberInput's root `.dragger` is flex: 1 1 auto
@@ -742,6 +759,43 @@ export class CapturePanel {
   }
 
   /**
+   * The Capture button: capture now, or in After Delay mode start (or cancel)
+   * the countdown to a capture.
+   */
+  _onCaptureButton() {
+    if (this._captureCountdown) {
+      this._cancelCaptureCountdown();
+      return;
+    }
+    if (this.captureMode !== 2 || this.captureDelaySeconds <= 0) {
+      this._startCapture();
+      return;
+    }
+    const end = performance.now() + this.captureDelaySeconds * 1000;
+    const tick = () => {
+      const left = (end - performance.now()) / 1000;
+      if (left <= 0) {
+        this._cancelCaptureCountdown();
+        this._startCapture({ frame: -1 });
+        return;
+      }
+      this._captureButton.text = `Capturing in ${left.toFixed(1)} s`;
+    };
+    this._captureButton.element.title = "Click to cancel the delayed capture";
+    this._captureButton.element.classList.add("btn-warning");
+    this._captureCountdown = setInterval(tick, 100);
+    tick();
+  }
+
+  _cancelCaptureCountdown() {
+    clearInterval(this._captureCountdown);
+    this._captureCountdown = null;
+    this._captureButton.text = "Capture";
+    this._captureButton.element.title = "";
+    this._captureButton.element.classList.remove("btn-warning");
+  }
+
+  /**
    * Request a frame capture with the control bar's settings.
    * @param {Object} [overrides] - { frame, frameCount } to override the
    *   capture mode and frame count (capture-on-hitch captures the next frame).
@@ -753,7 +807,7 @@ export class CapturePanel {
       this._captureData.onCaptureFrameResults.addListener(this._captureFrameResults, this);
       this._captureData.onUpdateCaptureStatus.addListener(this._updateCaptureStatus, this);
 
-      const frame = overrides.frame ?? (this.captureMode === 0 ? -1 : this.captureSpecificFrame);
+      const frame = overrides.frame ?? (this.captureMode === 1 ? this.captureSpecificFrame : -1);
       // The UI works in MB; the capture protocol is in bytes.
       const maxBufferSize = this.useMaxBufferSize ? Math.max(1, Math.round(this.maxBufferSizeMB * 1024 * 1024)) : -1;
       // -1 keeps the full-resolution texture pixels the texture viewer needs;

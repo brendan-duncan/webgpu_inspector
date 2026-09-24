@@ -39,7 +39,7 @@ Press the **Capture** button to capture a frame from the page.
 
 ### Capture Mode
 
-Capture has two modes: **Immediate** and **Specific Frame**.
+Capture has three modes: **Immediate**, **After Delay** and **Specific Frame**.
 
 #### Immediate Capture
 
@@ -48,6 +48,10 @@ Capture has two modes: **Immediate** and **Specific Frame**.
 Immediate capture will record the current frame on the page.
 
 **Frames** indicates how many frames to capture.
+
+#### After Delay Capture
+
+After Delay capture waits the given number of seconds after you press **Capture**, then captures like Immediate. Use it to put the page in the state you want to capture first, such as hovering a menu, holding a key or starting an animation, while focus is away from DevTools. The Capture button counts down; press it again to cancel.
 
 #### Specific Frame Capture
 

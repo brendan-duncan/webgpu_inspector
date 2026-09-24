@@ -12,6 +12,7 @@
 * Added Pause, Resume and Step to the Capture panel. They pause the page's requestAnimationFrame loop and step it one frame at a time, with rAF timestamps that advance one refresh per step. A Capture while paused steps through the captured frames.
 * Fixed the Inspect panel's object list cutting off its last entries: it now fills the panel instead of using a fixed height.
 * Texture viewers highlight special values: NaN and infinity by default, and optionally values below 0 or above 1. They also have a per-channel histogram with counts of special values. The capture texture viewer can copy its image as a PNG.
+* Added an After Delay capture mode: Capture counts down the given number of seconds, then captures, so the page can be set up first. Press Capture again to cancel.
 * Added an Allocations tab to the Inspect panel for finding leaks. It groups live GPU objects by the code that created them, with counts and memory, has a baseline to show only objects created since a mark, and lists buffers, textures and devices garbage collected without destroy() by where they were created.
 * The Inspect panel's GPU Objects plot can also plot GPU Memory, Texture Memory and Buffer Memory over time.
 * Fixed the Inspect panel's frame-time and GPU object plots going blank after switching to another panel (for example after a capture) and back.
