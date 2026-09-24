@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>WebGPU Inspector replay</title>
+<style>
+  body { font: 13px system-ui, sans-serif; background: #1e1e1e; color: #ccc; margin: 16px; }
+  #log { white-space: pre-wrap; font-family: monospace; }
+</style>
+</head>
+<body>
+<p>WebGPU Inspector replay host. The Claude Code plugin runs GPU replays of captures in this tab; leave it open while it works.</p>
+<div id="log"></div>
+<script type="module">
+// The plugin's MCP server drives this page over CDP (browser.js runReplay):
+// it calls window.__webgpuInspectorReplay.run(captureId, op, args), which
+// downloads the capture from the bridge once, runs the analysis on this
+// tab's GPU device, and returns the result as a JSON string.
+import * as analysis from "./inspector_analysis.js";
+
+const log = document.getElementById("log");
+const sessions = new Map();
+let devicePromise = null;
+
+function note(text) {
+  log.textContent = `${new Date().toLocaleTimeString()}  ${text}\n` + log.textContent.slice(0, 4000);
+}
+
+// A device with everything the adapter offers, as the DevTools panel creates
+// its own: timestamp queries for timing, float32-filterable for replays.
+function getDevice() {
+  if (!devicePromise) {
+    devicePromise = (async () => {
+      if (!navigator.gpu) {
+        throw new Error("WebGPU is not available in the controlled browser.");
+      }
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) {
+        throw new Error("No WebGPU adapter is available in the controlled browser.");
+      }
+      const requiredLimits = {};
+      for (const key in adapter.limits) {
+        if (key !== "minSubgroupSize" && key !== "maxSubgroupSize") {
+          requiredLimits[key] = adapter.limits[key];
+        }
+      }
+      const device = await adapter.requestDevice({ requiredFeatures: [...adapter.features], requiredLimits });
+      device.lost.then(() => {
+        devicePromise = null;
+      });
+      return device;
+    })();
+    devicePromise.catch(() => {
+      devicePromise = null;
+    });
+  }
+  return devicePromise;
+}
+
+async function getSession(captureId, token) {
+  if (!sessions.has(captureId)) {
+    const pending = (async () => {
+      note(`Downloading capture ${captureId}...`);
+      const query = token ? `?token=${encodeURIComponent(token)}` : "";
+      const response = await fetch(`./capture/${encodeURIComponent(captureId)}${query}`);
+      if (!response.ok) {
+        throw new Error(`The bridge has no capture "${captureId}" (HTTP ${response.status}).`);
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      note(`Loading capture ${captureId} (${(bytes.length / 1048576).toFixed(1)} MB)...`);
+      return analysis.openCaptureBytes(bytes);
+    })();
+    sessions.set(captureId, pending);
+    pending.catch(() => sessions.delete(captureId));
+  }
+  return sessions.get(captureId);
+}
+
+const OPS = {
+  overdraw: (session, device, args) => analysis.getOverdrawGpu(session, device, args),
+  bottlenecks: (session, device) => analysis.getBottlenecks(session, device),
+  flameGraphTimed: (session, device, args) => analysis.getShaderFlameGraphTimed(session, device, args),
+  shaderCost: (session, device, args) => analysis.measureShaderCost(session, device, args),
+};
+
+window.__webgpuInspectorReplay = {
+  async run(captureId, op, args, token) {
+    const fn = OPS[op];
+    if (!fn) {
+      throw new Error(`Unknown replay operation "${op}".`);
+    }
+    const [session, device] = await Promise.all([getSession(captureId, token), getDevice()]);
+    note(`Running ${op} on ${captureId}...`);
+    const started = performance.now();
+    device.pushErrorScope("validation");
+    let result;
+    try {
+      result = await fn(session, device, args ?? {});
+    } finally {
+      const error = await device.popErrorScope();
+      if (error) {
+        console.warn("Replay validation error:", error.message);
+      }
+    }
+    note(`${op} on ${captureId} took ${((performance.now() - started) / 1000).toFixed(1)} s.`);
+    return JSON.stringify(result);
+  },
+  forget(captureId) {
+    sessions.delete(captureId);
+  },
+};
+window.__webgpuInspectorReplayReady = true;
+note("Ready.");
+</script>
+</body>
+</html>

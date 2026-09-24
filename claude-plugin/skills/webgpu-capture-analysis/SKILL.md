@@ -59,6 +59,21 @@ To debug a specific draw (e.g. "this draw read a vertex attribute as 0"):
   `bufferDataCommandIndex` to decode its first N vertices into per-attribute
   numbers (the layout is taken from the pipeline automatically).
 - `diff_draws(cmdA, cmdB)` compares a working vs. a broken draw's resolved state.
+- `get_pixel_history(textureId, x, y)` lists every fragment that touched a pixel
+  and why it was kept or dropped (depth-failed, stencil-failed, discarded,
+  scissored, ...). Use it for "why is this pixel black / wrong / missing".
+- `debug_shader(commandIndex, ...)` runs one invocation on the CPU with the
+  captured resources: `vertexIndex` for a vertex, `x`/`y` for a fragment,
+  `invocation` for compute. Pass `watch: ["name", ...]` for a line-by-line trace
+  of variables. Its `missingData` field says when the capture lacks the bound
+  buffers' bytes; recapture with `payloads: "all"` then.
+- `get_frame_issues` runs the Frame Issues rules and `get_render_graph` shows
+  the pass dependencies (results nothing reads, overwritten before read, reads
+  of discarded attachments).
+
+To try a shader fix on the live page, `replace_shader(shaderId, code)` swaps the
+module's WGSL (it reports validation errors), then check with `screenshot_page`
+or a new capture; `restore_shader` undoes it. Capture ids and live ids match.
 
 For very large frames, capture only what you need: `capture_frames` accepts
 `passLabel` / `passType` (capture heavy payloads for matching passes only) and
@@ -89,6 +104,19 @@ take the GPU-timed path **by default, without being asked to enable it**:
 3. For a live page, `get_frame_stats` samples fps / dropped frames / CPU submit time
    / bound verdict over a short window without a capture — use it to confirm the page
    is actually dropping frames or is CPU-bound before drilling in.
+4. `get_bottlenecks` gives each pass a verdict from its GPU time, primitives and
+   fragment counts (tiny triangles, overdraw, fragments shaded then rejected,
+   heavy targets). `get_overdraw(textureId)` shows where the overdraw is.
+5. To find the expensive shader code: `get_shader_flame_graph` ranks the frame's
+   cost by pass, pipeline, stage and statement (`measureDrawTimes: true` measures
+   each draw), and `measure_shader_cost(commandIndex)` measures each statement of
+   one draw's shader on the GPU.
+6. After a change, recapture and `compare_captures(captureA, captureB)` to show
+   what moved.
+
+The GPU-replay tools (`get_bottlenecks`' counts, `get_overdraw`,
+`measure_shader_cost`, `measureDrawTimes`) need a browser from `launch_browser`
+or `attach_browser`; they replay the capture in a tab of their own.
 
 Notes:
 - GPU timing needs the adapter's `timestamp-query` feature; the inspector enables it

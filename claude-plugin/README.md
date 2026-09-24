@@ -177,9 +177,31 @@ needs no page changes.
 | `get_validation_errors` | Validation errors from the capture |
 | `read_buffer` | Read a live GPU buffer's current contents without a full capture |
 | `read_texture` | Read a live GPU texture/render-target region (stats + ASCII preview) |
+| `get_render_graph` | Passes in GPU order, what each reads and writes, dependencies, critical path and dependency findings |
+| `get_frame_issues` | The Frame Issues rules (mid-frame pipeline creation, redundant state, tiny draws, ...) with the commands they flag |
+| `get_bottlenecks` | Per-pass GPU time, primitives, rasterized/surviving fragments, overdraw, rejection rate and a verdict |
+| `get_overdraw` | Fragments per pixel of a render target: stats, histogram, hottest region, text heat map |
+| `get_pixel_history` | Every clear, load and fragment that touched one pixel, with its fate and value |
+| `get_shader_flame_graph` | Frame or single-shader cost, ranked by pass, pipeline, stage and statement |
+| `measure_shader_cost` | Per-statement GPU cost of one draw's or dispatch's shader, measured by replay |
+| `debug_shader` | Run one vertex, fragment or compute invocation on the CPU: inputs, outputs, watched-variable trace |
+| `compare_captures` | What changed between two captures: GPU time, passes, commands, objects, shaders, issues |
+| `replace_shader` | Swap a live shader module's WGSL on the page (the page renders with it next frame) |
+| `restore_shader` | Undo `replace_shader` |
 
 For **performance analysis**, capture with `profilePasses: true` (a performance
 request implies it) so passes carry GPU timings, then call `analyze_performance`.
+
+The analysis tools (`get_render_graph` through `compare_captures`) run the
+DevTools Capture panel's own code, bundled into
+[server/lib/inspector_analysis.js](server/lib/inspector_analysis.js) by the
+repository's `npm run build`. The CPU analyses run in the MCP server. The ones
+that replay the capture on a GPU (`get_bottlenecks`' fragment counts,
+`get_overdraw` by default, `measure_shader_cost`, and `get_shader_flame_graph`
+with `measureDrawTimes`) run in a replay tab the plugin opens in the browser it
+controls, so they need `launch_browser` or `attach_browser` first.
+`get_pixel_history` and `debug_shader` interpret the captured shaders, so they
+need a capture that kept its buffer (and texture) payloads.
 
 Tools never return raw base64 texture/buffer blobs — captures can be many
 megabytes. They return summaries, paginated slices, and counts instead.
@@ -211,6 +233,8 @@ claude-plugin/
   commands/                        /webgpu-inspector:capture, :analyze
   skills/                          webgpu-capture-analysis
   server/                          bridge + MCP + CDP controller (Node)
+  server/lib/                      the Capture panel's analyses, built by npm run build
+  server/replay/                   the replay tab for the GPU analyses
   page/                            manual-instrumentation example
 ```
 

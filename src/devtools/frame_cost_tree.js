@@ -326,10 +326,12 @@ export function buildFrameCostTree({ commands, getObject, fragmentCounts, perDra
       const pipeline = getObject(bucket.pipelineId);
       const pipelineLabel = pipeline?.label || pipeline?.descriptor?.label ||
         (bucket.pipelineId !== undefined ? `Pipeline ${bucket.pipelineId}` : "Pipeline");
-      const noun = bucket.items[0].kind === "draw" ? "draw" : "dispatch";
+      const noun = bucket.items[0].kind === "draw"
+        ? (drawCount === 1 ? "draw" : "draws")
+        : (drawCount === 1 ? "dispatch" : "dispatches");
       const name = perDraw
         ? `${bucket.items[0].method}`
-        : `${pipelineLabel} — ${drawCount} ${noun}${drawCount === 1 ? "" : "s"}`;
+        : `${pipelineLabel} — ${drawCount} ${noun}`;
 
       const itemNode = rollup(makeNode("loop", name, 0, stageNodes));
       itemNode.command = bucket.items[0].command;

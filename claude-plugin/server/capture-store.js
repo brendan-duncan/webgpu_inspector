@@ -131,6 +131,21 @@ export class CaptureStore {
     return p.bytes;
   }
 
+  // The capture as a WGPUCAP binary, as ordered byte chunks: what the replay
+  // host downloads. Null for an unknown id.
+  encodeBinary(id) {
+    const entry = this._captures.get(id);
+    if (!entry) {
+      return null;
+    }
+    const list = [];
+    for (const payloadId of entry.payloads.keys()) {
+      list.push({ id: payloadId, bytes: this.getPayload(id, payloadId) || Buffer.alloc(0) });
+    }
+    list.sort((a, b) => a.id - b.id);
+    return encodeCaptureBinaryParts({ metadata: entry.json, payloads: list });
+  }
+
   list() {
     return [...this._captures.values()].map((e) => this.describe(e));
   }

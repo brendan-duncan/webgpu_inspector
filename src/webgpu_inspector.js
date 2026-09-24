@@ -2025,11 +2025,11 @@ const DASH = String.fromCharCode(0x2013);
     _revertShader(shaderId) {
       const objectMap = this._objectReplacementMap.get(shaderId);
       if (!objectMap) {
-        return;
+        return false;
       }
       const shader = objectMap.object?.deref();
       if (!shader) {
-        return;
+        return false;
       }
 
       objectMap.replacement = null;
@@ -2075,19 +2075,24 @@ const DASH = String.fromCharCode(0x2013);
           }
         }
       }
+      return true;
     }
 
     // Replace a shader with a new shader with the given code.
-    // This is used for editing shaders live.
+    // This is used for editing shaders live. Returns null when the shader
+    // isn't live, or a promise of { errors, pipelines }: the validation errors
+    // of the new module and pipelines, and how many pipelines were replaced.
     _compileShader(shaderId, code) {
       const objectMap = this._objectReplacementMap.get(shaderId);
       if (!objectMap) {
-        return;
+        return null;
       }
       const shader = objectMap.object?.deref();
       if (!shader) {
-        return;
+        return null;
       }
+      const checks = [];
+      let pipelines = 0;
 
       const device = shader.__device;
       const descriptor = this._duplicateObject(shader.__descriptor);
@@ -2099,13 +2104,15 @@ const DASH = String.fromCharCode(0x2013);
       Object.defineProperty(descriptor, "__replacement", { value: shaderId, enumerable: false, writable: true });
       const newShaderModule = device.createShaderModule(descriptor);
       const self = this;
-      device.popErrorScope().then((error) => {
+      checks.push(device.popErrorScope().then((error) => {
         if (error) {
           console.error(error.message);
           const id = shaderId ?? 0;
           self._postMessage({ "action": Actions.ValidationError, id, "message": error.message });
+          return error.message;
         }
-      });
+        return null;
+      }));
       this._errorChecking++;
       this.enableRecording();
 
@@ -2159,17 +2166,20 @@ const DASH = String.fromCharCode(0x2013);
                 device.createRenderPipeline(newDescriptor) :
                 device.createComputePipeline(newDescriptor);
             const self = this;
-            device.popErrorScope().then((error) => {
+            checks.push(device.popErrorScope().then((error) => {
               if (error) {
                 console.error(error.message);
                 const id = objectRef.id ?? 0;
                 self._postMessage({ "action": Actions.ValidationError, id, "message": error.message });
+                return error.message;
               }
-            });
+              return null;
+            }));
             this._errorChecking++;
             this.enableRecording();
 
             objectRef.replacement = newPipeline;
+            pipelines++;
 
             // If any BindGroup was created with a BindGroupLayout from pipeline.getBindGroupLayout(#),
             // We need to recreate those as well.
@@ -2197,6 +2207,7 @@ const DASH = String.fromCharCode(0x2013);
           }
         }
       }
+      return Promise.all(checks).then((errors) => ({ errors: errors.filter((e) => e), pipelines }));
     }
 
     // The devtools panel has requested a texture to be captured.

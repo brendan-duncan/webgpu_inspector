@@ -166,4 +166,20 @@ for (const variant of variants) {
   );
 }
 
+// The capture analyses for the Claude Code plugin: one ES module that the
+// MCP server imports in Node and serves to its replay tab in the browser.
+builds.push({
+  input: "src/devtools/headless_analysis.js",
+  output: {
+    format: "es",
+    file: "claude-plugin/server/lib/inspector_analysis.js",
+    sourcemap: false,
+    banner: "// Built from src/devtools/headless_analysis.js by `npm run build`. Do not edit.",
+  },
+  plugins: [
+    nodeResolve(),
+    terser({ ecma: 2020, module: true, compress: { keep_classnames: true }, mangle: { keep_classnames: true } }),
+  ],
+});
+
 export default builds;

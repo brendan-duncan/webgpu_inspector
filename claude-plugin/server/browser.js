@@ -16,6 +16,11 @@ import os from "node:os";
 
 import puppeteer from "puppeteer-core";
 
+import { REPLAY_PATH } from "./bridge.js";
+
+// How long one CDP call may take; a GPU replay of a large frame is one call.
+const REPLAY_TIMEOUT_MS = 10 * 60 * 1000;
+
 const CDN_URL =
   "https://cdn.jsdelivr.net/gh/brendan-duncan/webgpu_inspector@main/extensions/chrome/webgpu_inspector.js";
 
@@ -33,6 +38,8 @@ export class BrowserController {
     this._launched = false;
     this._instrumenting = new Map(); // puppeteer Target -> Promise<instanceId>
     this._pages = new Map();         // instanceId -> { target, url }
+    this._replayPage = null;         // the replay host tab, once opened
+    this._replayQueue = Promise.resolve();
   }
 
   isConnected() {
@@ -43,10 +50,13 @@ export class BrowserController {
     return {
       connected: !!this._browser,
       mode: this._mode,
-      instrumentedPages: [...this._pages.entries()].map(([id, p]) => ({
-        instanceId: id,
-        url: p.url
-      }))
+      instrumentedPages: [...this._pages.entries()]
+        .filter(([, p]) => !isReplayHost(p.url))
+        .map(([id, p]) => ({
+          instanceId: id,
+          url: p.url
+        })),
+      replayHost: this._replayPage && !this._replayPage.isClosed() ? "open" : undefined
     };
   }
 
@@ -73,6 +83,8 @@ export class BrowserController {
       headless: options.headless === true,
       userDataDir,
       defaultViewport: null,
+      // GPU replays (runReplay) can run for minutes on a big frame.
+      protocolTimeout: REPLAY_TIMEOUT_MS,
       args: ["--no-first-run", "--no-default-browser-check"]
     });
     this._mode = "launch";
@@ -95,7 +107,7 @@ export class BrowserController {
 
     const browserURL = options.browserURL || "http://localhost:9222";
     this._log(`attaching to browser at ${browserURL}`);
-    this._browser = await puppeteer.connect({ browserURL, defaultViewport: null });
+    this._browser = await puppeteer.connect({ browserURL, defaultViewport: null, protocolTimeout: REPLAY_TIMEOUT_MS });
     this._mode = "attach";
     this._launched = false;
     await this._afterConnect(options.reloadPages === true);
@@ -112,6 +124,7 @@ export class BrowserController {
       this._mode = null;
       this._instrumenting.clear();
       this._pages.clear();
+      this._replayPage = null;
     });
 
     // Future documents are covered by Page.addScriptToEvaluateOnNewDocument.
@@ -291,6 +304,31 @@ export class BrowserController {
     };
   }
 
+  // Run a capture analysis that needs a GPU in the replay host tab (served by
+  // the bridge at hostUrl), and return its result. Replays run one at a time.
+  runReplay(hostUrl, captureId, op, args, token) {
+    const run = async () => {
+      if (!this._browser) {
+        throw new Error("This analysis replays the capture on a GPU, in the browser the plugin controls. " +
+          "Start one with launch_browser (or attach_browser) first.");
+      }
+      let page = this._replayPage;
+      if (!page || page.isClosed()) {
+        page = await this._browser.newPage();
+        this._replayPage = page;
+        await page.goto(hostUrl, { waitUntil: "load", timeout: 30000 });
+        await page.waitForFunction(() => window.__webgpuInspectorReplayReady === true, { timeout: 30000 });
+      }
+      const json = await page.evaluate(
+        (id, o, a, t) => window.__webgpuInspectorReplay.run(id, o, a, t),
+        captureId, op, args || {}, token || null);
+      return JSON.parse(json);
+    };
+    const result = this._replayQueue.then(run, run);
+    this._replayQueue = result.catch(() => {});
+    return result;
+  }
+
   async dispose() {
     if (!this._browser) {
       return;
@@ -315,14 +353,18 @@ export class BrowserController {
     if (this._token) {
       opts.token = this._token;
     }
-    return `${this._inspectorSource}
+    // The replay host tab runs the plugin's own GPU replays: it isn't a page
+    // to inspect, so the inspector stays out of it.
+    return `if (location.pathname.indexOf(${JSON.stringify(REPLAY_PATH)}) !== 0) {
+${this._inspectorSource}
 ;(function () {
   try {
     window.webgpuInspector.initializeServer(${JSON.stringify(opts)});
   } catch (e) {
     console.error("[webgpu-inspector] bridge init failed:", e);
   }
-})();`;
+})();
+}`;
   }
 
   async _loadInspectorSource() {
@@ -349,6 +391,10 @@ export class BrowserController {
     }
     return this._inspectorSource;
   }
+}
+
+function isReplayHost(url) {
+  return !!url && url.indexOf(REPLAY_PATH) !== -1;
 }
 
 function isRealPage(url) {

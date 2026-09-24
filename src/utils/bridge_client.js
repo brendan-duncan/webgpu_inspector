@@ -152,6 +152,12 @@ export class BridgeClient {
       case "frameStats":
         this._handleFrameStats(msg);
         break;
+      case "replaceShader":
+        this._handleReplaceShader(msg);
+        break;
+      case "restoreShader":
+        this._handleRestoreShader(msg);
+        break;
       case "ping":
         this._send({ type: "pong" });
         break;
@@ -201,6 +207,37 @@ export class BridgeClient {
         requestId: msg.requestId,
         error: (e && e.message) ? e.message : String(e)
       });
+    }
+  }
+
+  // --- Live shader editing ---------------------------------------------------
+
+  // Swap a live shader module's code, as the Inspect panel's shader editor
+  // does: the module and every pipeline using it are re-created, and the page
+  // renders with them from its next frame. Replies with the validation errors.
+  async _handleReplaceShader(msg) {
+    try {
+      const pending = this._inspector._compileShader(msg.shaderId, msg.code);
+      if (!pending) {
+        throw new Error(`Shader module ${msg.shaderId} is not live on this page.`);
+      }
+      const result = await pending;
+      this._send({ type: "shaderEditResult", requestId: msg.requestId, ...result });
+    } catch (e) {
+      this._send({ type: "shaderEditResult", requestId: msg.requestId,
+        error: (e && e.message) ? e.message : String(e) });
+    }
+  }
+
+  _handleRestoreShader(msg) {
+    try {
+      if (!this._inspector._revertShader(msg.shaderId)) {
+        throw new Error(`Shader module ${msg.shaderId} is not live on this page.`);
+      }
+      this._send({ type: "shaderEditResult", requestId: msg.requestId, restored: true });
+    } catch (e) {
+      this._send({ type: "shaderEditResult", requestId: msg.requestId,
+        error: (e && e.message) ? e.message : String(e) });
     }
   }
 

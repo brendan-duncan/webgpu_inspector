@@ -10,6 +10,9 @@
 
 import http from "node:http";
 import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { WebSocketServer } from "ws";
 
@@ -30,6 +33,10 @@ function _resolveMaxUpload(option) {
   }
   return DEFAULT_MAX_UPLOAD_BYTES;
 }
+
+// Where the replay host and its files are served from.
+export const REPLAY_PATH = "/__webgpu_inspector_replay/";
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 export class Bridge {
   constructor(options) {
@@ -174,6 +181,11 @@ export class Bridge {
     return this._port;
   }
 
+  // The auth token pages and the replay host must present, if any.
+  get token() {
+    return this._token;
+  }
+
   // --- WebSocket side: instrumented pages -----------------------------------
 
   _onConnection(ws, req) {
@@ -267,6 +279,7 @@ export class Bridge {
           this._resolvePending(msg.requestId, msg);
         }
         break;
+      case "shaderEditResult":
       case "frameStatsResult":
         if (msg.error) {
           this._rejectPending(msg.requestId, new Error(msg.error));
@@ -501,6 +514,55 @@ export class Bridge {
 
   // Ask a page to sample its live frame-health metrics over a window (ms) and
   // resolve with the aggregates (fps, dropped frames, CPU submit time, bound verdict).
+  // Replace a live shader module's code on a page (restore: true reverts it).
+  // Resolves { errors, pipelines } or { restored }.
+  requestShaderEdit(opts) {
+    opts = opts || {};
+    return new Promise((resolve, reject) => {
+      let page;
+      try {
+        page = this._pickPage(opts.pageId);
+      } catch (e) {
+        reject(e);
+        return;
+      }
+      const requestId = randomUUID();
+      const timer = setTimeout(() => {
+        this._rejectPending(requestId, new Error("The page did not answer the shader edit within 15s."));
+      }, 15000);
+      this._pending.set(requestId, { resolve, reject, timer, pageId: page.pageId });
+      const message = opts.restore
+        ? { type: "restoreShader", requestId, shaderId: opts.shaderId }
+        : { type: "replaceShader", requestId, shaderId: opts.shaderId, code: opts.code };
+      try {
+        page.ws.send(JSON.stringify(message));
+      } catch (e) {
+        this._rejectPending(requestId, new Error(`Failed to send the shader edit: ${e.message}`));
+      }
+    });
+  }
+
+  _pickPage(pageId) {
+    if (!this._listening) {
+      throw new Error("Bridge is not listening, so live pages are unavailable.");
+    }
+    const pages = [...this._pages.values()];
+    if (pages.length === 0) {
+      throw new Error("No instrumented pages connected.");
+    }
+    if (pageId) {
+      const page = this._pages.get(pageId);
+      if (!page) {
+        throw new Error(`No connected page with id "${pageId}".`);
+      }
+      return page;
+    }
+    if (pages.length === 1) {
+      return pages[0];
+    }
+    throw new Error(`${pages.length} pages connected (${pages.map((p) => p.pageId).join(", ")}). Pass pageId to choose one.`);
+  }
+
   requestFrameStats(opts) {
     opts = opts || {};
     return new Promise((resolve, reject) => {
@@ -593,6 +655,51 @@ export class Bridge {
     }
     if (req.method === "POST" && url.pathname.startsWith("/capture/")) {
       this._handleUpload(req, res, url, cors);
+      return;
+    }
+    if (req.method === "GET" && url.pathname.startsWith(REPLAY_PATH)) {
+      this._handleReplay(req, res, url, cors);
+      return;
+    }
+    res.writeHead(404, cors);
+    res.end();
+  }
+
+  // The replay host: a page the plugin opens in the controlled browser to run
+  // the GPU replays of the capture analyses (see mcp.js runReplay), the
+  // analysis bundle it imports, and the captures it analyzes.
+  _handleReplay(req, res, url, cors) {
+    const rest = url.pathname.slice(REPLAY_PATH.length);
+    if (rest === "host.html" || rest === "inspector_analysis.js") {
+      const file = rest === "host.html" ? join(HERE, "replay", "host.html") : join(HERE, "lib", "inspector_analysis.js");
+      const type = rest === "host.html" ? "text/html; charset=utf-8" : "text/javascript; charset=utf-8";
+      res.writeHead(200, { ...cors, "Content-Type": type, "Cache-Control": "no-store" });
+      createReadStream(file).on("error", () => res.end()).pipe(res);
+      return;
+    }
+    if (rest.startsWith("capture/")) {
+      if (this._token && url.searchParams.get("token") !== this._token) {
+        res.writeHead(401, cors);
+        res.end();
+        return;
+      }
+      const parts = this._store && this._store.encodeBinary(decodeURIComponent(rest.slice("capture/".length)));
+      if (!parts) {
+        res.writeHead(404, cors);
+        res.end();
+        return;
+      }
+      res.writeHead(200, { ...cors, "Content-Type": "application/octet-stream", "Content-Length": parts.byteLength });
+      const write = (i) => {
+        for (; i < parts.parts.length; ++i) {
+          if (!res.write(parts.parts[i])) {
+            res.once("drain", () => write(i + 1));
+            return;
+          }
+        }
+        res.end();
+      };
+      write(0);
       return;
     }
     res.writeHead(404, cors);

@@ -20,6 +20,18 @@ import {
   decodeVertexBuffer,
   diffDraws
 } from "./analysis.js";
+import { REPLAY_PATH } from "./bridge.js";
+
+// The Capture panel's analyses (render graph, frame issues, pixel history,
+// overdraw, shader cost, debugger, bottlenecks), bundled from the inspector's
+// src/devtools by `npm run build`. Loaded on first use: it's large.
+let analysisLib = null;
+function loadAnalysis() {
+  if (!analysisLib) {
+    analysisLib = import("./lib/inspector_analysis.js");
+  }
+  return analysisLib;
+}
 
 // Largest WGSL source returned by get_shader before truncation.
 const MAX_SHADER_CHARS = 60000;
@@ -231,6 +243,28 @@ export function createMcpServer(deps) {
     }
     return { id, json };
   }
+
+  // Loaded captures, as the analysis bundle's sessions, by capture id.
+  // Captures don't change once stored, so a session is built once.
+  const sessions = new Map();
+  async function resolveSession(args, key) {
+    const { id, json } = resolveCapture(key ? { captureId: args[key] } : args);
+    if (!sessions.has(id)) {
+      const pending = loadAnalysis().then((lib) =>
+        lib.openCapture(json, { get: (payloadId) => store.getPayload(id, payloadId) }));
+      sessions.set(id, pending);
+      pending.catch(() => sessions.delete(id));
+    }
+    return { id, session: await sessions.get(id), lib: await loadAnalysis() };
+  }
+
+  // Run an analysis on the GPU, in the replay tab of the controlled browser.
+  function runReplay(captureId, op, args) {
+    const host = `http://localhost:${bridge.port}${REPLAY_PATH}host.html`;
+    return browser.runReplay(host, captureId, op, args, bridge.token);
+  }
+
+  const captureIdProp = { type: "string", description: "Capture id (default: most recent)." };
 
   const tools = [
     {
@@ -586,6 +620,192 @@ export function createMcpServer(deps) {
           durationMs: { type: "integer", description: "Sampling window in milliseconds (default 1000, clamped 100–10000).", minimum: 100, maximum: 10000 }
         }
       }
+    },
+    {
+      name: "get_render_graph",
+      description: "The capture's render graph: its passes in GPU execution order (command buffers in " +
+        "submit() order), what each reads and writes, which passes each depends on, the critical path, " +
+        "resources read before anything in the capture wrote them, and dependency findings (results " +
+        "nothing reads, results overwritten before being read, reads of discarded attachments, MSAA " +
+        "stores, mergeable passes).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          captureId: captureIdProp,
+          includeResources: { type: "boolean", description: "Include the per-resource lifetime list (default true)." }
+        }
+      }
+    },
+    {
+      name: "get_frame_issues",
+      description: "The Frame Issues report: performance and correctness rules checked over the capture " +
+        "(pipelines created mid-frame, per-frame resource and bind group creation, fragmented writeBuffer " +
+        "calls, redundant state, tiny draws, small dispatches, empty passes, unread results, and more), " +
+        "most severe first, each with the command indices it flags.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          captureId: captureIdProp,
+          severity: { type: "string", enum: ["high", "medium", "low", "info"], description: "Only findings at least this severe." },
+          rule: { type: "string", description: "Only findings of this rule (the result's rules lists them)." },
+          limit: { type: "integer", description: "Max findings (default 100).", minimum: 1 }
+        }
+      }
+    },
+    {
+      name: "get_pixel_history",
+      description: "Everything that touched one pixel of a texture during the frame: the clears and loads, " +
+        "then every fragment of every draw covering the pixel, with its fate (written, depth-failed, " +
+        "stencil-failed, discarded, scissor-failed, ...), the fragment shader's output, the depth test's " +
+        "values, and the pixel's value after each event. Simulated on the CPU by interpreting the frame's " +
+        "shaders; indirect draws and render bundles aren't simulated. Needs a capture with buffer payloads.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          captureId: captureIdProp,
+          textureId: { type: "integer", description: "Texture or TextureView id (a render pass attachment)." },
+          x: { type: "integer", minimum: 0 },
+          y: { type: "integer", minimum: 0 },
+          limit: { type: "integer", description: "Max events (default 200).", minimum: 1 }
+        },
+        required: ["textureId", "x", "y"]
+      }
+    },
+    {
+      name: "get_overdraw",
+      description: "Overdraw of a render target: how many fragments the frame's draws rasterize per pixel " +
+        "(before depth and stencil tests), as statistics, a histogram, the hottest region and a coarse " +
+        "text heat map. Uses a GPU replay in the controlled browser when one is running (fast, and covers " +
+        "indirect draws), otherwise a CPU rasterization.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          captureId: captureIdProp,
+          textureId: { type: "integer", description: "Texture or TextureView id of the render target." },
+          method: { type: "string", enum: ["auto", "gpu", "cpu"], description: "Default auto: GPU when a browser is connected." }
+        },
+        required: ["textureId"]
+      }
+    },
+    {
+      name: "get_shader_flame_graph",
+      description: "The shader flame graph as a ranked list. Without shaderModuleId: the frame's cost by " +
+        "pass, pipeline, shader stage and statement, in measured GPU ms when the capture has pass timings " +
+        "(profilePasses) and modeled op units otherwise; measureDrawTimes replays every draw with timestamp " +
+        "queries in the controlled browser so each draw's share is measured. With shaderModuleId: one " +
+        "shader's modeled cost per invocation, by entry point and statement.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          captureId: captureIdProp,
+          shaderModuleId: { type: "integer", description: "Optional: one ShaderModule's cost instead of the frame's." },
+          entryPoint: { type: "string", description: "With shaderModuleId: only this entry point." },
+          perDraw: { type: "boolean", description: "Frame view: one entry per draw instead of per pipeline." },
+          measureDrawTimes: { type: "boolean", description: "Frame view: measure each draw's GPU time by replay (needs launch_browser)." },
+          limit: { type: "integer", description: "Max entries (default 40).", minimum: 1 }
+        }
+      }
+    },
+    {
+      name: "measure_shader_cost",
+      description: "Measure what each statement of one draw's or dispatch's shader costs on the GPU: the " +
+        "command is replayed with timestamp queries in the controlled browser, with the shader cut short " +
+        "after each statement, and the time differences attributed to statements (loops include their " +
+        "bodies). Needs launch_browser and a GPU with timestamp-query.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          captureId: captureIdProp,
+          commandIndex: { type: "integer", description: "Index of a draw* or dispatch* command.", minimum: 0 },
+          stage: { type: "string", enum: ["vertex", "fragment", "compute"], description: "Default: fragment for draws, compute for dispatches." },
+          entryPoint: { type: "string", description: "Optional entry point name." }
+        },
+        required: ["commandIndex"]
+      }
+    },
+    {
+      name: "debug_shader",
+      description: "Run one shader invocation of a captured draw or dispatch on the CPU interpreter, with " +
+        "the captured buffers and textures bound: returns its inputs, its outputs (or whether the fragment " +
+        "was discarded) and, for any variables named in watch, a trace of their values line by line. " +
+        "Vertex: pass vertexIndex. Fragment: pass the pixel x, y (the draw is rasterized there and the " +
+        "2x2 quad run, so derivatives work). Compute: pass invocation, a global invocation id. Needs a " +
+        "capture with buffer (and texture) payloads.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          captureId: captureIdProp,
+          commandIndex: { type: "integer", description: "Index of a draw or dispatchWorkgroups command.", minimum: 0 },
+          stage: { type: "string", enum: ["vertex", "fragment", "compute"], description: "Default: compute for dispatches; fragment when x/y are given; else vertex." },
+          vertexIndex: { type: "integer", minimum: 0 },
+          instance: { type: "integer", minimum: 0 },
+          x: { type: "integer", minimum: 0 },
+          y: { type: "integer", minimum: 0 },
+          primitive: { type: "integer", description: "Fragment: pick this primitive when several cover the pixel.", minimum: 0 },
+          invocation: { type: "array", items: { type: "integer" }, description: "Compute: global invocation id [x, y, z]." },
+          watch: { type: "array", items: { type: "string" }, description: "Variable names to trace." },
+          maxTrace: { type: "integer", description: "Max trace rows (default 200).", minimum: 1 }
+        },
+        required: ["commandIndex"]
+      }
+    },
+    {
+      name: "get_bottlenecks",
+      description: "The GPU Bottlenecks report: per pass, GPU time and share (with profilePasses), draws, " +
+        "primitives, rasterized and depth/stencil-surviving fragments, overdraw, pixels per primitive, " +
+        "rejection rate and target formats, with a verdict per pass and ranked findings (tiny triangles, " +
+        "high overdraw, fragments shaded then rejected, heavy render targets, heavy compute). The fragment " +
+        "counts are measured by GPU replay when a browser is running (launch_browser).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          captureId: captureIdProp,
+          measure: { type: "boolean", description: "Measure fragment counts on the GPU (default: when a browser is connected)." }
+        }
+      }
+    },
+    {
+      name: "compare_captures",
+      description: "Compare two captures, e.g. before and after a change: GPU time (with profilePasses), " +
+        "passes added, removed or changed in draws and GPU time, command and object count changes, " +
+        "shaders whose code changed, and Frame Issues rule counts.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          captureA: { type: "string", description: "The baseline capture id." },
+          captureB: { type: "string", description: "The capture to compare against it (default: most recent)." }
+        },
+        required: ["captureA"]
+      }
+    },
+    {
+      name: "replace_shader",
+      description: "Replace a live shader module's WGSL on a connected page, as the Inspect panel's shader " +
+        "editor does: the module and every pipeline using it are re-created, and the page renders with " +
+        "them from its next frame, so the effect can be checked with screenshot_page or a new capture. " +
+        "Returns the validation errors, if any. Shader module ids are the same in captures and the live " +
+        "page (get_shader returns the captured code). Undo with restore_shader.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          pageId: { type: "string", description: "Page to edit. Optional when exactly one page is connected." },
+          shaderId: { type: "integer", description: "ShaderModule object id." },
+          code: { type: "string", description: "The complete new WGSL source." }
+        },
+        required: ["shaderId", "code"]
+      }
+    },
+    {
+      name: "restore_shader",
+      description: "Undo replace_shader: the live page goes back to the shader module's original code and pipelines.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          pageId: { type: "string", description: "Page to edit. Optional when exactly one page is connected." },
+          shaderId: { type: "integer", description: "ShaderModule object id." }
+        },
+        required: ["shaderId"]
+      }
     }
   ];
 
@@ -787,6 +1007,98 @@ export function createMcpServer(deps) {
         pageId: args.pageId,
         durationMs: args.durationMs
       });
+    },
+
+    get_render_graph: async (args) => {
+      const { id, session, lib } = await resolveSession(args);
+      return { captureId: id, ...lib.getRenderGraph(session, { includeResources: args.includeResources !== false }) };
+    },
+
+    get_frame_issues: async (args) => {
+      const { id, session, lib } = await resolveSession(args);
+      return { captureId: id, ...lib.getFrameIssues(session, { severity: args.severity, rule: args.rule, limit: args.limit }) };
+    },
+
+    get_pixel_history: async (args) => {
+      const { id, session, lib } = await resolveSession(args);
+      return { captureId: id, ...lib.getPixelHistory(session, { textureId: args.textureId, x: args.x | 0, y: args.y | 0, limit: args.limit }) };
+    },
+
+    get_overdraw: async (args) => {
+      const { id, session, lib } = await resolveSession(args);
+      const method = args.method || "auto";
+      if (method === "gpu" || (method === "auto" && browser.isConnected())) {
+        try {
+          return { captureId: id, ...(await runReplay(id, "overdraw", { textureId: args.textureId })) };
+        } catch (e) {
+          if (method === "gpu") {
+            throw e;
+          }
+          const cpu = lib.getOverdraw(session, { textureId: args.textureId });
+          cpu.notes = [`The GPU replay failed (${e.message}), so this is the CPU rasterization.`, ...(cpu.notes || [])];
+          return { captureId: id, ...cpu };
+        }
+      }
+      return { captureId: id, ...lib.getOverdraw(session, { textureId: args.textureId }) };
+    },
+
+    get_shader_flame_graph: async (args) => {
+      const { id, session, lib } = await resolveSession(args);
+      const options = { shaderModuleId: args.shaderModuleId, entryPoint: args.entryPoint, perDraw: !!args.perDraw, limit: args.limit };
+      if (args.measureDrawTimes && args.shaderModuleId === undefined) {
+        return { captureId: id, ...(await runReplay(id, "flameGraphTimed", options)) };
+      }
+      return { captureId: id, ...lib.getShaderFlameGraph(session, options) };
+    },
+
+    measure_shader_cost: async (args) => {
+      const { id } = resolveCapture(args);
+      return {
+        captureId: id,
+        ...(await runReplay(id, "shaderCost", { commandIndex: args.commandIndex | 0, stage: args.stage, entryPoint: args.entryPoint }))
+      };
+    },
+
+    debug_shader: async (args) => {
+      const { id, session, lib } = await resolveSession(args);
+      return { captureId: id, ...lib.debugShader(session, args) };
+    },
+
+    get_bottlenecks: async (args) => {
+      const { id, session, lib } = await resolveSession(args);
+      const measure = args.measure ?? browser.isConnected();
+      if (measure) {
+        return { captureId: id, ...(await runReplay(id, "bottlenecks", {})) };
+      }
+      return { captureId: id, ...(await lib.getBottlenecks(session, null)) };
+    },
+
+    compare_captures: async (args) => {
+      const a = await resolveSession(args, "captureA");
+      const b = await resolveSession(args, "captureB");
+      return { captureA: a.id, captureB: b.id, ...a.lib.compareCaptures(a.session, b.session) };
+    },
+
+    replace_shader: async (args) => {
+      if (typeof args.code !== "string" || !args.code) {
+        throw new Error("code is required.");
+      }
+      const result = await bridge.requestShaderEdit({ pageId: args.pageId, shaderId: args.shaderId, code: args.code });
+      const errors = result.errors || [];
+      return {
+        shaderId: args.shaderId,
+        replaced: errors.length === 0,
+        pipelinesRecreated: result.pipelines,
+        validationErrors: errors,
+        note: errors.length
+          ? "The new code has errors, so the page may render wrongly or not at all. Fix it and replace again, or restore_shader."
+          : "The page renders with the new code from its next frame. restore_shader undoes it."
+      };
+    },
+
+    restore_shader: async (args) => {
+      await bridge.requestShaderEdit({ pageId: args.pageId, shaderId: args.shaderId, restore: true });
+      return { shaderId: args.shaderId, restored: true };
     },
 
     get_object: async (args) => {

@@ -22,6 +22,7 @@
 * Fixed 32-bit float textures (r32float, rgba32float, ...) displaying black in the texture viewers.
 * The Capture bar's settings (Max Buffer Size, Max Texture Size, Stacktraces, Profile Passes, Capture on hitch) moved to the ☰ menu under Capture Settings, which leaves the bar with Capture, capture mode and frames, Pause and Step, and Timing Capture. Help buttons are now icons.
 * Hovering an object in the Inspect panel's list shows its details, such as a texture's format, size, mip levels, samples, usage and memory, or a buffer's size and usage, plus where it was created.
+* The Claude Code plugin has new MCP tools that run the Capture panel's analyses: get_render_graph, get_frame_issues, get_bottlenecks, get_overdraw, get_pixel_history, get_shader_flame_graph, measure_shader_cost, debug_shader and compare_captures. The GPU replays run in a tab of the browser the plugin controls. replace_shader and restore_shader edit a live page's shaders.
 * Added a GPU Bottlenecks report to Capture. For each pass it shows GPU time and share, primitives, rasterized and depth-surviving fragments (counted by GPU replay), overdraw, pixels per primitive and rejection rate, with a verdict, plus a ranked list of findings such as tiny triangles, high overdraw, fragments shaded then rejected, and heavy render targets.
 * The capture's report buttons (Frame Stats, Frame Issues, Render Graph, Shader Flame Graph, Analyze Shaders) are now in a Reports menu, with a badge showing the frame's issue count.
 
