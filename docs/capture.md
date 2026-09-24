@@ -16,6 +16,7 @@
 * [Debug Groups](#debug-groups)
 * [Frame Stats](#frame-stats)
 * [Render Graph](#render-graph)
+* [Frame Issues](#frame-issues)
 * [Shader Debugger](#shader-debugger)
 
 ## Introduction
@@ -272,6 +273,28 @@ Suggestions above the chart come from the graph:
 * **mergeable-passes**: a render pass loads exactly what the previous pass stored, to the same attachments.
 
 The graph only sees the captured frame. A result that the next frame reads, such as a history buffer, can look unread here.
+
+## Frame Issues
+###### [Back to top](#capture)
+
+When a capture is loaded, the inspector checks the frame's commands for performance and correctness problems. The **Frame Issues** button shows how many it found, and opens a report with the most severe issues first. You can filter the report by severity and by rule. **Go to command** selects the command an issue is about in the command list, and each further click moves to the next command with the same issue. Flagged commands also get a small colored badge in the command list, and hovering the badge lists the issues.
+
+| Rule | What it flags |
+|---|---|
+| pipeline-created-in-frame | A synchronous `createRenderPipeline`/`createComputePipeline` during the frame |
+| shader-created-in-frame | `createShaderModule` during the frame |
+| resource-created-in-frame | `createBuffer`/`createTexture` during the frame |
+| bind-group-created-in-frame | Many `createBindGroup` calls during the frame |
+| fragmented-buffer-writes | Many separate `writeBuffer` calls to one buffer |
+| many-submits | Many `queue.submit` calls in one frame |
+| canvas-load | `loadOp: "load"` of a freshly acquired canvas texture, which is always zero |
+| color-load | `loadOp: "load"` of an attachment before anything in the frame rendered to it |
+| empty-pass | A pass that draws, dispatches and clears nothing |
+| redundant-pipeline-bind, redundant-bind-group, redundant-buffer-bind, redundant-state | Setting state that is already in effect |
+| tiny-draws | Many non-instanced draws of 12 vertices or fewer |
+| small-dispatch | Dispatches with fewer than 64 invocations in total |
+
+The report also includes the [Render Graph](#render-graph) suggestions.
 
 ## Shader Debugger
 ###### [Back to top](#capture)

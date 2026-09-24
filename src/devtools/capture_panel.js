@@ -30,6 +30,8 @@ import { addShaderAnalysisView, buildFrameShaderAnalysis } from "./shader_analys
 import { buildFrameFlameGraph } from "./frame_flamegraph.js";
 import { buildFrameRenderGraph } from "./render_graph.js";
 import { buildRenderGraphView } from "./render_graph_view.js";
+import { analyzeFrameIssues } from "./frame_issues.js";
+import { buildFrameIssuesView, markCommandIssues } from "./frame_issues_view.js";
 import { captureToText, downloadCapture } from "./capture_export.js";
 import { isCaptureBinary, decodeCaptureBinary } from "../utils/capture_binary.js";
 import { importCaptureJson, parseCaptureText } from "./capture_import.js";
@@ -614,7 +616,13 @@ export class CapturePanel {
       label: "Render Graph",
       class: "btn",
       title: "Show the frame's passes and the resources that connect them, with dependency-based suggestions",
-      callback: () => self._showRenderGraph(commands)
+      callback: () => self._showRenderGraph(state)
+    });
+    state.issuesButton = new Button(filterArea, {
+      label: "Frame Issues",
+      class: "btn",
+      title: "Performance and correctness issues found in the frame's commands",
+      callback: () => self._showFrameIssues(state)
     });
 
     // GPU pass timeline. Stays at 0 height until timestamp data arrives, so captures
@@ -703,6 +711,9 @@ export class CapturePanel {
     // Select the first command once passEncoderCommands is in place, so any command-info lookups
     // that consult it (e.g. pipeline state) see the fully populated map.
     renderResult.firstCommandWidget?.element.click();
+
+    // Run the frame rules now so their markers are in the command list from the start.
+    this._analyzeFrameIssues(state);
 
     // For imported captures, the live texture-streaming path that normally
     // uploads pixel data to GPU and builds left-pane thumbnails never fires.
@@ -2367,21 +2378,104 @@ export class CapturePanel {
   /**
    * Opens the frame's render graph as a capture tab: its passes in execution
    * order and the textures and buffers that connect them.
-   * @param {Array<Object>} commands - The frame's command records.
+   * @param {Object} state - The capture tab's state.
    */
-  _showRenderGraph(commands) {
+  _showRenderGraph(state) {
     const self = this;
-    const graph = buildFrameRenderGraph(commands, {
-      getObject: (id) => self._getObject(id),
-      getTextureFromView: (view) => self.database.getTextureFromView(view),
-      getBundleCommands: (id) => self._getObject(id)?.commands ?? null,
-    });
+    const graph = this._getRenderGraph(state);
     const panel = buildRenderGraphView(graph, {
-      onSelectCommand: (command) => self._jumpToCommand(command),
+      onSelectCommand: (command) => self._selectCommand(state, command),
       onInspect: (object) => self.window.inspectObject(object),
     });
     this._captureTab.addTab("Render Graph", panel);
     this._captureTab.setActivePanel(panel);
+  }
+
+  /**
+   * The capture tab's render graph, built on first use and shared by the
+   * Render Graph view and the Frame Issues rules.
+   * @param {Object} state - The capture tab's state.
+   */
+  _getRenderGraph(state) {
+    if (!state.renderGraph) {
+      state.renderGraph = buildFrameRenderGraph(state.commands, this._captureResolver());
+    }
+    return state.renderGraph;
+  }
+
+  _captureResolver() {
+    return {
+      getObject: (id) => this._getObject(id),
+      getTextureFromView: (view) => this.database.getTextureFromView(view),
+      getBundleCommands: (id) => this._getObject(id)?.commands ?? null,
+    };
+  }
+
+  /**
+   * Run the frame-level rules over a capture tab's commands, mark the commands
+   * they flag, and show the issue count on the Frame Issues button.
+   * @param {Object} state - The capture tab's state.
+   */
+  _analyzeFrameIssues(state) {
+    try {
+      state.frameIssues = analyzeFrameIssues(state.commands, this._captureResolver(), { graph: this._getRenderGraph(state) });
+    } catch (e) {
+      console.error("Frame issue analysis failed:", e);
+      state.frameIssues = { findings: [], byCommand: new Map(), error: e };
+      return;
+    }
+    const count = state.frameIssues.findings.length;
+    if (state.issuesButton) {
+      state.issuesButton.text = count ? `Frame Issues (${count})` : "Frame Issues";
+    }
+    markCommandIssues(state.frameIssues.byCommand, () => this._showFrameIssues(state));
+  }
+
+  /**
+   * Opens the Frame Issues report as a capture tab.
+   * @param {Object} state - The capture tab's state.
+   */
+  _showFrameIssues(state) {
+    if (!state.frameIssues) {
+      this._analyzeFrameIssues(state);
+    }
+    const panel = buildFrameIssuesView(state.frameIssues, {
+      onSelectCommand: (command) => this._selectCommand(state, command),
+    });
+    this._captureTab.addTab("Frame Issues", panel);
+    this._captureTab.setActivePanel(panel);
+  }
+
+  /**
+   * Switch to a capture tab's command list and select a command in it:
+   * expand every collapsed pass or debug group around it, show its details,
+   * and scroll it into view. Used by reports that open in their own tab.
+   * @param {Object} state - The capture tab's state.
+   * @param {Object} command - The command record.
+   */
+  _selectCommand(state, command) {
+    const row = command?.widget?.element;
+    if (!row) {
+      return;
+    }
+    if (state.tabHandle) {
+      this._captureTab.setHandleActive(state.tabHandle);
+    }
+    for (let element = row.parentElement; element && element !== state.captureContents?.element; element = element.parentElement) {
+      if (!element.classList.contains("collapsed")) {
+        continue;
+      }
+      // A collapsible block follows the header that toggles it; clicking the
+      // header keeps its +/- icon in sync.
+      const header = element.previousElementSibling;
+      if (header && /header/.test(header.className)) {
+        header.click();
+      } else {
+        element.classList.remove("collapsed");
+      }
+    }
+    row.click();
+    row.scrollIntoView({ block: "center" });
   }
 
   /**

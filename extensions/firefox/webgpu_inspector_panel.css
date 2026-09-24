@@ -3243,3 +3243,30 @@ li.tree-item .expandbutton
   fill: var(--fg-secondary);
   font-size: 10px;
 }
+
+/* Frame Issues: report tab and the markers on flagged command-list rows. */
+.frame-issues {
+  height: 100%;
+  overflow: auto;
+  white-space: normal;
+}
+
+.frame-issue-marker {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  line-height: 12px;
+  margin-right: 4px;
+  border-radius: 6px;
+  font-size: 8pt;
+  font-weight: bold;
+  text-align: center;
+  color: #000;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.frame-issue-marker.frame-issue-high { background-color: var(--accent-error); color: #fff; }
+.frame-issue-marker.frame-issue-medium { background-color: var(--accent-warning); }
+.frame-issue-marker.frame-issue-low { background-color: var(--accent-info); }
+.frame-issue-marker.frame-issue-info { background-color: var(--bg-hover); color: #fff; }
