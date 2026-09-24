@@ -3478,3 +3478,87 @@ li.tree-item .expandbutton
   color: var(--fg-secondary);
   font-size: 9pt;
 }
+
+/* Timing Capture tab. */
+.timing-view {
+  height: 100%;
+  overflow: auto;
+  white-space: normal;
+  font-size: 10pt;
+  padding: 0 8px 8px 8px;
+  box-sizing: border-box;
+}
+
+.timing-title {
+  font-weight: bold;
+  padding: 8px 0 4px 0;
+}
+
+.timing-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.timing-stat {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 4px 10px;
+  min-width: 80px;
+}
+
+.timing-stat-label {
+  color: var(--fg-secondary);
+  font-size: 8pt;
+}
+
+.timing-stat-value {
+  font-size: 12pt;
+  font-family: var(--font-mono);
+}
+
+.timing-bad {
+  color: var(--accent-error);
+}
+
+.timing-hint {
+  color: var(--fg-secondary);
+  font-size: 9pt;
+  padding: 6px 0;
+}
+
+.timing-chart {
+  border: 1px solid var(--border-color);
+}
+
+.timing-hitches {
+  padding-top: 8px;
+}
+
+.timing-hitch {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--bg-tertiary);
+}
+
+.timing-hitch-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.timing-hitch-time {
+  color: var(--fg-secondary);
+  font-size: 9pt;
+}
+
+.timing-captured {
+  color: var(--accent-info);
+  font-size: 9pt;
+}
+
+.timing-cause {
+  color: var(--fg-primary);
+  font-size: 9pt;
+  padding-left: 12px;
+}

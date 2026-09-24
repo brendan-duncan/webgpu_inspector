@@ -16,6 +16,7 @@
 * [Reports](#reports)
 * [Pixel History](#pixel-history)
 * [Debug Groups](#debug-groups)
+* [Timing Capture](#timing-capture)
 * [Frame Stats](#frame-stats)
 * [Render Graph](#render-graph)
 * [Frame Issues](#frame-issues)
@@ -288,6 +289,20 @@ If the page pushes/pops Debug Groups, they will be used to group commands in the
 <a href="images/capture_debug_groups.png">
 <img src="images/capture_debug_groups.png" style="width:512px">
 </a>
+
+## Timing Capture
+###### [Back to top](#capture)
+
+A frame capture shows one frame in depth, but a hitch is usually the frame you weren't capturing. **Timing Capture** records the timing of every frame for as long as it runs. Press it to start, and press it again (**Stop Timing**) to open a **Timing** tab with the results. It records while the page is being inspected (see the [Inspect](inspect.md) panel's Start button).
+
+* The chart shows each frame's time, the worst frame per pixel column, so a hitch never disappears into an average. The lighter part of each bar is the rAF callback's CPU time. Dashed lines mark the display's refresh budget and the median frame time. Drag across the chart to see the statistics of a range, and double-click to clear the selection.
+* The statistics are FPS, median, average, 90th and 99th percentile, worst frame, average CPU time, hitches and dropped frames.
+* A **hitch** is a frame that takes more than twice the rolling median frame time and at least 4 ms more than it. Consecutive hitch frames, such as a slowdown lasting several frames, are listed as one event. Each hitch lists its likely causes:
+    * Pipelines compiled synchronously (`createRenderPipeline` / `createComputePipeline`), shader modules, and buffer, texture and bind group creation. The GPU objects the page creates between frames are recorded with the frames.
+    * A long rAF callback: the frame's own JavaScript.
+    * Otherwise, time spent outside the frame's callback: garbage collection, other work on the page's thread, or the GPU or compositor holding the frame back.
+
+Check **Capture on hitch** to capture a frame automatically when the first hitch is detected. The hitch itself has already happened by then, so the capture is of the frame after it, which usually repeats the same work. The Timing tab marks the hitch that triggered the capture.
 
 ## Frame Stats
 ###### [Back to top](#capture)

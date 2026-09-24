@@ -35,6 +35,8 @@ import { buildFrameIssuesView, markCommandIssues } from "./frame_issues_view.js"
 import { buildMeshView } from "./mesh_view.js";
 import { compileAndReplay } from "./frame_replay.js";
 import { buildShaderReplayView } from "./shader_replay_view.js";
+import { TimingRecorder } from "./timing_capture.js";
+import { buildTimingView } from "./timing_view.js";
 import { captureToText, downloadCapture } from "./capture_export.js";
 import { isCaptureBinary, decodeCaptureBinary } from "../utils/capture_binary.js";
 import { importCaptureJson, parseCaptureText } from "./capture_import.js";
@@ -188,39 +190,22 @@ export class CapturePanel {
       }
     });
 
-    new Button(_controlBar, { label: "Capture", class: "btn btn-success", callback: () => {
-      try {
-        this._captureData = new CaptureData(this.database);
-        this._captureData.captureTimestampsRequested = this.captureTimestamps;
-        this._captureData.onCaptureFrameResults.addListener(self._captureFrameResults, self);
-        this._captureData.onUpdateCaptureStatus.addListener(self._updateCaptureStatus, self);
+    new Button(_controlBar, { label: "Capture", class: "btn btn-success", callback: () => this._startCapture() });
 
-        const frame = self.captureMode === 0 ? -1 : self.captureSpecificFrame;
-        // The UI works in MB; the capture protocol is in bytes.
-        const maxBufferSize = self.useMaxBufferSize ? Math.max(1, Math.round(self.maxBufferSizeMB * 1024 * 1024)) : -1;
-        // -1 keeps the full-resolution texture pixels the texture viewer needs;
-        // enabling the cap skips textures larger than it to shrink the capture.
-        const maxTextureSize = self.useMaxTextureSize ? Math.max(1, Math.round(self.maxTextureSizeMB * 1024 * 1024)) : -1;
-
-        // Send the capture request to the backend with the specified frame count and buffer size.
-        // A specific-frame capture (frame >= 0) reloads the page to initialize
-        // the inspector, so it carries the "Inspect Workers" setting the same
-        // way the Inspect panel's Start button does.
-        self.port.postMessage({
-          action: PanelActions.Capture,
-          captureFrameCount: this.captureFrameCount,
-          maxBufferSize,
-          maxTextureSize,
-          frame,
-          captureStacktraces: self.captureStacktraces,
-          captureTimestamps: self.captureTimestamps,
-          inspectWorkers: getInspectWorkers(),
-          objectStacktraces: getObjectStacktraces(),
-        });
-      } catch (e) {
-        console.error(e.message);
-      }
-    } });
+    // Timing Capture: record every frame's timing until stopped, detect
+    // hitches, and optionally capture the frame after the first hitch.
+    this._timingButton = new Button(_controlBar, {
+      label: "Timing Capture",
+      class: "btn",
+      title: "Record every frame's time until stopped, and find the hitches and their likely causes",
+      callback: () => this._toggleTimingCapture(),
+    });
+    this.captureOnHitch = false;
+    const captureOnHitch = new Checkbox(_controlBar, { value: this.captureOnHitch, label: "Capture on hitch", class: "ml-sm",
+      tooltip: "While Timing Capture records, capture the frame after the first hitch" });
+    captureOnHitch.input.onChange.addListener((value) => {
+      this.captureOnHitch = value;
+    });
 
     this.captureMode = 0;
 
@@ -713,6 +698,104 @@ export class CapturePanel {
     }
 
     this.database.onCapturedObjectsChanged.emit();
+  }
+
+  /**
+   * Request a frame capture with the control bar's settings.
+   * @param {Object} [overrides] - { frame, frameCount } to override the
+   *   capture mode and frame count (capture-on-hitch captures the next frame).
+   */
+  _startCapture(overrides = {}) {
+    try {
+      this._captureData = new CaptureData(this.database);
+      this._captureData.captureTimestampsRequested = this.captureTimestamps;
+      this._captureData.onCaptureFrameResults.addListener(this._captureFrameResults, this);
+      this._captureData.onUpdateCaptureStatus.addListener(this._updateCaptureStatus, this);
+
+      const frame = overrides.frame ?? (this.captureMode === 0 ? -1 : this.captureSpecificFrame);
+      // The UI works in MB; the capture protocol is in bytes.
+      const maxBufferSize = this.useMaxBufferSize ? Math.max(1, Math.round(this.maxBufferSizeMB * 1024 * 1024)) : -1;
+      // -1 keeps the full-resolution texture pixels the texture viewer needs;
+      // enabling the cap skips textures larger than it to shrink the capture.
+      const maxTextureSize = this.useMaxTextureSize ? Math.max(1, Math.round(this.maxTextureSizeMB * 1024 * 1024)) : -1;
+
+      // Send the capture request to the backend with the specified frame count and buffer size.
+      // A specific-frame capture (frame >= 0) reloads the page to initialize
+      // the inspector, so it carries the "Inspect Workers" setting the same
+      // way the Inspect panel's Start button does.
+      this.port.postMessage({
+        action: PanelActions.Capture,
+        captureFrameCount: overrides.frameCount ?? this.captureFrameCount,
+        maxBufferSize,
+        maxTextureSize,
+        frame,
+        captureStacktraces: this.captureStacktraces,
+        captureTimestamps: this.captureTimestamps,
+        inspectWorkers: getInspectWorkers(),
+        objectStacktraces: getObjectStacktraces(),
+      });
+    } catch (e) {
+      console.error(e.message);
+    }
+  }
+
+  /** Start or stop a Timing Capture. Stopping opens its Timing tab. */
+  _toggleTimingCapture() {
+    if (this._timing) {
+      const { recorder, handles } = this._timing;
+      this.database.onDeltaFrameTime.disconnect(handles.frame);
+      this.database.onAddObject.disconnect(handles.object);
+      this.database.onValidationError.disconnect(handles.error);
+      this._timing = null;
+      this._timingButton.text = "Timing Capture";
+      this._timingButton.element.classList.remove("btn-danger");
+      const panel = buildTimingView({ recorder });
+      const hitches = recorder.hitches.length;
+      this._captureTab.addTab(`Timing (${recorder.frames.length} frames${hitches ? `, ${hitches} hitch${hitches === 1 ? "" : "es"}` : ""})`, panel);
+      this._captureTab.setActivePanel(panel);
+      return;
+    }
+
+    const recorder = new TimingRecorder();
+    let hitchCaptured = false;
+    const update = () => {
+      const hitches = recorder.hitches.length;
+      this._timingButton.text = `Stop Timing (${recorder.frames.length} frames${hitches ? `, ${hitches} hitch${hitches === 1 ? "" : "es"}` : ""})`;
+    };
+    const handles = {
+      frame: this.database.onDeltaFrameTime.addListener(() => {
+        const db = this.database;
+        const frame = recorder.addFrame({
+          time: performance.now(),
+          deltaTime: db.deltaFrameTime,
+          cpuTime: db.cpuFrameTime,
+          refresh: db.refreshPeriod,
+          skipped: db.skippedFrames,
+        });
+        if (frame.hitch && this.captureOnHitch && !hitchCaptured) {
+          // The hitch has already happened; the frame after it is the
+          // closest a capture can get, and usually shows the same work.
+          hitchCaptured = true;
+          frame.captured = true;
+          this._startCapture({ frame: -1, frameCount: 1 });
+        }
+        update();
+      }),
+      object: this.database.onAddObject.addListener((object, pending) => {
+        const type = object?.constructor?.className;
+        let bytes = 0;
+        if (type === "Buffer") {
+          bytes = object.descriptor?.size ?? 0;
+        } else if (type === "Texture" && object.getGpuSize) {
+          bytes = Math.max(0, object.getGpuSize());
+        }
+        recorder.noteObject(type, { pending, bytes });
+      }),
+      error: this.database.onValidationError.addListener(() => recorder.noteValidationError()),
+    };
+    this._timing = { recorder, handles };
+    this._timingButton.element.classList.add("btn-danger");
+    update();
   }
 
   /**
