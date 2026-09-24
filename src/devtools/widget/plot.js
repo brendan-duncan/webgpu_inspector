@@ -5,6 +5,8 @@ import { Div } from './div.js';
 export class PlotData { 
   constructor(name, size) {
     this.name = name;
+    // At least 1 (see the size setter): a plot built in a hidden tab has width 0.
+    size = Math.max(1, Math.floor(size) || 1);
     this._size = size;
     this.data = new Float32Array(size);
     this.index = 0;
@@ -26,18 +28,24 @@ export class PlotData {
   }
 
   set size(value) {
+    // A zero-size buffer would make add()'s `% size` NaN and wedge the index
+    // for good, so the series never draws again.
+    value = Math.max(1, Math.floor(value) || 1);
     if (value === this._size) {
       return;
     }
-    const oldData = this.data;
-    const copyCount = Math.min(this.count, value);
-    this._size = value;
-    this.data = new Float32Array(value);
-    this.data.set(oldData.subarray(0, copyCount));
-    this.count = copyCount;
-    if (this.index >= value) {
-      this.index = 0;
+    // Keep the most recent samples, in order (the ring buffer's storage order
+    // isn't chronological once it has wrapped).
+    const keep = Math.min(this.count, value);
+    const next = new Float32Array(value);
+    for (let i = 0; i < keep; ++i) {
+      next[i] = this.get(this.count - keep + i);
     }
+    this._size = value;
+    this.data = next;
+    this.count = keep;
+    this.index = keep % value;
+    this._recalculateMinMax();
   }
 
   add(value) {
@@ -131,6 +139,11 @@ export class Plot extends Div {
   }
 
   onResize() {
+    // A plot in a hidden tab (display: none) reports a zero size. Keep the
+    // buffers and canvas as they are; the observer fires again when it shows.
+    if (this.width <= 0 || this.height <= 0) {
+      return;
+    }
     if (this.canvas) {
       const dpr = window.devicePixelRatio || 1;
       this.canvas.element.width = this.width * dpr;

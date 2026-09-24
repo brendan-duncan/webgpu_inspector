@@ -57,7 +57,7 @@ export class InspectorWindow extends Window {
     this._recorderPanel = new RecorderPanel(this, recorderPanel);
 
     const version = "__buildVersion";
-    new Widget("a", this._tabs.headerElement, { text: `WebGPU Inspector v${version}`,
+    new Widget("a", this._tabs.headerElement, { text: `v${version}`,
       href: "https://github.com/brendan-duncan/webgpu_inspector/blob/main/README.md",
       target: "_blank",
       style: "color: rgb(127 181 205); text-decoration: none; padding-top: 5px; font-size: 10pt; float: right; margin-right: 10px;" 
