@@ -3384,7 +3384,7 @@ export class CapturePanel {
     new Button(commandInfo, {
       label: "Mesh View",
       class: "btn",
-      title: "Show the draw's vertex inputs as a table and a 3D preview",
+      title: "Show the draw's vertex shader inputs and outputs as a table and a 3D preview",
       style: "margin: 4px 0 6px 0;",
       callback: () => this._showMeshView(command, state, pipeline),
     });
@@ -3408,6 +3408,8 @@ export class CapturePanel {
     const tabState = this._activeTabState;
     const panel = buildMeshView({
       device: this.window?.device ?? null,
+      database: this.database,
+      passCommands: this._passEncoderCommands.get(command.object) ?? null,
       command,
       label,
       pipelineDesc: desc,

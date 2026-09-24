@@ -12,9 +12,12 @@ import {
     guessPositionAttribute,
 } from "./mesh_input.js";
 import { MESH_MODES, MeshPreview } from "./mesh_preview.js";
+import { clipStats, runVsOut } from "./vs_out.js";
 
 const PAGE_SIZE = 100;
 const COLOR_NONE = "None";
+const STAGE_IN = "VS In";
+const STAGE_OUT = "VS Out";
 
 function formatNumber(v, format) {
     if (!Number.isFinite(v)) {
@@ -30,16 +33,28 @@ function formatNumber(v, format) {
     return String(Number(v.toPrecision(5)));
 }
 
+// The eight corners and twelve edges of the clip-space view volume in NDC:
+// x and y in [-1, 1], z in [0, 1].
+const BOX_CORNERS = [
+    [-1, -1, 0], [1, -1, 0], [1, 1, 0], [-1, 1, 0],
+    [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+];
+const BOX_EDGES = [0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7];
+
 /**
- * The Mesh view (VS In) for one draw: a 3D preview of its input geometry and
- * a table of every vertex it fetches, in draw order. Selecting a row marks
- * the vertex in the preview; clicking the preview selects the nearest vertex's
- * row.
+ * The Mesh view for one draw: a 3D preview and a table of every vertex the
+ * draw fetches, in draw order. "VS In" shows the vertex shader's inputs,
+ * decoded from the captured vertex buffers; "VS Out" runs the vertex shader
+ * by GPU replay (vs_out.js) and shows its outputs, with the preview in
+ * normalized device coordinates inside the view volume. Selecting a row marks
+ * the vertex in the preview; clicking the preview selects the nearest row.
  *
  * @param {Object} options
- * @param {GPUDevice} [options.device] - for the 3D preview
+ * @param {GPUDevice} [options.device] - for the preview and VS Out
+ * @param {Object} [options.database] - for VS Out
+ * @param {Object[]} [options.passCommands] - the draw's pass, for VS Out
  * @param {Object} options.command - the draw command
- * @param {string} options.label - e.g. 'Pass 2 drawIndexed #5'
+ * @param {string} options.label
  * @param {Object} options.pipelineDesc
  * @param {Object[]} [options.shaderInputs]
  * @param {Object[]} options.vertexBufferCommands - setVertexBuffer commands by slot
@@ -55,19 +70,31 @@ class MeshView {
     constructor(options) {
         this.options = options;
         this.instance = 0;
+        this.stage = STAGE_IN;
         this.positionIndex = -1;
         this.colorIndex = -1;
         this.selected = -1;
         this.page = 0;
+        this.outMesh = null;
 
         this.panel = new Div(null, { class: "mesh-view" });
         this.panel.onDestroy = () => this.preview?.destroy();
 
-        this.mesh = this._build();
+        this.inMesh = this._build();
+        this.mesh = this.inMesh;
         this.positionIndex = guessPositionAttribute(this.mesh.attributes);
 
         const toolbar = new Div(this.panel, { class: "mesh-toolbar" });
         this.summary = new Span(toolbar, { class: "mesh-summary" });
+        if (options.device && options.database) {
+            new Span(toolbar, { class: "mesh-label", text: "Stage" });
+            this.stageSelect = new Select(toolbar, {
+                options: [STAGE_IN, STAGE_OUT],
+                index: 0,
+                style: "width: 80px;",
+                onChange: (value) => this._setStage(value),
+            });
+        }
         const instances = this.mesh.drawArgs?.instanceCount ?? 1;
         if (instances > 1) {
             new Span(toolbar, { class: "mesh-label", text: "Instance" });
@@ -78,27 +105,23 @@ class MeshView {
             });
             new Span(toolbar, { text: `/ ${instances}` });
         }
-        const names = this.mesh.attributes.map((a) => `${a.name} (${a.format})`);
         new Span(toolbar, { class: "mesh-label", text: "Position" });
-        new Select(toolbar, {
-            options: names.length ? names : ["(no attributes)"],
-            index: Math.max(0, this.positionIndex),
-            style: "width: 180px;",
+        this.positionSelect = new Select(toolbar, {
+            style: "width: 200px;",
             onChange: (value, index) => {
                 this.positionIndex = index;
                 this._updateGeometry(false);
             },
         });
         new Span(toolbar, { class: "mesh-label", text: "Color" });
-        new Select(toolbar, {
-            options: [COLOR_NONE, ...names],
-            index: 0,
-            style: "width: 180px;",
+        this.colorSelect = new Select(toolbar, {
+            style: "width: 200px;",
             onChange: (value, index) => {
                 this.colorIndex = index - 1;
                 this.preview?.setColors(this._colors());
             },
         });
+        this._refreshAttributeSelects();
         new Span(toolbar, { class: "mesh-label", text: "Mode" });
         new Select(toolbar, {
             options: MESH_MODES,
@@ -122,7 +145,7 @@ class MeshView {
         if (options.device) {
             try {
                 this.preview = new MeshPreview(previewPane.element, options.device);
-                this.preview.onPick = (index) => this._select(index, true);
+                this.preview.onPick = (index) => this._select(index < this.mesh.count ? index : -1, true);
                 new Div(previewPane, { class: "mesh-hint", text: "Drag to orbit, right-drag to pan, wheel to zoom, click to pick a vertex." });
             } catch (e) {
                 console.error(e);
@@ -148,12 +171,88 @@ class MeshView {
         });
     }
 
-    _setInstance(instance) {
+    _refreshAttributeSelects() {
+        const names = this.mesh.attributes.map((a) => a.format ? `${a.name} (${a.format})` : a.name);
+        const fill = (select, options, index) => {
+            select.select.element.innerHTML = "";
+            for (const option of options) {
+                select.addOption(option);
+            }
+            select.index = index;
+        };
+        fill(this.positionSelect, names.length ? names : ["(no attributes)"], Math.max(0, this.positionIndex));
+        fill(this.colorSelect, [COLOR_NONE, ...names], this.colorIndex + 1);
+    }
+
+    async _setStage(stage) {
+        if (stage === this.stage) {
+            return;
+        }
+        if (stage === STAGE_OUT && !this.outMesh) {
+            this._showNotes([`Running the vertex shader for ${this.inMesh.count.toLocaleString()} vertices on the GPU…`]);
+            try {
+                this.outMesh = await this._computeOut();
+            } catch (e) {
+                console.warn("VS Out failed:", e);
+                this.stageSelect.index = 0;
+                this._showNotes([`VS Out failed: ${e.message ?? e}`, ...this.inMesh.warnings]);
+                return;
+            }
+        }
+        this.stage = stage;
+        this.mesh = stage === STAGE_OUT ? this.outMesh : this.inMesh;
+        this.positionIndex = stage === STAGE_OUT ? this.mesh.ndcIndex : guessPositionAttribute(this.mesh.attributes);
+        this.colorIndex = -1;
+        this._refreshAttributeSelects();
+        this._updateGeometry(false);
+        this._renderTable();
+    }
+
+    async _computeOut() {
+        const o = this.options;
+        const out = await runVsOut({
+            device: o.device,
+            database: o.database,
+            command: o.command,
+            passCommands: o.passCommands,
+            pipelineDesc: o.pipelineDesc,
+            mesh: this.inMesh,
+            instance: this.instance,
+        });
+        // Add NDC (position / w) as a derived attribute: the preview's position.
+        if (out.clipIndex >= 0) {
+            const clip = out.values[out.clipIndex];
+            const ndc = new Float64Array(out.count * 3);
+            for (let i = 0; i < out.count; ++i) {
+                const w = clip[i * 4 + 3];
+                for (let c = 0; c < 3; ++c) {
+                    ndc[i * 3 + c] = w > 0 ? clip[i * 4 + c] / w : NaN;
+                }
+            }
+            out.attributes.push({ name: "NDC (position / w)", format: "", components: 3, location: -1, derived: true });
+            out.values.push(ndc);
+            out.ndcIndex = out.attributes.length - 1;
+        } else {
+            out.ndcIndex = -1;
+            out.warnings.push("The vertex shader has no @builtin(position) output.");
+        }
+        return out;
+    }
+
+    async _setInstance(instance) {
         if (instance === this.instance) {
             return;
         }
         this.instance = instance;
-        this.mesh = this._build();
+        this.inMesh = this._build();
+        this.outMesh = null;
+        if (this.stage === STAGE_OUT) {
+            this.stage = STAGE_IN;
+            this.mesh = this.inMesh;
+            await this._setStage(STAGE_OUT);
+            return;
+        }
+        this.mesh = this.inMesh;
         this._updateGeometry(true);
         this._renderTable();
     }
@@ -162,12 +261,20 @@ class MeshView {
         return attributeColors(this.mesh, this.colorIndex);
     }
 
+    _showNotes(notes) {
+        this.notes.removeAllChildren();
+        for (const note of notes) {
+            new Div(this.notes, { class: "flame-note", text: note });
+        }
+    }
+
     _updateGeometry(keepCamera) {
         const mesh = this.mesh;
-        const { positions, valid, invalid, min, max } = attributePositions(mesh, this.positionIndex);
+        let { positions, valid, invalid, min, max } = attributePositions(mesh, this.positionIndex);
         const { triangles, lines } = assemblePrimitives(mesh);
         const validTriangles = filterPrimitives(triangles, 3, valid);
-        const validLines = filterPrimitives(lines, 2, valid);
+        let validLines = filterPrimitives(lines, 2, valid);
+        let colors = this._colors();
 
         const unique = new Set();
         for (const v of mesh.vertexIndices) {
@@ -176,7 +283,7 @@ class MeshView {
             }
         }
         const parts = [
-            `${mesh.count.toLocaleString()} vertices fetched (${unique.size.toLocaleString()} unique)`,
+            `${this.stage}: ${mesh.count.toLocaleString()} vertices (${unique.size.toLocaleString()} unique)`,
             mesh.topology,
         ];
         if (validTriangles.length) {
@@ -189,21 +296,53 @@ class MeshView {
         }
         this.summary.text = parts.join(" · ");
 
-        this.notes.removeAllChildren();
         const notes = [...mesh.warnings];
+        if (this.stage === STAGE_OUT) {
+            if (mesh.clipIndex >= 0) {
+                const s = clipStats(mesh.values[mesh.clipIndex], mesh.vertexIndices, triangles);
+                const n = (v) => v.toLocaleString();
+                notes.push(`${n(s.outside)} vertices lie outside the view volume, ${n(s.behind)} behind the eye (w ≤ 0), ${n(s.nan)} NaN; ` +
+                    `${n(s.culledTriangles)} triangles are entirely off-screen and ${n(s.zeroArea)} have zero area.`);
+            }
+            if (this.positionIndex === mesh.ndcIndex) {
+                notes.push("The preview shows normalized device coordinates (position / w) inside the view volume box; vertices behind the eye are left out.");
+            }
+            notes.push(`Outputs come from running the vertex shader on the DevTools device over the captured inputs${mesh.drawArgs?.instanceCount > 1 ? ` for instance ${this.instance}` : ""}.`);
+        } else {
+            if (mesh.attributes.some((a) => a.stepMode === "instance")) {
+                notes.push(`Instance-stepped attributes show instance ${this.instance}.`);
+            }
+            notes.push("Positions are the vertex shader's inputs, before the vertex shader runs.");
+        }
         if (invalid) {
-            notes.push(`${invalid.toLocaleString()} vertices have no usable position (NaN, infinite or not captured) and are left out of the preview.`);
+            notes.push(`${invalid.toLocaleString()} vertices have no usable position (NaN, infinite, behind the eye, or not captured) and are left out of the preview.`);
         }
-        if (mesh.attributes.some((a) => a.stepMode === "instance")) {
-            notes.push(`Instance-stepped attributes show instance ${this.instance}.`);
-        }
-        notes.push("Positions are the vertex shader's inputs, before the vertex shader runs.");
-        for (const note of notes) {
-            new Div(this.notes, { class: "flame-note", text: note });
-        }
+        this._showNotes(notes);
 
-        this.preview?.setGeometry({ positions, colors: this._colors(), valid, triangles: validTriangles, lines: validLines, min, max }, keepCamera);
-        if (this.selected >= 0) {
+        // In NDC, frame the geometry with the view volume.
+        if (this.stage === STAGE_OUT && this.positionIndex === mesh.ndcIndex) {
+            const base = mesh.count;
+            const boxPositions = new Float32Array(positions.length + 24);
+            boxPositions.set(positions);
+            boxPositions.set(BOX_CORNERS.flat(), positions.length);
+            const boxColors = new Float32Array(colors.length + 24);
+            boxColors.set(colors);
+            boxColors.fill(0.5, colors.length);
+            const boxValid = new Uint8Array(valid.length + 8);
+            boxValid.set(valid);
+            boxValid.fill(1, valid.length);
+            const boxLines = new Uint32Array(validLines.length + BOX_EDGES.length);
+            boxLines.set(validLines);
+            boxLines.set(BOX_EDGES.map((e) => e + base), validLines.length);
+            positions = boxPositions;
+            colors = boxColors;
+            valid = boxValid;
+            validLines = boxLines;
+            min = [Math.min(min[0], -1), Math.min(min[1], -1), Math.min(min[2], 0)];
+            max = [Math.max(max[0], 1), Math.max(max[1], 1), Math.max(max[2], 1)];
+        }
+        this.preview?.setGeometry({ positions, colors, valid, triangles: validTriangles, lines: validLines, min, max }, keepCamera);
+        if (this.selected >= 0 && this.selected < mesh.count) {
             this.preview?.setHighlight(this.selected);
         }
     }
@@ -249,7 +388,10 @@ class MeshView {
         th("#", "Element index in the draw");
         th("VTX", "Vertex index fetched (after baseVertex)");
         for (const attr of mesh.attributes) {
-            th(attr.name, `location ${attr.location}, ${attr.format}, slot ${attr.slot}${attr.stepMode === "instance" ? ", per instance" : ""}`);
+            const title = attr.derived ? "Derived from the position output"
+                : attr.slot === -1 ? (attr.builtin ? `@builtin(${attr.builtin})` : `@location(${attr.location})`)
+                : `location ${attr.location}, ${attr.format}, slot ${attr.slot}${attr.stepMode === "instance" ? ", per instance" : ""}`;
+            th(attr.name, title);
         }
         const body = table.createTBody();
         for (let i = start; i < end; ++i) {

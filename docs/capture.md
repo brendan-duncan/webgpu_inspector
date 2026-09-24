@@ -212,6 +212,11 @@ Select a **draw** command (any draw, including indexed and indirect draws) and p
 * The table lists every vertex the draw fetches, in draw order and 100 rows per page. It shows the vertex index (after `baseVertex`) and every attribute, named from the vertex shader's inputs. Strip restarts are marked.
 * Click a row to mark that vertex in the preview, or click in the preview to select the nearest vertex's row.
 * For instanced draws, **Instance** chooses which instance's per-instance attributes are shown.
+* **Stage** switches between **VS In** (the vertex shader's inputs) and **VS Out** (its outputs).
+
+**VS Out** runs the draw's vertex shader on the DevTools GPU device over the captured inputs, and lists every output: the `@builtin(position)` clip-space position, each `@location` output, and a derived **NDC (position / w)** column. The preview then shows the NDC positions inside a wire box marking the view volume (x and y from -1 to 1, z from 0 to 1). The notes count how many vertices lie outside the view volume, how many are behind the eye (w ≤ 0) and how many are NaN, plus how many triangles are entirely off-screen or have zero area. That answers questions like "why is my mesh invisible?" or "is it being clipped?".
+
+WebGPU has no transform feedback, so VS Out converts the vertex shader into a compute shader. The vertex entry point becomes an ordinary function, and a generated compute entry point calls it once per vertex. The shader's uniforms, storage buffers and textures are re-created from the capture. Bindings with dynamic offsets are supported. Textures whose contents weren't captured in their original format (depth and multisampled textures) are bound with placeholder contents, and the notes say so.
 
 The view decodes the captured vertex and index buffer bytes, and reads indirect draws' arguments from the captured indirect buffer. Vertices beyond the captured bytes (see [Max Buffer Size](#max-buffer-size)) are reported and left out of the preview.
 
