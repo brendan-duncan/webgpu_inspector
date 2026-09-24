@@ -243,7 +243,43 @@ export async function validated(replay, what, create) {
 // culled-but-covering draws are still detected (the CPU simulation reports
 // why they didn't contribute).
 async function getOverdrawPipeline(replay, pipelineId, stubModule, ignoreCull = false) {
-    const key = `overdraw-pipeline:${pipelineId}:${ignoreCull ? 1 : 0}`;
+    return getVariantPipeline(replay, pipelineId, {
+        key: `overdraw:${ignoreCull ? 1 : 0}`,
+        label: "overdraw",
+        primitive: ignoreCull ? (primitive) => ({ ...primitive, cullMode: "none" }) : null,
+        fragment: {
+            module: stubModule,
+            entryPoint: "overdrawMain",
+            targets: [{
+                format: COUNT_FORMAT,
+                blend: {
+                    color: { srcFactor: "one", dstFactor: "one", operation: "add" },
+                    alpha: { srcFactor: "one", dstFactor: "one", operation: "add" },
+                },
+            }],
+        },
+    });
+}
+
+/**
+ * Materialize a replay variant of a captured render pipeline: the original
+ * vertex stage and (optionally adjusted) primitive state, with the fragment
+ * stage, depth-stencil state and targets supplied by the caller. Variants are
+ * memoized per pipeline under `variant.key`. No multisampling: replays render
+ * at one sample per pixel.
+ * @param {CaptureReplay} replay
+ * @param {number} pipelineId
+ * @param {Object} variant
+ * @param {string} variant.key - memo key distinguishing this variant
+ * @param {string} [variant.label]
+ * @param {Object} [variant.fragment] - GPUFragmentState; omit for a depth-only pipeline
+ * @param {(primitive:Object)=>Object} [variant.primitive] - adjust the original primitive state
+ * @param {(depthStencil:Object|undefined)=>Object|undefined} [variant.depthStencil] - the
+ *   variant's depth-stencil state, given the original; omit for none
+ * @returns {Promise<Object>} { pipeline, isAuto, layoutBGLs, vsBindings, descriptor } or { error }
+ */
+export async function getVariantPipeline(replay, pipelineId, variant) {
+    const key = `variant-pipeline:${variant.key}:${pipelineId}`;
     if (replay._objects.has(key)) {
         return replay._objects.get(key);
     }
@@ -277,9 +313,9 @@ async function getOverdrawPipeline(replay, pipelineId, stubModule, ignoreCull = 
             return { error: "The pipeline layout requires shader reflection, which failed for the vertex shader." };
         }
 
-        const primitive = { ...(desc.primitive ?? {}) };
-        if (ignoreCull) {
-            primitive.cullMode = "none";
+        let primitive = { ...(desc.primitive ?? {}) };
+        if (variant.primitive) {
+            primitive = variant.primitive(primitive);
         }
         if (primitive.unclippedDepth && !replay.device.features.has("depth-clip-control")) {
             delete primitive.unclippedDepth;
@@ -298,28 +334,25 @@ async function getOverdrawPipeline(replay, pipelineId, stubModule, ignoreCull = 
             vertex.constants = desc.vertex.constants;
         }
 
+        const pipelineDescriptor = {
+            label: `${variant.label ?? variant.key} ${pipeline.label || pipelineId}`,
+            layout,
+            vertex,
+            primitive,
+        };
+        if (variant.fragment) {
+            pipelineDescriptor.fragment = variant.fragment;
+        }
+        const depthStencil = variant.depthStencil ? variant.depthStencil(desc.depthStencil) : undefined;
+        if (depthStencil) {
+            pipelineDescriptor.depthStencil = depthStencil;
+        }
         const gpuPipeline = await validated(replay, `Pipeline ${pipeline.label || pipelineId} could not be replayed`, () =>
-            replay.device.createRenderPipeline({
-                label: `overdraw ${pipeline.label || pipelineId}`,
-                layout,
-                vertex,
-                primitive,
-                fragment: {
-                    module: stubModule,
-                    entryPoint: "overdrawMain",
-                    targets: [{
-                        format: COUNT_FORMAT,
-                        blend: {
-                            color: { srcFactor: "one", dstFactor: "one", operation: "add" },
-                            alpha: { srcFactor: "one", dstFactor: "one", operation: "add" },
-                        },
-                    }],
-                },
-            }));
+            replay.device.createRenderPipeline(pipelineDescriptor));
         if (!gpuPipeline) {
             return { error: "The pipeline could not be re-created for replay." };
         }
-        return { pipeline: gpuPipeline, isAuto: layout === "auto", layoutBGLs, vsBindings };
+        return { pipeline: gpuPipeline, isAuto: layout === "auto", layoutBGLs, vsBindings, descriptor: desc };
     };
 
     const info = await build();
@@ -502,7 +535,7 @@ function addUpload(replay, command, entryIndex, bufferId, offset, expectedSize, 
 // draw's scissor (the pixel-coverage query restricts rasterization to one
 // pixel — deliberately ignoring the original scissor, so scissored-out draws
 // are still detected and the simulation can report why they didn't land).
-function encodeDraw(pass, replay, item, width, height, scissorOverride) {
+export function encodeDraw(pass, replay, item, width, height, scissorOverride, drawOverride) {
     const { plan, pipelineInfo, bindGroups } = item;
     pass.setPipeline(pipelineInfo.pipeline);
     for (const bg of bindGroups) {
@@ -532,8 +565,16 @@ function encodeDraw(pass, replay, item, width, height, scissorOverride) {
     pass.setViewport(vp?.[0] ?? 0, vp?.[1] ?? 0, vp?.[2] ?? width, vp?.[3] ?? height, vp?.[4] ?? 0, vp?.[5] ?? 1);
     const sc = scissorOverride ?? plan.scissor;
     pass.setScissorRect(sc?.[0] ?? 0, sc?.[1] ?? 0, sc?.[2] ?? width, sc?.[3] ?? height);
+    if (plan.stencilReference !== undefined && plan.stencilReference !== null) {
+        pass.setStencilReference(plan.stencilReference);
+    }
 
-    if (plan.method === "draw") {
+    if (drawOverride) {
+        // A caller-built index buffer replaces the draw's own geometry
+        // (the wireframe overlay's line list).
+        pass.setIndexBuffer(drawOverride.indexBuffer, "uint32");
+        pass.drawIndexed(drawOverride.indexCount, drawOverride.instanceCount, 0, drawOverride.baseVertex, drawOverride.firstInstance);
+    } else if (plan.method === "draw") {
         pass.draw(plan.args[0], plan.args[1] ?? 1, plan.args[2] ?? 0, plan.args[3] ?? 0);
     } else if (plan.method === "drawIndexed") {
         pass.drawIndexed(plan.args[0], plan.args[1] ?? 1, plan.args[2] ?? 0, plan.args[3] ?? 0, plan.args[4] ?? 0);
@@ -604,6 +645,7 @@ export function walkPassCommands(replay, passCommands, uploads, missing, stats) 
         indexBuffer: null,
         viewport: null,
         scissor: null,
+        stencilReference: null,
     };
     const drawPlans = [];
 
@@ -631,7 +673,7 @@ export function walkPassCommands(replay, passCommands, uploads, missing, stats) 
             }
             case "setIndexBuffer": {
                 const bufferObj = replay.database.getObject(args[0]?.__id);
-                state.indexBuffer = { bufferId: args[0]?.__id, format: args[1], offset: args[2] ?? 0, size: args[3] ?? undefined };
+                state.indexBuffer = { bufferId: args[0]?.__id, format: args[1], offset: args[2] ?? 0, size: args[3] ?? undefined, command };
                 addUpload(replay, command, 0, args[0]?.__id, 0, bufferObj?.descriptor?.size ?? 0, uploads, missing);
                 break;
             }
@@ -640,6 +682,9 @@ export function walkPassCommands(replay, passCommands, uploads, missing, stats) 
                 break;
             case "setScissorRect":
                 state.scissor = args.slice(0, 4);
+                break;
+            case "setStencilReference":
+                state.stencilReference = args[0] ?? 0;
                 break;
             case "executeBundles":
                 stats.skippedDraws++;
@@ -659,6 +704,7 @@ export function walkPassCommands(replay, passCommands, uploads, missing, stats) 
                     indexBuffer: state.indexBuffer,
                     viewport: state.viewport,
                     scissor: state.scissor,
+                    stencilReference: state.stencilReference,
                 };
                 if (command.method === "drawIndirect" || command.method === "drawIndexedIndirect") {
                     const bufferObj = replay.database.getObject(args[0]?.__id);
@@ -702,7 +748,19 @@ export function walkPassCommands(replay, passCommands, uploads, missing, stats) 
 // Materialize one draw plan's GPU objects (pipeline + bind groups), each
 // validated once. Returns { pipelineInfo, bindGroups } or { error }.
 async function prepareDraw(replay, plan, stubModule, ignoreCull) {
-    const pipelineInfo = await getOverdrawPipeline(replay, plan.pipelineId, stubModule, ignoreCull);
+    return prepareReplayDraw(replay, plan, (pipelineId) => getOverdrawPipeline(replay, pipelineId, stubModule, ignoreCull));
+}
+
+/**
+ * Materialize one draw plan's GPU objects with a caller-chosen pipeline
+ * variant (see getVariantPipeline). Returns { pipelineInfo, bindGroups } or
+ * { error }.
+ * @param {CaptureReplay} replay
+ * @param {Object} plan - from walkPassCommands
+ * @param {(pipelineId:number)=>Promise<Object>} getPipelineInfo
+ */
+export async function prepareReplayDraw(replay, plan, getPipelineInfo) {
+    const pipelineInfo = await getPipelineInfo(plan.pipelineId);
     if (pipelineInfo.error) {
         return { error: pipelineInfo.error };
     }

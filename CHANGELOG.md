@@ -4,6 +4,7 @@
 
 * Added a Render Graph view to Capture. It shows the frame's passes in GPU execution order and the textures and buffers that connect them as a resource lifetime chart. It also shows the critical path and suggestions based on dependencies, such as unread stores, results overwritten before they are read, reads of discarded attachments, MSAA stores and mergeable passes.
 * Added a Frame Issues report to Capture. It checks the frame for performance and correctness problems, such as pipelines created mid-frame, per-frame resource and bind group creation, fragmented writeBuffer calls, redundant state, tiny draws, small dispatches, empty passes and loads of fresh canvas textures, and includes the Render Graph suggestions. Flagged commands are marked in the command list.
+* Added draw stepping and per-draw overlays to the capture texture viewer (the Pixel History tab). Step through the draws that render to a texture, and overlay Highlight Draw, Wireframe, Depth Test and Stencil Test pass/fail, Backface Cull or Viewport / Scissor for the selected draw. The overlays are computed by GPU replay, and the depth and stencil tests replay the earlier draws first.
 
 ## v1.7.0
 

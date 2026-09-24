@@ -225,6 +225,25 @@ The viewer's **Overdraw** checkbox overlays a heatmap of how many fragments the 
 
 The overlay is computed by **GPU replay**: the frame's draws are re-executed on the DevTools panel's own GPU device, re-creating the pipelines, buffers, and bind groups from the capture, with each draw's original vertex stage but a stub fragment shader that additively counts fragments. This makes it fast on heavy frames and counts indirect draws, whose argument buffers are captured. Because it replays the captured buffer bytes, large buffers truncated by [Max Buffer Size](#max-buffer-size) replay with incomplete contents — the overlay reports this; capture with a larger limit for faithful geometry. Draws that can't be re-created (e.g. render bundles, or resources that weren't captured) are excluded from the counts and reported. When GPU replay isn't possible, the overlay falls back to a CPU simulation using the pixel-history interpreter, which is slower on geometry-heavy frames and skips indirect draws; the status line shows which engine produced the counts. Either way the result is cached for the viewer tab.
 
+### Draw Overlays
+
+The viewer's **Draw** bar steps through every draw in the passes that render to the texture. Use **‹** and **›**, or type a draw number. The viewer opens on the last draw of the pass you opened it from. **Go to** selects the draw in the command list. The **Overlay** menu shows one of these for the selected draw:
+
+* **Highlight Draw**: the pixels the draw rasterizes, after culling, viewport, scissor and depth clipping, with no depth test.
+* **Wireframe**: the edges of the draw's primitives, built from its captured index buffer or vertex range. Indirect draws use their captured arguments.
+* **Depth Test**: green where the draw's fragments pass the depth test and red where they fail. Before drawing, the overlay rebuilds the depth-stencil buffer by replaying every earlier draw that wrote it, including in earlier passes, and follows each pass's load ops.
+* **Stencil Test**: the same for the stencil test, using the draw's stencil reference.
+* **Backface Cull**: green for front-facing and red for back-facing pixels, whatever the draw's cull mode. The status line says which color the cull mode removes.
+* **Viewport / Scissor**: the draw's viewport (blue) and scissor (yellow) rectangles. Pixels outside the scissor are dimmed.
+
+Hovering a pixel adds the overlay's verdict to the tooltip. The status line gives pixel counts, for example how many fragments pass and fail the depth test.
+
+The overlays use the same GPU replay as [Overdraw](#overdraw): each draw's original vertex stage runs with a stub fragment shader that writes a flat color. That has some consequences:
+
+* Fragment-shader `discard` and `frag_depth` writes are not reproduced, so depth rebuilt from alpha-tested or depth-writing shaders can differ.
+* Depth-stencil contents from before the captured frame are not available, so the rebuild starts from the far plane and stencil 0. The status line says when this happens.
+* Multisampled targets are replayed at one sample per pixel.
+
 Pixel history is computed by re-running the pass's vertex and fragment shaders on the inspector's CPU WGSL interpreter and re-doing the rasterizer's work (triangle coverage, perspective-correct interpolation, depth/stencil tests, blending) at the selected pixel. When a pass loads an attachment instead of clearing it, the earlier passes in the frame that wrote that texture (including depth pre-passes) are replayed at the pixel first, so the depth test and blending see the right prior state.
 
 To keep this fast on geometry-heavy frames, the frame's draws are first **GPU-replayed** with a 1×1 scissor at the pixel and an occlusion query per draw (the same replay layer the [Overdraw](#overdraw) view uses, with culling disabled so culled-but-covering draws are still found) — the CPU interpreter then only simulates the draws that actually rasterized fragments at that pixel. When GPU replay isn't possible, every draw is simulated.

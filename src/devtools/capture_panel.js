@@ -1209,7 +1209,7 @@ export class CapturePanel {
             self.window.inspectObject(texture);
           } });
           new Button(colorAttachmentGrp.body, { label: "Pixel History", class: _inspectButtonStyle,
-            title: "Open the attachment in the capture texture viewer to pick a pixel and trace every draw that touched it", callback: () => {
+            title: "Open the attachment in the capture texture viewer: pick a pixel to trace every draw that touched it, or step through the draws with per-draw overlays", callback: () => {
             self._showTextureViewer(texture, renderPassIndex, i, false);
           } });
           const passId = this._getPassId(renderPassIndex, i);
@@ -1240,7 +1240,7 @@ export class CapturePanel {
             self.window.inspectObject(texture);
           } });
           new Button(depthStencilAttachmentGrp.body, { label: "Pixel History", class: _inspectButtonStyle,
-            title: "Open the attachment in the capture texture viewer to pick a pixel and trace every draw that touched it", callback: () => {
+            title: "Open the attachment in the capture texture viewer: pick a pixel to trace every draw that touched it, or step through the draws with per-draw overlays", callback: () => {
             self._showTextureViewer(texture, renderPassIndex, 0, true);
           } });
           this._createTextureWidget(depthStencilAttachmentGrp.body, texture, -1, this._clampedTextureWidth(texture), "margin-left: 20px; margin-top: 10px;");
@@ -3236,7 +3236,7 @@ export class CapturePanel {
           } });
           const colorIndex = index;
           new Button(outputGrp.body, { label: "Pixel History", class: _inspectButtonStyle,
-            title: "Open the attachment in the capture texture viewer to pick a pixel and trace every draw that touched it", callback: () => {
+            title: "Open the attachment in the capture texture viewer: pick a pixel to trace every draw that touched it, or step through the draws with per-draw overlays", callback: () => {
             self._showTextureViewer(texture, renderPassIndex, colorIndex, false);
           } });
           if (texture.gpuTexture) {
@@ -3257,7 +3257,7 @@ export class CapturePanel {
             self.window.inspectObject(texture);
           } });
           new Button(outputGrp.body, { label: "Pixel History", class: _inspectButtonStyle,
-            title: "Open the attachment in the capture texture viewer to pick a pixel and trace every draw that touched it", callback: () => {
+            title: "Open the attachment in the capture texture viewer: pick a pixel to trace every draw that touched it, or step through the draws with per-draw overlays", callback: () => {
             self._showTextureViewer(texture, renderPassIndex, 0, true);
           } });
           if (texture.gpuTexture) {

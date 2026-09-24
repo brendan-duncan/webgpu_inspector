@@ -16,6 +16,20 @@ import { runPixelHistoryGen } from "./pixel_history.js";
 import { buildPixelHistoryPasses } from "./pixel_history_builder.js";
 import { computeOverdraw } from "./overdraw.js";
 import { replayOverdraw, queryPixelCoverage } from "./capture_replay.js";
+import { Button } from "./widget/button.js";
+import {
+    DrawOverlayRenderer,
+    OVERLAY_BACKFACE,
+    OVERLAY_COLORS,
+    OVERLAY_DEPTH,
+    OVERLAY_HIGHLIGHT,
+    OVERLAY_MODES,
+    OVERLAY_NONE,
+    OVERLAY_STENCIL,
+    OVERLAY_VIEWPORT,
+    OVERLAY_WIREFRAME,
+    collectTargetDraws,
+} from "./draw_overlay.js";
 
 function _formatChannel(v) {
     if (v === null || v === undefined) {
@@ -178,6 +192,8 @@ export class CaptureTextureViewer extends Div {
         }
         this._overdrawNotesPane = new Div(this, { style: "flex: 0 0 auto; display: none; padding: 0px 5px 5px 5px; color: #999; font-size: 9pt; font-style: italic; white-space: normal;" });
 
+        this._buildDrawBar(labelStyle);
+
         if (!this.valuesAreCurrent) {
             new Div(this, {
                 style: "flex: 0 0 auto; padding: 0px 5px 5px 5px; color: #999; font-style: italic;",
@@ -226,6 +242,9 @@ export class CaptureTextureViewer extends Div {
 
     onDestroy() {
         this._overdrawRunId++; // cancel any in-flight overdraw compute
+        this._drawOverlayRunId++;
+        this._drawOverlayRenderer?.destroy();
+        this._drawOverlayRenderer = null;
         const tooltip = this.capturePanel?._tooltip;
         if (tooltip) {
             tooltip.style.display = "none";
@@ -290,9 +309,11 @@ export class CaptureTextureViewer extends Div {
             this._canvas.style.width = `${this.texture.width * zoom}px`;
             this._canvas.style.height = `${this.texture.height * zoom}px`;
         }
-        if (this._overlayCanvas) {
-            this._overlayCanvas.style.width = `${this.texture.width * zoom}px`;
-            this._overlayCanvas.style.height = `${this.texture.height * zoom}px`;
+        for (const overlay of [this._overlayCanvas, this._drawOverlayCanvas]) {
+            if (overlay) {
+                overlay.style.width = `${this.texture.width * zoom}px`;
+                overlay.style.height = `${this.texture.height * zoom}px`;
+            }
         }
         this._updateMarker();
     }
@@ -414,6 +435,10 @@ export class CaptureTextureViewer extends Div {
             const count = this._overdrawCountAt(p.x, p.y);
             if (count !== null) {
                 tooltip.innerHTML += `Overdraw: ${count}\n`;
+            }
+            const overlayText = this._drawOverlayTextAt(p.x, p.y);
+            if (overlayText) {
+                tooltip.innerHTML += `${overlayText}\n`;
             }
         });
 
@@ -618,6 +643,212 @@ export class CaptureTextureViewer extends Div {
                 text: `Captured value at end of pass: ${captured}. The simulation is a CPU approximation; small differences are expected.`,
             });
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // Draw stepping and per-draw overlays
+    // ------------------------------------------------------------------------
+
+    _buildDrawBar(labelStyle) {
+        this._draws = collectTargetDraws(this.commands ?? [], this.texture,
+            (attachment) => this.capturePanel._getTextureFromAttachment(attachment));
+        this._drawIndex = -1;
+        this._drawOverlayMode = OVERLAY_NONE;
+        this._drawOverlayRunId = 0;
+        this._drawOverlayResult = null;
+        this._drawOverlayCanvas = null;
+        this._drawOverlayRenderer = null;
+        if (!this._draws.length) {
+            return;
+        }
+
+        const bar = new Div(this, { style: "flex: 0 0 auto; display: flex; align-items: center; gap: 4px; padding: 0px 5px 5px 5px; color: #bbb; font-size: 9pt;" });
+        new Span(bar, { text: "Draw", style: labelStyle.replace("margin-left: 10px; ", "") });
+        const buttonStyle = "padding: 0 8px; min-width: 0;";
+        const prev = new Button(bar, { label: "‹", class: "btn", style: buttonStyle, callback: () => this._selectDraw(this._drawIndex - 1) });
+        prev.tooltip = "Previous draw";
+        this._drawNumber = new NumberInput(bar, {
+            value: 1, step: 1, min: 1, max: this._draws.length, precision: 0,
+            style: "width: 60px; display: inline-block;",
+            onChange: (value) => this._selectDraw(Math.round(value) - 1),
+        });
+        new Span(bar, { text: `/ ${this._draws.length}` });
+        const next = new Button(bar, { label: "›", class: "btn", style: buttonStyle, callback: () => this._selectDraw(this._drawIndex + 1) });
+        next.tooltip = "Next draw";
+        this._drawLabel = new Span(bar, { style: "margin-left: 6px; color: #ddd;" });
+        const goTo = new Button(bar, { label: "Go to", class: "btn", style: "margin-left: 6px;", callback: () => {
+            const draw = this._draws[this._drawIndex];
+            if (draw) {
+                this.onShowCommand?.(draw.command);
+            }
+        } });
+        goTo.tooltip = "Show this draw in the command list";
+
+        new Span(bar, { text: "Overlay", style: labelStyle });
+        new Select(bar, {
+            options: OVERLAY_MODES,
+            index: 0,
+            style: "color: #fff; font-size: 10pt; width: 150px;",
+            onChange: (value) => {
+                this._drawOverlayMode = value;
+                this._updateDrawOverlay();
+            },
+        });
+
+        this._drawOverlayStatus = new Div(this, { style: "flex: 0 0 auto; display: none; padding: 0px 5px 5px 5px; color: #bbb; font-size: 9pt; white-space: normal;" });
+
+        // Start on the last draw of this viewer's pass: what the attachment
+        // looks like at the end of the pass is the image being shown.
+        let initial = this._draws.length - 1;
+        for (let i = this._draws.length - 1; i >= 0; --i) {
+            if (this._draws[i].passIndex === this.passIndex) {
+                initial = i;
+                break;
+            }
+        }
+        this._selectDraw(initial);
+    }
+
+    _selectDraw(index) {
+        if (!this._draws?.length) {
+            return;
+        }
+        index = Math.max(0, Math.min(this._draws.length - 1, index));
+        if (index === this._drawIndex) {
+            return;
+        }
+        this._drawIndex = index;
+        const draw = this._draws[index];
+        this._drawNumber.setValue(index + 1, true);
+        this._drawLabel.text = draw.label;
+        this._updateDrawOverlay();
+    }
+
+    _updateDrawOverlay() {
+        const runId = ++this._drawOverlayRunId;
+        const mode = this._drawOverlayMode;
+        const draw = this._draws[this._drawIndex];
+        this._drawOverlayResult = null;
+        if (mode === OVERLAY_NONE || !draw || !this._canvas) {
+            if (this._drawOverlayCanvas) {
+                this._drawOverlayCanvas.style.display = "none";
+            }
+            this._drawOverlayStatus.element.style.display = "none";
+            return;
+        }
+        const status = this._drawOverlayStatus;
+        status.element.style.display = "block";
+        status.element.style.color = "#bbb";
+        status.text = `${mode}: replaying…`;
+
+        setTimeout(async () => {
+            if (runId !== this._drawOverlayRunId) {
+                return;
+            }
+            try {
+                if (!this._drawOverlayRenderer) {
+                    this._drawOverlayRenderer = new DrawOverlayRenderer({
+                        device: this.capturePanel?.window?.device,
+                        database: this.database,
+                        commands: this.commands,
+                        getTextureFromAttachment: (attachment) => this.capturePanel._getTextureFromAttachment(attachment),
+                    });
+                }
+                const result = await this._drawOverlayRenderer.render(draw, mode, this.texture.width, this.texture.height);
+                if (runId !== this._drawOverlayRunId) {
+                    return;
+                }
+                this._drawOverlayResult = { ...result, mode };
+                this._showDrawOverlay(result, mode);
+            } catch (e) {
+                if (runId !== this._drawOverlayRunId) {
+                    return;
+                }
+                console.warn("Draw overlay failed:", e);
+                if (this._drawOverlayCanvas) {
+                    this._drawOverlayCanvas.style.display = "none";
+                }
+                status.element.style.color = "#d99a2b";
+                status.text = `${mode}: ${e.message ?? e}`;
+            }
+        }, 0);
+    }
+
+    _showDrawOverlay(result, mode) {
+        const status = this._drawOverlayStatus;
+        status.removeAllChildren();
+        const legend = {
+            [OVERLAY_HIGHLIGHT]: [[OVERLAY_COLORS.highlight, "rasterized by the draw"]],
+            [OVERLAY_WIREFRAME]: [[OVERLAY_COLORS.wire, "primitive edges"]],
+            [OVERLAY_DEPTH]: [[OVERLAY_COLORS.pass, "passes"], [OVERLAY_COLORS.fail, "fails"]],
+            [OVERLAY_STENCIL]: [[OVERLAY_COLORS.pass, "passes"], [OVERLAY_COLORS.fail, "fails"]],
+            [OVERLAY_BACKFACE]: [[OVERLAY_COLORS.pass, "front-facing"], [OVERLAY_COLORS.fail, "back-facing"]],
+            [OVERLAY_VIEWPORT]: [[OVERLAY_COLORS.viewport, "viewport"], [OVERLAY_COLORS.scissor, "scissor"]],
+        }[mode] ?? [];
+        const line = new Div(status, { style: "display: flex; align-items: center; flex-wrap: wrap; gap: 4px;" });
+        for (const [c, text] of legend) {
+            new Span(line, { style: `display: inline-block; width: 12px; height: 12px; border: 1px solid #555; background-color: rgb(${c[0]}, ${c[1]}, ${c[2]});` });
+            new Span(line, { text, style: "margin-right: 8px;" });
+        }
+        if (result.summary) {
+            new Span(line, { text: result.summary, style: "color: #ddd;" });
+        }
+        for (const note of result.notes.slice(0, 4)) {
+            new Div(status, { text: note, style: "color: #999; font-style: italic;" });
+        }
+        if (result.notes.length > 4) {
+            new Div(status, { text: `(+${result.notes.length - 4} more — see the DevTools console)`, style: "color: #999; font-style: italic;" });
+            console.info("[webgpu-inspector] draw overlay notes:", result.notes);
+        }
+
+        if (!this._drawOverlayCanvas) {
+            const overlay = document.createElement("canvas");
+            overlay.width = this.texture.width;
+            overlay.height = this.texture.height;
+            overlay.style.cssText = "position: absolute; left: 0; top: 0; pointer-events: none; image-rendering: pixelated; z-index: 1;";
+            this._imageHolder.element.appendChild(overlay);
+            if (this._marker) {
+                this._marker.style.zIndex = "2";
+            }
+            this._drawOverlayCanvas = overlay;
+        }
+        const overlay = this._drawOverlayCanvas;
+        const ctx = overlay.getContext("2d");
+        const image = ctx.createImageData(overlay.width, overlay.height);
+        const pixels = result.pixels;
+        const alpha = mode === OVERLAY_WIREFRAME || mode === OVERLAY_VIEWPORT ? 1 : 0.75;
+        for (let i = 0; i < pixels.length; i += 4) {
+            image.data[i] = pixels[i];
+            image.data[i + 1] = pixels[i + 1];
+            image.data[i + 2] = pixels[i + 2];
+            image.data[i + 3] = pixels[i + 3] * alpha;
+        }
+        ctx.putImageData(image, 0, 0);
+        overlay.style.display = "block";
+        this._applyZoom();
+    }
+
+    // What the draw overlay says about one pixel, for the hover tooltip.
+    _drawOverlayTextAt(x, y) {
+        const result = this._drawOverlayResult;
+        if (!result?.pixels || result.mode === OVERLAY_VIEWPORT) {
+            return null;
+        }
+        const i = (y * this.texture.width + x) * 4;
+        if (!result.pixels[i + 3]) {
+            return result.mode === OVERLAY_WIREFRAME ? null : `${result.mode}: not covered`;
+        }
+        const green = result.pixels[i + 1] > result.pixels[i];
+        switch (result.mode) {
+            case OVERLAY_DEPTH:
+            case OVERLAY_STENCIL:
+                return `${result.mode}: ${green ? "pass" : "fail"}`;
+            case OVERLAY_BACKFACE:
+                return `Facing: ${green ? "front" : "back"}`;
+            case OVERLAY_HIGHLIGHT:
+                return "Draw: covered";
+        }
+        return null;
     }
 
     // ------------------------------------------------------------------------
