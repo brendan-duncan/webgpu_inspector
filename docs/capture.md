@@ -61,9 +61,17 @@ A start frame of **0** will record all commands from the start of the page load,
 
 For pages that do not use requestAnimationFrame, the Frames value does not do anything. In that case, recording will continue until the GPU device has been destroyed or garbage collected, or you press the inspector overlay on the page to stop the recording.
 
+### Capture Settings
+
+The capture settings below (**Max Buffer Size**, **Max Texture Size**, **Stacktraces**, **Profile Passes**, and **Capture on hitch** for [Timing Capture](#timing-capture)) are in the **☰** menu at the left of the Capture bar, under **Capture Settings**. The bar keeps only the controls used on every capture: Capture, the capture mode and frame count, [Pause and Step](#pause-and-step), and Timing Capture.
+
 #### Max Buffer Size
 
 The **Max Buffer Size** value specifies the maximum buffer size Capture will record, for Uniform and Storage buffers. Sending buffer data to the DevTools panel can be slow, so limiting the buffer size can help capture performance. Large buffers are typically used for storage buffers.
+
+#### Max Texture Size
+
+When checked, **Max Texture Size** skips capturing the pixel data of textures larger than the given size in MB. Full-resolution render targets are usually most of a capture's size, so this keeps captures small at the cost of those textures' images.
 
 #### Stacktraces
 
@@ -304,12 +312,12 @@ A frame capture shows one frame in depth, but a hitch is usually the frame you w
     * A long rAF callback: the frame's own JavaScript.
     * Otherwise, time spent outside the frame's callback: garbage collection, other work on the page's thread, or the GPU or compositor holding the frame back.
 
-Check **Capture on hitch** to capture a frame automatically when the first hitch is detected. The hitch itself has already happened by then, so the capture is of the frame after it, which usually repeats the same work. The Timing tab marks the hitch that triggered the capture.
+Check **Capture on hitch** (in the **☰** menu's Capture Settings) to capture a frame automatically when the first hitch is detected. The hitch itself has already happened by then, so the capture is of the frame after it, which usually repeats the same work. The Timing tab marks the hitch that triggered the capture.
 
 ## Pause and Step
 ###### [Back to top](#capture)
 
-**Pause** freezes the inspected page's `requestAnimationFrame` loop. The canvas keeps its last presented frame, and **Step** runs one frame at a time. Pausing holds the page's rAF callbacks instead of running them; **Resume** releases them. This applies to the page and to any inspected workers that render with `requestAnimationFrame`.
+The Pause and Step buttons sit after the capture mode and frame count on the Capture bar. **Pause** freezes the inspected page's `requestAnimationFrame` loop. The canvas keeps its last presented frame, and **Step** runs one frame at a time. Pausing holds the page's rAF callbacks instead of running them; **Resume** releases them. This applies to the page and to any inspected workers that render with `requestAnimationFrame`.
 
 The callbacks see a virtual timestamp that advances by one display refresh per frame. An animation driven by the rAF timestamp therefore moves one frame per step instead of jumping by the time spent paused, and it continues smoothly after Resume. Animations that read `performance.now()` or `Date.now()` directly still see real time.
 

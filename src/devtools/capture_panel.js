@@ -7,6 +7,7 @@ import {
   TextureView
 } from "./gpu_objects/index.js";
 import { Button } from "./widget/button.js";
+import { createHelpButton } from "./widget/help_button.js";
 import { Checkbox } from "./widget/checkbox.js";
 import { collapsible } from "./widget/collapsible.js";
 import { Dialog } from "./widget/dialog.js";
@@ -193,41 +194,6 @@ export class CapturePanel {
 
     new Button(_controlBar, { label: "Capture", class: "btn btn-success", callback: () => this._startCapture() });
 
-    // Timing Capture: record every frame's timing until stopped, detect
-    // hitches, and optionally capture the frame after the first hitch.
-    this._timingButton = new Button(_controlBar, {
-      label: "Timing Capture",
-      class: "btn",
-      title: "Record every frame's time until stopped, and find the hitches and their likely causes",
-      callback: () => this._toggleTimingCapture(),
-    });
-    this.captureOnHitch = false;
-    const captureOnHitch = new Checkbox(_controlBar, { value: this.captureOnHitch, label: "Capture on hitch", class: "ml-sm",
-      tooltip: "While Timing Capture records, capture the frame after the first hitch" });
-    captureOnHitch.input.onChange.addListener((value) => {
-      this.captureOnHitch = value;
-    });
-
-    // Pause / step the page's requestAnimationFrame loop. A capture of a
-    // paused page steps through the frames it captures.
-    this._framePaused = false;
-    const iconStyle = "width: 15px; height: 15px; filter: invert(1); vertical-align: middle;";
-    this._pauseIcon = new Img(null, { src: "img/debug-pause.svg", style: iconStyle });
-    this._pauseButton = new Button(_controlBar, {
-      children: [this._pauseIcon],
-      class: "btn ml-sm capture_icon_button",
-      title: "Pause the page's requestAnimationFrame loop; the canvas keeps its last frame",
-      callback: () => this._setFramePause(this._framePaused ? "resume" : "pause"),
-    });
-    this._stepButton = new Button(_controlBar, {
-      children: [new Img(null, { src: "img/debug-step-over.svg", style: iconStyle })],
-      class: "btn capture_icon_button",
-      title: "Step: run one frame of the paused page",
-      callback: () => this._setFramePause("step", 1),
-    });
-    this._stepButton.disabled = true;
-    this._pauseStatus = new Span(_controlBar, { class: "text-secondary ml-sm" });
-
     this.captureMode = 0;
 
     new Select(_controlBar, {
@@ -271,69 +237,43 @@ export class CapturePanel {
       self.captureFrameCount = Math.max(value, 1);
     } });
 
-    this.maxBufferSizeMB = 1;
-    this.useMaxBufferSize = false;
-    const useMaxBufferSizeBtn = new Checkbox(_controlBar, { value: this.useMaxBufferSize, title: "Use Max Buffer Size",
-      label: "Max Buffer Size (MB):", class: "ml-sm" });
-    const maxBufferSizeInput = new NumberInput(_controlBar, { value: this.maxBufferSizeMB, min: 0, step: 1, precision: 0,
-        class: "mr-sm", style: "width: 60px; flex: 0 0 auto;", onChange: (value) => {
-      self.maxBufferSizeMB = Math.max(value, 0);
-    } });
+    // Pause / step the page's requestAnimationFrame loop. A capture of a
+    // paused page steps through the frames it captures.
+    this._framePaused = false;
+    const iconStyle = "width: 15px; height: 15px; filter: invert(1); vertical-align: middle;";
+    this._pauseIcon = new Img(null, { src: "img/debug-pause.svg", style: iconStyle });
+    this._pauseButton = new Button(_controlBar, {
+      children: [this._pauseIcon],
+      class: "btn ml-sm capture_icon_button",
+      title: "Pause the page's requestAnimationFrame loop; the canvas keeps its last frame",
+      callback: () => this._setFramePause(this._framePaused ? "resume" : "pause"),
+    });
+    this._stepButton = new Button(_controlBar, {
+      children: [new Img(null, { src: "img/debug-step-over.svg", style: iconStyle })],
+      class: "btn capture_icon_button",
+      title: "Step: run one frame of the paused page",
+      callback: () => this._setFramePause("step", 1),
+    });
+    this._stepButton.disabled = true;
+    this._pauseStatus = new Span(_controlBar, { class: "text-secondary ml-sm" });
 
-
-    maxBufferSizeInput.disabled = !this.useMaxBufferSize;
-    useMaxBufferSizeBtn.input.onChange.addListener((value) => {
-      this.useMaxBufferSize = value;
-      maxBufferSizeInput.disabled = !value;
+    // Timing Capture: record every frame's timing until stopped, detect
+    // hitches, and optionally capture the frame after the first hitch.
+    this._timingButton = new Button(_controlBar, {
+      label: "Timing Capture",
+      class: "btn ml-sm",
+      title: "Record every frame's time until stopped, and find the hitches and their likely causes",
+      callback: () => this._toggleTimingCapture(),
     });
 
-    // Texture pixel data dominates the size of a capture (full-res render
-    // targets). Off by default so the texture viewer has full data; enable to
-    // skip textures larger than the limit and keep captures small.
-    this.maxTextureSizeMB = 16;
-    this.useMaxTextureSize = false;
-    const useMaxTextureSizeBtn = new Checkbox(_controlBar, { value: this.useMaxTextureSize,
-      title: "Skip capturing textures larger than this size",
-      label: "Max Texture Size (MB):", class: "ml-sm" });
-    const maxTextureSizeInput = new NumberInput(_controlBar, { value: this.maxTextureSizeMB, min: 0, step: 1, precision: 0,
-        class: "mr-sm", style: "width: 60px; flex: 0 0 auto;", onChange: (value) => {
-      self.maxTextureSizeMB = Math.max(value, 0);
-    } });
-
-    maxTextureSizeInput.disabled = !this.useMaxTextureSize;
-    useMaxTextureSizeBtn.input.onChange.addListener((value) => {
-      this.useMaxTextureSize = value;
-      maxTextureSizeInput.disabled = !value;
-    });
-
-    // Stacktraces per recorded command are useful but can dominate the payload size
-    // when a frame contains thousands of commands. Off by default; opt in here.
-    this.captureStacktraces = false;
-    const stacktraceBtn = new Checkbox(_controlBar, { value: this.captureStacktraces,
-      title: "Capture Stacktraces", label: "Stacktraces", class: "ml-sm" });
-    stacktraceBtn.input.onChange.addListener((value) => {
-      this.captureStacktraces = value;
-    });
-
-    // Profile Passes injects timestamp queries around each render/compute pass so the
-    // panel can report per-pass GPU duration and render a frame timeline. Requires the
-    // page's adapter to support the "timestamp-query" feature; the page-side guard in
-    // webgpu_inspector.js silently skips the injection when it doesn't.
-    this.captureTimestamps = true;
-    const timestampsBtn = new Checkbox(_controlBar, { checked: this.captureTimestamps,
-      title: "Inject GPU timestamp queries to measure per-pass duration",
-      label: "Profile Passes", class: "ml-sm" });
-    timestampsBtn.input.onChange.addListener((value) => {
-      this.captureTimestamps = value;
-    });
+    this._buildCaptureSettings(menuDropdown);
 
     this._captureStatus = new Span(_controlBar, { style: "margin-left: 20px; margin-right: 10px;" });
 
     new Div(_controlBar, { class: "control-bar-spacer" });
 
-    new Button(_controlBar, { label: "Help", class: "btn", callback: () => {
-      window.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/capture.md", "_blank");
-    }});
+    createHelpButton(_controlBar, "https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/capture.md",
+      { title: "Capture documentation" });
 
     this._capturePanel = new Div(parent, { style: "overflow: hidden; white-space: nowrap; flex: 1 1 auto; min-height: 0; display: flex;" });
 
@@ -725,6 +665,80 @@ export class CapturePanel {
     }
 
     this.database.onCapturedObjectsChanged.emit();
+  }
+
+  /**
+   * The capture settings, in the ☰ menu below Save / Load so the control bar
+   * keeps only the controls used on every capture.
+   * @param {Div} menu - the menu's dropdown
+   */
+  _buildCaptureSettings(menu) {
+    new Div(menu, { class: "menu-separator" });
+    new Div(menu, { class: "menu-heading", text: "Capture Settings" });
+    const row = () => new Div(menu, { class: "menu-setting" });
+
+    // Captured buffer bytes can dominate a capture; cap them when needed.
+    this.maxBufferSizeMB = 1;
+    this.useMaxBufferSize = false;
+    let r = row();
+    const useMaxBufferSizeBtn = new Checkbox(r, { value: this.useMaxBufferSize, title: "Use Max Buffer Size",
+      label: "Max Buffer Size (MB)" });
+    const maxBufferSizeInput = new NumberInput(r, { value: this.maxBufferSizeMB, min: 0, step: 1, precision: 0,
+        style: "width: 60px; flex: 0 0 auto;", onChange: (value) => {
+      this.maxBufferSizeMB = Math.max(value, 0);
+    } });
+    maxBufferSizeInput.disabled = !this.useMaxBufferSize;
+    useMaxBufferSizeBtn.input.onChange.addListener((value) => {
+      this.useMaxBufferSize = value;
+      maxBufferSizeInput.disabled = !value;
+    });
+
+    // Texture pixel data dominates the size of a capture (full-res render
+    // targets). Off by default so the texture viewer has full data; enable to
+    // skip textures larger than the limit and keep captures small.
+    this.maxTextureSizeMB = 16;
+    this.useMaxTextureSize = false;
+    r = row();
+    const useMaxTextureSizeBtn = new Checkbox(r, { value: this.useMaxTextureSize,
+      title: "Skip capturing textures larger than this size",
+      label: "Max Texture Size (MB)" });
+    const maxTextureSizeInput = new NumberInput(r, { value: this.maxTextureSizeMB, min: 0, step: 1, precision: 0,
+        style: "width: 60px; flex: 0 0 auto;", onChange: (value) => {
+      this.maxTextureSizeMB = Math.max(value, 0);
+    } });
+    maxTextureSizeInput.disabled = !this.useMaxTextureSize;
+    useMaxTextureSizeBtn.input.onChange.addListener((value) => {
+      this.useMaxTextureSize = value;
+      maxTextureSizeInput.disabled = !value;
+    });
+
+    // Stacktraces per recorded command are useful but can dominate the payload size
+    // when a frame contains thousands of commands. Off by default; opt in here.
+    this.captureStacktraces = false;
+    const stacktraceBtn = new Checkbox(row(), { value: this.captureStacktraces,
+      title: "Record a stacktrace for every captured command", label: "Stacktraces" });
+    stacktraceBtn.input.onChange.addListener((value) => {
+      this.captureStacktraces = value;
+    });
+
+    // Profile Passes injects timestamp queries around each render/compute pass so the
+    // panel can report per-pass GPU duration and render a frame timeline. Requires the
+    // page's adapter to support the "timestamp-query" feature; the page-side guard in
+    // webgpu_inspector.js silently skips the injection when it doesn't.
+    this.captureTimestamps = true;
+    const timestampsBtn = new Checkbox(row(), { checked: this.captureTimestamps,
+      title: "Inject GPU timestamp queries to measure per-pass duration",
+      label: "Profile Passes" });
+    timestampsBtn.input.onChange.addListener((value) => {
+      this.captureTimestamps = value;
+    });
+
+    this.captureOnHitch = false;
+    const captureOnHitch = new Checkbox(row(), { value: this.captureOnHitch, label: "Capture on hitch",
+      tooltip: "While Timing Capture records, capture the frame after the first hitch" });
+    captureOnHitch.input.onChange.addListener((value) => {
+      this.captureOnHitch = value;
+    });
   }
 
   /**

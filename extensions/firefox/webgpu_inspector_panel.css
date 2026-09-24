@@ -145,6 +145,33 @@
     background-color: transparent;
 }
 
+/* Settings rows in a dropdown menu (the Capture panel's capture settings). */
+.menu-separator {
+    height: 1px;
+    margin: 4px 0;
+    background-color: var(--border-color);
+}
+
+.menu-heading {
+    padding: 4px 16px 2px 16px;
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--fg-secondary);
+    user-select: none;
+}
+
+.menu-setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 4px 16px;
+    font-size: 10pt;
+    color: var(--fg-primary);
+    white-space: nowrap;
+}
+
 /* Buttons.
  * Selectors are written as `button.btn*` so they out-rank the legacy `.button`
  * rule further down in this file (added by the Button widget itself); without
@@ -3584,12 +3611,14 @@ li.tree-item .expandbutton
   padding-top: 3px;
 }
 
-/* Icon-only buttons in the capture control bar (Pause / Resume / Step). */
-button.capture_icon_button {
+/* Icon-only buttons (Pause / Resume / Step, Help). */
+button.capture_icon_button,
+button.icon-button {
   padding: 2px 8px;
   line-height: 0;
 }
 
-button.capture_icon_button:disabled img {
+button.capture_icon_button:disabled img,
+button.icon-button:disabled img {
   opacity: 0.35;
 }

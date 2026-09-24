@@ -13,6 +13,7 @@
 * Fixed the Inspect panel's object list cutting off its last entries: it now fills the panel instead of using a fixed height.
 * Texture viewers highlight special values: NaN and infinity by default, and optionally values below 0 or above 1. They also have a per-channel histogram with counts of special values. The capture texture viewer can copy its image as a PNG.
 * Fixed 32-bit float textures (r32float, rgba32float, ...) displaying black in the texture viewers.
+* The Capture bar's settings (Max Buffer Size, Max Texture Size, Stacktraces, Profile Passes, Capture on hitch) moved to the ☰ menu under Capture Settings, which leaves the bar with Capture, capture mode and frames, Pause and Step, and Timing Capture. Help buttons are now icons.
 * Hovering an object in the Inspect panel's list shows its details, such as a texture's format, size, mip levels, samples, usage and memory, or a buffer's size and usage, plus where it was created.
 * The capture's report buttons (Frame Stats, Frame Issues, Render Graph, Shader Flame Graph, Analyze Shaders) are now in a Reports menu, with a badge showing the frame's issue count.
 

@@ -1,4 +1,5 @@
 import { Button } from "./widget/button.js";
+import { createHelpButton } from "./widget/help_button.js";
 import { Checkbox } from "./widget/checkbox.js";
 import { collapsible } from "./widget/collapsible.js";
 import { Div } from "./widget/div.js";
@@ -115,9 +116,8 @@ export class InspectPanel {
 
     new Span(_controlBar, { class: "control-bar-spacer" });
 
-    new Button(_controlBar, { label: "Help", class: "btn", callback: () => {
-      window.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/inspect.md", "_blank");
-    }});
+    createHelpButton(_controlBar, "https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/inspect.md",
+      { title: "Inspect documentation" });
 
     // overflow:hidden keeps a too-narrow window from pushing items out of the row; the
     // label can shrink/clip (flex 0 1 auto below) so the meters keep priority on width.

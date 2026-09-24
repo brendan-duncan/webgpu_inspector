@@ -23,6 +23,7 @@ import { lintKeymap } from "@codemirror/lint";
 import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
 import { cobalt } from 'thememirror';
 import { Button } from "./widget/button.js";
+import { createHelpButton } from "./widget/help_button.js";
 import { NumberInput } from "./widget/number_input.js";
 import { TextInput } from "./widget/text_input.js";
 
@@ -347,14 +348,8 @@ export class ShaderDebugger extends Div {
             });
         }
 
-        new Button(this.controls, {
-            text: "Help",
-            title: "Help",
-            style: "background-color: #777;",
-            onClick: () => {
-                window.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/shader_debugger.md", "_blank");
-            }
-        });
+        createHelpButton(this.controls, "https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/shader_debugger.md",
+            { title: "Shader debugger documentation", style: "background-color: #777;" });
 
         const editorPanel = new Div(this, { style: "height: 100%;" });
 

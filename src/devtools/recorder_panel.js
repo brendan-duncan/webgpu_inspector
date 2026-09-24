@@ -1,4 +1,5 @@
 import { Button } from "./widget/button.js";
+import { createHelpButton } from "./widget/help_button.js";
 import { Checkbox } from "./widget/checkbox.js";
 import { collapsible } from "./widget/collapsible.js";
 import { Div } from "./widget/div.js";
@@ -151,9 +152,8 @@ export class RecorderPanel {
 
     new Div(recorderBar, { class: "control-bar-spacer" });
 
-    new Button(recorderBar, { label: "Help", class: "btn", callback: () => {
-      globalThis.open("https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/record.md", "_blank");
-    }});
+    createHelpButton(recorderBar, "https://github.com/brendan-duncan/webgpu_inspector/blob/main/docs/record.md",
+      { title: "Record documentation" });
 
     this._updateModeUI();
 
