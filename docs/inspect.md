@@ -9,6 +9,7 @@
 * [Inspection History](#inspection-history)
 * [Filters](#filters)
 * [Object Stacktrace](#object-stacktrace)
+* [Allocations](#allocations)
 * [Validation Errors](#validation-errors)
 * [Textures](#textures)
 * [Shaders](#shaders)
@@ -168,6 +169,18 @@ The stacktrace for each object is recorded, identifying where in the code the ob
 <a href="images/inspect_stacktrace.png">
 <img src="images/inspect_stacktrace.png" style="width: 750px;">
 </a>
+
+## Allocations
+###### [Back to top](#inspect)
+
+The **Allocations** tab, next to **Inspect** on the right side of the panel, is for finding leaks. A leak in a WebGPU page is usually one line of code that creates a buffer or bind group every frame and never releases it, so this tab groups the live GPU objects by the code that created them. Each row shows the object type, the creation site, how many of those objects are alive, and their buffer and texture memory. Click a row to list its objects, and click an object to inspect it.
+
+* The creation site is the first frame of the object's creation stack trace. Turn on **Object Stacktraces** (see [Starting the Inspect Tool](#starting-the-inspect-tool)) to get one. Without stack traces, objects are grouped by label.
+* **Type** limits the list to one kind of object.
+* **Mark Baseline** remembers the objects alive now. With **Since baseline** checked, only objects created after the mark that are still alive are listed. Mark a baseline, let the page run for a while (or repeat an action, such as loading a level twice), and whatever is still growing is the leak.
+* **Garbage collected without destroy()** lists the buffers, textures and devices the page dropped without calling `destroy()`, grouped the same way, with a count, memory and when the last one was collected. Their GPU memory is only freed when the garbage collector gets to them, which can be much later.
+
+The tab refreshes every two seconds while it is visible; **Refresh** updates it immediately.
 
 ## Validation Errors
 ###### [Back to top](#inspect)

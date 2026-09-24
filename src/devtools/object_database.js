@@ -42,6 +42,11 @@ export class ObjectDatabase {
     // Emitted with (id, object, reason) when a resource an object references was destroyed.
     this.onObjectInvalidated = new Signal();
     this.onCapturedObjectsChanged = new Signal();
+    // Emitted with the leak record when an object is garbage collected without destroy().
+    this.onLeakedObject = new Signal();
+    // Buffers, textures and devices garbage collected without destroy(): snapshots
+    // of what the objects were, since the objects themselves are deleted next.
+    this.leakedObjects = [];
 
     this.totalTextureMemory = 0;
     this.totalBufferMemory = 0;
@@ -65,6 +70,27 @@ export class ObjectDatabase {
           this.totalSkippedFrames += (message.skipped ?? 0);
           this.onDeltaFrameTime.emit();
           break;
+        case Actions.GarbageCollectedLeak: {
+          const object = self.getObject(message.id);
+          if (object) {
+            const record = {
+              id: object.id,
+              type: object.constructor.className,
+              label: object.label,
+              bytes: object.constructor.className === "Buffer" ? (object.size ?? 0)
+                : object.getGpuSize ? Math.max(0, object.getGpuSize()) : 0,
+              stacktrace: object.stacktrace,
+              time: performance.now(),
+            };
+            // Keep the most recent ones; a leak in a render loop never stops.
+            if (self.leakedObjects.length >= 10000) {
+              self.leakedObjects.shift();
+            }
+            self.leakedObjects.push(record);
+            self.onLeakedObject.emit(record);
+          }
+          break;
+        }
         case Actions.ValidationError: {
           const errorMessage = message.message;
           const stacktrace = message.stacktrace;
@@ -285,6 +311,7 @@ export class ObjectDatabase {
     this.frameTime = 0;
     this.totalTextureMemory = 0;
     this.totalBufferMemory = 0;
+    this.leakedObjects = [];
   }
 
   getObjectDependencies(object) {

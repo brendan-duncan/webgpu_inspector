@@ -3622,3 +3622,54 @@ button.capture_icon_button:disabled img,
 button.icon-button:disabled img {
   opacity: 0.35;
 }
+
+/* Allocations tab of the Inspect panel. */
+.allocations {
+  height: 100%;
+  overflow: auto;
+  white-space: normal;
+  font-size: 10pt;
+  padding: 0 8px 8px 8px;
+  box-sizing: border-box;
+}
+
+.allocations-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 0;
+}
+
+.allocations-summary {
+  padding: 2px 0 4px 0;
+  color: var(--fg-primary);
+}
+
+.allocations-hint {
+  font-size: 9pt;
+  color: var(--fg-secondary);
+  padding: 0 0 4px 0;
+}
+
+.allocations-heading {
+  padding-top: 12px;
+}
+
+.allocations-section {
+  overflow-x: auto;
+}
+
+.allocations-table td:nth-child(2) {
+  max-width: 520px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.allocations-group td:first-child {
+  white-space: nowrap;
+}
+
+.allocations-object td {
+  color: var(--accent-info);
+}

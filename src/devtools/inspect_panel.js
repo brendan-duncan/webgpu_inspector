@@ -36,6 +36,7 @@ import { addShaderFlameGraphView } from "./shader_flamegraph.js";
 import { StacktraceViewer } from './stacktrace_viewer.js';
 import { TextureViewer } from "./texture_viewer.js";
 import { objectTooltip } from "./object_tooltip.js";
+import { buildAllocationsView } from "./allocations_view.js";
 
 export class InspectPanel {
   constructor(win, parent) {
@@ -335,6 +336,15 @@ export class InspectPanel {
     const inspectTab = new TabWidget(pane2, { class: "inspector-tabs" });
     this.inspectPanel = new Div(null, { class: "inspector_panel_content" });
     inspectTab.addTab("Inspect", this.inspectPanel);
+
+    // Live objects grouped by the code that created them, for leak hunting.
+    // _reset rebuilds this UI, so stop the previous view's refresh timer.
+    this._allocationsPanel?.onDestroy?.();
+    this._allocationsPanel = buildAllocationsView({
+      database: this.database,
+      onInspect: (object) => this.inspectObject(object),
+    });
+    inspectTab.addTab("Allocations", this._allocationsPanel);
 
     this._buildFilterUI(objectsPanel);
 

@@ -15,6 +15,8 @@ export const Actions = {
   CaptureTextureData: "webgpu_inspect_capture_texture_data",
   CaptureBufferData: "webgpu_inspect_capture_buffer_data",
   WriteBuffer: "wrebgpu_inspect_write_buffer",
+  // Page -> panel: a buffer, texture or device was garbage collected without destroy(). { id }
+  GarbageCollectedLeak: "webgpu_inspect_gc_leak",
   // Page -> panel: the frame pause state (paused, frame, held callbacks) after a FramePause.
   FramePauseState: "webgpu_inspect_frame_pause_state",
 

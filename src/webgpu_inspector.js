@@ -1904,6 +1904,9 @@ export let webgpuInspector = null;
         const type = object.name;
         const message = `${type} was garbage collected without being explicitly destroyed. These objects should explicitly destroyed to avoid GPU memory leaks.`;
         this._postMessage({ "action": Actions.ValidationError, id: 0, "message": message });
+        // Which object it was, so the panel can record where it was created. Sent
+        // before the batched DeleteObjects, so the panel still has the object.
+        this._postMessage({ "action": Actions.GarbageCollectedLeak, id });
       }
     }
 
