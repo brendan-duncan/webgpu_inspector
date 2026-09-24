@@ -173,6 +173,21 @@ Hovering a variable in the shader editor shows its current value; member and
 element chains like `material.alphaCutoff` or `lights[2].color` resolve to the
 hovered member's value.
 
+## Inputs and Outputs
+###### [Back to top](#shader-debugger-experimental)
+
+When debugging a vertex or fragment shader, two panes above **Variables** show what goes in and out of the debugged invocation:
+
+* **Inputs**: the invocation's inputs. For a vertex, these are the attributes fetched from the captured vertex buffers and the builtins. For a fragment, they are the interpolated values and builtins at the picked pixel.
+* **Outputs (CPU vs GPU)**: each output the entry point returns, as computed by the debugger (the CPU interpreter) and by the GPU, with a check mark where they agree and a not-equal sign where they don't.
+
+The GPU values come from replaying the draw on the DevTools device:
+
+* **Vertex:** the vertex shader runs as a compute shader over the draw's inputs (the same replay as the Mesh View's [VS Out](capture.md#mesh-view)), and the row for the picked vertex and instance is used.
+* **Fragment:** the draw alone is replayed with its real fragment shader, scissored to the picked pixel, with blending off and a fresh depth buffer, so the GPU value is the draw's own front-most fragment at that pixel before blending. If the GPU writes no fragment there (discarded, culled, or not covered), the row says so.
+
+When the two disagree, the debugger is missing something the shader depends on, or it has a bug. Common causes are a texture whose contents at draw time differ from its captured contents, derivatives at a triangle's edge, and floating-point precision. A mismatch means the stepped values should be read with care.
+
 ## Callstack
 ###### [Back to top](#shader-debugger-experimental)
 

@@ -24,6 +24,7 @@ import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
 import { cobalt } from 'thememirror';
 import { Button } from "./widget/button.js";
 import { createHelpButton } from "./widget/help_button.js";
+import { compareOutputs, cpuFragmentOutputs, cpuVertexOutputs, gpuFragmentOutputs, gpuVertexOutputs } from "./shader_gpu_compare.js";
 import { NumberInput } from "./widget/number_input.js";
 import { TextInput } from "./widget/text_input.js";
 
@@ -230,6 +231,30 @@ const shaderEditorSetup = (() => [
     ])
 ])();
 
+// A shader input or output value for the Inputs / Outputs panes.
+function formatIoValue(value) {
+    const format = (v) => {
+        if (typeof v !== "number") {
+            return String(v);
+        }
+        if (!Number.isFinite(v)) {
+            return String(v);
+        }
+        return Number.isInteger(v) ? String(v) : String(Number(v.toPrecision(5)));
+    };
+    if (value === null || value === undefined) {
+        return "—";
+    }
+    if (ArrayBuffer.isView(value) || Array.isArray(value)) {
+        const items = Array.from(value, format);
+        return items.length === 1 ? items[0] : `(${items.join(", ")})`;
+    }
+    if (typeof value === "object") {
+        return JSON.stringify(value);
+    }
+    return format(value);
+}
+
 export class ShaderDebugger extends Div {
     constructor(command, entry, data, database, capturePanel, options) {
         super(null, options);
@@ -370,6 +395,11 @@ export class ShaderDebugger extends Div {
         openSearchPanel(this.editorView);
 
         this.watch = new Div(pane2, { style: "overflow: auto; background-color: #333; color: #bbb; width: 100%; height: 100%;" });
+
+        if (this.stage === "vertex" || this.stage === "fragment") {
+            this.inputsPane = new collapsible(this.watch, { collapsed: false, label: "Inputs" });
+            this.outputsPane = new collapsible(this.watch, { collapsed: false, label: "Outputs (CPU vs GPU)" });
+        }
 
         this.variables = new collapsible(this.watch, { collapsed: false, label: `Variables` });
 
@@ -528,6 +558,8 @@ export class ShaderDebugger extends Div {
             this.debugger = new WgslDebug(config.code, this.runStateChanged.bind(this));
             this.debugger.debugVertex(config.entryName, config.inputs, config.bindGroups, config.options);
             this.update();
+            this._showInputs(config.inputs);
+            this._checkAgainstGpu(config);
             return;
         }
 
@@ -547,6 +579,8 @@ export class ShaderDebugger extends Div {
             }
             this.debugger = new QuadDebuggerAdapter(scheduler, this.runStateChanged.bind(this));
             this.update();
+            this._showInputs(config.quadInputs[config.targetLane]);
+            this._checkAgainstGpu(config);
             return;
         }
 
@@ -659,7 +693,7 @@ export class ShaderDebugger extends Div {
             options.constants = constants;
         }
 
-        return { code: this.module.descriptor.code, entryName: entry.name, inputs, bindGroups, options };
+        return { code: this.module.descriptor.code, entryName: entry.name, entry, inputs, bindGroups, options };
     }
 
     // Rasterize the draw at the picked pixel and build the four interpolated quad
@@ -762,11 +796,165 @@ export class ShaderDebugger extends Div {
         return {
             code: this.module.descriptor.code,
             entryName: fragEntry.name,
+            entry: fragEntry,
             quadInputs: quad.quadInputs,
             targetLane: quad.targetLane,
             bindGroups,
             options,
         };
+    }
+
+    // ----------------------------------------------------------------------
+    // Inputs and outputs, checked against the GPU
+    // ----------------------------------------------------------------------
+
+    _showInputs(inputs) {
+        const body = this.inputsPane?.body;
+        if (!body) {
+            return;
+        }
+        body.removeAllChildren();
+        const table = document.createElement("table");
+        table.className = "debug-io-table";
+        for (const [key, value] of Object.entries(inputs ?? {})) {
+            const row = table.insertRow();
+            const label = /^\d+$/.test(key) ? `@location(${key})` : key;
+            row.insertCell().textContent = label;
+            row.insertCell().textContent = formatIoValue(value);
+        }
+        if (!table.rows.length) {
+            new Div(body, { class: "race-hint", text: "This entry point takes no inputs." });
+            return;
+        }
+        body.element.appendChild(table);
+    }
+
+    // Run the debugged invocation to completion on the CPU, and the same
+    // invocation on the GPU, and show both side by side.
+    async _checkAgainstGpu(config) {
+        const body = this.outputsPane?.body;
+        if (!body) {
+            return;
+        }
+        const run = (this._checkRun = (this._checkRun ?? 0) + 1);
+        body.removeAllChildren();
+        const status = new Div(body, { class: "race-hint", text: "Running on the CPU and the GPU…" });
+
+        let cpu;
+        let cpuDiscarded = false;
+        try {
+            if (this.stage === "vertex") {
+                cpu = cpuVertexOutputs({ code: config.code, entry: config.entry, inputs: config.inputs, bindGroups: config.bindGroups, constants: config.options?.constants });
+            } else {
+                const r = cpuFragmentOutputs({ code: config.code, entry: config.entry, quadInputs: config.quadInputs, bindGroups: config.bindGroups, targetLane: config.targetLane, constants: config.options?.constants });
+                cpu = r.outputs;
+                cpuDiscarded = r.discarded;
+            }
+        } catch (e) {
+            status.text = `The CPU run failed: ${e.message ?? e}`;
+            return;
+        }
+
+        let gpu = null;
+        let gpuCovered = true;
+        let notes = [];
+        let gpuError = null;
+        const device = this.capturePanel?.window?.device;
+        const passCommands = this.capturePanel?._passEncoderCommands?.get(this.command.object) ?? null;
+        try {
+            if (!device) {
+                throw new Error("the DevTools GPU device is not available");
+            }
+            if (!passCommands) {
+                throw new Error("the draw's pass commands are not available");
+            }
+            if (this.stage === "vertex") {
+                const r = await gpuVertexOutputs({
+                    device,
+                    database: this.database,
+                    command: this.command,
+                    passCommands,
+                    pipelineDesc: this.pipelineDesc,
+                    shaderInputs: config.entry.inputs,
+                    vertexBufferCommands: this.pipelineState.vertexBuffers,
+                    indexBufferCommand: this.pipelineState.indexBuffer,
+                    vertexIndex: Math.floor(this._vertexIndex),
+                    instance: Math.floor(this._instanceIndex),
+                });
+                gpu = r.outputs;
+                notes = r.notes;
+            } else {
+                const size = this._getRenderTargetSize();
+                const r = await gpuFragmentOutputs({
+                    device,
+                    database: this.database,
+                    command: this.command,
+                    passCommands,
+                    pipelineId: this.pipelineState.pipeline.args[0].__id,
+                    pixelX: Math.floor(this._pixelX),
+                    pixelY: Math.floor(this._pixelY),
+                    width: size.width,
+                    height: size.height,
+                    fragmentEntry: config.entry,
+                });
+                gpu = r.outputs;
+                gpuCovered = r.covered;
+                notes = r.notes;
+            }
+        } catch (e) {
+            gpuError = e.message ?? String(e);
+        }
+        if (run !== this._checkRun) {
+            return;
+        }
+
+        body.removeAllChildren();
+        const rows = compareOutputs(cpu, gpu ?? new Map());
+        const table = document.createElement("table");
+        table.className = "debug-io-table";
+        const head = table.createTHead().insertRow();
+        for (const h of ["Output", "CPU (debugger)", "GPU", ""]) {
+            const th = document.createElement("th");
+            th.textContent = h;
+            head.appendChild(th);
+        }
+        const tbody = table.createTBody();
+        for (const r of rows) {
+            const row = tbody.insertRow();
+            row.insertCell().textContent = r.name === r.key ? r.key : `${r.name} ${r.key}`;
+            row.insertCell().textContent = cpuDiscarded ? "discarded" : (r.cpu ? formatIoValue(r.cpu) : "—");
+            row.insertCell().textContent = gpuError ? "—" : (!gpuCovered ? "no fragment" : (r.gpu ? formatIoValue(r.gpu) : "—"));
+            const verdict = row.insertCell();
+            if (r.match === true && !cpuDiscarded && gpuCovered) {
+                verdict.textContent = "\u2713";
+                verdict.className = "debug-io-match";
+                verdict.title = "The debugger and the GPU agree";
+            } else if (r.match === false) {
+                verdict.textContent = "\u2260";
+                verdict.className = "debug-io-mismatch";
+                verdict.title = "The debugger and the GPU disagree";
+            }
+        }
+        body.element.appendChild(table);
+
+        const summary = [];
+        if (gpuError) {
+            summary.push(`The GPU check couldn't run: ${gpuError}.`);
+        } else if (this.stage === "fragment" && cpuDiscarded !== !gpuCovered) {
+            summary.push(cpuDiscarded
+                ? "The debugger discards this fragment, but the GPU wrote one."
+                : "The GPU wrote no fragment here (discarded, culled or outside the draw), but the debugger ran one.");
+        } else if (rows.some((r) => r.match === false)) {
+            summary.push("The debugger and the GPU disagree. The debugger may be missing something the shader depends on (a texture's contents at draw time, derivatives at a triangle edge), or it has a bug, and its stepping should be read with care.");
+        } else if (rows.some((r) => r.match === true)) {
+            summary.push("The debugger's result matches the GPU.");
+        }
+        if (this.stage === "fragment") {
+            summary.push("The GPU value is the draw's own front-most fragment at this pixel, before blending, from a replay of the draw alone.");
+        }
+        for (const text of [...summary, ...notes.slice(0, 3)]) {
+            new Div(body, { class: "race-hint", text });
+        }
     }
 
     // Decode the bound index buffer into a typed array.

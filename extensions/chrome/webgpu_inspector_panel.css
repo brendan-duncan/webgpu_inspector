@@ -3673,3 +3673,35 @@ button.icon-button:disabled img {
 .allocations-object td {
   color: var(--accent-info);
 }
+
+/* Shader debugger Inputs / Outputs (CPU vs GPU) panes. */
+.debug-io-table {
+  border-collapse: collapse;
+  margin: 4px 6px;
+  font-family: var(--font-mono);
+  font-size: 9pt;
+}
+
+.debug-io-table th {
+  text-align: left;
+  font-weight: normal;
+  color: var(--fg-secondary);
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.debug-io-table td {
+  padding: 1px 8px;
+  color: var(--fg-primary);
+  white-space: nowrap;
+}
+
+.debug-io-match {
+  color: #5fd08a !important;
+  font-weight: bold;
+}
+
+.debug-io-mismatch {
+  color: var(--accent-error) !important;
+  font-weight: bold;
+}

@@ -276,6 +276,8 @@ async function getOverdrawPipeline(replay, pipelineId, stubModule, ignoreCull = 
  * @param {(primitive:Object)=>Object} [variant.primitive] - adjust the original primitive state
  * @param {(depthStencil:Object|undefined)=>Object|undefined} [variant.depthStencil] - the
  *   variant's depth-stencil state, given the original; omit for none
+ * @param {Set<string>} [variant.bindings] - "group:binding" pairs the variant's shaders use,
+ *   when that isn't just the vertex stage's (an "auto" layout contains exactly these)
  * @returns {Promise<Object>} { pipeline, isAuto, layoutBGLs, vsBindings, descriptor } or { error }
  */
 export async function getVariantPipeline(replay, pipelineId, variant) {
@@ -296,7 +298,10 @@ export async function getVariantPipeline(replay, pipelineId, variant) {
         if (!vertexModule) {
             return { error: "The draw's vertex shader was not captured." };
         }
-        const vsBindings = vertexStageBindings(vertexModuleObj?.reflection, desc.vertex.entryPoint);
+        // The bindings the variant's shaders use: by default the vertex
+        // stage's (the fragment stage is a stub), or the caller's set when the
+        // variant runs a real fragment shader too.
+        const vsBindings = variant.bindings ?? vertexStageBindings(vertexModuleObj?.reflection, desc.vertex.entryPoint);
 
         // Prefer the original explicit layout; fall back to "auto" when it (or
         // any of its bind group layouts) has no captured descriptor.
