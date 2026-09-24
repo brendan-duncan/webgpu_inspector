@@ -11,6 +11,12 @@ import { BridgeClient } from "./utils/bridge_client.js";
 
 export let webgpuInspector = null;
 
+// HUD separators, built at run time: the bundler would turn escapes back into
+// literal characters, and this script is loaded into pages that may not declare
+// UTF-8, where literal non-ASCII text would be garbled.
+const SEP = ` ${String.fromCharCode(0xb7)} `;
+const DASH = String.fromCharCode(0x2013);
+
 // This code will be executed to initialize the WebGPU Inspector from
 // webgpu_inspector_loader.js.
 (() => {
@@ -640,6 +646,8 @@ export let webgpuInspector = null;
         frame: this._frameIndex,
         held: this._framePauseHeld.size,
       });
+      this._hudLastUpdate = 0;
+      this._updateStatusMessage();
     }
 
     // Schedule every held callback for the next native animation frame.
@@ -713,7 +721,7 @@ export let webgpuInspector = null;
       this._statusElementsCreated = true;
 
       const statusContainer = _document.createElement("div");
-      statusContainer.style = "position: absolute; top: 0px; left: 0px; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt;";
+      statusContainer.style = "position: absolute; top: 0px; left: 0px; z-index: 1000000; margin-left: 10px; margin-top: 5px; padding-left: 5px; padding-right: 10px; background-color: rgba(0, 0, 1, 0.75); border-radius: 5px; box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5); color: #fff; font-size: 12pt; font-family: system-ui, -apple-system, \"Segoe UI\", sans-serif;";
       _document.body.appendChild(statusContainer);
 
       this._inspectingStatus = _document.createElement("div");
@@ -726,6 +734,19 @@ export let webgpuInspector = null;
       this._inspectingStatusFrame.textContent = "Frame: 0";
       this._lastFrameStatusText = "Frame: 0";
       statusContainer.appendChild(this._inspectingStatusFrame);
+
+      // Frame-health HUD: fps, frame-time range and dropped frames, plus a
+      // sparkline of the recent frame times against the refresh budget.
+      this._hudStats = _document.createElement("div");
+      this._hudStats.style = "display: inline-block; margin-left: 8px; font-size: 10pt; color: #ddd; font-variant-numeric: tabular-nums;";
+      statusContainer.appendChild(this._hudStats);
+      this._hudSpark = _document.createElement("canvas");
+      this._hudSpark.width = 60;
+      this._hudSpark.height = 16;
+      this._hudSpark.title = "Recent frame times (dashed: display refresh)";
+      this._hudSpark.style = "display: inline-block; margin-left: 8px; vertical-align: middle; width: 60px; height: 16px;";
+      statusContainer.appendChild(this._hudSpark);
+      this._hudLastUpdate = 0;
 
       this._inspectingStatusText = _document.createElement("div");
       this._inspectingStatusText.style = "display: inline-block; margin-left: 10px; cursor: pointer;";
@@ -2249,15 +2270,12 @@ export let webgpuInspector = null;
       }
       this._statusDirty = false;
 
-      let frameStatus = `Frame: ${this._frameIndex}`;
-      const frameRate = this._frameRate.average;
-      if (frameRate !== 0) {
-        frameStatus += ` : ${frameRate.toFixed(2)}ms`;
-      }
+      const frameStatus = `Frame: ${this._frameIndex}`;
       if (frameStatus !== this._lastFrameStatusText) {
         this._lastFrameStatusText = frameStatus;
         this._inspectingStatusFrame.textContent = frameStatus;
       }
+      this._updateHud();
 
       let status = "";
 
@@ -2295,6 +2313,91 @@ export let webgpuInspector = null;
         this._lastStatusText = status;
         this._inspectingStatusText.textContent = status;
       }
+    }
+
+    // The HUD's numbers and sparkline, at most four times a second: a number
+    // that changes every frame can't be read anyway, and each text change is
+    // a layout on the page being measured.
+    _updateHud() {
+      if (!this._hudStats) {
+        return;
+      }
+      const now = performance.now();
+      if (now - this._hudLastUpdate < 250) {
+        // Come back for the latest values once the interval is up.
+        if (!this._hudPending) {
+          this._hudPending = true;
+          setTimeout(() => {
+            this._hudPending = false;
+            this._updateHud();
+          }, 250 - (now - this._hudLastUpdate));
+        }
+        return;
+      }
+      this._hudLastUpdate = now;
+
+      const buffer = this._frameRate.buffer;
+      let text = "";
+      if (buffer.length) {
+        let min = Infinity;
+        let max = 0;
+        for (const v of buffer) {
+          min = Math.min(min, v);
+          max = Math.max(max, v);
+        }
+        const avg = this._frameRate.average;
+        text = `${(1000 / avg).toFixed(0)} fps${SEP}${avg.toFixed(1)} ms (${min.toFixed(1)}${DASH}${max.toFixed(1)})`;
+      }
+      if (this._framePaused) {
+        text += `${SEP}paused`;
+      }
+      let html = text;
+      if (this._skippedFrameTotal > 0) {
+        html += `${SEP}<span style="color: #ff7070;">${this._skippedFrameTotal} dropped</span>`;
+      }
+      if (html !== this._hudLastHtml) {
+        this._hudLastHtml = html;
+        this._hudStats.innerHTML = html;
+      }
+      this._drawHudSparkline(buffer);
+    }
+
+    _drawHudSparkline(buffer) {
+      const canvas = this._hudSpark;
+      const ctx = canvas?.getContext("2d");
+      if (!ctx) {
+        return;
+      }
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      if (!buffer.length) {
+        return;
+      }
+      const refresh = this._refreshPeriod > 0 ? this._refreshPeriod : 1000 / 60;
+      // Scale to 3 refreshes so a dropped frame reads as a spike to the top.
+      const top = refresh * 3;
+      const y = (ms) => h - Math.min(ms / top, 1) * h;
+      const step = w / Math.max(1, buffer.length - 1);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      ctx.moveTo(0, y(refresh));
+      ctx.lineTo(w, y(refresh));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = "#7fd6ff";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      buffer.forEach((ms, i) => {
+        const x = i * step;
+        if (i === 0) {
+          ctx.moveTo(x, y(ms));
+        } else {
+          ctx.lineTo(x, y(ms));
+        }
+      });
+      ctx.stroke();
     }
 
     // Update the frame rate overlay. Called for DeltaTime messages forwarded from worker

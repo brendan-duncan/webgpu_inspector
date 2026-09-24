@@ -34,7 +34,14 @@ Press the **Start** button on the Inspect panel. This will **reload** the page, 
 
 ![GPU Start](images/inspector_start.png)
 
-When the WebGPU Inspector is active on the page, there will be a small icon drawn on the upper-left corner of the page.
+When the WebGPU Inspector is active on the page, a small status display is drawn in the upper-left corner of the page. It shows the frame number and a live frame-health HUD:
+
+* the frame rate and the average frame time, with the fastest and slowest of the last 60 frames in parentheses,
+* the number of dropped frames (missed display refreshes), in red, once there are any,
+* **paused** while the page is paused from the Capture panel ([Pause and Step](capture.md#pause-and-step)),
+* a small sparkline of the last 60 frame times, with the display refresh interval dashed, so a hitch shows up as a spike.
+
+The numbers update a few times a second, so they're readable and add almost nothing to the page's own frame cost.
 
 ![Inspector Status](images/inspect_status.png)
 
