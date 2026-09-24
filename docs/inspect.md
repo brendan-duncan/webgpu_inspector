@@ -237,6 +237,16 @@ You can make changes to the shader code and press the Compile button. The modifi
 
 There are limitations to the types of changes you can make to the shader. The page already has a pipeline and bind groups for the original version of the shader, so making any changes to the bindings used by the modified version of the shader will likely result in WebGPU errors.
 
+### Compile & Replay
+
+**Compile & Replay** tries the edit against a captured frame without changing the page. It uses the Capture tab's frame when that frame uses the shader, otherwise the most recent capture that does. The captured frame is replayed on the DevTools GPU device twice: once as captured and once with the edited shader. The inspector then compares every render target the edit could affect. The results open as a **Shader Edit** tab in the Capture panel. Each changed target gets a card with the target as captured (**Before**), with the edit (**After**), the changed texels highlighted, and how many texels changed. Targets that didn't change are listed below the cards. If the edited shader doesn't compile, the error is shown next to the button.
+
+Both runs start from the same captured state, so any differences come from the edit. The edit's effects carry through the rest of the frame, so a change to a G-buffer shader also shows up in the lighting and post-processing targets. The replay has some limits:
+
+* Render bundles are not replayed.
+* Depth, multisampled and compressed textures start empty rather than with their captured contents, which matters only when the frame reads them before writing them.
+* Only mip 0 and layer 0 of each target are compared. Depth targets show only which texels changed.
+
 
 ## Profiling Tips
 ###### [Back to top](#inspect)

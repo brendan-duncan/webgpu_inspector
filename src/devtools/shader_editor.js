@@ -12,6 +12,7 @@ import { wgsl } from "../thirdparty/codemirror_lang_wgsl.js";
 import { cobalt } from 'thememirror';
 import { Button } from "./widget/button.js";
 import { Div } from "./widget/div.js";
+import { Span } from "./widget/span.js";
 import { PanelActions } from "../utils/actions.js";
 
 const shaderEditorSetup = (() => [
@@ -59,6 +60,13 @@ export class ShaderEditor extends Div {
     const compileRow = new Div(this, { style: "flex: 0 0 auto;" });
     const compileButton = new Button(compileRow, { label: "Compile", style: "background-color: rgb(200, 150, 51);" });
     const revertButton = isModified ? new Button(compileRow, { label: "Revert", style: "background-color: rgb(200, 150, 51);" }) : null;
+    const capturePanel = panel.window?._capturePanel;
+    const replayButton = capturePanel ? new Button(compileRow, {
+      label: "Compile & Replay",
+      style: "background-color: rgb(60, 110, 170);",
+      title: "Replay the captured frame with the edited shader, without changing the page, and show which render targets change",
+    }) : null;
+    const replayStatus = new Span(compileRow, { style: "margin-left: 8px; color: #d99a2b; font-size: 9pt;" });
 
     const editorDiv = new Div(this, { class: "shader-editor-cm", style: "flex: 1 1 auto; min-height: 0; overflow: hidden;" });
 
@@ -116,6 +124,21 @@ export class ShaderEditor extends Div {
         }
       }
     };
+
+    if (replayButton) {
+      replayButton.callback = async () => {
+        replayStatus.text = "";
+        replayButton.disabled = true;
+        try {
+          const error = await capturePanel.compileAndReplayShader(object, editor.state.doc.toString());
+          if (error) {
+            replayStatus.text = error;
+          }
+        } finally {
+          replayButton.disabled = false;
+        }
+      };
+    }
 
     if (revertButton) {
       revertButton.callback = () => {

@@ -7,6 +7,7 @@
 * Added draw stepping and per-draw overlays to the capture texture viewer (the Pixel History tab). Step through the draws that render to a texture, and overlay Highlight Draw, Wireframe, Depth Test and Stencil Test pass/fail, Backface Cull or Viewport / Scissor for the selected draw. The overlays are computed by GPU replay, and the depth and stencil tests replay the earlier draws first.
 * Added a Mesh View for draw commands. It shows every vertex the draw fetches in a table, next to a 3D preview of the input geometry (solid, wireframe or points, colored by any attribute) with an orbit camera and vertex picking.
 * Added VS Out to the Mesh View. It runs the draw's vertex shader by GPU replay (as a generated compute shader) and shows its outputs, a preview of the positions in normalized device coordinates inside the view volume, and counts of vertices that are off-screen, behind the eye or NaN, and of triangles with zero area.
+* Added Compile & Replay to the shader editor. It replays a captured frame that uses the shader, once as captured and once with the edited shader, without changing the page, and opens a Shader Edit tab. For each render target the edit changes, the tab shows the target before and after the edit, with the changed texels highlighted.
 * The capture's report buttons (Frame Stats, Frame Issues, Render Graph, Shader Flame Graph, Analyze Shaders) are now in a Reports menu, with a badge showing the frame's issue count.
 
 ## v1.7.0

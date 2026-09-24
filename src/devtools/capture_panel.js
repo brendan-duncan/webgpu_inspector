@@ -33,6 +33,8 @@ import { buildRenderGraphView } from "./render_graph_view.js";
 import { analyzeFrameIssues } from "./frame_issues.js";
 import { buildFrameIssuesView, markCommandIssues } from "./frame_issues_view.js";
 import { buildMeshView } from "./mesh_view.js";
+import { compileAndReplay } from "./frame_replay.js";
+import { buildShaderReplayView } from "./shader_replay_view.js";
 import { captureToText, downloadCapture } from "./capture_export.js";
 import { isCaptureBinary, decodeCaptureBinary } from "../utils/capture_binary.js";
 import { importCaptureJson, parseCaptureText } from "./capture_import.js";
@@ -711,6 +713,83 @@ export class CapturePanel {
     }
 
     this.database.onCapturedObjectsChanged.emit();
+  }
+
+  /**
+   * The capture tab whose frame uses a shader module: the active tab when it
+   * does, else the most recent one that does.
+   * @param {number} moduleId
+   * @returns {Object|null} the tab's state
+   */
+  _captureTabUsingModule(moduleId) {
+    const uses = (state) => state.commands.some((command) => {
+      if (command?.method !== "setPipeline") {
+        return false;
+      }
+      const desc = this._getObject(command.args?.[0]?.__id)?.descriptor;
+      return [desc?.vertex, desc?.fragment, desc?.compute].some((stage) => stage?.module?.__id === moduleId);
+    });
+    if (this._activeTabState && uses(this._activeTabState)) {
+      return this._activeTabState;
+    }
+    for (let i = this._captureTabs.length - 1; i >= 0; --i) {
+      if (uses(this._captureTabs[i])) {
+        return this._captureTabs[i];
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Compile & Replay: replay a capture that uses `module` with `code` in
+   * place of the module's source, and open a Shader Edit tab showing which
+   * render targets the edit changes. Called from the shader editor.
+   * @param {Object} module - the ShaderModule
+   * @param {string} code - the edited WGSL
+   * @returns {Promise<string|null>} an error message, or null on success
+   */
+  async compileAndReplayShader(module, code) {
+    const state = this._captureTabUsingModule(module.id);
+    if (!state) {
+      return "No capture uses this shader module. Capture a frame that draws with it first.";
+    }
+    const device = this.window?.device;
+    if (!device) {
+      return "The DevTools GPU device is not available.";
+    }
+    this.window.showCapturePanel?.();
+    if (state.tabHandle) {
+      this._captureTab.setHandleActive(state.tabHandle);
+    }
+    this._showLoadingOverlay("Compile & Replay…");
+    let result;
+    try {
+      result = await compileAndReplay({
+        device,
+        database: this.database,
+        commands: state.commands,
+        getTextureFromAttachment: (attachment) => this._getTextureFromAttachment(attachment),
+        moduleId: module.id,
+        code,
+        onProgress: (text) => this._showLoadingOverlay(`Compile & Replay: ${text}`),
+      });
+    } catch (e) {
+      console.error("Compile & Replay failed:", e);
+      return e.message ?? String(e);
+    } finally {
+      this._hideLoadingOverlay();
+    }
+    const moduleLabel = module.label ? `"${module.label}"` : `ShaderModule ${module.idName}`;
+    const panel = buildShaderReplayView({
+      result,
+      moduleLabel,
+      device,
+      textureUtils: this.textureUtils,
+      onInspect: (object) => this.window.inspectObject(object),
+    });
+    this._captureTab.addTab(`Shader Edit: ${moduleLabel}`, panel);
+    this._captureTab.setActivePanel(panel);
+    return null;
   }
 
   /**

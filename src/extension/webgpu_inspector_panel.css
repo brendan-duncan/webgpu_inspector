@@ -3419,3 +3419,62 @@ li.tree-item .expandbutton
 .mesh-table tr.mesh-row-selected td {
   background: rgba(255, 140, 0, 0.3);
 }
+
+/* Compile & Replay results (Shader Edit capture tab). */
+.shader-replay {
+  height: 100%;
+  overflow: auto;
+  white-space: normal;
+  font-size: 10pt;
+}
+
+.shader-replay-card {
+  margin: 8px;
+  padding: 6px 8px 8px 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.shader-replay-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.shader-replay-name {
+  font-weight: bold;
+}
+
+.shader-replay-detail {
+  color: var(--fg-secondary);
+  font-size: 9pt;
+}
+
+.shader-replay-count {
+  color: var(--accent-warning);
+}
+
+.shader-replay-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.shader-replay-caption {
+  color: var(--fg-secondary);
+  font-size: 9pt;
+  margin-bottom: 2px;
+}
+
+.shader-replay-frame {
+  position: relative;
+  background: #000;
+  border: 1px solid var(--border-color);
+}
+
+.shader-replay-rest {
+  margin: 8px;
+  color: var(--fg-secondary);
+  font-size: 9pt;
+}

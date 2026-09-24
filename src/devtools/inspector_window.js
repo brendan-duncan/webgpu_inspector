@@ -136,6 +136,11 @@ export class InspectorWindow extends Window {
     this.textureUtils = new TextureUtils(this.device);   
   }
 
+  /** Switch the window to the Capture panel. */
+  showCapturePanel() {
+    this._tabs.activeTab = 1;
+  }
+
   inspectObject(object) {
     if (!object) {
       return;
