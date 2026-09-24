@@ -32,6 +32,7 @@ import { buildFrameRenderGraph } from "./render_graph.js";
 import { buildRenderGraphView } from "./render_graph_view.js";
 import { analyzeFrameIssues } from "./frame_issues.js";
 import { buildFrameIssuesView, markCommandIssues } from "./frame_issues_view.js";
+import { buildMeshView } from "./mesh_view.js";
 import { captureToText, downloadCapture } from "./capture_export.js";
 import { isCaptureBinary, decodeCaptureBinary } from "../utils/capture_binary.js";
 import { importCaptureJson, parseCaptureText } from "./capture_import.js";
@@ -595,35 +596,7 @@ export class CapturePanel {
     this.filterEdit = new TextInput(filterArea, { style: "width: 200px;", placeholder: "Filter", onEdit: (value) => {
       self._filterCommands(value, commands);
     } });
-    state.statsButton = new Button(filterArea, {
-      label: "Frame Stats",
-      class: "btn capture_filter_stats",
-      callback: () => self._inspectStats(commandInfoContents)
-    });
-    new Button(filterArea, {
-      label: "Analyze Shaders",
-      class: "btn",
-      title: "Run static performance analysis on the shaders used in this frame",
-      callback: () => self._analyzeAllShaders(commands)
-    });
-    new Button(filterArea, {
-      label: "Shader Flame Graph",
-      class: "btn",
-      title: "Break the frame's GPU cost down by pass, pipeline and shader statement",
-      callback: () => self._showFrameFlameGraph(commands)
-    });
-    new Button(filterArea, {
-      label: "Render Graph",
-      class: "btn",
-      title: "Show the frame's passes and the resources that connect them, with dependency-based suggestions",
-      callback: () => self._showRenderGraph(state)
-    });
-    state.issuesButton = new Button(filterArea, {
-      label: "Frame Issues",
-      class: "btn",
-      title: "Performance and correctness issues found in the frame's commands",
-      callback: () => self._showFrameIssues(state)
-    });
+    this._buildReportsMenu(filterArea, state, commands, commandInfoContents);
 
     // GPU pass timeline. Stays at 0 height until timestamp data arrives, so captures
     // without "Profile Passes" enabled get no layout shift.
@@ -738,6 +711,58 @@ export class CapturePanel {
     }
 
     this.database.onCapturedObjectsChanged.emit();
+  }
+
+  /**
+   * The capture tab's Reports menu: every frame-wide report, in one dropdown
+   * so the filter bar doesn't overflow. The Frame Issues count shows as a
+   * badge on the menu button.
+   * @param {Widget} parent - The filter bar.
+   * @param {Object} state - The capture tab's state.
+   * @param {Array<Object>} commands - The frame's command records.
+   * @param {Widget} commandInfoContents - Where Frame Stats renders.
+   */
+  _buildReportsMenu(parent, state, commands, commandInfoContents) {
+    const container = new Div(parent, { class: "menu-container capture_reports_menu" });
+    const button = new Widget("button", container, {
+      class: "menu-button capture_reports_button",
+      title: "Frame reports",
+    });
+    button.element.innerHTML = "&#9776; Reports";
+    state.issuesBadge = new Span(button, { class: "capture_reports_badge" });
+    state.issuesBadge.element.style.display = "none";
+    const dropdown = new Div(container, { class: "menu-dropdown capture_reports_dropdown" });
+
+    const addItem = (label, title, callback) => {
+      const item = new Div(dropdown, { class: "menu-item", text: label });
+      item.element.title = title;
+      item.element.addEventListener("click", (e) => {
+        e.stopPropagation();
+        dropdown.element.classList.remove("open");
+        callback();
+      });
+      return item;
+    };
+    addItem("Frame Stats", "Command counts, the frame's CPU/GPU bound verdict and per-pass GPU timings",
+      () => this._inspectStats(commandInfoContents));
+    state.issuesMenuItem = addItem("Frame Issues", "Performance and correctness issues found in the frame's commands",
+      () => this._showFrameIssues(state));
+    addItem("Render Graph", "The frame's passes and the resources that connect them, with dependency-based suggestions",
+      () => this._showRenderGraph(state));
+    addItem("Shader Flame Graph", "The frame's GPU cost broken down by pass, pipeline and shader statement",
+      () => this._showFrameFlameGraph(commands));
+    addItem("Analyze Shaders", "Static performance analysis of the shaders used in this frame",
+      () => this._analyzeAllShaders(commands));
+
+    button.element.addEventListener("click", (e) => {
+      e.stopPropagation();
+      dropdown.element.classList.toggle("open");
+    });
+    document.addEventListener("click", (e) => {
+      if (!container.element.contains(e.target)) {
+        dropdown.element.classList.remove("open");
+      }
+    });
   }
 
   /**
@@ -942,6 +967,11 @@ export class CapturePanel {
    * Listener for the capture TabWidget. Releases resources held by the tab.
    */
   _onCaptureTabClosed(panel) {
+    try {
+      panel?.onDestroy?.();
+    } catch (e) {
+      console.error(e);
+    }
     const state = panel && panel._captureState;
     if (!state) {
       return;
@@ -2425,8 +2455,17 @@ export class CapturePanel {
       return;
     }
     const count = state.frameIssues.findings.length;
-    if (state.issuesButton) {
-      state.issuesButton.text = count ? `Frame Issues (${count})` : "Frame Issues";
+    if (state.issuesMenuItem) {
+      state.issuesMenuItem.text = count ? `Frame Issues (${count})` : "Frame Issues";
+    }
+    if (state.issuesBadge) {
+      const findings = state.frameIssues.findings;
+      const worst = findings.some((f) => f.severity === "high") ? "high"
+        : findings.some((f) => f.severity === "medium") ? "medium" : "low";
+      state.issuesBadge.text = String(count);
+      state.issuesBadge.element.className = `capture_reports_badge frame-issue-${worst}`;
+      state.issuesBadge.element.title = `${count} frame issue${count === 1 ? "" : "s"}`;
+      state.issuesBadge.element.style.display = count ? "" : "none";
     }
     markCommandIssues(state.frameIssues.byCommand, () => this._showFrameIssues(state));
   }
@@ -3331,6 +3370,57 @@ export class CapturePanel {
   }
 
   /**
+   * A "Mesh View" button for a draw: opens the draw's vertex inputs as a
+   * table and 3D preview in a capture tab.
+   * @param {Object} command - The draw command.
+   * @param {Widget} commandInfo - Where the command's info is shown.
+   * @param {Object} state - From _getPipelineState.
+   */
+  _addMeshViewButton(command, commandInfo, state) {
+    const pipeline = this._getObject(state.pipeline?.args?.[0]?.__id);
+    if (!pipeline?.descriptor?.vertex) {
+      return;
+    }
+    new Button(commandInfo, {
+      label: "Mesh View",
+      class: "btn",
+      title: "Show the draw's vertex inputs as a table and a 3D preview",
+      style: "margin: 4px 0 6px 0;",
+      callback: () => this._showMeshView(command, state, pipeline),
+    });
+  }
+
+  _showMeshView(command, state, pipeline) {
+    const desc = pipeline.descriptor;
+    const vertexModule = this._getObject(desc.vertex.module?.__id);
+    let shaderInputs = null;
+    try {
+      const entries = vertexModule?.reflection?.entry?.vertex ?? [];
+      const entry = (desc.vertex.entryPoint ? entries.find((e) => e.name === desc.vertex.entryPoint) : null) ?? entries[0];
+      shaderInputs = entry?.inputs ?? null;
+    } catch (e) {
+      shaderInputs = null;
+    }
+    const passLabel = state.renderPass?.args?.[0]?.label;
+    const passIndex = state.renderPass?._passIndex;
+    const index = this._captureCommands?.indexOf(command) ?? -1;
+    const label = `${passLabel ? `"${passLabel}"` : `Pass ${passIndex ?? "?"}`} ${command.method}${index >= 0 ? ` (command ${index})` : ""}`;
+    const tabState = this._activeTabState;
+    const panel = buildMeshView({
+      device: this.window?.device ?? null,
+      command,
+      label,
+      pipelineDesc: desc,
+      shaderInputs,
+      vertexBufferCommands: state.vertexBuffers,
+      indexBufferCommand: state.indexBuffer,
+      onShowCommand: (cmd) => tabState ? this._selectCommand(tabState, cmd) : this._jumpToCommand(cmd),
+    });
+    this._captureTab.addTab(`Mesh: ${label}`, panel);
+    this._captureTab.setActivePanel(panel);
+  }
+
+  /**
    * Displays info for draw command.
    * @param {Object} command - The command object.
    * @param {HTMLElement} commandInfo - Element to display info in.
@@ -3340,6 +3430,7 @@ export class CapturePanel {
     if (!state) {
       return;
     }
+    this._addMeshViewButton(command, commandInfo, state);
 
     this._showTextureOutputs(state, commandInfo, true);
     this._showTextureInputs(state, commandInfo);
@@ -3366,6 +3457,7 @@ export class CapturePanel {
     if (!state) {
       return;
     }
+    this._addMeshViewButton(command, commandInfo, state);
 
     this._showTextureOutputs(state, commandInfo, true);
     this._showTextureInputs(state, commandInfo);
@@ -3441,6 +3533,10 @@ export class CapturePanel {
    */
   _showCaptureCommandInfo_drawIndirect(command, commandInfo) {
     const state = this._getPipelineState(command);
+    if (!state) {
+      return;
+    }
+    this._addMeshViewButton(command, commandInfo, state);
 
     this._showTextureOutputs(state, commandInfo, true);
     this._showTextureInputs(state, commandInfo);
@@ -3465,6 +3561,10 @@ export class CapturePanel {
    */
   _showCaptureCommandInfo_drawIndexedIndirect(command, commandInfo) {
     const state = this._getPipelineState(command);
+    if (!state) {
+      return;
+    }
+    this._addMeshViewButton(command, commandInfo, state);
 
     this._showTextureOutputs(state, commandInfo, true);
     this._showTextureInputs(state, commandInfo);

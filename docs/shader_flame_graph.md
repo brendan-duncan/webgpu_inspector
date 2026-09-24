@@ -9,7 +9,7 @@ There are two views:
   entry point at a time, showing the cost of a *single invocation*.
 ![Shader Cost](images/shader_cost.png)
 
-* **Shader Flame Graph** — a Capture tab (the button next to *Analyze Shaders*).
+* **Shader Flame Graph** — a Capture tab (in the capture's *Reports* menu, next to *Analyze Shaders*).
   The whole frame: pass → pipeline → shader stage → statement.
   ![Shader Flame Graph](images/shader_flamegraph.png)
 

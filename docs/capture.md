@@ -12,6 +12,8 @@
 * [Uniform and Storage Buffer Inspection](#uniform-and-storage-buffer-inspection)
     * [Formatting Buffer Data](formatting_buffer_data.md)
 * [Vertex Buffer Data](#vertex-buffer-data)
+* [Mesh View](#mesh-view)
+* [Reports](#reports)
 * [Pixel History](#pixel-history)
 * [Debug Groups](#debug-groups)
 * [Frame Stats](#frame-stats)
@@ -201,6 +203,23 @@ If you select a Draw command, it will inspect any Vertex Buffers bound for the d
 <img src="images/vertex_buffer_capture.png" style="width:512px">
 </a>
 
+## Mesh View
+###### [Back to top](#capture)
+
+Select a **draw** command (any draw, including indexed and indirect draws) and press **Mesh View** at the top of its details. This opens the draw's vertex shader inputs in a capture tab:
+
+* The 3D preview shows the draw's input geometry: the positions before the vertex shader runs. Drag to orbit, right-drag (or shift-drag) to pan, and use the mouse wheel to zoom. **Mode** switches between Solid (flat-lit), Wireframe, Solid + Wireframe and Points. **Position** chooses which attribute to use as the position; the view guesses one from the shader's input names. **Color** colors the mesh by any attribute, normalized over the draw's range. **Reset camera** frames the whole mesh.
+* The table lists every vertex the draw fetches, in draw order and 100 rows per page. It shows the vertex index (after `baseVertex`) and every attribute, named from the vertex shader's inputs. Strip restarts are marked.
+* Click a row to mark that vertex in the preview, or click in the preview to select the nearest vertex's row.
+* For instanced draws, **Instance** chooses which instance's per-instance attributes are shown.
+
+The view decodes the captured vertex and index buffer bytes, and reads indirect draws' arguments from the captured indirect buffer. Vertices beyond the captured bytes (see [Max Buffer Size](#max-buffer-size)) are reported and left out of the preview.
+
+## Reports
+###### [Back to top](#capture)
+
+The **☰ Reports** menu at the right of the capture's filter bar opens the frame-wide reports: [Frame Stats](#frame-stats), [Frame Issues](#frame-issues), [Render Graph](#render-graph), [Shader Flame Graph](shader_flame_graph.md) and Analyze Shaders. When the frame has [issues](#frame-issues), a badge on the menu button shows how many, in the color of the most severe.
+
 ## Pixel History
 ###### [Back to top](#capture)
 
@@ -268,7 +287,7 @@ If the page pushes/pops Debug Groups, they will be used to group commands in the
 ## Frame Stats
 ###### [Back to top](#capture)
 
-The Capture tool can provide various statistics about the capture. Press the **Frame Stats** to show the capture statistics. These include how many graphics commands were called; how many draw calls; and so on. When [Profile Passes](#profile-passes) is enabled, Frame Stats also includes a **Frame Bound** card (CPU-/GPU-/vsync-bound verdict with CPU/GPU-vs-budget bars) and a **Pass Timings** breakdown of per-pass GPU duration.
+The Capture tool can provide various statistics about the capture. Choose **Frame Stats** from the [Reports](#reports) menu to show the capture statistics. These include how many graphics commands were called; how many draw calls; and so on. When [Profile Passes](#profile-passes) is enabled, Frame Stats also includes a **Frame Bound** card (CPU-/GPU-/vsync-bound verdict with CPU/GPU-vs-budget bars) and a **Pass Timings** breakdown of per-pass GPU duration.
 
 <a href="images/capture_frame_stats.png">
 <img src="images/capture_frame_stats.png" style="width:512px">
@@ -277,7 +296,7 @@ The Capture tool can provide various statistics about the capture. Press the **F
 ## Render Graph
 ###### [Back to top](#capture)
 
-Press **Render Graph** to see the frame's passes and the textures and buffers that connect them. Passes are shown in the order the GPU runs them, meaning command buffers in `submit()` order.
+Choose **Render Graph** from the [Reports](#reports) menu to see the frame's passes and the textures and buffers that connect them. Passes are shown in the order the GPU runs them, meaning command buffers in `submit()` order.
 
 The main view is a resource lifetime chart. Passes run along the top, and when the capture was taken with [Profile Passes](#profile-passes), each pass header is filled in proportion to its GPU time. Each texture or buffer gets one row. A row shows where the resource is live and marks each pass that uses it: filled marks are writes, hollow marks are reads, and the color gives the usage (attachment, sampled, storage, copy or upload, geometry or uniform). Texture dependencies are tracked per mip level and array layer, so a bloom chain that reads one mip and writes the next shows as a chain of passes rather than a cycle.
 
@@ -296,7 +315,7 @@ The graph only sees the captured frame. A result that the next frame reads, such
 ## Frame Issues
 ###### [Back to top](#capture)
 
-When a capture is loaded, the inspector checks the frame's commands for performance and correctness problems. The **Frame Issues** button shows how many it found, and opens a report with the most severe issues first. You can filter the report by severity and by rule. **Go to command** selects the command an issue is about in the command list, and each further click moves to the next command with the same issue. Flagged commands also get a small colored badge in the command list, and hovering the badge lists the issues.
+When a capture is loaded, the inspector checks the frame's commands for performance and correctness problems. The badge on the [Reports](#reports) menu button shows how many it found, colored by the most severe. **Frame Issues** in that menu opens a report with the most severe issues first. You can filter the report by severity and by rule. **Go to command** selects the command an issue is about in the command list, and each further click moves to the next command with the same issue. Flagged commands also get a small colored badge in the command list, and hovering the badge lists the issues.
 
 | Rule | What it flags |
 |---|---|

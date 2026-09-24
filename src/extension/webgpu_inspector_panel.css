@@ -2175,8 +2175,37 @@ li.tree-item .expandbutton
   gap: 5px;
 }
 
-.capture_filter_stats {
+.capture_reports_menu {
   margin-left: auto;
+}
+
+.capture_reports_button {
+  font-size: 10pt;
+  line-height: 14pt;
+  padding: 2px 10px;
+}
+
+.capture_reports_badge {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  font-size: 8pt;
+  line-height: 14px;
+  font-weight: bold;
+  text-align: center;
+  color: #000;
+}
+
+.capture_reports_badge.frame-issue-high { background-color: var(--accent-error); color: #fff; }
+.capture_reports_badge.frame-issue-medium { background-color: var(--accent-warning); }
+.capture_reports_badge.frame-issue-low { background-color: var(--accent-info); }
+
+/* The Reports menu sits at the right edge of the filter bar; open leftward. */
+.capture_reports_dropdown {
+  left: auto;
+  right: 0;
 }
 
 .capture_array_view {
@@ -3270,3 +3299,123 @@ li.tree-item .expandbutton
 .frame-issue-marker.frame-issue-medium { background-color: var(--accent-warning); }
 .frame-issue-marker.frame-issue-low { background-color: var(--accent-info); }
 .frame-issue-marker.frame-issue-info { background-color: var(--bg-hover); color: #fff; }
+
+/* Mesh view (VS In): toolbar, notes, and the 3D preview beside the vertex table. */
+.mesh-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  white-space: normal;
+  font-size: 10pt;
+}
+
+.mesh-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.mesh-summary {
+  color: var(--fg-primary);
+  margin-right: 10px;
+}
+
+.mesh-label {
+  color: var(--fg-secondary);
+  font-size: 9pt;
+  margin-left: 6px;
+}
+
+.mesh-notes {
+  flex: 0 0 auto;
+  padding: 0 8px 4px 8px;
+  font-size: 9pt;
+  color: var(--fg-secondary);
+}
+
+.mesh-content {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  gap: 6px;
+  padding: 0 8px 8px 8px;
+}
+
+.mesh-preview {
+  flex: 1 1 50%;
+  position: relative;
+  min-width: 250px;
+  min-height: 200px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.mesh-hint {
+  position: absolute;
+  left: 6px;
+  bottom: 4px;
+  font-size: 8pt;
+  color: var(--fg-secondary);
+  pointer-events: none;
+}
+
+.mesh-table-pane {
+  flex: 1 1 50%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.mesh-pager {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 4px;
+  color: var(--fg-secondary);
+  font-size: 9pt;
+}
+
+.mesh-table-scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+}
+
+.mesh-table {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 9pt;
+  white-space: nowrap;
+}
+
+.mesh-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary);
+  color: var(--fg-secondary);
+  text-align: left;
+  font-weight: normal;
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.mesh-table td {
+  padding: 1px 8px;
+  color: var(--fg-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+
+.mesh-table tr:hover td {
+  background: var(--bg-hover);
+}
+
+.mesh-table tr.mesh-row-selected td {
+  background: rgba(255, 140, 0, 0.3);
+}
