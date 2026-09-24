@@ -139,6 +139,17 @@ export let webgpuInspector = null;
       // percentile of a sliding window of recent frame deltas (robust to VRR / outlier
       // frames), recomputed every _refreshRecalcInterval frames.
       this._refreshPeriod = 0;      // est. refresh interval (ms); 0 until warmed up
+      // Frame pause (see _setFramePause): while paused, requestAnimationFrame
+      // callbacks are held rather than run; stepping releases one frame.
+      this._framePaused = false;
+      this._framePauseSteps = 0;
+      this._framePauseHeld = new Map();   // id -> callback
+      this._framePauseNextId = 1e9;       // ids for held requests, clear of native ids
+      this._framePauseTick = -1;          // the native timestamp of the tick being run
+      this._framePauseTickRuns = false;   // whether that tick's callbacks run
+      this._framePauseOffset = 0;         // native - virtual timestamp
+      this._framePauseLastVirtual = null;
+      this._framePauseResync = false;
       this._skippedFrameTotal = 0;  // cumulative dropped frames since load
       this._frameDeltaWindow = new Float32Array(150);
       this._frameDeltaWindowLen = 0;
@@ -420,21 +431,49 @@ export let webgpuInspector = null;
       this._nativeRequestAnimationFrame = __requestAnimationFrame.bind(_self);
       this._currentFrameTime = 0.0;
 
-      requestAnimationFrame = function (cb) {
-        function callback(timestamp) {
-          self._frameStart(timestamp);
-          const result = cb(timestamp);
-          if (result instanceof Promise) {
-            Promise.all([result]).then(() => {
-              self._frameEnd(timestamp);
-            });
-          } else {
-            self._frameEnd(timestamp);
-          }
-          return result;
+      const __cancelAnimationFrame = typeof cancelAnimationFrame === "function" ? cancelAnimationFrame : null;
+
+      // Runs one page rAF callback. While the loop is paused, a callback whose
+      // tick isn't a stepped frame is held instead (see _setFramePause).
+      const runFrameCallback = function (cb, nativeTimestamp) {
+        const timestamp = self._framePauseTimestamp(nativeTimestamp);
+        if (timestamp === null) {
+          const id = self._framePauseNextId++;
+          self._framePauseHeld.set(id, cb);
+          return undefined;
         }
-        return __requestAnimationFrame(callback);
+        self._frameStart(timestamp);
+        const result = cb(timestamp);
+        if (result instanceof Promise) {
+          Promise.all([result]).then(() => {
+            self._frameEnd(timestamp);
+          });
+        } else {
+          self._frameEnd(timestamp);
+        }
+        return result;
       };
+      this._runFrameCallback = runFrameCallback;
+
+      requestAnimationFrame = function (cb) {
+        if (self._framePaused && self._framePauseSteps <= 0) {
+          // Paused: hold the request until a step or resume releases it.
+          const id = self._framePauseNextId++;
+          self._framePauseHeld.set(id, cb);
+          return id;
+        }
+        return __requestAnimationFrame((timestamp) => runFrameCallback(cb, timestamp));
+      };
+
+      if (__cancelAnimationFrame) {
+        // A request held by a pause must still be cancelable.
+        cancelAnimationFrame = function (id) {
+          if (self._framePauseHeld.delete(id)) {
+            return;
+          }
+          return __cancelAnimationFrame(id);
+        };
+      }
 
       // Listen for messages from the content-script.
       function eventCallback(event) {
@@ -468,7 +507,21 @@ export let webgpuInspector = null;
           // The devtools panel is requesting to revert a shader back to its original code.
           const shaderId = message.id;
           self._revertShader(shaderId);
+        } else if (message.action === PanelActions.FramePause) {
+          self._setFramePause(message.mode, message.frames ?? 1);
         } else if (message.action === PanelActions.Capture) {
+          // A capture of a paused page records the frames it steps through.
+          if (self._framePaused) {
+            let data = message.data;
+            try {
+              data = typeof data === "string" ? JSON.parse(data) : data;
+            } catch (e) {
+              data = null;
+            }
+            if ((data?.frame ?? -1) < 0) {
+              self._setFramePause("step", data?.captureFrameCount ?? 1);
+            }
+          }
           // The devtools panel is requesting to capture a frame.
           if (_window == null) {
             if (message.data.constructor.name === "String") {
@@ -553,6 +606,85 @@ export let webgpuInspector = null;
       if (this._captureData) {
         this._initCaptureData();
       }
+    }
+
+    /**
+     * Pause, resume or step the page's requestAnimationFrame loop.
+     *
+     * While paused, rAF callbacks are held instead of scheduled, so the page
+     * stops rendering and the canvas keeps its last presented frame. A step
+     * releases the held callbacks for `frames` native animation frames. The
+     * callbacks see virtual timestamps that advance by one refresh period per
+     * frame, so a stepped animation moves one frame at a time rather than
+     * jumping by the time spent paused.
+     * @param {string} mode - "pause" | "resume" | "step"
+     * @param {number} frames - frames to run for "step"
+     */
+    _setFramePause(mode, frames) {
+      if (mode === "pause") {
+        this._framePaused = true;
+        this._framePauseSteps = 0;
+      } else if (mode === "resume") {
+        this._framePaused = false;
+        this._framePauseSteps = 0;
+        this._framePauseResync = true;
+        this._releaseHeldFrames();
+      } else if (mode === "step") {
+        this._framePaused = true;
+        this._framePauseSteps += Math.max(1, frames | 0);
+        this._releaseHeldFrames();
+      }
+      this._postMessage({
+        action: Actions.FramePauseState,
+        paused: this._framePaused,
+        frame: this._frameIndex,
+        held: this._framePauseHeld.size,
+      });
+    }
+
+    // Schedule every held callback for the next native animation frame.
+    _releaseHeldFrames() {
+      const held = [...this._framePauseHeld.values()];
+      this._framePauseHeld.clear();
+      const request = this._nativeRequestAnimationFrame;
+      for (const cb of held) {
+        request((timestamp) => this._runFrameCallback(cb, timestamp));
+      }
+    }
+
+    // The timestamp a rAF callback runs with, or null if its frame is held.
+    // All callbacks of one native tick share a decision: the first one to run
+    // decides whether the tick is a stepped frame.
+    _framePauseTimestamp(nativeTimestamp) {
+      if (nativeTimestamp !== this._framePauseTick) {
+        this._framePauseTick = nativeTimestamp;
+        const period = this._refreshPeriod > 0 ? this._refreshPeriod : 1000 / 60;
+        if (this._framePaused) {
+          this._framePauseTickRuns = this._framePauseSteps > 0;
+          if (this._framePauseTickRuns) {
+            this._framePauseSteps--;
+            const virtual = this._framePauseLastVirtual !== null ? this._framePauseLastVirtual + period : nativeTimestamp;
+            this._framePauseOffset = nativeTimestamp - virtual;
+            if (this._framePauseSteps === 0) {
+              // The last stepped frame: report the frame the page now shows.
+              Promise.resolve().then(() => this._postMessage({
+                action: Actions.FramePauseState, paused: true, frame: this._frameIndex, held: this._framePauseHeld.size,
+              }));
+            }
+          }
+        } else {
+          this._framePauseTickRuns = true;
+          if (this._framePauseResync && this._framePauseLastVirtual !== null) {
+            // Resuming: continue the virtual clock from where the pause left it.
+            this._framePauseOffset = nativeTimestamp - (this._framePauseLastVirtual + period);
+          }
+          this._framePauseResync = false;
+        }
+        if (this._framePauseTickRuns) {
+          this._framePauseLastVirtual = nativeTimestamp - this._framePauseOffset;
+        }
+      }
+      return this._framePauseTickRuns ? nativeTimestamp - this._framePauseOffset : null;
     }
 
     scheduleStatusElements() {

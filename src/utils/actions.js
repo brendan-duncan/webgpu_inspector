@@ -15,6 +15,8 @@ export const Actions = {
   CaptureTextureData: "webgpu_inspect_capture_texture_data",
   CaptureBufferData: "webgpu_inspect_capture_buffer_data",
   WriteBuffer: "wrebgpu_inspect_write_buffer",
+  // Page -> panel: the frame pause state (paused, frame, held callbacks) after a FramePause.
+  FramePauseState: "webgpu_inspect_frame_pause_state",
 
   // Wrapper action for a coalesced group of high-frequency notification messages
   // (AddObject, DeleteObject, etc.). The page batches them into one message to cut
@@ -40,6 +42,9 @@ export const PanelActions = {
   RequestTexture: "webgpu_inspect_request_texture",
   CompileShader: "webgpu_inspect_compile_shader",
   RevertShader: "webgpu_inspect_revert_shader",
+  // Panel -> page: pause, resume, or step the page's requestAnimationFrame loop.
+  // { mode: "pause" | "resume" | "step", frames }
+  FramePause: "webgpu_inspect_frame_pause",
   Capture: "webgpu_inspector_capture",
   InitializeInspector: "webgpu_initialize_inspector",
   InitializeRecorder: "webgpu_initialize_recorder",

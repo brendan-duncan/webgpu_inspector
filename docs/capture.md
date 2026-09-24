@@ -17,6 +17,7 @@
 * [Pixel History](#pixel-history)
 * [Debug Groups](#debug-groups)
 * [Timing Capture](#timing-capture)
+* [Pause and Step](#pause-and-step)
 * [Frame Stats](#frame-stats)
 * [Render Graph](#render-graph)
 * [Frame Issues](#frame-issues)
@@ -303,6 +304,15 @@ A frame capture shows one frame in depth, but a hitch is usually the frame you w
     * Otherwise, time spent outside the frame's callback: garbage collection, other work on the page's thread, or the GPU or compositor holding the frame back.
 
 Check **Capture on hitch** to capture a frame automatically when the first hitch is detected. The hitch itself has already happened by then, so the capture is of the frame after it, which usually repeats the same work. The Timing tab marks the hitch that triggered the capture.
+
+## Pause and Step
+###### [Back to top](#capture)
+
+**Pause** freezes the inspected page's `requestAnimationFrame` loop. The canvas keeps its last presented frame, and **Step** runs one frame at a time. Pausing holds the page's rAF callbacks instead of running them; **Resume** releases them. This applies to the page and to any inspected workers that render with `requestAnimationFrame`.
+
+The callbacks see a virtual timestamp that advances by one display refresh per frame. An animation driven by the rAF timestamp therefore moves one frame per step instead of jumping by the time spent paused, and it continues smoothly after Resume. Animations that read `performance.now()` or `Date.now()` directly still see real time.
+
+Pressing **Capture** while paused (in Immediate mode) steps through the captured frames, so the capture shows the frames that come right after the one on screen. Loops driven by `setTimeout`, `setInterval` or `requestVideoFrameCallback` are not paused.
 
 ## Frame Stats
 ###### [Back to top](#capture)

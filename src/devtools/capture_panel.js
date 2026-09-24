@@ -207,6 +207,24 @@ export class CapturePanel {
       this.captureOnHitch = value;
     });
 
+    // Pause / step the page's requestAnimationFrame loop. A capture of a
+    // paused page steps through the frames it captures.
+    this._framePaused = false;
+    this._pauseButton = new Button(_controlBar, {
+      label: "Pause",
+      class: "btn ml-sm",
+      title: "Pause the page's requestAnimationFrame loop; the canvas keeps its last frame",
+      callback: () => this._setFramePause(this._framePaused ? "resume" : "pause"),
+    });
+    this._stepButton = new Button(_controlBar, {
+      label: "Step",
+      class: "btn",
+      title: "Run one frame of the paused page",
+      callback: () => this._setFramePause("step", 1),
+    });
+    this._stepButton.disabled = true;
+    this._pauseStatus = new Span(_controlBar, { class: "text-secondary ml-sm" });
+
     this.captureMode = 0;
 
     new Select(_controlBar, {
@@ -331,6 +349,12 @@ export class CapturePanel {
     this._lastSelectedCommand = null;
     this._gpuTextureMap = new Map();
     this._passEncoderCommands = new Map();
+
+    port.addListener((message) => {
+      if (message.action === Actions.FramePauseState) {
+        self._onFramePauseState(message);
+      }
+    });
 
     port.addListener((message) => {
       if (!self._captureData) {
@@ -737,6 +761,36 @@ export class CapturePanel {
     } catch (e) {
       console.error(e.message);
     }
+  }
+
+  /**
+   * Ask the page to pause, resume or step its requestAnimationFrame loop.
+   * @param {string} mode - "pause" | "resume" | "step"
+   * @param {number} [frames]
+   */
+  _setFramePause(mode, frames = 1) {
+    this.port.postMessage({ action: PanelActions.FramePause, mode, frames });
+    // Reflect the request right away; the page's FramePauseState confirms it.
+    this._applyPauseUI(mode !== "resume");
+    if (mode === "pause") {
+      this._pauseStatus.text = "Pausing…";
+    } else if (mode === "step") {
+      this._pauseStatus.text = "Stepping…";
+    } else {
+      this._pauseStatus.text = "";
+    }
+  }
+
+  _applyPauseUI(paused) {
+    this._framePaused = paused;
+    this._pauseButton.text = paused ? "Resume" : "Pause";
+    this._pauseButton.element.classList.toggle("btn-warning", paused);
+    this._stepButton.disabled = !paused;
+  }
+
+  _onFramePauseState(message) {
+    this._applyPauseUI(!!message.paused);
+    this._pauseStatus.text = message.paused ? `Paused at frame ${message.frame}` : "";
   }
 
   /** Start or stop a Timing Capture. Stopping opens its Timing tab. */

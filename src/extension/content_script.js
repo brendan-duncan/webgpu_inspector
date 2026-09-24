@@ -136,7 +136,8 @@ const port = new MessagePort("webgpu-inspector-page", 0, (message) => {
     return;
   }
 
-  if (action === PanelActions.RequestTexture || action === PanelActions.CompileShader || action === PanelActions.RevertShader) {
+  if (action === PanelActions.RequestTexture || action === PanelActions.CompileShader || action === PanelActions.RevertShader ||
+      action === PanelActions.FramePause) {
     const msg = isFirefox() ? cloneInto(message, document.defaultView) : message;
     window.dispatchEvent(new CustomEvent("__WebGPUInspector", { detail: msg }));
     return;

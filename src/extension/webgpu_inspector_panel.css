@@ -183,6 +183,10 @@ button.btn-danger {
     background-color: var(--accent-error);
 }
 
+button.btn-warning {
+    background-color: #b8860b;
+}
+
 button.btn-info {
     background-color: var(--bg-elevated);
     border: 1px solid var(--border-color);

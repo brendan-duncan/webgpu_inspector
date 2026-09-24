@@ -299,8 +299,11 @@ export class InspectPanel {
 
     const self = this;
 
-    const objectsTab = new TabWidget(pane1);
-    const objectsPanel = new Div(null, { style: "font-size: 11pt; overflow: auto; height: calc(-115px + 100vh);" });
+    // Fill the pane with flex (the .inspector-tabs rules) rather than a
+    // 100vh-minus-header guess, which clipped the bottom of the list whenever
+    // the header above it grew.
+    const objectsTab = new TabWidget(pane1, { class: "inspector-tabs" });
+    const objectsPanel = new Div(null, { style: "font-size: 11pt; overflow: auto; height: 100%; min-height: 0; box-sizing: border-box;" });
     objectsTab.addTab("Objects", objectsPanel);
 
     this._backButton = new Button(objectsTab.headerElement, { label: "<", style: "font-weight: bold;", tooltip: "Back", disabled: true, callback: () => {

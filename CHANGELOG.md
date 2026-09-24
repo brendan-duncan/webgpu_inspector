@@ -9,6 +9,8 @@
 * Added VS Out to the Mesh View. It runs the draw's vertex shader by GPU replay (as a generated compute shader) and shows its outputs, a preview of the positions in normalized device coordinates inside the view volume, and counts of vertices that are off-screen, behind the eye or NaN, and of triangles with zero area.
 * Added Compile & Replay to the shader editor. It replays a captured frame that uses the shader, once as captured and once with the edited shader, without changing the page, and opens a Shader Edit tab. For each render target the edit changes, the tab shows the target before and after the edit, with the changed texels highlighted.
 * Added Timing Capture to the Capture panel. It records every frame's timing until stopped and shows a frame-time chart with range selection, percentiles and dropped frames, plus the hitches with their likely causes (synchronous pipeline compiles, shader and resource creation, long rAF callbacks, or time spent outside the frame). Capture on hitch captures the frame after the first hitch.
+* Added Pause, Resume and Step to the Capture panel. They pause the page's requestAnimationFrame loop and step it one frame at a time, with rAF timestamps that advance one refresh per step. A Capture while paused steps through the captured frames.
+* Fixed the Inspect panel's object list cutting off its last entries: it now fills the panel instead of using a fixed height.
 * The capture's report buttons (Frame Stats, Frame Issues, Render Graph, Shader Flame Graph, Analyze Shaders) are now in a Reports menu, with a badge showing the frame's issue count.
 
 ## v1.7.0
