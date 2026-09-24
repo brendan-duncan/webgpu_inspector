@@ -40,6 +40,7 @@ import { buildShaderReplayView } from "./shader_replay_view.js";
 import { TimingRecorder } from "./timing_capture.js";
 import { buildTimingView } from "./timing_view.js";
 import { downloadReportHtml } from "./report_export.js";
+import { buildBottleneckView } from "./bottleneck_view.js";
 import { captureToText, downloadCapture } from "./capture_export.js";
 import { isCaptureBinary, decodeCaptureBinary } from "../utils/capture_binary.js";
 import { importCaptureJson, parseCaptureText } from "./capture_import.js";
@@ -1038,6 +1039,8 @@ export class CapturePanel {
       () => this._inspectStats(commandInfoContents));
     state.issuesMenuItem = addItem("Frame Issues", "Performance and correctness issues found in the frame's commands",
       () => this._showFrameIssues(state));
+    addItem("GPU Bottlenecks", "Per pass: GPU time, overdraw, fragments per primitive and depth rejection, measured by replay, with a verdict",
+      () => this._showBottlenecks(state));
     addItem("Render Graph", "The frame's passes and the resources that connect them, with dependency-based suggestions",
       () => this._showRenderGraph(state));
     addItem("Shader Flame Graph", "The frame's GPU cost broken down by pass, pipeline and shader statement",
@@ -2746,6 +2749,19 @@ export class CapturePanel {
       onInspect: (object) => self.window.inspectObject(object),
     });
     this._addReportTab("Render Graph", panel);
+    this._captureTab.setActivePanel(panel);
+  }
+
+  /** Opens the GPU Bottlenecks report as a capture tab. */
+  _showBottlenecks(state) {
+    const panel = buildBottleneckView({
+      commands: state.commands,
+      database: this.database,
+      device: this.window?.device ?? null,
+      getTextureFromAttachment: (attachment) => this._getTextureFromAttachment(attachment),
+      onSelectCommand: (command) => this._selectCommand(state, command),
+    });
+    this._addReportTab("GPU Bottlenecks", panel);
     this._captureTab.setActivePanel(panel);
   }
 

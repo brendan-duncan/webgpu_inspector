@@ -3705,3 +3705,28 @@ button.icon-button:disabled img {
   color: var(--accent-error) !important;
   font-weight: bold;
 }
+
+/* GPU Bottlenecks report. */
+.bottlenecks {
+  height: 100%;
+  overflow: auto;
+  white-space: normal;
+  font-size: 10pt;
+}
+
+.bottlenecks-table {
+  padding: 4px 8px;
+  overflow-x: auto;
+}
+
+.bottlenecks-grid td:first-child {
+  cursor: pointer;
+}
+
+.bottlenecks-issues {
+  padding: 4px 8px 12px 8px;
+}
+
+.bottleneck-verdict.bottleneck-high { color: var(--accent-error); }
+.bottleneck-verdict.bottleneck-medium { color: var(--accent-warning); }
+.bottleneck-verdict.bottleneck-low { color: var(--accent-info); }

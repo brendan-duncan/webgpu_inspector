@@ -21,6 +21,7 @@
 * [Frame Stats](#frame-stats)
 * [Render Graph](#render-graph)
 * [Frame Issues](#frame-issues)
+* [GPU Bottlenecks](#gpu-bottlenecks)
 * [Shader Debugger](#shader-debugger)
 
 ## Introduction
@@ -237,11 +238,11 @@ The view decodes the captured vertex and index buffer bytes, and reads indirect 
 ## Reports
 ###### [Back to top](#capture)
 
-The **☰ Reports** menu at the right of the capture's filter bar opens the frame-wide reports: [Frame Stats](#frame-stats), [Frame Issues](#frame-issues), [Render Graph](#render-graph), [Shader Flame Graph](shader_flame_graph.md) and Analyze Shaders. When the frame has [issues](#frame-issues), a badge on the menu button shows how many, in the color of the most severe.
+The **☰ Reports** menu at the right of the capture's filter bar opens the frame-wide reports: [Frame Stats](#frame-stats), [Frame Issues](#frame-issues), [Render Graph](#render-graph), [GPU Bottlenecks](#gpu-bottlenecks), [Shader Flame Graph](shader_flame_graph.md) and Analyze Shaders. When the frame has [issues](#frame-issues), a badge on the menu button shows how many, in the color of the most severe.
 
 ### Exporting Reports
 
-To share a report or attach it to a bug, right-click the tab of a report (Frame Issues, Render Graph, Shader Flame Graph, Shader Analysis, Timing, Shader Edit, or a Mesh View) and choose **Export to HTML**. Frame Stats, which opens in the frame's details pane, has an **Export to HTML** button at its top. The report is saved as a single self-contained HTML file, as it currently appears: expanded sections, filters and selections included, with charts and images embedded as pictures. The exported file is a snapshot, so its links and buttons don't do anything.
+To share a report or attach it to a bug, right-click the tab of a report (Frame Issues, Render Graph, GPU Bottlenecks, Shader Flame Graph, Shader Analysis, Timing, Shader Edit, or a Mesh View) and choose **Export to HTML**. Frame Stats, which opens in the frame's details pane, has an **Export to HTML** button at its top. The report is saved as a single self-contained HTML file, as it currently appears: expanded sections, filters and selections included, with charts and images embedded as pictures. The exported file is a snapshot, so its links and buttons don't do anything.
 
 ## Pixel History
 ###### [Back to top](#capture)
@@ -380,6 +381,33 @@ When a capture is loaded, the inspector checks the frame's commands for performa
 | small-dispatch | Dispatches with fewer than 64 invocations in total |
 
 The report also includes the [Render Graph](#render-graph) suggestions.
+
+## GPU Bottlenecks
+###### [Back to top](#capture)
+
+Choose **GPU Bottlenecks** from the [Reports](#reports) menu to see what each pass spends its GPU time on. The report has one row per pass, in the order the GPU runs them:
+
+* **GPU ms** and **Share**: the pass's GPU time and its share of the frame. These need a capture made with [Profile Passes](#profile-passes).
+* **Draws** and **Primitives**: the pass's draw calls and the triangles, lines or points they submit. A **+** means some draws are indirect or in render bundles and couldn't be counted.
+* **Rasterized**: every pixel the pass's draws cover, before any test.
+* **Survived**: the pixels that then pass the depth and stencil tests.
+* **Overdraw**: rasterized pixels divided by the target's pixels.
+* **Px / prim**: rasterized pixels per primitive.
+* **Rejected**: the fraction of rasterized pixels the depth and stencil tests throw away.
+* **Targets**: the pass's size and sample count. Hover it to see the attachment formats.
+* **Verdict**: the pass's most important finding.
+
+The fragment counts are measured when the report opens, by replaying each render pass with a shader that counts fragments: once with no depth test, and once with the draws' own depth and stencil state. Depth-stencil textures carry over from pass to pass during the replay, and start at the far plane. The counts are per pixel, so MSAA passes count one sample per pixel. The replay doesn't run the page's fragment shaders, so fragments that `discard` are counted as surviving.
+
+**What to look at** lists the findings across the frame, most severe first:
+
+* **Tiny triangles**: many primitives covering fewer than 4 pixels each. The GPU shades pixels in 2x2 quads, so tiny triangles waste most of their fragment work. Consider level of detail for distant meshes.
+* **High overdraw**: each pixel is covered 3 or more times. Sort opaque draws front to back, or add a depth pre-pass.
+* **Shaded, then rejected**: most fragments fail the depth test, and the pass's fragment shaders `discard` or write `frag_depth`. That turns off early depth testing, so the rejected fragments are shaded first.
+* **Heavy render targets**: wide formats or MSAA make each pixel's writes and blending expensive.
+* **Heavy compute**: a compute pass takes a large share of the frame.
+
+Click a pass name to select its begin command in the command list.
 
 ## Shader Debugger
 ###### [Back to top](#capture)
