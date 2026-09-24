@@ -28,6 +28,8 @@ import { ShaderDebugger } from "./shader_debugger.js";
 import { CaptureTextureViewer } from "./capture_texture_viewer.js";
 import { addShaderAnalysisView, buildFrameShaderAnalysis } from "./shader_analysis_view.js";
 import { buildFrameFlameGraph } from "./frame_flamegraph.js";
+import { buildFrameRenderGraph } from "./render_graph.js";
+import { buildRenderGraphView } from "./render_graph_view.js";
 import { captureToText, downloadCapture } from "./capture_export.js";
 import { isCaptureBinary, decodeCaptureBinary } from "../utils/capture_binary.js";
 import { importCaptureJson, parseCaptureText } from "./capture_import.js";
@@ -607,6 +609,12 @@ export class CapturePanel {
       class: "btn",
       title: "Break the frame's GPU cost down by pass, pipeline and shader statement",
       callback: () => self._showFrameFlameGraph(commands)
+    });
+    new Button(filterArea, {
+      label: "Render Graph",
+      class: "btn",
+      title: "Show the frame's passes and the resources that connect them, with dependency-based suggestions",
+      callback: () => self._showRenderGraph(commands)
     });
 
     // GPU pass timeline. Stays at 0 height until timestamp data arrives, so captures
@@ -2353,6 +2361,26 @@ export class CapturePanel {
       },
     });
     this._captureTab.addTab("Shader Flame Graph", panel);
+    this._captureTab.setActivePanel(panel);
+  }
+
+  /**
+   * Opens the frame's render graph as a capture tab: its passes in execution
+   * order and the textures and buffers that connect them.
+   * @param {Array<Object>} commands - The frame's command records.
+   */
+  _showRenderGraph(commands) {
+    const self = this;
+    const graph = buildFrameRenderGraph(commands, {
+      getObject: (id) => self._getObject(id),
+      getTextureFromView: (view) => self.database.getTextureFromView(view),
+      getBundleCommands: (id) => self._getObject(id)?.commands ?? null,
+    });
+    const panel = buildRenderGraphView(graph, {
+      onSelectCommand: (command) => self._jumpToCommand(command),
+      onInspect: (object) => self.window.inspectObject(object),
+    });
+    this._captureTab.addTab("Render Graph", panel);
     this._captureTab.setActivePanel(panel);
   }
 

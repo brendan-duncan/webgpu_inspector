@@ -2930,3 +2930,316 @@ li.tree-item .expandbutton
   content: "\21B3\00a0";
   color: var(--text-secondary, #888);
 }
+
+/* ---------------------------------------------------------------------------
+   Render Graph (capture tab): resource lifetime chart plus the selected
+   pass's neighborhood.
+   --------------------------------------------------------------------------- */
+.render-graph {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+  white-space: normal;
+  font-size: 10pt;
+}
+
+.render-graph-summary {
+  padding: 6px 8px 2px 8px;
+  color: var(--fg-secondary);
+}
+
+.render-graph > .flame-note {
+  padding: 2px 8px;
+  font-size: 9pt;
+  color: var(--fg-secondary);
+}
+
+.render-graph-heading {
+  font-weight: bold;
+  color: var(--fg-primary);
+}
+
+.render-graph-suggestions > .render-graph-heading {
+  padding: 4px 8px;
+}
+
+.render-graph-chart {
+  flex: 0 0 auto;
+  padding: 0 8px;
+}
+
+.render-graph-scroll {
+  overflow-x: auto;
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+}
+
+.render-graph-grid {
+  position: relative;
+}
+
+.render-graph-header {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.render-graph-corner {
+  flex: 0 0 auto;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--bg-secondary);
+  padding: 4px 6px;
+  box-sizing: border-box;
+  color: var(--fg-secondary);
+  font-size: 9pt;
+}
+
+.render-graph-header-track {
+  position: relative;
+  height: 44px;
+}
+
+.render-graph-pass {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  cursor: pointer;
+  overflow: hidden;
+  opacity: 0.55;
+}
+
+.render-graph-pass-render { background: #3d6a9e; }
+.render-graph-pass-compute { background: #7a5aa6; }
+.render-graph-pass-transfer { background: #666; }
+
+.render-graph-pass-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.render-graph-pass-name {
+  position: absolute;
+  left: 3px;
+  top: 2px;
+  font-size: 8pt;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.render-graph-pass.render-graph-unread {
+  background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(0, 0, 0, 0.35) 4px 7px);
+}
+
+.render-graph-pass.render-graph-onpath {
+  box-shadow: inset 0 -3px 0 var(--accent-warning);
+}
+
+.render-graph-pass.render-graph-related {
+  opacity: 0.85;
+}
+
+.render-graph-pass.render-graph-selected {
+  opacity: 1;
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+
+.render-graph-row {
+  display: flex;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.render-graph-row.render-graph-related {
+  background: rgba(86, 156, 214, 0.12);
+}
+
+.render-graph-row.render-graph-selected {
+  background: rgba(86, 156, 214, 0.28);
+}
+
+.render-graph-label {
+  flex: 0 0 auto;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-primary);
+  box-sizing: border-box;
+  padding: 0 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  font-size: 9pt;
+  line-height: 18px;
+  border-right: 1px solid var(--border-color);
+}
+
+.render-graph-label.render-graph-texture { border-left: 3px solid #4f9a5f; }
+.render-graph-label.render-graph-buffer { border-left: 3px solid #b08a3c; }
+
+.render-graph-name {
+  color: var(--fg-primary);
+  margin-right: 6px;
+}
+
+.render-graph-detail-text {
+  color: var(--fg-secondary);
+  font-size: 8pt;
+}
+
+.render-graph-track {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.render-graph-life {
+  position: absolute;
+  top: 8px;
+  height: 2px;
+  background: var(--bg-hover);
+}
+
+.render-graph-external {
+  position: absolute;
+  top: 3px;
+  width: 2px;
+  height: 12px;
+  background: var(--accent-warning);
+}
+
+.render-graph-external.render-graph-host {
+  background: var(--accent-info);
+}
+
+.render-graph-use {
+  position: absolute;
+  top: 3px;
+  height: 12px;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+.render-graph-usage-attachment { --rg-color: #4e9de0; }
+.render-graph-usage-sampled { --rg-color: #5fb86c; }
+.render-graph-usage-storage { --rg-color: #c586c0; }
+.render-graph-usage-transfer { --rg-color: #d7ba7d; }
+.render-graph-usage-input { --rg-color: #8a8a8a; }
+.render-graph-usage-other { --rg-color: #bbbbbb; }
+
+.render-graph-use-write,
+.render-graph-use-readwrite {
+  background: var(--rg-color);
+}
+
+.render-graph-use-readwrite {
+  border: 1px solid #fff;
+}
+
+.render-graph-use-read {
+  border: 2px solid var(--rg-color);
+  background: transparent;
+}
+
+.render-graph-legend {
+  padding: 6px 0;
+}
+
+.render-graph-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 10px;
+  box-sizing: border-box;
+  background: var(--rg-color);
+}
+
+.render-graph-swatch.render-graph-use-read {
+  background: transparent;
+}
+
+.render-graph-detail {
+  padding: 6px 8px 12px 8px;
+}
+
+.render-graph-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.render-graph-facts {
+  color: var(--fg-secondary);
+  font-size: 9pt;
+  padding: 2px 0 4px 0;
+}
+
+.render-graph-subheading {
+  margin-top: 8px;
+  color: var(--fg-secondary);
+  font-size: 9pt;
+  font-weight: bold;
+}
+
+.render-graph-list-row {
+  display: flex;
+  gap: 12px;
+  padding: 1px 0;
+  font-size: 9pt;
+}
+
+.render-graph-list-name {
+  flex: 0 0 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.render-graph-list-value {
+  color: var(--fg-secondary);
+}
+
+.render-graph-dag {
+  display: block;
+  width: 100%;
+  max-width: 780px;
+  height: auto;
+  margin: 6px 0;
+}
+
+.render-graph-dag-node rect {
+  fill: var(--bg-tertiary);
+  stroke: var(--border-color);
+  cursor: pointer;
+}
+
+.render-graph-dag-node text {
+  fill: var(--fg-primary);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.render-graph-dag-self rect {
+  fill: #2b4f78;
+  stroke: #4e9de0;
+}
+
+.render-graph-dag-edge {
+  fill: none;
+  stroke: #6b6b6b;
+  stroke-width: 1.5;
+}
+
+.render-graph-dag-edge-label {
+  fill: var(--fg-secondary);
+  font-size: 10px;
+}

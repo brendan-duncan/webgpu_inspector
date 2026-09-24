@@ -15,6 +15,7 @@
 * [Pixel History](#pixel-history)
 * [Debug Groups](#debug-groups)
 * [Frame Stats](#frame-stats)
+* [Render Graph](#render-graph)
 * [Shader Debugger](#shader-debugger)
 
 ## Introduction
@@ -252,6 +253,25 @@ The Capture tool can provide various statistics about the capture. Press the **F
 <a href="images/capture_frame_stats.png">
 <img src="images/capture_frame_stats.png" style="width:512px">
 </a>
+
+## Render Graph
+###### [Back to top](#capture)
+
+Press **Render Graph** to see the frame's passes and the textures and buffers that connect them. Passes are shown in the order the GPU runs them, meaning command buffers in `submit()` order.
+
+The main view is a resource lifetime chart. Passes run along the top, and when the capture was taken with [Profile Passes](#profile-passes), each pass header is filled in proportion to its GPU time. Each texture or buffer gets one row. A row shows where the resource is live and marks each pass that uses it: filled marks are writes, hollow marks are reads, and the color gives the usage (attachment, sampled, storage, copy or upload, geometry or uniform). Texture dependencies are tracked per mip level and array layer, so a bloom chain that reads one mip and writes the next shows as a chain of passes rather than a cycle.
+
+Select a pass to see which passes feed it and which passes it feeds, along with what it reads and writes. Select a resource to see each version written during the frame and who read it. **Critical path** selects the longest chain of dependent passes by GPU time.
+
+Suggestions above the chart come from the graph:
+
+* **read-after-discard**: a pass reads an attachment whose producer ended with `storeOp: "discard"`, so it reads zeros.
+* **overwritten-before-read**: a result is completely replaced before anything reads it.
+* **msaa-store**: a multisampled attachment is both resolved and stored, and nothing reads the stored samples.
+* **unread-store**: an attachment is stored, but no later pass in the capture reads it.
+* **mergeable-passes**: a render pass loads exactly what the previous pass stored, to the same attachments.
+
+The graph only sees the captured frame. A result that the next frame reads, such as a history buffer, can look unread here.
 
 ## Shader Debugger
 ###### [Back to top](#capture)
