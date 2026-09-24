@@ -12,6 +12,7 @@
 * Added Pause, Resume and Step to the Capture panel. They pause the page's requestAnimationFrame loop and step it one frame at a time, with rAF timestamps that advance one refresh per step. A Capture while paused steps through the captured frames.
 * Fixed the Inspect panel's object list cutting off its last entries: it now fills the panel instead of using a fixed height.
 * Texture viewers highlight special values: NaN and infinity by default, and optionally values below 0 or above 1. They also have a per-channel histogram with counts of special values. The capture texture viewer can copy its image as a PNG.
+* The Inspect panel's GPU Objects plot can also plot GPU Memory, Texture Memory and Buffer Memory over time.
 * Fixed the Inspect panel's frame-time and GPU object plots going blank after switching to another panel (for example after a capture) and back.
 * Fixed 32-bit float textures (r32float, rgba32float, ...) displaying black in the texture viewers.
 * The Capture bar's settings (Max Buffer Size, Max Texture Size, Stacktraces, Profile Passes, Capture on hitch) moved to the ☰ menu under Capture Settings, which leaves the bar with Capture, capture mode and frames, Pause and Step, and Timing Capture. Help buttons are now icons.

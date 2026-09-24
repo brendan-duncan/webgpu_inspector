@@ -91,6 +91,8 @@ long stall doesn't flatten the rest of the plot.
 
 **GPU Objects**: Plots the number of GPU Objects that are allocated over time. You can select a specific GPU object type to plot from the option box. The GPU Objects option tracks all GPU objects.
 
+The option box also offers memory over time: **GPU Memory** (textures and buffers together), **Texture Memory** and **Buffer Memory**, plotted in MB. Hover the plot for the current value in bytes. The figures are estimates from the sizes of the textures and buffers the page has created and not yet destroyed or garbage collected; drivers may pad allocations or add metadata. A memory plot that keeps climbing points at a leak, and a saw-tooth at resources being reallocated every few frames.
+
 A plot that has a saw-tooth pattern indicates you are allocating GPU objects and garbage collection is destroying them. Some GPU objects are more expensive than others, such as buffers and textures. Others are light-weight, such as texture views. But with any garbage collected language, minimizing garbage collection is ideal.
 
 

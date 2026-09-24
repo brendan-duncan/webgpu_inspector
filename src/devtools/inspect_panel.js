@@ -152,7 +152,7 @@ export class InspectPanel {
     this._objectCountObject = null;
 
     new Select(this.plots, {
-      options: ["GPU Objects", "Buffer", "BindGroup", "TextureView", "Texture", "Sampler", "PipelineLayout", "BindGroupLayout", "ShaderModule", "ComputePipeline", "RenderPipeline", "RenderBundle"],
+      options: ["GPU Objects", "GPU Memory", "Texture Memory", "Buffer Memory", "Buffer", "BindGroup", "TextureView", "Texture", "Sampler", "PipelineLayout", "BindGroupLayout", "ShaderModule", "ComputePipeline", "RenderPipeline", "RenderBundle"],
       index: 0,
       class: "text-secondary mt-sm mr-sm",
       style: "padding: 0px; margin: 0px;",
@@ -233,6 +233,12 @@ export class InspectPanel {
       return;
     }
     this._objectCountType = value;
+    // The memory series plot bytes (as MB) instead of an object count.
+    this._objectCountMemory = value === "GPU Memory" ? "total"
+      : value === "Texture Memory" ? "texture"
+      : value === "Buffer Memory" ? "buffer" : null;
+    this.objectCountPlot.suffix = this._objectCountMemory ? " MB" : "";
+    this.objectCountPlot.precision = this._objectCountMemory ? 1 : 0;
     switch (value) {
       case "GPU Objects":
         this._objectCountObject = this.database.allObjects;
@@ -426,7 +432,17 @@ export class InspectPanel {
     this._updateBoundBadge();
     this.frameRatePlot.draw();
 
-    this.objectCountData.add(this._objectCountObject?.size ?? db.allObjects.size);
+    if (this._objectCountMemory) {
+      const bytes = this._objectCountMemory === "texture" ? db.totalTextureMemory
+        : this._objectCountMemory === "buffer" ? db.totalBufferMemory
+        : db.totalTextureMemory + db.totalBufferMemory;
+      this.objectCountData.add(bytes / (1024 * 1024));
+      this.objectCountPlot.element.title = `${this._objectCountType}: ${formatBytes(bytes)} (${bytes.toLocaleString("en-US")} bytes). ` +
+        "Estimated from the textures and buffers the page has created and not destroyed; drivers may pad or add metadata.";
+    } else {
+      this.objectCountData.add(this._objectCountObject?.size ?? db.allObjects.size);
+      this.objectCountPlot.element.title = "";
+    }
     this.objectCountPlot.draw();
   }
 
