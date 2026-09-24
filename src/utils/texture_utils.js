@@ -186,7 +186,14 @@ export class TextureUtils {
       minMaxUpdateCallback) {
     layer ??= 0;
     dimension ??= "2d";
-    const sampleType = TextureFormatInfo[srcFormat]?.sampleType || "unfilterable-float";
+    // The 2D blit only uses textureLoad, so "unfilterable-float" works for every
+    // float format, including 32-bit floats, which aren't filterable without the
+    // float32-filterable feature. The 3D path samples with a sampler, so it
+    // keeps the format's own sample type.
+    let sampleType = TextureFormatInfo[srcFormat]?.sampleType || "unfilterable-float";
+    if (sampleType === "float" && dimension !== "3d") {
+      sampleType = "unfilterable-float";
+    }
 
     const bgLayoutKey = `${sampleType}#${sampleCount}#${dimension}`;
 
@@ -272,7 +279,7 @@ export class TextureUtils {
     if (display) {
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
         new Float32Array([display.exposure, display.channels, numChannels, display.autoRange ?? 0 ? 1 : 0,
-          display.minRange ?? 0, display.maxRange ?? 1, layer, 0]));
+          display.minRange ?? 0, display.maxRange ?? 1, layer, display.highlight ?? 0]));
     } else {
       this.device.queue.writeBuffer(this.displayUniformBuffer, 0,
         new Float32Array([1, 0, numChannels, 0, 0, 1, layer, 0]));
@@ -307,6 +314,104 @@ export class TextureUtils {
           display.maxRange = data[4];
           minMaxUpdateCallback(display.minRange, display.maxRange);
       });
+    }
+  }
+
+  /**
+   * Per-channel histogram of a 2D texture view, plus counts of special values.
+   * Two compute passes: the finite range of each channel (ordered-bit atomics,
+   * so NaN and infinity can't poison it), then the binning.
+   * @param {GPUTextureView} srcView - a single-mip, single-layer 2D view
+   * @param {string} srcFormat - the texture's format (depth formats read as their float copies)
+   * @param {number} width - the view's width
+   * @param {number} height - the view's height
+   * @param {number} [bins=128]
+   * @returns {Promise<Object>} { bins, channels, counts: Uint32Array[channels],
+   *   min: number[], max: number[], nan, posInf, negInf, below0, above1, values }
+   */
+  async computeHistogram(srcView, srcFormat, width, height, bins = 128) {
+    const info = TextureFormatInfo[srcFormat];
+    const kind = info?.sampleType === "uint" ? "u32" : info?.sampleType === "sint" ? "i32" : "f32";
+    const channels = info?.channels ?? 4;
+    const sampleType = kind === "u32" ? "uint" : kind === "i32" ? "sint" : "unfilterable-float";
+    const key = `histogram#${kind}`;
+    if (!this._histogramPipelines) {
+      this._histogramPipelines = new Map();
+    }
+    let entry = this._histogramPipelines.get(key);
+    if (!entry) {
+      const layout = this.device.createBindGroupLayout({
+        entries: [
+          { binding: 0, visibility: GPUShaderStage.COMPUTE, texture: { sampleType } },
+          { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+        ],
+      });
+      const module = this.device.createShaderModule({ code: _getHistogramShader(kind) });
+      const pipelineLayout = this.device.createPipelineLayout({ bindGroupLayouts: [layout] });
+      entry = { layout, module, pipelineLayout, pipelines: new Map() };
+      this._histogramPipelines.set(key, entry);
+    }
+    const pipelineKey = `${bins}#${channels}`;
+    let pipelines = entry.pipelines.get(pipelineKey);
+    if (!pipelines) {
+      const constants = { BINS: bins, CHANNELS: channels };
+      pipelines = ["rangeMain", "histogramMain"].map((entryPoint) => this.device.createComputePipeline({
+        layout: entry.pipelineLayout,
+        compute: { module: entry.module, entryPoint, constants },
+      }));
+      entry.pipelines.set(pipelineKey, pipelines);
+    }
+
+    // Layout: 4 range min keys, 4 range max keys, 5 counters, then 4 * bins.
+    const words = 8 + 5 + 4 * bins;
+    const init = new Uint32Array(words);
+    init.fill(0xffffffff, 0, 4);
+    const storage = this.device.createBuffer({ size: words * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+    const readback = this.device.createBuffer({ size: words * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    try {
+      this.device.queue.writeBuffer(storage, 0, init);
+      const bindGroup = this.device.createBindGroup({
+        layout: entry.layout,
+        entries: [{ binding: 0, resource: srcView }, { binding: 1, resource: { buffer: storage } }],
+      });
+      const encoder = this.device.createCommandEncoder();
+      for (const pipeline of pipelines) {
+        const pass = encoder.beginComputePass();
+        pass.setPipeline(pipeline);
+        pass.setBindGroup(0, bindGroup);
+        pass.dispatchWorkgroups(Math.ceil(width / 16), Math.ceil(height / 16));
+        pass.end();
+      }
+      encoder.copyBufferToBuffer(storage, 0, readback, 0, words * 4);
+      this.device.queue.submit([encoder.finish()]);
+      await readback.mapAsync(GPUMapMode.READ);
+      const data = new Uint32Array(readback.getMappedRange().slice(0));
+      readback.unmap();
+
+      // Undo the ordered-bit mapping of the range keys.
+      const unkey = (k) => {
+        const u = (k & 0x80000000) ? (k ^ 0x80000000) >>> 0 : (~k) >>> 0;
+        return new Float32Array(new Uint32Array([u]).buffer)[0];
+      };
+      const min = [];
+      const max = [];
+      for (let c = 0; c < channels; ++c) {
+        const empty = data[c] === 0xffffffff && data[4 + c] === 0;
+        min.push(empty ? 0 : unkey(data[c]));
+        max.push(empty ? 0 : unkey(data[4 + c]));
+      }
+      const counts = [];
+      for (let c = 0; c < channels; ++c) {
+        counts.push(data.slice(13 + c * bins, 13 + (c + 1) * bins));
+      }
+      return {
+        bins, channels, counts, min, max,
+        nan: data[8], posInf: data[9], negInf: data[10], below0: data[11], above1: data[12],
+        values: width * height * channels,
+      };
+    } finally {
+      storage.destroy();
+      readback.destroy();
     }
   }
 
@@ -583,6 +688,79 @@ function _getComputeTextureMinMax3d(fmt) {
   }`;
 }
 
+function _getHistogramShader(fmt) {
+  return `
+  override BINS: u32 = 128u;
+  override CHANNELS: u32 = 4u;
+  @group(0) @binding(0) var tex: texture_2d<${fmt}>;
+  // [0..3] min keys, [4..7] max keys, [8] NaN, [9] +Inf, [10] -Inf, [11] < 0, [12] > 1, then bins.
+  @group(0) @binding(1) var<storage, read_write> data: array<atomic<u32>>;
+
+  // Float bits mapped so unsigned order matches float order.
+  fn orderedKey(x: f32) -> u32 {
+    let u = bitcast<u32>(x);
+    return select(u ^ 0x80000000u, ~u, (u & 0x80000000u) != 0u);
+  }
+
+  fn isFinite(x: f32) -> bool {
+    return (bitcast<u32>(x) & 0x7f800000u) != 0x7f800000u;
+  }
+
+  @compute @workgroup_size(16, 16)
+  fn rangeMain(@builtin(global_invocation_id) id: vec3u) {
+    let dim = textureDimensions(tex);
+    if (id.x >= dim.x || id.y >= dim.y) {
+      return;
+    }
+    let v = vec4f(textureLoad(tex, vec2i(id.xy), 0));
+    for (var c = 0u; c < CHANNELS; c++) {
+      if (isFinite(v[c])) {
+        let k = orderedKey(v[c]);
+        atomicMin(&data[c], k);
+        atomicMax(&data[4u + c], k);
+      }
+    }
+  }
+
+  fn fromKey(k: u32) -> f32 {
+    return bitcast<f32>(select(~k, k ^ 0x80000000u, (k & 0x80000000u) != 0u));
+  }
+
+  @compute @workgroup_size(16, 16)
+  fn histogramMain(@builtin(global_invocation_id) id: vec3u) {
+    let dim = textureDimensions(tex);
+    if (id.x >= dim.x || id.y >= dim.y) {
+      return;
+    }
+    let v = vec4f(textureLoad(tex, vec2i(id.xy), 0));
+    for (var c = 0u; c < CHANNELS; c++) {
+      let x = v[c];
+      let bits = bitcast<u32>(x) & 0x7fffffffu;
+      if (bits > 0x7f800000u) {
+        atomicAdd(&data[8], 1u);
+        continue;
+      }
+      if (bits == 0x7f800000u) {
+        atomicAdd(&data[select(10u, 9u, x > 0.0)], 1u);
+        continue;
+      }
+      if (x < 0.0) {
+        atomicAdd(&data[11], 1u);
+      }
+      if (x > 1.0) {
+        atomicAdd(&data[12], 1u);
+      }
+      let lo = fromKey(atomicLoad(&data[c]));
+      let hi = fromKey(atomicLoad(&data[4u + c]));
+      var b = 0u;
+      if (hi > lo) {
+        b = min(u32((x - lo) / (hi - lo) * f32(BINS)), BINS - 1u);
+      }
+      atomicAdd(&data[13u + c * BINS + b], 1u);
+    }
+  }`;
+}
+
 function _getBlitShader(fmt) {
   return `
   var<private> posTex:array<vec4f, 3> = array<vec4f, 3>(
@@ -609,7 +787,7 @@ function _getBlitShader(fmt) {
     minRange: f32,
     maxRange: f32,
     _pad2: f32,
-    _pad3: f32
+    highlight: f32
   };
   struct MinMax {
       min_val: vec4f,
@@ -617,8 +795,48 @@ function _getBlitShader(fmt) {
   };
   @group(1) @binding(0) var<uniform> display: Display;
   @group(1) @binding(1) var<storage> minMax: MinMax;
+
+  // Highlight colors for special values (see TextureUtils.HIGHLIGHT_*). NaN
+  // and infinity are tested on the bits: x != x may be folded away.
+  fn highlightColor(v: vec4f, numChannels: u32, flags: u32) -> vec4f {
+    for (var c = 0u; c < numChannels; c++) {
+      let x = v[c];
+      let bits = bitcast<u32>(x) & 0x7fffffffu;
+      if ((flags & 1u) != 0u) {
+        if (bits > 0x7f800000u) {
+          return vec4f(1.0, 0.0, 1.0, 1.0);       // NaN: magenta
+        }
+        if (bits == 0x7f800000u) {
+          return select(vec4f(0.0, 1.0, 1.0, 1.0), vec4f(1.0, 0.55, 0.0, 1.0), x > 0.0);  // +Inf orange, -Inf cyan
+        }
+      }
+      if (bits <= 0x7f800000u) {
+        if ((flags & 2u) != 0u && x < 0.0) {
+          return vec4f(0.15, 0.35, 1.0, 1.0);     // below 0: blue
+        }
+        if ((flags & 4u) != 0u && x > 1.0) {
+          return vec4f(1.0, 0.1, 0.1, 1.0);       // above 1: red
+        }
+      }
+    }
+    return vec4f(-1.0);
+  }
+
   @fragment
   fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+    let flags = u32(display.highlight);
+    if (flags != 0u) {
+      let dim = textureDimensions(texture);
+      let raw = vec4f(textureLoad(texture, vec2i(input.uv * vec2f(dim)), 0));
+      let h = highlightColor(raw, u32(display.numChannels), flags);
+      if (h.a >= 0.0) {
+        return h;
+      }
+    }
+    return shade(input);
+  }
+
+  fn shade(input: VertexOutput) -> vec4f {
     var dim = textureDimensions(texture);
     var color = vec4f(textureLoad(texture, vec2i(input.uv * vec2f(dim)), 0));
     var minVal = minMax.min_val;

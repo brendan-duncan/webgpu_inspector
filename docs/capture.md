@@ -236,6 +236,7 @@ Select a **beginRenderPass**, **draw**, or **end** command and press the **Pixel
 
 * The image shows the texture's most recently captured contents (a note is shown if a later pass in the frame also writes it). The viewer has the same display controls as the Inspector's texture viewer: **Zoom** (a percentage, also CTRL + mouse-wheel), **Exposure**, a channel selector (RGB / Red / Green / Blue / Alpha / Luminance), and **Auto Range** for HDR and depth content. Hovering the image shows a tooltip with the pixel coordinates and value.
 * Click a pixel to select it — its history is computed automatically and shown in the panel on the right. Click other pixels to explore.
+* The toolbar also has the Inspect texture viewer's **NaN/Inf**, **< 0** and **> 1** highlighting and **Histogram**, and **Copy PNG** copies the displayed image to the clipboard (or saves it as a file when the clipboard isn't available).
 
 The history panel lists, in order, every event in the frame that touched the selected pixel of that texture:
 

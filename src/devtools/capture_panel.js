@@ -17,6 +17,7 @@ import { TextArea } from "./widget/text_area.js";
 import { TextInput } from "./widget/text_input.js";
 import { TimelineWidget } from "./widget/timeline.js";
 import { Widget } from "./widget/widget.js";
+import { Img } from "./widget/img.js";
 import { TabWidget } from "./widget/tab_widget.js";
 import { getFlagString } from "../utils/flags.js";
 import { Select } from "./widget/select.js";
@@ -210,16 +211,18 @@ export class CapturePanel {
     // Pause / step the page's requestAnimationFrame loop. A capture of a
     // paused page steps through the frames it captures.
     this._framePaused = false;
+    const iconStyle = "width: 15px; height: 15px; filter: invert(1); vertical-align: middle;";
+    this._pauseIcon = new Img(null, { src: "img/debug-pause.svg", style: iconStyle });
     this._pauseButton = new Button(_controlBar, {
-      label: "Pause",
-      class: "btn ml-sm",
+      children: [this._pauseIcon],
+      class: "btn ml-sm capture_icon_button",
       title: "Pause the page's requestAnimationFrame loop; the canvas keeps its last frame",
       callback: () => this._setFramePause(this._framePaused ? "resume" : "pause"),
     });
     this._stepButton = new Button(_controlBar, {
-      label: "Step",
-      class: "btn",
-      title: "Run one frame of the paused page",
+      children: [new Img(null, { src: "img/debug-step-over.svg", style: iconStyle })],
+      class: "btn capture_icon_button",
+      title: "Step: run one frame of the paused page",
       callback: () => this._setFramePause("step", 1),
     });
     this._stepButton.disabled = true;
@@ -783,7 +786,10 @@ export class CapturePanel {
 
   _applyPauseUI(paused) {
     this._framePaused = paused;
-    this._pauseButton.text = paused ? "Resume" : "Pause";
+    this._pauseIcon.element.src = paused ? "img/debug-continue-small.svg" : "img/debug-pause.svg";
+    this._pauseButton.element.title = paused
+      ? "Resume the page's requestAnimationFrame loop"
+      : "Pause the page's requestAnimationFrame loop; the canvas keeps its last frame";
     this._pauseButton.element.classList.toggle("btn-warning", paused);
     this._stepButton.disabled = !paused;
   }

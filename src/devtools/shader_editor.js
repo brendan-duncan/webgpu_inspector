@@ -165,6 +165,7 @@ export class ShaderEditor extends Div {
     }
     if (object.widget) {
       object.widget.element.classList.remove("error");
+      object.widget.errorMessage = null;
       object.widget.tooltip = "";
       for (const child of object.widget.children) {
         child.tooltip = "";

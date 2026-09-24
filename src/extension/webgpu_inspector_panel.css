@@ -3566,3 +3566,30 @@ li.tree-item .expandbutton
   font-size: 9pt;
   padding-left: 12px;
 }
+
+/* Texture viewer histogram (texture_tools.js). */
+.texture-histogram {
+  margin: 6px 0;
+  font-size: 9pt;
+  color: #bbb;
+  white-space: normal;
+}
+
+.texture-histogram-canvas {
+  display: block;
+  border: 1px solid var(--border-color);
+}
+
+.texture-histogram-info {
+  padding-top: 3px;
+}
+
+/* Icon-only buttons in the capture control bar (Pause / Resume / Step). */
+button.capture_icon_button {
+  padding: 2px 8px;
+  line-height: 0;
+}
+
+button.capture_icon_button:disabled img {
+  opacity: 0.35;
+}

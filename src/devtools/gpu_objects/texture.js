@@ -20,7 +20,9 @@ export class Texture extends GPUObject {
       minRange: 0,
       maxRange: 1,
       mipLevel: 0,
-      zoom: 100
+      zoom: 100,
+      // Special values drawn in solid colors: bit 1 NaN/Inf, 2 below 0, 4 above 1.
+      highlight: 1
     };
   }
 

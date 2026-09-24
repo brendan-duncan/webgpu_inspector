@@ -11,6 +11,9 @@
 * Added Timing Capture to the Capture panel. It records every frame's timing until stopped and shows a frame-time chart with range selection, percentiles and dropped frames, plus the hitches with their likely causes (synchronous pipeline compiles, shader and resource creation, long rAF callbacks, or time spent outside the frame). Capture on hitch captures the frame after the first hitch.
 * Added Pause, Resume and Step to the Capture panel. They pause the page's requestAnimationFrame loop and step it one frame at a time, with rAF timestamps that advance one refresh per step. A Capture while paused steps through the captured frames.
 * Fixed the Inspect panel's object list cutting off its last entries: it now fills the panel instead of using a fixed height.
+* Texture viewers highlight special values: NaN and infinity by default, and optionally values below 0 or above 1. They also have a per-channel histogram with counts of special values. The capture texture viewer can copy its image as a PNG.
+* Fixed 32-bit float textures (r32float, rgba32float, ...) displaying black in the texture viewers.
+* Hovering an object in the Inspect panel's list shows its details, such as a texture's format, size, mip levels, samples, usage and memory, or a buffer's size and usage, plus where it was created.
 * The capture's report buttons (Frame Stats, Frame Issues, Render Graph, Shader Flame Graph, Analyze Shaders) are now in a Reports menu, with a badge showing the frame's issue count.
 
 ## v1.7.0

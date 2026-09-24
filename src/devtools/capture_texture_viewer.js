@@ -17,6 +17,7 @@ import { buildPixelHistoryPasses } from "./pixel_history_builder.js";
 import { computeOverdraw } from "./overdraw.js";
 import { replayOverdraw, queryPixelCoverage } from "./capture_replay.js";
 import { Button } from "./widget/button.js";
+import { TextureTools } from "./texture_tools.js";
 import {
     DrawOverlayRenderer,
     OVERLAY_BACKFACE,
@@ -133,6 +134,7 @@ export class CaptureTextureViewer extends Div {
             minRange: 0,
             maxRange: 1,
             zoom: 100,
+            highlight: 1,
         };
         const layerRanges = texture.layerRanges;
         if (layerRanges && 0 in layerRanges) {
@@ -179,6 +181,30 @@ export class CaptureTextureViewer extends Div {
             this._setOverdraw(checked);
         } });
 
+        // Highlighting, histogram and PNG copy. The histogram panel is
+        // placed below the toolbar once the rest of the header exists.
+        this._histogramHolder = new Div(null, { style: "flex: 0 0 auto; padding: 0 5px;" });
+        this._tools = new TextureTools(toolbar, {
+            display: this._display,
+            textureUtils: this.capturePanel?.textureUtils,
+            rerender: (skipMinMax) => this._renderTexture(skipMinMax),
+            histogramParent: this._histogramHolder,
+            getCanvas: () => this._canvas,
+            fileName: `pass${this.passIndex}_${(this.attachmentLabel ?? "texture").replace(/\s+/g, "_")}.png`,
+            getSource: () => {
+                const gpu = this.gpuTexture?.object;
+                if (!gpu || !texture.width) {
+                    return null;
+                }
+                return {
+                    view: gpu.createView({ dimension: "2d", baseMipLevel: 0, mipLevelCount: 1, baseArrayLayer: 0, arrayLayerCount: 1 }),
+                    format: texture.format,
+                    width: texture.width,
+                    height: texture.height,
+                };
+            },
+        });
+
         this._pixelLabel = new Span(toolbar, { style: "margin-left: 10px; color: #ddd;" });
 
         // --- Overdraw status + legend (shown while the overlay is on). -------
@@ -191,6 +217,7 @@ export class CaptureTextureViewer extends Div {
             new Span(this._overdrawLegend, { text: i === _overdrawRamp.length - 1 ? `${i + 1}+` : `${i + 1}`, style: "margin-left: 2px; vertical-align: middle;" });
         }
         this._overdrawNotesPane = new Div(this, { style: "flex: 0 0 auto; display: none; padding: 0px 5px 5px 5px; color: #999; font-size: 9pt; font-style: italic; white-space: normal;" });
+        this.element.appendChild(this._histogramHolder.element);
 
         this._buildDrawBar(labelStyle);
 

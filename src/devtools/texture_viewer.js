@@ -5,6 +5,7 @@ import { Span } from "./widget/span.js";
 import { Select } from "./widget/select.js";
 import { NumberInput } from "./widget/number_input.js";
 import { Signal } from "../utils/signal.js";
+import { TextureTools } from "./texture_tools.js";
 
 export class TextureViewer extends Div {
   constructor(panel, parent, texture) {
@@ -27,6 +28,29 @@ export class TextureViewer extends Div {
     this.layerPixelInfo = [];
 
     const zoomControl = this._createTextureControls(controls, texture, displayChanged);
+
+    // Highlighting, histogram (of layer 0 at the displayed mip) and PNG copy.
+    const tools = new TextureTools(controls, {
+      display: texture.display,
+      textureUtils: this.panel.textureUtils,
+      rerender: (skipMinMax) => displayChanged.emit(skipMinMax ? 1 : 0),
+      histogramParent: container,
+      getSource: () => {
+        const gpuTexture = texture.gpuTexture?.object;
+        if (!gpuTexture || texture.descriptor.dimension === "3d") {
+          return null;
+        }
+        const mip = Math.max(Math.min(texture.display.mipLevel || 0, texture.mipLevelCount - 1), 0);
+        const [w, h] = texture.getMipSize(mip);
+        return {
+          view: gpuTexture.createView({ dimension: "2d", baseMipLevel: mip, mipLevelCount: 1, baseArrayLayer: 0, arrayLayerCount: 1 }),
+          format: texture.format,
+          width: Math.max(1, w),
+          height: Math.max(1, h),
+        };
+      },
+    });
+    displayChanged.addListener(() => tools.refresh());
 
     if (!this.panel._tooltip) {
       this._createTooltip();
@@ -155,7 +179,7 @@ export class TextureViewer extends Div {
     this._setupCanvasEvents(canvas, texture, layer, displayChanged, zoomControl);
     // The copy button lives in the layer's title row, not over the canvas: an overlay
     // covered most of a small texture (and its pixels under the mouse).
-    this._createCopyButton(layerInfo, canvas);
+    this._createCopyButton(layerInfo, canvas, texture, layer);
 
     canvas.element.width = width;
     canvas.element.height = height;
@@ -165,7 +189,7 @@ export class TextureViewer extends Div {
     this._setupDisplayChangeListener(displayChanged, canvas, texture, layer);
   }
 
-  _createCopyButton(parent, canvas) {
+  _createCopyButton(parent, canvas, texture, layer) {
     const button = new Widget("button", parent, {
       title: "Copy image as PNG",
       style: "display: inline-block; vertical-align: middle; margin-left: 8px; width: 20px; height: 20px; padding: 2px; border: 1px solid rgba(255,255,255,0.4); border-radius: 3px; background: rgba(20,20,20,0.72); color: #fff; cursor: pointer; line-height: 0;"
@@ -179,6 +203,9 @@ export class TextureViewer extends Div {
     button.element.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
+      // A WebGPU canvas's drawing buffer is cleared once presented: redraw
+      // it so the copy (read in the same task) isn't blank.
+      this._renderTexture(canvas, texture, layer, true);
       await this._copyCanvasToClipboard(canvas.element, button.element);
     });
   }

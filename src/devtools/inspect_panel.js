@@ -34,6 +34,7 @@ import { addShaderAnalysisView } from "./shader_analysis_view.js";
 import { addShaderFlameGraphView } from "./shader_flamegraph.js";
 import { StacktraceViewer } from './stacktrace_viewer.js';
 import { TextureViewer } from "./texture_viewer.js";
+import { objectTooltip } from "./object_tooltip.js";
 
 export class InspectPanel {
   constructor(win, parent) {
@@ -366,10 +367,8 @@ export class InspectPanel {
     const object = this.database.getObject(error.object);
     if (object?.widget) {
       object.widget.element.classList.add("error");
+      object.widget.errorMessage = error.message;
       object.widget.tooltip = error.message;
-      for (const child of object.widget.children) {
-        child.tooltip = error.message;
-      }
     }
   }
 
@@ -379,10 +378,8 @@ export class InspectPanel {
   _objectInvalidated(id, object, reason) {
     if (object.widget) {
       object.widget.element.classList.add("error");
+      object.widget.errorMessage = reason;
       object.widget.tooltip = reason;
-      for (const child of object.widget.children) {
-        child.tooltip = reason;
-      }
     }
     if (id === this.inspectedObject?.id) {
       this._inspectObject(this.inspectedObject);
@@ -727,6 +724,10 @@ export class InspectPanel {
       widget.nameWidget.text = name;
       widget.idWidget.text = `ID:${idName}`;
       widget.typeWidget.text = type;
+      // A recycled entry mustn't carry the previous object's error.
+      widget.errorMessage = null;
+      widget.element.classList.remove("error");
+      widget.tooltip = "";
     } else {
       widget = new Widget("li", ui.objectList);
       widget.nameWidget = new Span(widget, { text: name });
@@ -736,6 +737,13 @@ export class InspectPanel {
 
     object.widget = widget;
     widget.group = ui;
+    // Details for the hover text, built when hovered: an entry has room for
+    // one line, and building every entry's text up front would cost the most
+    // on the pages that create the most objects.
+    widget.element.onmouseenter = () => {
+      const details = objectTooltip(object, this.database);
+      widget.element.title = widget.errorMessage ? `${widget.errorMessage}\n\n${details}` : details;
+    };
 
     this._applyFilterToObject(object);
 

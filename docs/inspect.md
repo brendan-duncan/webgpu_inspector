@@ -203,6 +203,12 @@ Channel: lets you inspect specific color channels of the image.
 
 Zoom: scale the display of the texture. You can also control the texture display zoom using **control+mouse-wheel**.
 
+NaN/Inf, < 0, > 1: draw special values in solid colors so they stand out. **NaN/Inf** is on by default: NaN is magenta, +Inf is orange and -Inf is cyan. **< 0** draws values below 0 in blue, and **> 1** draws values above 1 in red, which helps spot out-of-range data in textures that should be normalized. A texel is highlighted when any of its channels has the value.
+
+Histogram: shows a per-channel histogram of the displayed mip level of layer 0, over each channel's own range of finite values (square-root scale). Below it are each channel's range and the counts of NaN, +Inf, -Inf, and values below 0 and above 1.
+
+The copy button in each layer's title bar copies the displayed image to the clipboard as a PNG.
+
 Depth textures are always normalized for display. This means the min and max
 values of the texture are found, then all values in the depth texture
 are normalized to that range. This makes it easier to visualize depth
