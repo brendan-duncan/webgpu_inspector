@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* Fixed pages that create textures with TRANSIENT_ATTACHMENT usage failing validation when the inspector is active. Those textures are no longer given extra usages and are skipped when capturing texture contents (#47).
+
 ## v1.8.0
 
 * Added a Render Graph view to Capture. It shows the frame's passes in GPU execution order and the textures and buffers that connect them as a resource lifetime chart. It also shows the critical path and suggestions based on dependencies, such as unread stores, results overwritten before they are read, reads of discarded attachments, MSAA stores and mergeable passes.

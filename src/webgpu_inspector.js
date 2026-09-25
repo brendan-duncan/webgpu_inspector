@@ -17,6 +17,9 @@ export let webgpuInspector = null;
 const SEP = ` ${String.fromCharCode(0xb7)} `;
 const DASH = String.fromCharCode(0x2013);
 
+// GPUTextureUsage.TRANSIENT_ATTACHMENT (not all browsers support it yet).
+const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
+
 // This code will be executed to initialize the WebGPU Inspector from
 // webgpu_inspector_loader.js.
 (() => {
@@ -1428,8 +1431,12 @@ const DASH = String.fromCharCode(0x2013);
       }
 
       if (method === "createTexture") {
-        // Add COPY_SRC usage to all textures so we can capture them
-        args[0].usage |= GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING;
+        // Add COPY_SRC usage to all textures so we can capture them.
+        // TRANSIENT_ATTACHMENT can't be combined with any other usage, so
+        // those textures are left alone and skipped when capturing.
+        if (!(args[0].usage & TEXTURE_USAGE_TRANSIENT_ATTACHMENT)) {
+          args[0].usage |= GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING;
+        }
       }
 
       if (method === "createBuffer") {
@@ -3652,6 +3659,11 @@ const DASH = String.fromCharCode(0x2013);
       let formatInfo = format ? TextureFormatInfo[format] : undefined;
       let copyMipLevel = mipLevel;
       if (!formatInfo) { // GPUExternalTexture?
+        return;
+      }
+
+      // Transient attachments have no memory backing to copy from.
+      if (texture.usage & TEXTURE_USAGE_TRANSIENT_ATTACHMENT) {
         return;
       }
 

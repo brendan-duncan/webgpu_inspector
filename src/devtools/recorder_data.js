@@ -1085,7 +1085,8 @@ export class RecorderData {
       return null;
     }
 
-    if (method === "createTexture") {
+    // TRANSIENT_ATTACHMENT (0x20) can't be combined with any other usage.
+    if (method === "createTexture" && !(args[0].usage & 0x20)) {
       args[0].usage |= GPUTextureUsage.TEXTURE_BINDING;
     }
 
