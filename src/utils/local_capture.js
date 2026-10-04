@@ -357,10 +357,14 @@ export class LocalCaptureStore {
       }
       const start = timestampData[i];
       const end = timestampData[i + 1];
+      i += 2;
+      // Unwritten (0) or error (-1) timestamps leave the pass untimed.
+      if (start <= 0n || end <= 0n || end < start) {
+        continue;
+      }
       command.startTime = Number(start) / 1000000.0;
       command.endTime = Number(end) / 1000000.0;
       command.duration = Number(end - start) / 1000000.0;
-      i += 2;
     }
   }
 

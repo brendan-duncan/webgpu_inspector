@@ -254,7 +254,9 @@ export async function importCaptureJson(data, database, idOffset, payloads, onPr
     if (c.result !== undefined) cmd.result = _rewriteValue(c.result, idOffset, payloads);
     if (c.stacktrace) cmd.stacktrace = c.stacktrace;
     if (c.passIndex !== undefined) cmd._passIndex = c.passIndex;
-    if (c.duration !== undefined) {
+    // Captures saved before timestamps were validated can hold a negative
+    // duration from an unwritten end timestamp; leave those passes untimed.
+    if (c.duration !== undefined && c.duration >= 0 && c.startTime > 0) {
       cmd.duration = c.duration;
       cmd.startTime = c.startTime;
       cmd.endTime = c.endTime;

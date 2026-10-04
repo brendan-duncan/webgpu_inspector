@@ -3,6 +3,7 @@
 ## Unreleased
 
 * Fixed pages that create textures with TRANSIENT_ATTACHMENT usage failing validation when the inspector is active. Those textures are no longer given extra usages and are skipped when capturing texture contents (#47).
+* Fixed a pass with an unwritten or invalid GPU timestamp (seen in Firefox on macOS) showing a huge negative duration and breaking the Pass Timings total. Such passes are now left untimed and show "Duration: n/a".
 
 ## v1.8.0
 

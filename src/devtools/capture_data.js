@@ -285,21 +285,24 @@ export class CaptureData {
 
         const timestampData = new BigInt64Array(this._timestampBuffer.buffer);
 
-        const firstTime = Number(timestampData[0]) / 1000000.0;
-
         for (let i = 0, k = 0; i < timestampData.length; i += 2) {
           const start = timestampData[i];
           const end = timestampData[i + 1];
+          // Some implementations leave a timestamp unwritten (0) or write an
+          // error value (-1), e.g. Firefox on Metal for an empty pass. Such a
+          // pass is left untimed rather than given a bogus duration.
+          const valid = start > 0n && end > 0n && end >= start;
           const duration = Number(end - start) / 1000000.0; // convert ns to ms
           for (; k < this.commands.length; k++) {
             const command = this.commands[k];
             if (command.method === "beginRenderPass" ||
                 command.method === "beginComputePass") {
-              command.duration = duration;
-              command.startTime = Number(start) / 1000000.0;
-              command.endTime = Number(end) / 1000000.0;
-
-              timestampMap.push(command);
+              if (valid) {
+                command.duration = duration;
+                command.startTime = Number(start) / 1000000.0;
+                command.endTime = Number(end) / 1000000.0;
+                timestampMap.push(command);
+              }
 
               if (command.header) {
                 const passLabel = command.args?.[0]?.label;
@@ -308,7 +311,7 @@ export class CaptureData {
                   if (passLabel) {
                     headerText += ` "${passLabel}"`;
                   }
-                  headerText += ` Duration: ${command.duration}ms`;
+                  headerText += valid ? ` Duration: ${command.duration}ms` : " Duration: n/a";
                   command.header.text = headerText;
                   renderPassIndex++;
                 } else {
@@ -316,7 +319,7 @@ export class CaptureData {
                   if (passLabel) {
                     headerText += ` "${passLabel}"`;
                   }
-                  headerText += ` Duration: ${command.duration}ms`;
+                  headerText += valid ? ` Duration: ${command.duration}ms` : " Duration: n/a";
                   command.header.text = headerText;
                   computePassIndex++;
                 }
@@ -344,6 +347,7 @@ export class CaptureData {
           this.database.gpuFrameTime = gpuFrameTime;
         }
 
+        const firstTime = timestampMap.length ? timestampMap[0].startTime : 0;
         this.timestampData = { commands: timestampMap, firstTime };
         this.onTimestampDataReady.emit(this.timestampData);
         this.onUpdateCaptureStatus.emit();
