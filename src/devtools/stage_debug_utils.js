@@ -7,11 +7,6 @@ import { WgslDebug } from "wgsl_reflect/wgsl_reflect.module.js";
 import { TextureView, Sampler } from "./gpu_objects/index.js";
 import { fetchVertexInputs } from "./vertex_fetcher.js";
 
-// The interpreter binds a storage/uniform buffer by its backing ArrayBuffer
-// from byte 0, and sizes runtime arrays (arrayLength) from that ArrayBuffer's
-// byteLength. Captures loaded from a file hold buffer payloads as views into
-// the file's ArrayBuffer, so give the interpreter a copy that spans exactly
-// the captured bytes.
 function wholeBuffer(data) {
     if (ArrayBuffer.isView(data) &&
         (data.byteOffset !== 0 || data.byteLength !== data.buffer.byteLength)) {
@@ -20,14 +15,6 @@ function wholeBuffer(data) {
     return data;
 }
 
-// Build the bound-resource map (buffers, uniforms, textures, samplers) that
-// WgslDebug expects, from an array of captured setBindGroup commands (indexed
-// by bind group slot). Shared by every stage.
-//
-// Note: bound texture contents come from the capture's texture data, which is
-// the texture's most recently captured state — for textures written multiple
-// times in a frame this may differ from their contents at the time of the
-// draw being debugged.
 export function buildBindGroups(database, bindGroupCommands) {
     const bindGroups = {};
 
