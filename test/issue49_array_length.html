@@ -1,0 +1,63 @@
+<html>
+<body>
+<pre id="out"></pre>
+<script type="module">
+// Repro for issue #49: small storage buffers written with writeBuffer, read in a
+// compute shader via arrayLength(). Runs every frame so it can be captured.
+const adapter = await navigator.gpu?.requestAdapter();
+const device = await adapter?.requestDevice();
+
+const code = `
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@group(0) @binding(1) var<storage, read_write> output: array<f32>;
+
+@compute @workgroup_size(64) fn main(@builtin(global_invocation_id) id: vec3u) {
+  let n = arrayLength(&input);
+  if (id.x >= n) {
+    return;
+  }
+  let v = input[id.x];
+  output[id.x] = v * 2.0 + f32(n);
+}
+`;
+
+const module = device.createShaderModule({ code });
+const pipeline = device.createComputePipeline({ layout: "auto", compute: { module } });
+
+const count = 768; // 3072 bytes
+const size = count * 4;
+const inputBuffer = device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+const outputBuffer = device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+
+const bindGroup = device.createBindGroup({
+  layout: pipeline.getBindGroupLayout(0),
+  entries: [
+    { binding: 0, resource: { buffer: inputBuffer } },
+    { binding: 1, resource: { buffer: outputBuffer } },
+  ],
+});
+
+const data = new Float32Array(count);
+let frame = 0;
+
+function tick() {
+  for (let i = 0; i < count; ++i) {
+    data[i] = i + frame;
+  }
+  device.queue.writeBuffer(inputBuffer, 0, data);
+
+  const encoder = device.createCommandEncoder();
+  const pass = encoder.beginComputePass({ label: "issue49 pass" });
+  pass.setPipeline(pipeline);
+  pass.setBindGroup(0, bindGroup);
+  pass.dispatchWorkgroups(Math.ceil(count / 64));
+  pass.end();
+  device.queue.submit([encoder.finish()]);
+
+  document.getElementById("out").textContent = `frame ${frame++}`;
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

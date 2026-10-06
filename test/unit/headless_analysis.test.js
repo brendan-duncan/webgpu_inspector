@@ -98,6 +98,43 @@ test("headless: debug_shader runs a vertex with a trace, and a fragment at a pix
   assert.throws(() => debugShader(session, { commandIndex: 2 }), /not a draw or dispatch/);
 });
 
+test("headless: debug_shader binds a storage buffer payload that is a view into a larger buffer", async () => {
+  // A capture file's payloads are views into the file's ArrayBuffer; the
+  // shader must see only the captured bytes, so arrayLength and reads are
+  // those of the bound buffer (issue #49).
+  const code = `
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@compute @workgroup_size(1) fn main(@builtin(global_invocation_id) id: vec3u) {
+  let n = arrayLength(&input);
+  let v = input[id.x];
+}`;
+  const file = new ArrayBuffer(4096);
+  const values = new Float32Array(file, 64, 8);
+  values.set([10, 11, 12, 13, 14, 15, 16, 17]);
+  const payloads = new Map([[0, new Uint8Array(file, 64, 32)]]);
+  const data = {
+    schemaVersion: "1.1",
+    frame: 1,
+    objects: {
+      1: { type: "ShaderModule", descriptor: { code } },
+      2: { type: "ComputePipeline", descriptor: { layout: "auto", compute: { module: ref(1), entryPoint: "main" } } },
+      3: { type: "Buffer", descriptor: { size: 32, usage: 0x80 } },
+      4: { type: "BindGroup", descriptor: { entries: [{ binding: 0, resource: { buffer: ref(3) } }] } },
+    },
+    commands: [
+      { method: "createCommandEncoder", object: 0, args: [], result: 100 },
+      { method: "beginComputePass", object: 100, result: 101, args: [{}] },
+      { method: "setPipeline", object: 101, args: [ref(2)] },
+      { method: "setBindGroup", object: 101, args: [0, ref(4)], bufferData: [{ __typedArray: "Uint8Array", __payloadId: 0, entryIndex: 0 }] },
+      { method: "dispatchWorkgroups", object: 101, args: [8] },
+      { method: "end", object: 101, args: [] },
+    ],
+  };
+  const session = await openCapture(data, payloads);
+  const result = debugShader(session, { commandIndex: 4, invocation: [3, 0, 0], watch: ["n", "v"] });
+  assert.deepEqual(result.trace.map((t) => t.n ?? t.v), [8, 13]);
+});
+
 test("headless: the shader flame graph ranks one module's statements", async () => {
   const session = await open();
   const result = getShaderFlameGraph(session, { shaderModuleId: 1 });
