@@ -5,6 +5,7 @@
 * Fixed pages that create textures with TRANSIENT_ATTACHMENT usage failing validation when the inspector is active. Those textures are no longer given extra usages and are skipped when capturing texture contents (#47).
 * Fixed a pass with an unwritten or invalid GPU timestamp (seen in Firefox on macOS) showing a huge negative duration and breaking the Pass Timings total. Such passes are now left untimed and show "Duration: n/a".
 * Fixed the shader debugger reading the wrong data for bound storage and uniform buffers in a capture loaded from a file. Buffer reads returned garbage and arrayLength() returned the wrong count (#49).
+* Fixed the inspector not working on pages loaded from a blob: URL, such as blob:https://example.com/... The extension's scripts now run in blob:, data: and about: documents created by an http(s) or file page.
 
 ## v1.8.0
 
