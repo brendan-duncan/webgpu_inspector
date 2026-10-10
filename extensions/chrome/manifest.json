@@ -21,7 +21,8 @@
           "https://*/*",
           "file://*/*"],
       "run_at" : "document_start",
-      "all_frames" : true
+      "all_frames" : true,
+      "match_origin_as_fallback" : true
     },
     {
       "js": ["webgpu_inspector_loader.js"],
@@ -30,6 +31,7 @@
         "file://*/*"],
       "run_at" : "document_start",
       "all_frames" : true,
+      "match_origin_as_fallback" : true,
       "world": "MAIN"
     },
     {
@@ -39,6 +41,7 @@
         "file://*/*"],
       "run_at" : "document_start",
       "all_frames" : true,
+      "match_origin_as_fallback" : true,
       "world": "MAIN"
     }
   ],
