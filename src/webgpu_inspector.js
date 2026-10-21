@@ -326,11 +326,12 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
       this._wrapLabelAccessors();
       // Recording where each GPU object was created costs a stacktrace capture
       // per creation (~16us, see stacktrace.js), so it is opt-in via the panel's
-      // "Object Stacktraces" setting, forwarded here by the loader. A frame
-      // capture can raise the wrapper's flag temporarily for per-command
-      // stacktraces; this is the baseline it returns to afterwards.
+      // "Object Stacktraces" setting, forwarded here by the loader. It only
+      // affects creation methods; a frame capture that asks for per-command
+      // stacktraces raises the wrapper's separate recordCommandStacktraces flag
+      // for the captured frames.
       this._recordObjectStacktraces = !!_self.__webgpuInspectorRecordStacktraces;
-      this._gpuWrapper.recordStacktraces = this._recordObjectStacktraces;
+      this._gpuWrapper.recordObjectStacktraces = this._recordObjectStacktraces;
       this._gpuWrapper.onPromise.addListener(this._onAsyncPromise, this);
       this._gpuWrapper.onPromiseResolve.addListener(this._onAsyncResolve, this);
       // Direct callbacks, not Signal listeners: these run on every WebGPU call.
@@ -813,9 +814,10 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
     set recordStacktraces(enabled) {
       this._recordObjectStacktraces = !!enabled;
       // No wrapper when the page has no WebGPU support; nothing to apply to.
-      // Don't clear a capture's temporarily-raised flag while one is running.
-      if (this._gpuWrapper && (!this._captureFrameRequest || this._recordObjectStacktraces)) {
-        this._gpuWrapper.recordStacktraces = this._recordObjectStacktraces;
+      // Creation stacktraces are independent of a running capture's per-command
+      // stacktraces, so this can be applied at any time.
+      if (this._gpuWrapper) {
+        this._gpuWrapper.recordObjectStacktraces = this._recordObjectStacktraces;
       }
     }
 
@@ -1756,17 +1758,24 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
           this._trackObject(result.__id, result);
           Object.defineProperty(result, "__descriptor", { value: args[0], enumerable: false, writable: true });
           this._trackReplaceableObject(result);
+          // A bind group is immutable, so which of its entries are canvas texture
+          // views is decided here, once. setBindGroup runs thousands of times a
+          // frame and used to walk every entry of the descriptor each time to find
+          // them; now it reads one property, and only bind groups that reference a
+          // canvas texture carry a list to check.
+          const canvasViews = this._canvasTextureViewsOf(args[0]);
+          if (canvasViews !== null) {
+            Object.defineProperty(result, "__canvasViews", { value: canvasViews, enumerable: false, writable: true });
+          }
         } else if (method === "setBindGroup") {
-          const descriptor = args[1].__descriptor;
-          if (descriptor) {
-            for (const entry of descriptor.entries) {
-              if (entry.resource instanceof GPUTextureView && entry.resource.__id < 0) {
-                // This is a canvas texture view
-                const texture = entry.resource.__texture;
-                if (texture.__frameIndex < this._frameIndex) {
-                  const message = `A BindGroup(${object.__id}) with an expired canvas texture is being used.`;
-                  this._postMessage({ "action": Actions.ValidationError, id: 0, message, stacktrace });
-                }
+          const canvasViews = args[1].__canvasViews;
+          if (canvasViews !== undefined) {
+            for (let i = 0; i < canvasViews.length; ++i) {
+              const texture = canvasViews[i].__texture;
+              if (texture.__frameIndex < this._frameIndex) {
+                const message = `A BindGroup(${object.__id}) with an expired canvas texture is being used.`;
+                this._postMessage({ "action": Actions.ValidationError, id: 0, message, stacktrace });
+                break;
               }
             }
           }
@@ -1774,6 +1783,26 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
       }
 
       this._recordCommand(object, method, result, args, stacktrace);
+    }
+
+    // The canvas texture views a bind group descriptor references (a view of a
+    // getCurrentTexture() texture has a negative id), or null when there are none.
+    _canvasTextureViewsOf(descriptor) {
+      const entries = descriptor?.entries;
+      if (!entries) {
+        return null;
+      }
+      let views = null;
+      for (const entry of entries) {
+        const resource = entry?.resource;
+        if (resource instanceof GPUTextureView && resource.__id < 0) {
+          if (views === null) {
+            views = [];
+          }
+          views.push(resource);
+        }
+      }
+      return views;
     }
 
     // Called when an async GPU method promise is created, allowing the inspector to wrap the result.
@@ -2473,10 +2502,9 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
         // (see stacktrace.js) and a few thousand per frame also dominates the
         // CaptureFrameCommands payload size.
         // Object creation stacktraces follow the separate "Object Stacktraces"
-        // setting, so a capture turns per-command stacktraces on without turning
-        // that baseline off.
-        this._gpuWrapper.recordStacktraces =
-          this._recordObjectStacktraces || !!this._captureData.captureStacktraces;
+        // setting and its own wrapper flag, so a capture turns per-command
+        // stacktraces on and off without touching that baseline.
+        this._gpuWrapper.recordCommandStacktraces = !!this._captureData.captureStacktraces;
         // Profile Passes is opt-in from the panel. The actual per-pass timestampWrites
         // injection happens in _preMethodCall on beginRenderPass/beginComputePass; the
         // device must have been requested with "timestamp-query", which only happens
@@ -2606,7 +2634,7 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
 
       this._commandId = 0;
       this._captureFrameRequest = false;
-      this._gpuWrapper.recordStacktraces = this._recordObjectStacktraces;
+      this._gpuWrapper.recordCommandStacktraces = false;
       this._updateStatusMessage();
     }
 

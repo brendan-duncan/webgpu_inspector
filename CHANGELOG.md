@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+* Fixed the Inspect panel's Object Stacktraces setting slowing pages down far more than it should: it captured a stacktrace on every WebGPU call, including every setBindGroup and draw, instead of only where objects are created. On a page issuing a few thousand of those per frame it halved the frame rate. Per-command stacktraces are now only captured for a frame capture that asks for them.
+* setBindGroup no longer walks every entry of the bind group's descriptor on each call to find expired canvas texture views; which entries are canvas views is decided once when the bind group is created.
 * Fixed pages that create textures with TRANSIENT_ATTACHMENT usage failing validation when the inspector is active. Those textures are no longer given extra usages and are skipped when capturing texture contents (#47).
 * Fixed a pass with an unwritten or invalid GPU timestamp (seen in Firefox on macOS) showing a huge negative duration and breaking the Pass Timings total. Such passes are now left untimed and show "Duration: n/a".
 * Fixed the shader debugger reading the wrong data for bound storage and uniform buffers in a capture loaded from a file. Buffer reads returned garbage and arrayLength() returned the wrong count (#49).

@@ -44,6 +44,15 @@ export const GPUCreateMethods = new Set([
   "createView",
 ]);
 
+// The methods whose stacktrace the "Object Stacktraces" setting records: everything
+// that produces a GPU object the Inspect panel lists.
+export const GPUStacktraceMethods = new Set([
+  ...GPUCreateMethods,
+  "requestAdapter",
+  "requestDevice",
+  "getCurrentTexture",
+]);
+
 export class GPUObjectWrapper {
   constructor(idGenerator) {
     this._idGenerator = idGenerator;
@@ -58,7 +67,18 @@ export class GPUObjectWrapper {
     // requestDevice, createPipelineAsync, mapAsync), so they stay Signals.
     this.onPromise = new Signal();
     this.onPromiseResolve = new Signal();
-    this.recordStacktraces = false;
+    // Two independent stacktrace switches, because they differ by orders of
+    // magnitude in cost. recordObjectStacktraces captures where each GPU object is
+    // created: only the creation methods (GPUStacktraceMethods) pay, at most a few
+    // hundred captures per frame on a busy page. recordCommandStacktraces captures
+    // every call, for a frame capture that asked for per-command stacktraces; it
+    // covers the thousands of setBindGroup/draw calls a frame makes, so it is only
+    // raised for the captured frames. One flag used to serve both, which made the
+    // panel's "Object Stacktraces" setting capture a stacktrace on every draw and
+    // bind group set: ~5us each, enough to halve the frame rate of a page issuing a
+    // few thousand of them.
+    this.recordObjectStacktraces = false;
+    this.recordCommandStacktraces = false;
     this._skipRecord = 0;
     this._wrapGPUTypes();
   }
@@ -184,6 +204,9 @@ export class GPUObjectWrapper {
 
   _wrapMethod(method, origMethod) {
     const self = this;
+    // Decided once per wrapped method, not per call: whether this method creates
+    // an object whose creation site the "Object Stacktraces" setting records.
+    const isCreateMethod = GPUStacktraceMethods.has(method);
     return function () {
       const object = this;
 
@@ -233,10 +256,11 @@ export class GPUObjectWrapper {
 
       // Stacktraces are opt-in. Capturing one costs ~16us (see stacktrace.js),
       // which dominates the inspector's overhead on pages that create views or
-      // bind groups per frame — this used to fire unconditionally for every
-      // create method. Enabled by the panel's "Object Stacktraces" setting, and
-      // by captures that ask for per-command stacktraces.
-      const stacktrace = self.recordStacktraces ? getStacktrace() : undefined;
+      // bind groups per frame — this used to fire unconditionally for every create
+      // method. The panel's "Object Stacktraces" setting records creation methods
+      // only; captures that ask for per-command stacktraces record every call.
+      const stacktrace = (self.recordCommandStacktraces || (isCreateMethod && self.recordObjectStacktraces))
+        ? getStacktrace() : undefined;
 
       // If it was an async method it will have returned a Promise
       if (result instanceof Promise) {
