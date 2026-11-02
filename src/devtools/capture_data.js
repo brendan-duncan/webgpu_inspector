@@ -92,6 +92,7 @@ export class CaptureData {
     this._pendingCommandBufferData = new Map();
     this._timestampBuffer = null;
     this._timestampChunkCount = 0;
+    this._tsCursor = 0;
     // Cached result of the latest onTimestampDataReady emit. Held on the instance so
     // late subscribers (e.g. a TimelineWidget built after the readback finished) can
     // pick up the data without depending on listener-registration ordering.
@@ -146,6 +147,8 @@ export class CaptureData {
     // capture allocates a fresh buffer sized for its own timestamp data.
     this._timestampBuffer = null;
     this._timestampChunkCount = 0;
+    this._tsCursor = 0;
+    this.timestampData = null;
   }
 
   /**
@@ -280,12 +283,20 @@ export class CaptureData {
       if (this._timestampChunkCount === 0) {
         let renderPassIndex = 0;
         let computePassIndex = 0;
+        for (let k = 0; k < this._tsCursor; k++) {
+          const command = this.commands[k];
+          if (command.method === "beginRenderPass") {
+            renderPassIndex++;
+          } else if (command.method === "beginComputePass") {
+            computePassIndex++;
+          }
+        }
 
-        const timestampMap = new Array();
+        const timestampMap = this.timestampData?.commands.slice() ?? new Array();
 
         const timestampData = new BigInt64Array(this._timestampBuffer.buffer);
 
-        for (let i = 0, k = 0; i < timestampData.length; i += 2) {
+        for (let i = 0, k = this._tsCursor; i < timestampData.length; i += 2) {
           const start = timestampData[i];
           const end = timestampData[i + 1];
           // Some implementations leave a timestamp unwritten (0) or write an
@@ -326,6 +337,7 @@ export class CaptureData {
               }
 
               k++;
+              this._tsCursor = k;
               break;
             }
           }

@@ -1,0 +1,137 @@
+<html>
+    <body>
+        <canvas id="webgpu_canvas" width="256" height="256"></canvas>
+        <p>Seventeen render/compute passes over three rendering submits. Five passes also write the page's own timestamps, resolved in a fourth submit.</p>
+        <p>Use ?work=4096 for a busy GPU, ?work=0 for short passes, or ?resolve=pass to resolve the page's writes after each pass.</p>
+        <button id="capture" disabled>Capture twice</button>
+        <pre id="output"></pre>
+        <script src="../extensions/chrome/webgpu_inspector.js"></script>
+        <script>
+async function main() {
+  const output = document.getElementById("output");
+  if (!navigator.gpu) {
+    throw new Error("WebGPU is not available");
+  }
+  window.webgpuInspector?.initialize();
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter?.features.has("timestamp-query")) {
+    throw new Error("timestamp-query is not available");
+  }
+  const device = await adapter.requestDevice({ requiredFeatures: ["timestamp-query"] });
+  const errors = [];
+  device.addEventListener("uncapturederror", (event) => errors.push(event.error.message));
+  const canvas = document.getElementById("webgpu_canvas");
+  const context = canvas.getContext("webgpu");
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  context.configure({ device, format });
+  const options = new URLSearchParams(location.search);
+  const work = Number(options.get("work") ?? 128);
+  const draws = Number(options.get("draws") ?? 1);
+  const resolvePerPass = options.get("resolve") === "pass";
+  const module = device.createShaderModule({ code: `
+    @vertex fn vertexMain(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+      let p = array(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
+      return vec4f(p[i], 0, 1);
+    }
+    @fragment fn fragmentMain(@builtin(position) p: vec4f) -> @location(0) vec4f {
+      var v = p.x * 0.001;
+      for (var i = 0; i < ${work}; i++) { v = sin(v + f32(i) * 0.01); }
+      return vec4f(v * 0.5 + 0.5, p.y / 256.0, 0.3, 1);
+    }
+    @group(0) @binding(0) var<storage, read_write> values: array<f32>;
+    @compute @workgroup_size(64) fn computeMain(@builtin(global_invocation_id) id: vec3u) {
+      var v = f32(id.x);
+      for (var i = 0; i < 256; i++) { v = sin(v + f32(i) * 0.01); }
+      values[id.x] = v;
+    }` });
+  const renderPipeline = device.createRenderPipeline({
+    layout: "auto", vertex: { module, entryPoint: "vertexMain" },
+    fragment: { module, entryPoint: "fragmentMain", targets: [{ format }] }
+  });
+  const computePipeline = device.createComputePipeline({
+    layout: "auto", compute: { module, entryPoint: "computeMain" }
+  });
+  const storage = device.createBuffer({ size: 4096 * 4, usage: GPUBufferUsage.STORAGE });
+  const bindGroup = device.createBindGroup({
+    layout: computePipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: storage } }]
+  });
+  const querySet = device.createQuerySet({ type: "timestamp", count: 34 });
+  const pageResolve = device.createBuffer({ size: 17 * 256, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
+  const ownPasses = [0, 3, 8, 12, 16];
+
+  async function render(capture = false) {
+    return new Promise((resolve, reject) => requestAnimationFrame(async () => {
+      try {
+        if (capture) webgpuInspector.beginFrameCapture({ captureTimestamps: true, maxBufferSize: 0, maxTextureSize: 0 });
+        const pageRead = device.createBuffer({ size: 17 * 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+        const view = context.getCurrentTexture().createView();
+        for (const [first, last] of [[0, 5], [5, 11], [11, 17]]) {
+          const encoder = device.createCommandEncoder();
+          for (let i = first; i < last; i++) {
+            const descriptor = { label: "pass " + i };
+            if (ownPasses.includes(i)) {
+              descriptor.timestampWrites = { querySet, beginningOfPassWriteIndex: i * 2, endOfPassWriteIndex: i * 2 + 1 };
+            }
+            if (i === 8) {
+              const pass = encoder.beginComputePass(descriptor);
+              pass.setPipeline(computePipeline);
+              pass.setBindGroup(0, bindGroup);
+              pass.dispatchWorkgroups(64);
+              pass.end();
+            } else {
+              descriptor.colorAttachments = [{ view, loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] }];
+              const pass = encoder.beginRenderPass(descriptor);
+              pass.setPipeline(renderPipeline);
+              for (let draw = 0; draw < draws; draw++) pass.draw(3);
+              pass.end();
+            }
+            if (ownPasses.includes(i) && resolvePerPass) {
+              encoder.resolveQuerySet(querySet, i * 2, 2, pageResolve, i * 256);
+              encoder.copyBufferToBuffer(pageResolve, i * 256, pageRead, i * 16, 16);
+            }
+          }
+          device.queue.submit([encoder.finish()]);
+        }
+        if (!resolvePerPass) {
+          const encoder = device.createCommandEncoder();
+          encoder.resolveQuerySet(querySet, 0, 34, pageResolve, 0);
+          encoder.copyBufferToBuffer(pageResolve, 0, pageRead, 0, 34 * 8);
+          device.queue.submit([encoder.finish()]);
+        }
+        let metadata = null;
+        if (capture) {
+          webgpuInspector.endFrameCapture();
+          metadata = (await webgpuInspector.saveCaptureData(null, { download: false })).metadata;
+        }
+        await pageRead.mapAsync(GPUMapMode.READ);
+        const timestamps = new BigInt64Array(pageRead.getMappedRange());
+        const pageTimes = ownPasses.map((i) => ({
+          pass: i, start: String(timestamps[i * 2]), end: String(timestamps[i * 2 + 1]),
+          duration: Number(timestamps[i * 2 + 1] - timestamps[i * 2]) / 1000000.0
+        }));
+        pageRead.unmap();
+        pageRead.destroy();
+        const passes = metadata?.commands.filter((c) => c.method === "beginRenderPass" || c.method === "beginComputePass")
+          .map((c) => ({ label: c.args[0].label, start: c.startTime, end: c.endTime, duration: c.duration })) ?? [];
+        const result = { passes, pageTimes, errors: errors.slice(), validationErrors: metadata?.validationErrors };
+        output.textContent = JSON.stringify(result, null, 2);
+        resolve(result);
+      } catch (error) {
+        output.textContent = error.stack;
+        reject(error);
+      }
+    }));
+  }
+  window.timestampTest = { render, device, adapter: { ...adapter.info } };
+  document.getElementById("capture").disabled = false;
+  document.getElementById("capture").onclick = async () => {
+    const results = [await render(true), await render(true)];
+    output.textContent = JSON.stringify(results, null, 2);
+  };
+  output.textContent = "Ready";
+}
+window.timestampTestReady = main();
+window.timestampTestReady.catch((error) => { document.getElementById("output").textContent = error.stack; });
+        </script>
+    </body>
+</html>
