@@ -92,6 +92,7 @@ export class LocalCaptureStore {
     // saveCaptureData()/importCaptureJson() round-trips.
     this._timestampBytes = null;
     this._timestampChunksRemaining = 0;
+    this._tsCursor = 0;
   }
 
   hasCapturedCommands() {
@@ -108,6 +109,9 @@ export class LocalCaptureStore {
     this._currentSlot = null;
     this._firstFrame = null;
     this._pendingBufferData.clear();
+    this._timestampBytes = null;
+    this._timestampChunksRemaining = 0;
+    this._tsCursor = 0;
   }
 
   // Clear just the captured commands (and the pending-by-id state that goes
@@ -121,6 +125,7 @@ export class LocalCaptureStore {
     this._pendingBufferData.clear();
     this._timestampBytes = null;
     this._timestampChunksRemaining = 0;
+    this._tsCursor = 0;
   }
 
   processMessage(message) {
@@ -349,8 +354,8 @@ export class LocalCaptureStore {
     const timestampData = new BigInt64Array(this._timestampBytes.buffer);
     this._timestampBytes = null;
 
-    let i = 2;
-    for (let k = 0; k < this._commands.length && i < timestampData.length; k++) {
+    let i = 0;
+    for (let k = this._tsCursor; k < this._commands.length && i < timestampData.length; k++) {
       const command = this._commands[k];
       if (!command || (command.method !== "beginRenderPass" && command.method !== "beginComputePass")) {
         continue;
@@ -358,6 +363,7 @@ export class LocalCaptureStore {
       const start = timestampData[i];
       const end = timestampData[i + 1];
       i += 2;
+      this._tsCursor = k + 1;
       // Unwritten (0) or error (-1) timestamps leave the pass untimed.
       if (start <= 0n || end <= 0n || end < start) {
         continue;

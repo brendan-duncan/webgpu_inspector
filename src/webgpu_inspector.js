@@ -1471,21 +1471,20 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
               count: this._maxTimestamps
             });
             this._timestampBuffer = object.__device.createBuffer({
-              size: this._maxTimestamps * 8,
-              usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
+              size: this._maxTimestamps * 256,
+              usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
             });
             this.enableRecording();
           }
 
           if (this._timestampQuerySet &&
-              !args[0].timestampWrites &&
+              !args[0]?.timestampWrites &&
               this._timestampIndex + 1 < this._maxTimestamps) {
             args[0] = { ...args[0], timestampWrites: {
               querySet: this._timestampQuerySet,
               beginningOfPassWriteIndex: this._timestampIndex,
               endOfPassWriteIndex: this._timestampIndex + 1
             } };
-            this._timestampIndex += 2;
           }
         }
       }
@@ -1506,6 +1505,39 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
 
     // Called after a GPU method is called, allowing the inspector to wrap the result.
     _postMethodCall(object, method, args, result, stacktrace) {
+      if ((method === "beginRenderPass" || method === "beginComputePass") &&
+          this._captureTimestamps && this._captureFrameRequest &&
+          this._timestampQuerySet && this._timestampIndex + 1 < this._maxTimestamps) {
+        const timestampWrites = args[0].timestampWrites;
+        Object.defineProperty(result, "__timestampCapture", { value: {
+          commandEncoder: object,
+          timestampWrites: {
+            querySet: timestampWrites.querySet,
+            beginningOfPassWriteIndex: timestampWrites.beginningOfPassWriteIndex,
+            endOfPassWriteIndex: timestampWrites.endOfPassWriteIndex
+          },
+          index: this._timestampIndex
+        }, enumerable: false });
+        this._timestampIndex += 2;
+      }
+
+      if (method === "end" && object.__timestampCapture) {
+        const { commandEncoder, timestampWrites, index } = object.__timestampCapture;
+        this.disableRecording();
+        // Resolve before the page can reuse its queries. Each resolve offset must be 256-byte aligned.
+        const indices = [timestampWrites.beginningOfPassWriteIndex, timestampWrites.endOfPassWriteIndex];
+        for (let i = 0; i < 2; i++) {
+          const offset = (index + i) * 256;
+          if (indices[i] !== undefined) {
+            commandEncoder.resolveQuerySet(timestampWrites.querySet, indices[i], 1, this._timestampBuffer, offset);
+          } else {
+            // A missing boundary leaves the pass untimed, without changing the page's writes.
+            commandEncoder.clearBuffer(this._timestampBuffer, offset, 8);
+          }
+        }
+        this.enableRecording();
+      }
+
       if (object instanceof GPURenderBundleEncoder && method !== "finish") {
         if (object._commands === undefined) {
           object._commands = [];
@@ -1561,14 +1593,14 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
         if (this._timestampIndex > 0) {
           const commandEncoder = object.__device.createCommandEncoder();
 
-          commandEncoder.resolveQuerySet(this._timestampQuerySet, 0, this._timestampIndex, this._timestampBuffer, 0);
-
           timestampDstBuffer = object.__device.createBuffer({
             size: this._timestampIndex * 8,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
           });
           Object.defineProperty(timestampDstBuffer, "__count", { value: this._timestampIndex, enumerable: false, writable: true });
-          commandEncoder.copyBufferToBuffer(this._timestampBuffer, 0, timestampDstBuffer, 0, this._timestampIndex * 8);
+          for (let i = 0; i < this._timestampIndex; i++) {
+            commandEncoder.copyBufferToBuffer(this._timestampBuffer, i * 256, timestampDstBuffer, i * 8, 8);
+          }
           object.__device.queue.submit([commandEncoder.finish()]);
           this._timestampIndex = 0;
         }
@@ -1620,7 +1652,7 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
           const toDestroy = this._toDestroy;
           this._toDestroy = [];
 
-          this._pendingMapCount += captureBuffers.length + captureTextures.length;
+          this._pendingMapCount += captureBuffers.length + captureTextures.length + (timestampDstBuffer ? 1 : 0);
 
           object.onSubmittedWorkDone().then(() => {
             self.disableRecording();
@@ -3398,7 +3430,6 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
 
     _sendTimestampBuffer(count, buffer) {
       const self = this;
-      this._pendingMapCount++;
       buffer.mapAsync(GPUMapMode.READ).then(() => {
         self.disableRecording();
         const range = buffer.getMappedRange();
