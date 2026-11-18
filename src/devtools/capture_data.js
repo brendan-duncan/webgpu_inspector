@@ -92,7 +92,15 @@ export class CaptureData {
     this._pendingCommandBufferData = new Map();
     this._timestampBuffer = null;
     this._timestampChunkCount = 0;
-    this._tsCursor = 0;
+    // Serial of the current capture (from CaptureFrameResults); readbacks carry the
+    // serial their command ids belong to.
+    this._captureSerial = null;
+    // True once every CaptureFrameCommands batch of the current capture has arrived.
+    this._commandsReady = false;
+    // Decoded { serial, commandId, start, end } timings not yet applied to a command.
+    this._pendingTimestamps = [];
+    // Timed pass commands of the current capture.
+    this._timedPasses = [];
     // Cached result of the latest onTimestampDataReady emit. Held on the instance so
     // late subscribers (e.g. a TimelineWidget built after the readback finished) can
     // pick up the data without depending on listener-registration ordering.
@@ -147,8 +155,12 @@ export class CaptureData {
     // capture allocates a fresh buffer sized for its own timestamp data.
     this._timestampBuffer = null;
     this._timestampChunkCount = 0;
-    this._tsCursor = 0;
+    this._captureSerial = message.serial;
+    this._commandsReady = false;
+    this._timedPasses = [];
     this.timestampData = null;
+    // Keep timings that arrived early for this capture; older ones can't match it.
+    this._pendingTimestamps = this._pendingTimestamps.filter((t) => t.serial === message.serial);
   }
 
   /**
@@ -175,6 +187,8 @@ export class CaptureData {
     }
     this._captureCount--;
     if (this._captureCount === 0) {
+      this._commandsReady = true;
+      this._applyPendingTimestamps();
       this.onCaptureFrameResults.emit(frame, this.commands);
     }
   }
@@ -247,6 +261,79 @@ export class CaptureData {
   }
 
   /**
+   * Applies decoded pass timings to the current capture's commands by command id.
+   * Timings wait until the capture's commands have all arrived; timings from an
+   * older capture are dropped, and ones from a newer capture are kept for it.
+   */
+  _applyPendingTimestamps() {
+    if (!this._commandsReady || !this._pendingTimestamps.length) {
+      return;
+    }
+    const serial = this._captureSerial;
+    let applied = false;
+    const remaining = [];
+    for (const timing of this._pendingTimestamps) {
+      if (timing.serial !== serial) {
+        if (timing.serial > serial) {
+          remaining.push(timing);
+        }
+        continue;
+      }
+      const command = this.commands[timing.commandId];
+      if (!command || (command.method !== "beginRenderPass" && command.method !== "beginComputePass")) {
+        continue;
+      }
+      applied = true;
+      const { start, end } = timing;
+      // Some implementations leave a timestamp unwritten (0) or write an
+      // error value (-1), e.g. Firefox on Metal for an empty pass. Such a
+      // pass is left untimed rather than given a bogus duration.
+      const valid = start > 0n && end > 0n && end >= start;
+      if (valid) {
+        command.duration = Number(end - start) / 1000000.0; // convert ns to ms
+        command.startTime = Number(start) / 1000000.0;
+        command.endTime = Number(end) / 1000000.0;
+        this._timedPasses.push(command);
+      }
+      if (command.header) {
+        const kind = command.method === "beginRenderPass" ? "Render Pass" : "Compute Pass";
+        let headerText = `${kind} ${command._passIndex ?? 0}`;
+        const passLabel = command.args?.[0]?.label;
+        if (passLabel) {
+          headerText += ` "${passLabel}"`;
+        }
+        headerText += valid ? ` Duration: ${command.duration}ms` : " Duration: n/a";
+        command.header.text = headerText;
+      }
+    }
+    this._pendingTimestamps = remaining;
+    if (!applied) {
+      return;
+    }
+
+    const timestampMap = this._timedPasses;
+    timestampMap.sort((a, b) => { return a.startTime - b.startTime; });
+
+    // Whole-frame GPU busy time = first pass start -> last pass end. This covers gaps
+    // between passes; a bare sum of durations would undercount serialized idle. Feeds
+    // the panel's CPU-vs-GPU bound verdict.
+    let gpuFrameTime = 0;
+    if (timestampMap.length) {
+      const first = timestampMap[0];
+      const last = timestampMap.reduce((a, b) => (b.endTime > a.endTime ? b : a));
+      gpuFrameTime = last.endTime - first.startTime;
+    }
+    this.gpuFrameTime = gpuFrameTime;
+    if (this.database) {
+      this.database.gpuFrameTime = gpuFrameTime;
+    }
+
+    const firstTime = timestampMap.length ? timestampMap[0].startTime : 0;
+    this.timestampData = { commands: timestampMap.slice(), firstTime };
+    this.onTimestampDataReady.emit(this.timestampData);
+  }
+
+  /**
    * Handles the capture of buffer data, updating the internal state with the new buffer data and loading status.
    * @param {number} id - The ID of the command associated with the buffer data.
    * @param {number} entryIndex - The index of the buffer entry.
@@ -281,90 +368,19 @@ export class CaptureData {
       this._timestampBuffer.set(chunkData, offset);
       this._timestampChunkCount--;
       if (this._timestampChunkCount === 0) {
-        let renderPassIndex = 0;
-        let computePassIndex = 0;
-        for (let k = 0; k < this._tsCursor; k++) {
-          const command = this.commands[k];
-          if (command.method === "beginRenderPass") {
-            renderPassIndex++;
-          } else if (command.method === "beginComputePass") {
-            computePassIndex++;
-          }
-        }
-
-        const timestampMap = this.timestampData?.commands.slice() ?? new Array();
-
+        // u64 quads [serial, commandId, start, end], one per timed pass.
         const timestampData = new BigInt64Array(this._timestampBuffer.buffer);
-
-        for (let i = 0, k = this._tsCursor; i < timestampData.length; i += 2) {
-          const start = timestampData[i];
-          const end = timestampData[i + 1];
-          // Some implementations leave a timestamp unwritten (0) or write an
-          // error value (-1), e.g. Firefox on Metal for an empty pass. Such a
-          // pass is left untimed rather than given a bogus duration.
-          const valid = start > 0n && end > 0n && end >= start;
-          const duration = Number(end - start) / 1000000.0; // convert ns to ms
-          for (; k < this.commands.length; k++) {
-            const command = this.commands[k];
-            if (command.method === "beginRenderPass" ||
-                command.method === "beginComputePass") {
-              if (valid) {
-                command.duration = duration;
-                command.startTime = Number(start) / 1000000.0;
-                command.endTime = Number(end) / 1000000.0;
-                timestampMap.push(command);
-              }
-
-              if (command.header) {
-                const passLabel = command.args?.[0]?.label;
-                if (command.method === "beginRenderPass") {
-                  let headerText = `Render Pass ${renderPassIndex}`;
-                  if (passLabel) {
-                    headerText += ` "${passLabel}"`;
-                  }
-                  headerText += valid ? ` Duration: ${command.duration}ms` : " Duration: n/a";
-                  command.header.text = headerText;
-                  renderPassIndex++;
-                } else {
-                  let headerText = `Compute Pass ${computePassIndex}`;
-                  if (passLabel) {
-                    headerText += ` "${passLabel}"`;
-                  }
-                  headerText += valid ? ` Duration: ${command.duration}ms` : " Duration: n/a";
-                  command.header.text = headerText;
-                  computePassIndex++;
-                }
-              }
-
-              k++;
-              this._tsCursor = k;
-              break;
-            }
-          }
-        }
-
-        timestampMap.sort((a, b) => { return a.startTime - b.startTime; });
-
-        // Whole-frame GPU busy time = first pass start -> last pass end. This covers gaps
-        // between passes; a bare sum of durations would undercount serialized idle. Feeds
-        // the panel's CPU-vs-GPU bound verdict.
-        let gpuFrameTime = 0;
-        if (timestampMap.length) {
-          const first = timestampMap[0];
-          const last = timestampMap.reduce((a, b) => (b.endTime > a.endTime ? b : a));
-          gpuFrameTime = last.endTime - first.startTime;
-        }
-        this.gpuFrameTime = gpuFrameTime;
-        if (this.database) {
-          this.database.gpuFrameTime = gpuFrameTime;
-        }
-
-        const firstTime = timestampMap.length ? timestampMap[0].startTime : 0;
-        this.timestampData = { commands: timestampMap, firstTime };
-        this.onTimestampDataReady.emit(this.timestampData);
-        this.onUpdateCaptureStatus.emit();
-
         this._timestampBuffer = null;
+        for (let i = 0; i + 3 < timestampData.length; i += 4) {
+          this._pendingTimestamps.push({
+            serial: Number(timestampData[i]),
+            commandId: Number(timestampData[i + 1]),
+            start: timestampData[i + 2],
+            end: timestampData[i + 3]
+          });
+        }
+        this._applyPendingTimestamps();
+        this.onUpdateCaptureStatus.emit();
       }
       return;
     }

@@ -92,7 +92,10 @@ export class LocalCaptureStore {
     // saveCaptureData()/importCaptureJson() round-trips.
     this._timestampBytes = null;
     this._timestampChunksRemaining = 0;
-    this._tsCursor = 0;
+    // Capture serial from CaptureFrameResults; timings from another serial are dropped.
+    this._captureSerial = null;
+    // commandId -> { serial, start, end } for timings that arrived before their command.
+    this._pendingTimestamps = new Map();
   }
 
   hasCapturedCommands() {
@@ -111,7 +114,8 @@ export class LocalCaptureStore {
     this._pendingBufferData.clear();
     this._timestampBytes = null;
     this._timestampChunksRemaining = 0;
-    this._tsCursor = 0;
+    this._captureSerial = null;
+    this._pendingTimestamps.clear();
   }
 
   // Clear just the captured commands (and the pending-by-id state that goes
@@ -125,7 +129,8 @@ export class LocalCaptureStore {
     this._pendingBufferData.clear();
     this._timestampBytes = null;
     this._timestampChunksRemaining = 0;
-    this._tsCursor = 0;
+    this._captureSerial = null;
+    this._pendingTimestamps.clear();
   }
 
   processMessage(message) {
@@ -233,6 +238,15 @@ export class LocalCaptureStore {
     if (this._firstFrame === null) {
       this._firstFrame = message.frame;
     }
+    if (message.serial !== this._captureSerial) {
+      this._captureSerial = message.serial;
+      // Timings parked for an older capture can never match this one's commands.
+      for (const [commandId, timing] of this._pendingTimestamps) {
+        if (!(timing.serial >= message.serial)) {
+          this._pendingTimestamps.delete(commandId);
+        }
+      }
+    }
   }
 
   _handleCaptureFrameCommands(message) {
@@ -262,6 +276,11 @@ export class LocalCaptureStore {
             this._applyBufferDataChunk(cmd, pendingMessage);
           }
           this._pendingBufferData.delete(cmd.commandId);
+        }
+        const timing = this._pendingTimestamps.get(cmd.commandId);
+        if (timing && timing.serial === this._captureSerial) {
+          this._pendingTimestamps.delete(cmd.commandId);
+          this._applyTimestamp(cmd, timing);
         }
       }
     }
@@ -330,12 +349,13 @@ export class LocalCaptureStore {
     cmd.isBufferDataLoaded[entryIndex] = loaded;
   }
 
-  // Accumulates the raw u64 timestamp buffer streamed in CaptureBufferData
-  // messages with commandId === -1000. When the last chunk arrives, decodes the
-  // BigInt64Array and writes startTime/endTime/duration onto each
-  // beginRenderPass/beginComputePass command in capture order. Mirrors the
-  // decode in src/devtools/capture_data.js so the merged fields are picked up
-  // unchanged by _serializeCommand → saveCaptureData → importCaptureJson.
+  // Accumulates a timestamp readback streamed in CaptureBufferData messages with
+  // commandId === -1000: u64 quads [serial, commandId, start, end], one per timed
+  // pass. When the last chunk arrives, writes startTime/endTime/duration onto the
+  // beginRenderPass/beginComputePass command with that id. A timing that arrives
+  // before its command is parked until the command lands. Mirrors the decode in
+  // src/devtools/capture_data.js so the merged fields are picked up unchanged by
+  // _serializeCommand → saveCaptureData → importCaptureJson.
   _handleTimestampChunk(message) {
     if (this._timestampBytes === null) {
       this._timestampBytes = new Uint8Array(message.size);
@@ -354,24 +374,34 @@ export class LocalCaptureStore {
     const timestampData = new BigInt64Array(this._timestampBytes.buffer);
     this._timestampBytes = null;
 
-    let i = 0;
-    for (let k = this._tsCursor; k < this._commands.length && i < timestampData.length; k++) {
-      const command = this._commands[k];
-      if (!command || (command.method !== "beginRenderPass" && command.method !== "beginComputePass")) {
-        continue;
+    for (let i = 0; i + 3 < timestampData.length; i += 4) {
+      const timing = {
+        serial: Number(timestampData[i]),
+        start: timestampData[i + 2],
+        end: timestampData[i + 3]
+      };
+      const commandId = Number(timestampData[i + 1]);
+      const command = this._commandsById.get(commandId);
+      if (command && timing.serial === this._captureSerial) {
+        this._applyTimestamp(command, timing);
+      } else if (this._captureSerial === null || timing.serial >= this._captureSerial) {
+        // The command (or this capture's CaptureFrameResults) hasn't arrived yet.
+        this._pendingTimestamps.set(commandId, timing);
       }
-      const start = timestampData[i];
-      const end = timestampData[i + 1];
-      i += 2;
-      this._tsCursor = k + 1;
-      // Unwritten (0) or error (-1) timestamps leave the pass untimed.
-      if (start <= 0n || end <= 0n || end < start) {
-        continue;
-      }
-      command.startTime = Number(start) / 1000000.0;
-      command.endTime = Number(end) / 1000000.0;
-      command.duration = Number(end - start) / 1000000.0;
     }
+  }
+
+  _applyTimestamp(command, { start, end }) {
+    if (command.method !== "beginRenderPass" && command.method !== "beginComputePass") {
+      return;
+    }
+    // Unwritten (0) or error (-1) timestamps leave the pass untimed.
+    if (start <= 0n || end <= 0n || end < start) {
+      return;
+    }
+    command.startTime = Number(start) / 1000000.0;
+    command.endTime = Number(end) / 1000000.0;
+    command.duration = Number(end - start) / 1000000.0;
   }
 
   _handleCaptureTextureData(message) {
