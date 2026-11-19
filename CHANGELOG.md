@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+* Fixed captured GPU pass timings being shifted or missing, including captures with several queue submits.
+* Fixed saving a capture before its GPU timestamp readbacks finish, leaving passes untimed on a busy GPU.
+* Fixed passes with their own timestampWrites missing GPU timings in a capture. The page's timestamp writes are preserved.
 * Fixed the Inspect panel's Object Stacktraces setting slowing pages down far more than it should: it captured a stacktrace on every WebGPU call, including every setBindGroup and draw, instead of only where objects are created. On a page issuing a few thousand of those per frame it halved the frame rate. Per-command stacktraces are now only captured for a frame capture that asks for them.
 * setBindGroup no longer walks every entry of the bind group's descriptor on each call to find expired canvas texture views; which entries are canvas views is decided once when the bind group is created.
 * Fixed pages that create textures with TRANSIENT_ATTACHMENT usage failing validation when the inspector is active. Those textures are no longer given extra usages and are skipped when capturing texture contents (#47).

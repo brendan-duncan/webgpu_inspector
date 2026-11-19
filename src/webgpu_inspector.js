@@ -171,9 +171,19 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
       this._captureTimestamps = false;
       this._timestampQuerySupported = false;
       this._timestampQuerySet = null;
+      // Tightly packed [start, end] u64 pairs, one per timed pass, at _timestampIndex * 8.
       this._timestampBuffer = null;
+      // 256-byte-aligned resolve target; each pass resolves here, then copies into _timestampBuffer.
+      this._timestampScratch = null;
+      this._timestampDevice = null;
       this._timestampIndex = 0;
+      // Timed passes whose command buffer hasn't been submitted yet. Slots are only
+      // reused once this drops to 0, so an unsubmitted encoder's slots stay its own.
+      this._timestampOutstanding = 0;
       this._maxTimestamps = 2000;
+      // Bumped whenever _commandId restarts, so a readback can name the capture its
+      // command ids belong to.
+      this._captureSerial = 0;
       this._captureFrameCount = 0;
       this._pendingMapCount = 0; // Number of pending async map requests
       this._hasPendingDeviceDestroy = false;
@@ -905,6 +915,7 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
       // and passes simply carry no duration.
       this._captureTimestamps = !!options.captureTimestamps && this._timestampQuerySupported;
       this._timestampIndex = 0;
+      this._timestampOutstanding = 0;
       this._captureFrameRequest = true;
     }
 
@@ -945,6 +956,7 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
       this._postMessage({
         "action": Actions.CaptureFrameResults,
         "frame": this._frameIndex,
+        "serial": this._captureSerial,
         "count": commands.length,
         batches
       });
@@ -1055,7 +1067,7 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
       // Subsequent begin/end pairs start a fresh frame list. Object records
       // stay so anything created before this save (and still referenced by
       // a later capture) is exported next time too.
-      this._commandId = 0;
+      this._resetCommandIds();
       this._frameRenderPassCount = 0;
       this._localCapture.resetCaptures();
 
@@ -1466,26 +1478,28 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
             // captured command list isn't polluted with the QuerySet/Buffer
             // creation and command IDs stay aligned with what the page did.
             this.disableRecording();
+            this._timestampDevice = object.__device;
             this._timestampQuerySet = object.__device.createQuerySet({
               type: "timestamp",
               count: this._maxTimestamps
             });
             this._timestampBuffer = object.__device.createBuffer({
               size: this._maxTimestamps * 8,
+              usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+            });
+            this._timestampScratch = object.__device.createBuffer({
+              size: 512,
               usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
             });
             this.enableRecording();
           }
 
-          if (this._timestampQuerySet &&
-              !args[0].timestampWrites &&
-              this._timestampIndex + 1 < this._maxTimestamps) {
+          if (this._canTimePass(object) && !args[0]?.timestampWrites) {
             args[0] = { ...args[0], timestampWrites: {
               querySet: this._timestampQuerySet,
               beginningOfPassWriteIndex: this._timestampIndex,
               endOfPassWriteIndex: this._timestampIndex + 1
             } };
-            this._timestampIndex += 2;
           }
         }
       }
@@ -1506,6 +1520,10 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
 
     // Called after a GPU method is called, allowing the inspector to wrap the result.
     _postMethodCall(object, method, args, result, stacktrace) {
+      if (method === "end" && object.__timestampCapture) {
+        this._resolvePassTimestamps(object.__timestampCapture);
+      }
+
       if (object instanceof GPURenderBundleEncoder && method !== "finish") {
         if (object._commands === undefined) {
           object._commands = [];
@@ -1551,27 +1569,18 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
         // otherwise it will be black. Store the value in the command buffer so we can
         // see it from the submit function.
         Object.defineProperty(result, "__rendersToCanvas", { value: object.__rendersToCanvas, enumerable: false, writable: true });
+        // Timed passes are read back when this command buffer is submitted.
+        if (object.__timestampPasses) {
+          Object.defineProperty(result, "__timestampPasses", { value: object.__timestampPasses, enumerable: false, writable: true });
+          object.__timestampPasses = null;
+        }
       }
 
       if (method === "submit") {
         this._frameSubmitCount++;
         this.disableRecording();
 
-        let timestampDstBuffer = null;
-        if (this._timestampIndex > 0) {
-          const commandEncoder = object.__device.createCommandEncoder();
-
-          commandEncoder.resolveQuerySet(this._timestampQuerySet, 0, this._timestampIndex, this._timestampBuffer, 0);
-
-          timestampDstBuffer = object.__device.createBuffer({
-            size: this._timestampIndex * 8,
-            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-          });
-          Object.defineProperty(timestampDstBuffer, "__count", { value: this._timestampIndex, enumerable: false, writable: true });
-          commandEncoder.copyBufferToBuffer(this._timestampBuffer, 0, timestampDstBuffer, 0, this._timestampIndex * 8);
-          object.__device.queue.submit([commandEncoder.finish()]);
-          this._timestampIndex = 0;
-        }
+        const timestampReadback = this._queueTimestampReadback(object, args[0]);
 
         const self = this;
 
@@ -1608,7 +1617,7 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
         const hasWork = this._captureTempBuffers.length > 0 ||
           this._captureTexturedBuffers.length > 0 ||
           this._toDestroy.length > 0 ||
-          timestampDstBuffer !== null;
+          timestampReadback !== null;
 
         if (hasWork) {
           const captureBuffers = this._captureTempBuffers;
@@ -1620,13 +1629,14 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
           const toDestroy = this._toDestroy;
           this._toDestroy = [];
 
-          this._pendingMapCount += captureBuffers.length + captureTextures.length;
+          const pendingCount = captureBuffers.length + captureTextures.length + (timestampReadback ? 1 : 0);
+          this._pendingMapCount += pendingCount;
 
           object.onSubmittedWorkDone().then(() => {
             self.disableRecording();
 
-            if (timestampDstBuffer) {
-              self._sendTimestampBuffer(timestampDstBuffer.__count, timestampDstBuffer);
+            if (timestampReadback) {
+              self._sendTimestampBuffer(timestampReadback);
             }
 
             if (captureBuffers.length) {
@@ -1639,6 +1649,13 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
               obj.destroy();
             }
             self.enableRecording();
+          }, (error) => {
+            // No readback will run (e.g. device lost); release the pending count so
+            // saveCaptureData and a deferred device.destroy() don't wait on it.
+            console.error(error);
+            for (let i = 0; i < pendingCount; ++i) {
+              self._pendingMapFinished();
+            }
           });
         }
 
@@ -1783,6 +1800,118 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
       }
 
       this._recordCommand(object, method, result, args, stacktrace);
+
+      // After _recordCommand, so the pass carries the id of its captured begin*Pass command.
+      if ((method === "beginRenderPass" || method === "beginComputePass") &&
+          this._captureTimestamps && this._captureFrameRequest && this._canTimePass(object)) {
+        this._allocatePassTimestamps(object, args[0]?.timestampWrites, result);
+      }
+    }
+
+    // Whether a pass begun on this command encoder can get a timestamp slot.
+    _canTimePass(commandEncoder) {
+      return this._timestampQuerySet !== null &&
+          commandEncoder.__device === this._timestampDevice &&
+          this._timestampIndex + 1 < this._maxTimestamps;
+    }
+
+    // Give a pass a [start, end] slot in _timestampBuffer, tagged with its captured
+    // command id. The page's own timestampWrites (or the injected ones) are resolved
+    // into the slot when the pass ends; see _resolvePassTimestamps.
+    _allocatePassTimestamps(commandEncoder, timestampWrites, pass) {
+      const commandId = typeof pass?.__id === "string" ? Number(pass.__id.slice(1)) : NaN;
+      if (!timestampWrites || !Number.isInteger(commandId)) {
+        return;
+      }
+      const index = this._timestampIndex;
+      this._timestampIndex += 2;
+      this._timestampOutstanding++;
+      Object.defineProperty(pass, "__timestampCapture", { value: {
+        commandEncoder,
+        querySet: timestampWrites.querySet,
+        begin: timestampWrites.beginningOfPassWriteIndex,
+        end: timestampWrites.endOfPassWriteIndex,
+        index
+      }, enumerable: false, writable: true });
+      if (!commandEncoder.__timestampPasses) {
+        Object.defineProperty(commandEncoder, "__timestampPasses", { value: [], enumerable: false, writable: true });
+      }
+      commandEncoder.__timestampPasses.push({ commandId, index, serial: this._captureSerial });
+    }
+
+    // Copy a finished pass's timestamps into its slot, before the page can reuse its
+    // queries. Resolve offsets must be 256-byte aligned, so resolve into the scratch
+    // buffer and copy the 16 bytes into the packed slot.
+    _resolvePassTimestamps(capture) {
+      const { commandEncoder, querySet, begin, end, index } = capture;
+      const dst = index * 8;
+      this.disableRecording();
+      if (begin !== undefined && end === begin + 1) {
+        commandEncoder.resolveQuerySet(querySet, begin, 2, this._timestampScratch, 0);
+        commandEncoder.copyBufferToBuffer(this._timestampScratch, 0, this._timestampBuffer, dst, 16);
+      } else {
+        const queries = [begin, end];
+        for (let i = 0; i < 2; i++) {
+          if (queries[i] !== undefined) {
+            commandEncoder.resolveQuerySet(querySet, queries[i], 1, this._timestampScratch, i * 256);
+            commandEncoder.copyBufferToBuffer(this._timestampScratch, i * 256, this._timestampBuffer, dst + i * 8, 8);
+          } else {
+            // A missing boundary leaves the pass untimed, without changing the page's writes.
+            commandEncoder.clearBuffer(this._timestampBuffer, dst + i * 8, 8);
+          }
+        }
+      }
+      this.enableRecording();
+    }
+
+    // At submit, copy the slots of the timed passes in the submitted command buffers
+    // into a readback buffer, then clear those slots so a pass whose resolve never ran
+    // (an invalid command buffer) reads back as untimed rather than as older data.
+    // Returns { buffer, passes } or null.
+    _queueTimestampReadback(queue, commandBuffers) {
+      const device = queue.__device;
+      if (!this._timestampBuffer || device !== this._timestampDevice || !commandBuffers) {
+        return null;
+      }
+      let passes = null;
+      for (const commandBuffer of commandBuffers) {
+        const timed = commandBuffer?.__timestampPasses;
+        if (timed) {
+          commandBuffer.__timestampPasses = null;
+          passes ??= [];
+          for (const pass of timed) {
+            passes.push(pass);
+          }
+        }
+      }
+      if (!passes) {
+        return null;
+      }
+      this._timestampOutstanding = Math.max(0, this._timestampOutstanding - passes.length);
+
+      const commandEncoder = device.createCommandEncoder();
+      const buffer = device.createBuffer({
+        size: passes.length * 16,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+      });
+      // One copy per run of consecutive slots; usually the whole submit is one run.
+      for (let i = 0; i < passes.length;) {
+        let j = i + 1;
+        while (j < passes.length && passes[j].index === passes[j - 1].index + 2) {
+          j++;
+        }
+        const offset = passes[i].index * 8;
+        const size = (j - i) * 16;
+        commandEncoder.copyBufferToBuffer(this._timestampBuffer, offset, buffer, i * 16, size);
+        commandEncoder.clearBuffer(this._timestampBuffer, offset, size);
+        i = j;
+      }
+      device.queue.submit([commandEncoder.finish()]);
+
+      if (this._timestampOutstanding === 0) {
+        this._timestampIndex = 0;
+      }
+      return { buffer, passes };
     }
 
     // The canvas texture views a bind group descriptor references (a view of a
@@ -1937,7 +2066,14 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
       this._frameCaptureCommands.length = 0;
       this._captureFrameCommands.length = 0;
       this._currentFrame = null;
+      this._resetCommandIds();
+    }
+
+    // Restart captured command ids. Timestamp readbacks carry the serial so ids from
+    // an earlier capture are never applied to this one's commands.
+    _resetCommandIds() {
       this._commandId = 0;
+      this._captureSerial++;
     }
 
     // Get the next unique object ID.
@@ -2511,8 +2647,9 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
         // when the adapter exposes it (see the guard around requestDevice).
         this._captureTimestamps = !!this._captureData.captureTimestamps && this._timestampQuerySupported;
         this._timestampIndex = 0;
+        this._timestampOutstanding = 0;
         this._captureData = null;
-        this._commandId = 0;
+        this._resetCommandIds();
         this._updateStatusMessage();
       }
     }
@@ -2617,7 +2754,7 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
       const commands = this._takeFrameCaptureCommands();
 
       const batches = Math.ceil(commands.length / maxFrameCount);
-      this._postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "count": commands.length, "batches": batches });
+      this._postMessage({ "action": Actions.CaptureFrameResults, "frame": this._frameIndex, "serial": this._captureSerial, "count": commands.length, "batches": batches });
 
       for (let i = 0; i < commands.length; i += maxFrameCount) {
         const length = Math.min(maxFrameCount, commands.length - i);
@@ -2632,7 +2769,7 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
           });
       }
 
-      this._commandId = 0;
+      this._resetCommandIds();
       this._captureFrameRequest = false;
       this._gpuWrapper.recordCommandStacktraces = false;
       this._updateStatusMessage();
@@ -3396,19 +3533,28 @@ const TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 0x20;
       }
     }
 
-    _sendTimestampBuffer(count, buffer) {
+    // Send a submit's pass timings as u64 quads [serial, commandId, start, end], so the
+    // receiver matches each timing to its pass by id rather than by position.
+    _sendTimestampBuffer(readback) {
       const self = this;
-      this._pendingMapCount++;
+      const { buffer, passes } = readback;
       buffer.mapAsync(GPUMapMode.READ).then(() => {
         self.disableRecording();
-        const range = buffer.getMappedRange();
-        const data = new Uint8Array(range);
-        self._sendBufferData(-1000, -1000, data);
+        const values = new BigInt64Array(buffer.getMappedRange());
+        const data = new BigInt64Array(passes.length * 4);
+        for (let i = 0; i < passes.length; ++i) {
+          data[i * 4] = BigInt(passes[i].serial);
+          data[i * 4 + 1] = BigInt(passes[i].commandId);
+          data[i * 4 + 2] = values[i * 2];
+          data[i * 4 + 3] = values[i * 2 + 1];
+        }
         buffer.destroy();
+        self._sendBufferData(-1000, -1000, new Uint8Array(data.buffer));
         self.enableRecording();
         self._pendingMapFinished();
-     }).catch((error) => {
+      }, (error) => {
         console.error(error);
+        self._pendingMapFinished();
       });
     }
 
